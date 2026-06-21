@@ -89,6 +89,12 @@ export class AuthService {
         ? requestedCompanyId
         : (companies.find((c) => c.isDefault)?.id ?? companies[0]?.id ?? null);
 
+    // The module that loads automatically for the active company: the user's
+    // per-company default, falling back to their global default module.
+    const activeCompanyDefaultModuleId =
+      user.companies.find((uc) => uc.company.id === activeCompanyId)
+        ?.defaultModuleId ?? null;
+
     const profile = {
       id: user.id,
       userCode: user.userCode,
@@ -96,7 +102,7 @@ export class AuthService {
       name: user.name,
       email: user.email,
       isSuperAdmin: user.isSuperAdmin,
-      defaultModuleId: user.defaultModuleId,
+      defaultModuleId: activeCompanyDefaultModuleId ?? user.defaultModuleId,
     };
 
     if (!activeCompanyId) {

@@ -26,6 +26,7 @@ import type {
   Permission,
   CompanyLite,
 } from '@/lib/types';
+import { moduleLandingRoute } from '@/lib/nav';
 
 interface AuthContextValue {
   user: User | null;
@@ -150,7 +151,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const me = await api.get<MeResponse>('/auth/me');
         applyProfile(me);
         setActiveModuleId(null); // recomputed from the new company's nav
-        router.replace('/');
+        // Land on the new active module's default dashboard. The active module
+        // is the user's per-company default (me.user.defaultModuleId) or the
+        // first available module.
+        const nav = me.navigation || [];
+        const defId = me.user?.defaultModuleId ?? null;
+        const mod =
+          (defId ? nav.find((m) => m.id === defId) : undefined) ??
+          nav[0] ??
+          null;
+        router.replace(moduleLandingRoute(mod));
       } finally {
         setLoading(false);
       }
@@ -186,7 +196,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       setToken(res.token);
       applyProfile(res);
-      router.replace('/');
+      // Land directly on the default module's default dashboard.
+      const nav = res.navigation || [];
+      const defId = res.user?.defaultModuleId ?? null;
+      const mod =
+        (defId ? nav.find((m) => m.id === defId) : undefined) ??
+        nav[0] ??
+        null;
+      router.replace(moduleLandingRoute(mod));
     },
     [router, applyProfile],
   );

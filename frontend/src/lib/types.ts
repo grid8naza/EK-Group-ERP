@@ -144,7 +144,11 @@ export interface ErpObject {
   description?: string | null;
   route?: string | null;
   icon?: string | null;
-  help?: string | null;
+  help?: boolean | null;
+  /** System objects (Cpanel core) are visible only to super admins. */
+  isSystem?: boolean;
+  /** Locked objects must be unlocked before they can be edited or deleted. */
+  isLocked?: boolean;
   createdAt?: string;
   updatedAt?: string;
   revisions?: ObjectRevision[];
@@ -317,6 +321,8 @@ export interface UserCompanyRef {
   code: string;
   name: string;
   isDefault?: boolean;
+  /** Module that loads automatically when this company is active. */
+  defaultModuleId?: number | null;
 }
 
 export interface AppUser {
@@ -338,8 +344,12 @@ export interface AppUser {
   groups?: UserGroupRef[];
   companyIds?: number[];
   companies?: UserCompanyRef[];
-  /** Per-company module assignment. */
-  moduleAssignments?: { companyId: number; moduleIds: number[] }[];
+  /** Per-company module assignment + the default module for that company. */
+  moduleAssignments?: {
+    companyId: number;
+    moduleIds: number[];
+    defaultModuleId?: number | null;
+  }[];
   defaultCompanyId?: number | null;
   defaultModuleId?: number | null;
 }

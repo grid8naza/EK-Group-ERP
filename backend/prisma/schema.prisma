@@ -59,14 +59,15 @@ model Module {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  objects         ObjectMaster[]
-  mainMenus       MainMenu[]
-  userGroups      UserGroupModule[]
-  userAccess      UserModule[]
-  gadgets         Gadget[]
-  dashboards      Dashboard[]
-  companyModules  CompanyModule[]
-  defaultForUsers User[]            @relation("UserDefaultModule")
+  objects             ObjectMaster[]
+  mainMenus           MainMenu[]
+  userGroups          UserGroupModule[]
+  userAccess          UserModule[]
+  gadgets             Gadget[]
+  dashboards          Dashboard[]
+  companyModules      CompanyModule[]
+  defaultForUsers     User[]            @relation("UserDefaultModule")
+  defaultForCompanies UserCompany[]     @relation("UserCompanyDefaultModule")
 
   @@map("modules")
 }
@@ -130,7 +131,6 @@ model Company {
   modules     CompanyModule[]
   users       UserCompany[]
   userModules UserModule[]
-  objects     ObjectMaster[]
   mainMenus   MainMenu[]
   userGroups  UserGroup[]
   gadgets     Gadget[]
@@ -155,27 +155,32 @@ model CompanyModule {
 }
 
 // Which companies a user may log into. isDefault selects the company that
-// loads automatically after login.
+// loads automatically after login. defaultModuleId selects, within that
+// company, the module that loads automatically (must be one assigned to the
+// user in this company via UserModule).
 model UserCompany {
-  id        Int     @id @default(autoincrement())
-  userId    Int
-  companyId Int
-  isDefault Boolean @default(false)
+  id              Int     @id @default(autoincrement())
+  userId          Int
+  companyId       Int
+  isDefault       Boolean @default(false)
+  defaultModuleId Int?
 
-  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company       Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  defaultModule Module? @relation("UserCompanyDefaultModule", fields: [defaultModuleId], references: [id], onDelete: SetNull)
 
   @@unique([userId, companyId])
   @@map("user_companies")
 }
 
 // ---------------------------------------------------------------------------
-// Object Master — registry of every Table/Form/Report/Dashboard (per company).
+// Object Master — global registry of every Table/Form/Report/Dashboard. Object
+// definitions (e.g. "HR Master") are shared across all companies, so they are
+// NOT company-scoped; only menus/privileges that reference them are per company.
 // ---------------------------------------------------------------------------
 
 model ObjectMaster {
   id          Int        @id @default(autoincrement())
-  companyId   Int
   moduleId    Int
   author      String
   objectType  ObjectType
@@ -188,10 +193,11 @@ model ObjectMaster {
   icon        String?
   help        Boolean    @default(false)
   attachment  String?
+  isSystem    Boolean    @default(false) // system objects (Cpanel core) vs user objects (e.g. HR Master); system are visible only to super admins
+  isLocked    Boolean    @default(false) // when locked, the object must be unlocked before it can be edited or deleted
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
-  company    Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   module     Module           @relation(fields: [moduleId], references: [id])
   revisions  ObjectRevision[]
   subMenus   SubMenu[]

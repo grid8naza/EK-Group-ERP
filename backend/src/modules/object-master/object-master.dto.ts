@@ -33,9 +33,19 @@ export class CreateObjectDto {
   @IsOptional() @IsString() icon?: string;
   @IsOptional() @IsBoolean() help?: boolean;
   @IsOptional() @IsString() attachment?: string;
+
+  // System classification (Cpanel core objects). Only super admins may set it;
+  // the controller strips it for everyone else.
+  @IsOptional() @IsBoolean() isSystem?: boolean;
 }
 
 export class UpdateObjectDto extends PartialType(CreateObjectDto) {}
+
+// Lock / unlock toggle (separate endpoint so a locked object can be unlocked).
+export class LockObjectDto {
+  @IsBoolean()
+  locked: boolean;
+}
 
 export class CreateObjectRevisionDto {
   @IsString()

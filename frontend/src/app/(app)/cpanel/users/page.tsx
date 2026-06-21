@@ -51,6 +51,8 @@ const empty = {
   groupIds: [] as number[],
   // companyId -> assigned module ids
   moduleAssignments: {} as Record<number, number[]>,
+  // companyId -> the module that loads automatically in that company
+  defaultModuleByCompany: {} as Record<number, number | null>,
 };
 
 export default function UsersPage() {
@@ -187,6 +189,7 @@ export default function UsersPage() {
     setForm((f) => {
       let changed = false;
       const next = { ...f.moduleAssignments };
+      const nextDefaults = { ...f.defaultModuleByCompany };
       for (const cid of f.companyIds) {
         if (!groupsByCompany[cid] || !modulesByCompany[cid]) continue;
         const allowed = availableModuleIds(cid, f.groupIds);
@@ -196,14 +199,26 @@ export default function UsersPage() {
           next[cid] = pruned;
           changed = true;
         }
+        // Keep the default within the (possibly pruned) assigned modules.
+        const def = nextDefaults[cid] ?? null;
+        const newDef =
+          def != null && pruned.includes(def)
+            ? def
+            : (pruned[0] ?? null);
+        if (newDef !== def) {
+          nextDefaults[cid] = newDef;
+          changed = true;
+        }
       }
-      return changed ? { ...f, moduleAssignments: next } : f;
+      return changed
+        ? { ...f, moduleAssignments: next, defaultModuleByCompany: nextDefaults }
+        : f;
     });
   }, [open, form.groupIds, form.companyIds, groupsByCompany, modulesByCompany, availableModuleIds]);
 
   const openAdd = () => {
     setEditing(null);
-    setForm({ ...empty, moduleAssignments: {} });
+    setForm({ ...empty, moduleAssignments: {}, defaultModuleByCompany: {} });
     setExpanded({});
     setOpen(true);
   };
@@ -215,8 +230,10 @@ export default function UsersPage() {
       u.companies?.find((c) => c.isDefault)?.id ??
       null;
     const moduleAssignments: Record<number, number[]> = {};
+    const defaultModuleByCompany: Record<number, number | null> = {};
     for (const a of u.moduleAssignments ?? []) {
       moduleAssignments[a.companyId] = a.moduleIds;
+      defaultModuleByCompany[a.companyId] = a.defaultModuleId ?? null;
     }
     // Expand every accessible company panel by default.
     setExpanded(Object.fromEntries(companyIds.map((id) => [id, true])));
@@ -238,6 +255,7 @@ export default function UsersPage() {
       defaultCompanyId,
       groupIds: u.groupIds ?? u.groups?.map((g) => g.id) ?? [],
       moduleAssignments,
+      defaultModuleByCompany,
     });
     setOpen(true);
   };
@@ -246,15 +264,18 @@ export default function UsersPage() {
     setForm((f) => {
       const has = f.companyIds.includes(id);
       if (has) {
-        // Remove company: drop its groups + module assignment + default.
+        // Remove company: drop its groups + module assignment + defaults.
         const companyGroupIds = (groupsByCompany[id] ?? []).map((g) => g.id);
         const moduleAssignments = { ...f.moduleAssignments };
         delete moduleAssignments[id];
+        const defaultModuleByCompany = { ...f.defaultModuleByCompany };
+        delete defaultModuleByCompany[id];
         return {
           ...f,
           companyIds: f.companyIds.filter((c) => c !== id),
           groupIds: f.groupIds.filter((g) => !companyGroupIds.includes(g)),
           moduleAssignments,
+          defaultModuleByCompany,
           defaultCompanyId:
             f.defaultCompanyId === id ? null : f.defaultCompanyId,
         };
@@ -289,23 +310,49 @@ export default function UsersPage() {
       const next = cur.includes(moduleId)
         ? cur.filter((m) => m !== moduleId)
         : [...cur, moduleId];
+      // Keep the default valid: clear it if its module was removed; if nothing
+      // is the default yet, the first assigned module becomes it.
+      let def = f.defaultModuleByCompany[companyId] ?? null;
+      if (def != null && !next.includes(def)) def = null;
+      if (def == null && next.length) def = next[0];
       return {
         ...f,
         moduleAssignments: { ...f.moduleAssignments, [companyId]: next },
+        defaultModuleByCompany: {
+          ...f.defaultModuleByCompany,
+          [companyId]: def,
+        },
       };
     });
   };
 
-  const setAllModules = (companyId: number, all: boolean) => {
+  const setDefaultModule = (companyId: number, moduleId: number) => {
     setForm((f) => ({
       ...f,
-      moduleAssignments: {
-        ...f.moduleAssignments,
-        [companyId]: all
-          ? Array.from(availableModuleIds(companyId, f.groupIds))
-          : [],
+      defaultModuleByCompany: {
+        ...f.defaultModuleByCompany,
+        [companyId]: moduleId,
       },
     }));
+  };
+
+  const setAllModules = (companyId: number, all: boolean) => {
+    setForm((f) => {
+      const next = all
+        ? Array.from(availableModuleIds(companyId, f.groupIds))
+        : [];
+      let def = f.defaultModuleByCompany[companyId] ?? null;
+      if (def != null && !next.includes(def)) def = null;
+      if (def == null && next.length) def = next[0];
+      return {
+        ...f,
+        moduleAssignments: { ...f.moduleAssignments, [companyId]: next },
+        defaultModuleByCompany: {
+          ...f.defaultModuleByCompany,
+          [companyId]: def,
+        },
+      };
+    });
   };
 
   const toggleExpand = (id: number) =>
@@ -346,6 +393,7 @@ export default function UsersPage() {
         moduleAssignments: form.companyIds.map((companyId) => ({
           companyId,
           moduleIds: form.moduleAssignments[companyId] ?? [],
+          defaultModuleId: form.defaultModuleByCompany[companyId] ?? null,
         })),
       };
       if (form.password.trim()) payload.password = form.password;
@@ -706,7 +754,9 @@ export default function UsersPage() {
             <p className="mb-3 text-xs text-slate-400">
               For each company, first pick the user&apos;s groups; the modules
               those groups manage then appear below to assign. The top module
-              dropdown shows the modules selected here.
+              dropdown shows the modules selected here. Mark one as
+              &ldquo;Default&rdquo; to load it automatically when the user
+              enters that company.
             </p>
             {selectedCompanies.length === 0 ? (
               <p className="text-sm text-slate-400">
@@ -841,27 +891,48 @@ export default function UsersPage() {
                                 {mods.map((m) => {
                                   const MIcon = resolveIcon(m.icon);
                                   const active = assigned.includes(m.id);
+                                  const isDefault =
+                                    form.defaultModuleByCompany[c.id] === m.id;
                                   return (
-                                    <label
+                                    <div
                                       key={m.id}
                                       className={cn(
-                                        'flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 transition',
+                                        'flex items-center gap-2 rounded-lg border px-3 py-2 transition',
                                         active
                                           ? 'border-brand-300 bg-brand-50 dark:border-brand-700 dark:bg-brand-950/30'
                                           : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800/40',
                                       )}
                                     >
-                                      <Checkbox
-                                        checked={active}
-                                        onChange={() =>
-                                          toggleModule(c.id, m.id)
-                                        }
-                                      />
-                                      <MIcon className="h-4 w-4 flex-none text-slate-500 dark:text-slate-400" />
-                                      <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                                        {m.name}
-                                      </span>
-                                    </label>
+                                      <label className="flex flex-1 cursor-pointer items-center gap-2">
+                                        <Checkbox
+                                          checked={active}
+                                          onChange={() =>
+                                            toggleModule(c.id, m.id)
+                                          }
+                                        />
+                                        <MIcon className="h-4 w-4 flex-none text-slate-500 dark:text-slate-400" />
+                                        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                                          {m.name}
+                                        </span>
+                                      </label>
+                                      {active && (
+                                        <label
+                                          className="inline-flex cursor-pointer select-none items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400"
+                                          title="Load this module automatically in this company"
+                                        >
+                                          <input
+                                            type="radio"
+                                            name={`defaultModule-${c.id}`}
+                                            className="h-3.5 w-3.5 border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
+                                            checked={isDefault}
+                                            onChange={() =>
+                                              setDefaultModule(c.id, m.id)
+                                            }
+                                          />
+                                          Default
+                                        </label>
+                                      )}
+                                    </div>
                                   );
                                 })}
                               </div>

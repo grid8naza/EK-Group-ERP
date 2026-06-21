@@ -21,6 +21,10 @@ export class ModuleAssignmentDto {
   @IsArray()
   @IsInt({ each: true })
   moduleIds: number[];
+
+  // The module that loads automatically when the user enters this company.
+  // Must be one of moduleIds (the service ignores it otherwise).
+  @IsOptional() @IsInt() defaultModuleId?: number | null;
 }
 
 export class CreateUserDto {

@@ -10,6 +10,10 @@ import {
   History,
   Monitor,
   LayoutDashboard,
+  Lock,
+  Unlock,
+  ShieldCheck,
+  User as UserIcon,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/providers/ToastProvider';
@@ -22,14 +26,19 @@ import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { StatCard } from '@/components/ui/StatCard';
 import { Badge } from '@/components/ui/Badge';
 import { Tabs } from '@/components/ui/Tabs';
-import { formatDate } from '@/lib/utils';
+import { formatDate, cn } from '@/lib/utils';
 import type {
   ErpObject,
   ObjectListResponse,
   Module,
   ObjectType,
   ObjectRevision,
+  Lookup,
+  LookupValue,
 } from '@/lib/types';
+
+// Lookup code for the Developers list that drives the Author dropdown.
+const DEVELOPERS_LOOKUP_CODE = 'DEVELOPERS';
 
 const ROUTE = '/cpanel/objects';
 const PAGE_SIZE = 15;
@@ -44,22 +53,28 @@ const emptyForm = {
   description: '',
   route: '',
   icon: '',
-  help: '',
+  help: false,
+  isSystem: false,
   notes: '',
 };
 
 export default function ObjectsPage() {
-  const { can, activeCompanyId } = useAuth();
+  const { can, user } = useAuth();
+  const isSuperAdmin = !!user?.isSuperAdmin;
   const toast = useToast();
   const confirm = useConfirm();
 
   const [resp, setResp] = useState<ObjectListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [modules, setModules] = useState<Module[]>([]);
+  // Developers list (lookup values) that the Author field selects from.
+  const [developers, setDevelopers] = useState<LookupValue[]>([]);
 
   const [search, setSearch] = useState('');
   const [moduleId, setModuleId] = useState('');
   const [objectType, setObjectType] = useState('');
+  // System/User classification filter (super admin only): '' | 'system' | 'user'.
+  const [classFilter, setClassFilter] = useState('');
   const [page, setPage] = useState(1);
 
   const canAdd = can(ROUTE, 'add');
@@ -90,6 +105,7 @@ export default function ObjectsPage() {
       if (search.trim()) params.set('search', search.trim());
       if (moduleId) params.set('moduleId', moduleId);
       if (objectType) params.set('objectType', objectType);
+      if (classFilter) params.set('isSystem', String(classFilter === 'system'));
       params.set('page', String(page));
       params.set('pageSize', String(PAGE_SIZE));
       const res = await api.get<ObjectListResponse>(
@@ -103,25 +119,65 @@ export default function ObjectsPage() {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, moduleId, objectType, page]);
+  }, [search, moduleId, objectType, classFilter, page]);
 
   useEffect(() => {
     load();
   }, [load]);
 
+  // Objects are global, so the Module filter uses the global module catalog
+  // (not the active company's enabled modules).
   useEffect(() => {
     api
-      .get<Module[]>('/companies/enabled-modules')
+      .get<Module[]>('/modules')
       .then((m) => setModules(m ?? []))
       .catch(() => {});
-  }, [activeCompanyId]);
+  }, []);
+
+  // Load the Developers lookup values (global reference data) for the Author
+  // dropdown: find the lookup by code, then fetch its values.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get<Lookup[]>('/lookups')
+      .then((lookups) => {
+        const dev = (lookups ?? []).find(
+          (l) => l.code === DEVELOPERS_LOOKUP_CODE,
+        );
+        if (!dev) return [] as LookupValue[];
+        return api.get<LookupValue[]>(`/lookups/${dev.id}/values`);
+      })
+      .then((values) => {
+        if (!cancelled) setDevelopers(values ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setDevelopers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // reset to page 1 on filter change
   useEffect(() => {
     setPage(1);
-  }, [search, moduleId, objectType]);
+  }, [search, moduleId, objectType, classFilter]);
 
   const moduleOptions = modules.map((m) => ({ value: m.id, label: m.name }));
+
+  // Author choices come from the active Developers lookup values. If an object
+  // being edited has an author no longer in the list, keep it selectable so the
+  // value isn't silently lost.
+  const developerOptions = developers
+    .filter((d) => d.isActive)
+    .map((d) => ({ value: d.value, label: d.label }));
+  const authorOptions =
+    form.author && !developerOptions.some((o) => o.value === form.author)
+      ? [
+          ...developerOptions,
+          { value: form.author, label: `${form.author} (not in list)` },
+        ]
+      : developerOptions;
 
   const openAdd = () => {
     setEditing(null);
@@ -143,7 +199,8 @@ export default function ObjectsPage() {
       description: o.description ?? '',
       route: o.route ?? '',
       icon: o.icon ?? '',
-      help: o.help ?? '',
+      help: !!o.help,
+      isSystem: !!o.isSystem,
       notes: o.notes ?? '',
     });
     setRevisions([]);
@@ -168,7 +225,9 @@ export default function ObjectsPage() {
     description: form.description || null,
     route: form.route || null,
     icon: form.icon || null,
-    help: form.help || null,
+    help: form.help,
+    // Only super admins may classify objects; the backend ignores it otherwise.
+    isSystem: isSuperAdmin ? form.isSystem : undefined,
     notes: form.notes || null,
   });
 
@@ -215,6 +274,41 @@ export default function ObjectsPage() {
       load();
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to delete.');
+    }
+  };
+
+  // Locked objects must be unlocked before they can be edited or deleted.
+  const handleEdit = (o: ErpObject) => {
+    if (o.isLocked) {
+      toast.error('This object is locked. Unlock it first to edit.');
+      return;
+    }
+    openEdit(o);
+  };
+  const handleDelete = (o: ErpObject) => {
+    if (o.isLocked) {
+      toast.error('This object is locked. Unlock it first to delete.');
+      return;
+    }
+    remove(o);
+  };
+
+  const toggleLock = async (o: ErpObject) => {
+    const locking = !o.isLocked;
+    if (locking) {
+      const ok = await confirm({
+        title: 'Lock object',
+        message: `Lock "${o.objectName}"? It can't be edited or deleted until unlocked.`,
+        confirmText: 'Lock',
+      });
+      if (!ok) return;
+    }
+    try {
+      await api.patch(`/objects/${o.id}/lock`, { locked: locking });
+      toast.success(locking ? 'Object locked.' : 'Object unlocked.');
+      load();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Failed to update lock.');
     }
   };
 
@@ -274,7 +368,14 @@ export default function ObjectsPage() {
         </span>
       ),
     },
-    { key: 'author', header: 'Author', accessor: (r) => r.author },
+    {
+      key: 'author',
+      header: 'Author',
+      // Resolve the stored developer code to its name; fall back to the raw
+      // value for legacy free-text authors no longer in the list.
+      render: (r) =>
+        developers.find((d) => d.value === r.author)?.label ?? r.author,
+    },
     {
       key: 'module',
       header: 'Module',
@@ -292,10 +393,32 @@ export default function ObjectsPage() {
       key: 'objectName',
       header: 'Object Name',
       render: (r) => (
-        <span className="font-medium text-slate-800 dark:text-slate-100">
+        <span className="flex items-center gap-1.5 font-medium text-slate-800 dark:text-slate-100">
           {r.objectName}
+          {r.isLocked && (
+            <Lock
+              className="h-3.5 w-3.5 text-amber-500"
+              aria-label="Locked"
+            />
+          )}
         </span>
       ),
+    },
+    {
+      key: 'isSystem',
+      header: 'Type',
+      render: (r) =>
+        r.isSystem ? (
+          <Badge color="slate">
+            <ShieldCheck className="mr-1 inline h-3 w-3" />
+            System
+          </Badge>
+        ) : (
+          <Badge color="blue">
+            <UserIcon className="mr-1 inline h-3 w-3" />
+            User
+          </Badge>
+        ),
     },
     {
       key: 'nameInMenu',
@@ -362,10 +485,32 @@ export default function ObjectsPage() {
         onSearchChange={setSearch}
         serverSearch
         searchPlaceholder="Search objects..."
-        onEdit={openEdit}
-        onDelete={remove}
+        onEdit={handleEdit}
+        onDelete={handleDelete}
         canEdit={canEdit}
         canDelete={canDelete}
+        rowActions={
+          canEdit
+            ? (r) => (
+                <button
+                  onClick={() => toggleLock(r)}
+                  className={cn(
+                    'rounded-lg p-1.5 transition',
+                    r.isLocked
+                      ? 'text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/40'
+                      : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800',
+                  )}
+                  title={r.isLocked ? 'Unlock to allow edit/delete' : 'Lock'}
+                >
+                  {r.isLocked ? (
+                    <Lock className="h-4 w-4" />
+                  ) : (
+                    <Unlock className="h-4 w-4" />
+                  )}
+                </button>
+              )
+            : undefined
+        }
         emptyMessage="No objects found"
         serverPagination={{
           page,
@@ -394,6 +539,18 @@ export default function ObjectsPage() {
                 { value: 'DASHBOARD', label: 'Dashboard' },
               ]}
             />
+            {isSuperAdmin && (
+              <Select
+                wrapClassName="w-36"
+                value={classFilter}
+                onChange={(e) => setClassFilter(e.target.value)}
+                placeholder="System & User"
+                options={[
+                  { value: 'system', label: 'System' },
+                  { value: 'user', label: 'User' },
+                ]}
+              />
+            )}
           </>
         }
       />
@@ -446,11 +603,13 @@ export default function ObjectsPage() {
               placeholder="Select"
               options={moduleOptions}
             />
-            <Input
+            <Select
               label="Author"
               required
               value={form.author}
               onChange={(e) => setForm({ ...form, author: e.target.value })}
+              placeholder="Select developer"
+              options={authorOptions}
             />
             <Select
               label="Object Type"
@@ -495,6 +654,22 @@ export default function ObjectsPage() {
               disabled={!form.showInMenu}
               placeholder={form.showInMenu ? '' : 'Enable "Show in Menu"'}
             />
+            {isSuperAdmin && (
+              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700 sm:col-span-2">
+                <Checkbox
+                  label="System object"
+                  checked={form.isSystem}
+                  onChange={(e) =>
+                    setForm({ ...form, isSystem: e.target.checked })
+                  }
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  System objects (Cpanel core) are visible only to super admins.
+                  New system objects are locked by default; unlock them to edit
+                  or delete.
+                </p>
+              </div>
+            )}
             <Input
               label="Route"
               wrapClassName="sm:col-span-2"
@@ -508,11 +683,13 @@ export default function ObjectsPage() {
               onChange={(e) => setForm({ ...form, icon: e.target.value })}
               placeholder="e.g. box"
             />
-            <Input
-              label="Help"
-              value={form.help}
-              onChange={(e) => setForm({ ...form, help: e.target.value })}
-            />
+            <div className="flex items-end pb-2">
+              <Checkbox
+                label="Help Available"
+                checked={form.help}
+                onChange={(e) => setForm({ ...form, help: e.target.checked })}
+              />
+            </div>
             <Textarea
               label="Description"
               wrapClassName="sm:col-span-2"

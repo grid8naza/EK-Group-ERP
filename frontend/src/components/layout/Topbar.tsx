@@ -18,6 +18,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { resolveIcon } from '@/lib/icons';
 import { initials, cn } from '@/lib/utils';
+import { moduleLandingRoute } from '@/lib/nav';
 
 interface TopbarProps {
   onToggleSidebar: () => void;
@@ -68,9 +69,8 @@ export function Topbar({
     setActiveModule(id);
     setModOpen(false);
     const mod = navigation.find((m) => m.id === id);
-    const firstRoute =
-      mod?.menus[0]?.items[0]?.route || mod?.dashboards?.[0]?.route;
-    if (firstRoute) router.push(firstRoute);
+    // Land on the module's default dashboard (falls back to first menu/dash).
+    router.push(moduleLandingRoute(mod));
   };
 
   const selectCompany = (id: number) => {

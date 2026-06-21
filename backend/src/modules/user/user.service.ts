@@ -30,7 +30,12 @@ const userSelect = {
     },
   },
   companies: {
-    include: { company: { select: { id: true, code: true, name: true } } },
+    select: {
+      companyId: true,
+      isDefault: true,
+      defaultModuleId: true,
+      company: { select: { id: true, code: true, name: true } },
+    },
   },
   modules: { select: { companyId: true, moduleId: true } },
 } satisfies Prisma.UserSelect;
@@ -46,6 +51,10 @@ function shape(user: RawUser) {
     arr.push(m.moduleId);
     byCompany.set(m.companyId, arr);
   }
+  // Per-company default module, keyed by companyId.
+  const defaultModuleByCompany = new Map<number, number | null>(
+    user.companies.map((c) => [c.companyId, c.defaultModuleId]),
+  );
   return {
     ...user,
     groupIds: user.groupAssignments.map((g) => g.userGroupId),
@@ -54,11 +63,27 @@ function shape(user: RawUser) {
     companies: user.companies.map((c) => ({
       ...c.company,
       isDefault: c.isDefault,
+      defaultModuleId: c.defaultModuleId,
     })),
     moduleAssignments: Array.from(byCompany.entries()).map(
-      ([companyId, moduleIds]) => ({ companyId, moduleIds }),
+      ([companyId, moduleIds]) => ({
+        companyId,
+        moduleIds,
+        defaultModuleId: defaultModuleByCompany.get(companyId) ?? null,
+      }),
     ),
   };
+}
+
+// The default module for a company is honoured only when it is one of the
+// modules actually assigned to the user in that company; otherwise null.
+function resolveDefaultModule(
+  companyId: number,
+  assignments?: { companyId: number; moduleIds: number[]; defaultModuleId?: number | null }[],
+): number | null {
+  const a = assignments?.find((x) => x.companyId === companyId);
+  if (!a || a.defaultModuleId == null) return null;
+  return a.moduleIds.includes(a.defaultModuleId) ? a.defaultModuleId : null;
 }
 
 @Injectable()
@@ -120,6 +145,10 @@ export class UserService {
                 create: companyIds.map((companyId) => ({
                   companyId,
                   isDefault: companyId === defaultCompanyId,
+                  defaultModuleId: resolveDefaultModule(
+                    companyId,
+                    moduleAssignments,
+                  ),
                 })),
               }
             : undefined,
@@ -165,6 +194,7 @@ export class UserService {
               userId: id,
               companyId,
               isDefault: companyId === defaultCompanyId,
+              defaultModuleId: resolveDefaultModule(companyId, moduleAssignments),
             })),
           });
         }
@@ -181,6 +211,23 @@ export class UserService {
         );
         if (moduleRows.length) {
           await tx.userModule.createMany({ data: moduleRows });
+        }
+
+        // Keep each accessible company's default module in sync with the
+        // assignment (covers the case where companies were left unchanged but
+        // the default module selection changed). Clear stale defaults first.
+        await tx.userCompany.updateMany({
+          where: { userId: id },
+          data: { defaultModuleId: null },
+        });
+        for (const a of moduleAssignments) {
+          const def = resolveDefaultModule(a.companyId, moduleAssignments);
+          if (def != null) {
+            await tx.userCompany.updateMany({
+              where: { userId: id, companyId: a.companyId },
+              data: { defaultModuleId: def },
+            });
+          }
         }
       }
 

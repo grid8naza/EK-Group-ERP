@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { ObjectType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
@@ -8,10 +12,13 @@ import {
 } from './object-master.dto';
 
 interface FindAllParams {
-  companyId: number;
   search?: string;
   moduleId?: number;
   objectType?: ObjectType;
+  // System objects are visible only to super admins.
+  includeSystem?: boolean;
+  // Optional System/User filter (only honoured for super admins).
+  isSystem?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -25,9 +32,20 @@ export class ObjectMasterService {
     const pageSize =
       params.pageSize && params.pageSize > 0 ? params.pageSize : 15;
 
-    const where: Prisma.ObjectMasterWhereInput = { companyId: params.companyId };
+    // Objects are global (not company-scoped): the list shows every object.
+    // System objects are hidden from non-super-admins.
+    const visibility: Prisma.ObjectMasterWhereInput = params.includeSystem
+      ? {}
+      : { isSystem: false };
+
+    const where: Prisma.ObjectMasterWhereInput = { ...visibility };
     if (params.moduleId) where.moduleId = params.moduleId;
     if (params.objectType) where.objectType = params.objectType;
+    // The System/User filter only applies to super admins; for everyone else
+    // visibility already pins isSystem=false, so it can never widen access.
+    if (params.includeSystem && params.isSystem !== undefined) {
+      where.isSystem = params.isSystem;
+    }
     if (params.search) {
       where.OR = [
         { objectName: { contains: params.search, mode: 'insensitive' } },
@@ -36,7 +54,11 @@ export class ObjectMasterService {
       ];
     }
 
-    const company = params.companyId;
+    // Stat-card counts respect the same visibility (but ignore the active filters).
+    const countWhere = (objectType: ObjectType) => ({
+      ...visibility,
+      objectType,
+    });
     const [data, total, forms, reports, tables, dashboards] = await Promise.all([
       this.prisma.objectMaster.findMany({
         where,
@@ -46,10 +68,10 @@ export class ObjectMasterService {
         take: pageSize,
       }),
       this.prisma.objectMaster.count({ where }),
-      this.prisma.objectMaster.count({ where: { companyId: company, objectType: 'FORM' } }),
-      this.prisma.objectMaster.count({ where: { companyId: company, objectType: 'REPORT' } }),
-      this.prisma.objectMaster.count({ where: { companyId: company, objectType: 'TABLE' } }),
-      this.prisma.objectMaster.count({ where: { companyId: company, objectType: 'DASHBOARD' } }),
+      this.prisma.objectMaster.count({ where: countWhere('FORM') }),
+      this.prisma.objectMaster.count({ where: countWhere('REPORT') }),
+      this.prisma.objectMaster.count({ where: countWhere('TABLE') }),
+      this.prisma.objectMaster.count({ where: countWhere('DASHBOARD') }),
     ]);
 
     return {
@@ -73,19 +95,41 @@ export class ObjectMasterService {
     return object;
   }
 
-  create(dto: CreateObjectDto, companyId: number) {
-    return this.prisma.objectMaster.create({ data: { ...dto, companyId } });
+  create(dto: CreateObjectDto) {
+    // System objects start locked so they can't be edited/deleted by accident.
+    return this.prisma.objectMaster.create({
+      data: { ...dto, isLocked: !!dto.isSystem },
+    });
   }
 
   async update(id: number, dto: UpdateObjectDto) {
-    await this.ensureObject(id);
+    const existing = await this.ensureObject(id);
+    if (existing.isLocked) {
+      throw new ConflictException(
+        'This object is locked. Unlock it before editing.',
+      );
+    }
     return this.prisma.objectMaster.update({ where: { id }, data: dto });
   }
 
   async remove(id: number) {
-    await this.ensureObject(id);
+    const existing = await this.ensureObject(id);
+    if (existing.isLocked) {
+      throw new ConflictException(
+        'This object is locked. Unlock it before deleting.',
+      );
+    }
     await this.prisma.objectMaster.delete({ where: { id } });
     return { success: true };
+  }
+
+  /** Lock or unlock an object (the only way to clear a lock). */
+  async setLock(id: number, locked: boolean) {
+    await this.ensureObject(id);
+    return this.prisma.objectMaster.update({
+      where: { id },
+      data: { isLocked: locked },
+    });
   }
 
   async findRevisions(objectId: number) {

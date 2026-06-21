@@ -388,17 +388,28 @@ export default function DashboardsPage() {
             value={form.icon}
             onChange={(icon) => setForm({ ...form, icon })}
           />
-          <div className="flex items-end gap-4 pb-2">
-            <Checkbox
-              label="Default"
-              checked={form.isDefault}
-              onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
-            />
-            <Checkbox
-              label="Active"
-              checked={form.isActive}
-              onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
-            />
+          <div className="pb-2 sm:col-span-2">
+            <div className="flex items-end gap-4">
+              <Checkbox
+                label="Default"
+                checked={form.isDefault}
+                onChange={(e) =>
+                  setForm({ ...form, isDefault: e.target.checked })
+                }
+              />
+              <Checkbox
+                label="Active"
+                checked={form.isActive}
+                onChange={(e) =>
+                  setForm({ ...form, isActive: e.target.checked })
+                }
+              />
+            </div>
+            <p className="mt-1.5 text-xs text-slate-400">
+              The default dashboard loads automatically when this module opens.
+              Only one dashboard per module can be the default — marking this one
+              clears it on the others.
+            </p>
           </div>
         </div>
       </Drawer>

@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   CreateDashboardDto,
@@ -32,12 +33,46 @@ export class DashboardService {
   }
 
   create(dto: CreateDashboardDto, companyId: number) {
-    return this.prisma.dashboard.create({ data: { ...dto, companyId } });
+    return this.prisma.$transaction(async (tx) => {
+      const created = await tx.dashboard.create({
+        data: { ...dto, companyId },
+      });
+      if (created.isDefault) {
+        await this.clearOtherDefaults(tx, created);
+      }
+      return created;
+    });
   }
 
   async update(id: number, dto: UpdateDashboardDto) {
     await this.ensure(id);
-    return this.prisma.dashboard.update({ where: { id }, data: dto });
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.dashboard.update({ where: { id }, data: dto });
+      if (updated.isDefault) {
+        await this.clearOtherDefaults(tx, updated);
+      }
+      return updated;
+    });
+  }
+
+  /**
+   * Only one dashboard per (company, module) may be the default. Whenever a
+   * dashboard is marked default, unset the flag on every other dashboard in
+   * the same company + module.
+   */
+  private clearOtherDefaults(
+    tx: Prisma.TransactionClient,
+    dashboard: { id: number; companyId: number; moduleId: number },
+  ) {
+    return tx.dashboard.updateMany({
+      where: {
+        companyId: dashboard.companyId,
+        moduleId: dashboard.moduleId,
+        id: { not: dashboard.id },
+        isDefault: true,
+      },
+      data: { isDefault: false },
+    });
   }
 
   async remove(id: number) {

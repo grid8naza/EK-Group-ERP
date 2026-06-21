@@ -61,6 +61,58 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
+  // Object Master (GLOBAL) — one definition per screen, shared by every
+  // company. Objects are no longer company-scoped.
+  // -------------------------------------------------------------------------
+  const OBJECT_AUTHOR = 'Pavani';
+  for (const s of CPANEL_SUBS) {
+    await prisma.objectMaster.create({
+      data: {
+        moduleId: modules['CPANEL'],
+        author: OBJECT_AUTHOR,
+        objectType: ObjectType.FORM,
+        objectName: s.name,
+        nameInMenu: s.name,
+        showInMenu: true,
+        route: s.route,
+        icon: s.icon,
+        isSystem: true, // Cpanel core objects: super-admin only, locked
+        isLocked: true,
+      },
+    });
+  }
+  for (const name of ['Enquiry AMC', 'Enquiry OT', 'Enquiry EMG COT']) {
+    await prisma.objectMaster.create({
+      data: {
+        moduleId: modules['CRM'],
+        author: OBJECT_AUTHOR,
+        objectType: ObjectType.FORM,
+        objectName: name,
+        nameInMenu: name,
+        showInMenu: true,
+        route: `/crm/enquiry/${name.toLowerCase().replace(/\s+/g, '-')}`,
+        icon: 'list',
+      },
+    });
+  }
+  // DASHBOARD object that each company's Admin Overview dashboard links to.
+  const adminDashObj = await prisma.objectMaster.create({
+    data: {
+      moduleId: modules['CPANEL'],
+      author: OBJECT_AUTHOR,
+      objectType: ObjectType.DASHBOARD,
+      objectName: 'Admin Overview',
+      nameInMenu: 'Admin Overview',
+      showInMenu: true,
+      route: '/dashboard',
+      icon: 'layout-dashboard',
+      isSystem: true,
+      isLocked: true,
+    },
+  });
+  const dashObjId = adminDashObj.id;
+
+  // -------------------------------------------------------------------------
   // Lookups (global) — Developers, Icons.
   // -------------------------------------------------------------------------
   const devLookup = await prisma.lookup.create({
@@ -108,15 +160,8 @@ async function main() {
       });
     }
 
-    // ---- Cpanel objects + menu ----
+    // ---- Cpanel menu (objects are global; created once above) ----
     const cpanelId = modules['CPANEL'];
-    await prisma.objectMaster.createMany({
-      data: [
-        { companyId: cid, moduleId: cpanelId, objectName: 'in_objectlist', objectType: ObjectType.TABLE, author: opts.author, showInMenu: false, notes: 'Details of all objects in this project' },
-        { companyId: cid, moduleId: cpanelId, objectName: 'fm_objectmaster', objectType: ObjectType.FORM, author: opts.author, nameInMenu: 'Object Master', showInMenu: true, route: '/cpanel/objects', icon: 'database' },
-      ],
-    });
-
     const cpanelMain = await prisma.mainMenu.create({
       data: { companyId: cid, moduleId: cpanelId, menuName: 'Cpanel', sortOrder: 1, objectType: ObjectType.FORM, isUserMenu: true, icon: 'settings' },
     });
@@ -143,12 +188,6 @@ async function main() {
     let crmGadgetIds: number[] = [];
     if (opts.enabledModules.includes('CRM')) {
       const crmId = modules['CRM'];
-      await prisma.objectMaster.createMany({
-        data: [
-          { companyId: cid, moduleId: crmId, objectName: 'fm_amcenquiry', objectType: ObjectType.FORM, author: opts.author, nameInMenu: 'Enquiry AMC', showInMenu: true, route: '/crm/enquiry/enquiry-amc', icon: 'list' },
-          { companyId: cid, moduleId: crmId, objectName: 'rp_attendance', objectType: ObjectType.REPORT, author: opts.author, nameInMenu: 'Attendance Report', showInMenu: true, route: '/crm/reports/attendance', icon: 'list' },
-        ],
-      });
       crmMain = await prisma.mainMenu.create({
         data: { companyId: cid, moduleId: crmId, menuName: 'Enquiry', sortOrder: 1, objectType: ObjectType.FORM, isUserMenu: true, icon: 'list' },
       });
@@ -204,12 +243,9 @@ async function main() {
     }
 
     // ---- Dashboards (multiple per module + group) ----
-    // Register a DASHBOARD object and build a dashboard from it.
-    const adminDashObj = await prisma.objectMaster.create({
-      data: { companyId: cid, moduleId: cpanelId, objectName: 'db_adminoverview', objectType: ObjectType.DASHBOARD, author: opts.author, nameInMenu: 'Admin Overview', showInMenu: true, route: '/dashboard', icon: 'layout-dashboard' },
-    });
+    // Build the dashboard from the global Admin Overview object.
     const adminDash = await prisma.dashboard.create({
-      data: { companyId: cid, moduleId: cpanelId, userGroupId: adminGroup.id, objectId: adminDashObj.id, name: 'Admin Overview', icon: 'layout-dashboard', sortOrder: 1, isDefault: true },
+      data: { companyId: cid, moduleId: cpanelId, userGroupId: adminGroup.id, objectId: dashObjId, name: 'Admin Overview', icon: 'layout-dashboard', sortOrder: 1, isDefault: true },
     });
     const adminWidgetCodes = ['USERS_COUNT', 'GROUPS_COUNT', 'MODULES_COUNT', 'COMPANIES_COUNT', 'RECENT_OBJECTS', 'QUICK_LINKS'];
     for (const [i, code] of adminWidgetCodes.entries()) {
@@ -315,8 +351,13 @@ async function main() {
       defaultModuleId: modules['CPANEL'],
       companies: {
         create: [
-          { companyId: acme.company.id, isDefault: true },
-          { companyId: globex.company.id },
+          // Per-company default module: Cpanel in Acme, CRM in Globex.
+          {
+            companyId: acme.company.id,
+            isDefault: true,
+            defaultModuleId: modules['CPANEL'],
+          },
+          { companyId: globex.company.id, defaultModuleId: modules['CRM'] },
         ],
       },
       groupAssignments: {

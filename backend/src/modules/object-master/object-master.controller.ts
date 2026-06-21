@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -13,17 +12,13 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { ObjectType } from '@prisma/client';
 import { ObjectMasterService } from './object-master.service';
-import { CompanyId } from '../../auth/company.decorator';
+import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
 import {
   CreateObjectDto,
   CreateObjectRevisionDto,
+  LockObjectDto,
   UpdateObjectDto,
 } from './object-master.dto';
-
-function requireCompany(companyId?: number): number {
-  if (!companyId) throw new BadRequestException('No active company selected');
-  return companyId;
-}
 
 @ApiTags('objects')
 @ApiBearerAuth()
@@ -33,18 +28,21 @@ export class ObjectMasterController {
 
   @Get()
   findAll(
-    @CompanyId() companyId?: number,
+    @CurrentUser() user: AuthUser,
     @Query('search') search?: string,
     @Query('moduleId') moduleId?: string,
     @Query('objectType') objectType?: ObjectType,
+    @Query('isSystem') isSystem?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
   ) {
     return this.service.findAll({
-      companyId: requireCompany(companyId),
       search,
       moduleId: moduleId ? Number(moduleId) : undefined,
       objectType,
+      includeSystem: user.isSuperAdmin,
+      isSystem:
+        isSystem === 'true' ? true : isSystem === 'false' ? false : undefined,
       page: page ? Number(page) : undefined,
       pageSize: pageSize ? Number(pageSize) : undefined,
     });
@@ -56,18 +54,31 @@ export class ObjectMasterController {
   }
 
   @Post()
-  create(@Body() dto: CreateObjectDto, @CompanyId() companyId?: number) {
-    return this.service.create(dto, requireCompany(companyId));
+  create(@Body() dto: CreateObjectDto, @CurrentUser() user: AuthUser) {
+    // Only super admins may classify an object as a system object.
+    if (!user.isSuperAdmin) dto.isSystem = false;
+    return this.service.create(dto);
   }
 
   @Patch(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateObjectDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateObjectDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (!user.isSuperAdmin) delete dto.isSystem;
     return this.service.update(id, dto);
   }
 
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.service.remove(id);
+  }
+
+  // Lock / unlock an object (must be unlocked before edit or delete).
+  @Patch(':id/lock')
+  setLock(@Param('id', ParseIntPipe) id: number, @Body() dto: LockObjectDto) {
+    return this.service.setLock(id, dto.locked);
   }
 
   @Get(':id/revisions')
