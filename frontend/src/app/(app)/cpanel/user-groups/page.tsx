@@ -527,7 +527,7 @@ export default function UserGroupsPage() {
               const collapsed = collapsedModules.has(grp.module.id);
               const menuCount = grp.tree.length;
               return (
-                <section key={grp.module.id} className="space-y-3">
+                <section key={grp.module.id}>
                   {/* Module heading — click to expand / collapse its details */}
                   <button
                     type="button"
@@ -550,8 +550,14 @@ export default function UserGroupsPage() {
                       {menuCount} {menuCount === 1 ? 'menu' : 'menus'}
                     </span>
                   </button>
-                  {!collapsed && (
-                  <>
+                  <div
+                    className={cn(
+                      'grid transition-[grid-template-rows] duration-200 ease-in-out',
+                      collapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]',
+                    )}
+                  >
+                  <div className="overflow-hidden">
+                  <div className="space-y-3 pt-3">
                   {grp.tree.length === 0 && (
                     <p className="text-sm text-slate-400">
                       No menus in this module.
@@ -765,8 +771,9 @@ export default function UserGroupsPage() {
                       </div>
                     )}
                   </div>
-                  </>
-                  )}
+                  </div>
+                  </div>
+                  </div>
                 </section>
               );
             })}

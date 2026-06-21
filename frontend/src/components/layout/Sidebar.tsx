@@ -147,26 +147,35 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
                         </>
                       )}
                     </button>
-                    {!collapsed && isOpen && (
-                      <div className="mt-0.5 space-y-0.5 border-l border-slate-200 pl-3 dark:border-slate-800">
-                        {menu.items.map((item) => {
-                          const ItemIcon = resolveIcon(item.icon);
-                          const active = item.route === pathname;
-                          return (
-                            <NavLink
-                              key={item.id}
-                              href={item.route}
-                              label={item.name}
-                              icon={
-                                <ItemIcon className="h-[16px] w-[16px]" />
-                              }
-                              active={active}
-                              collapsed={false}
-                              sub
-                              onClick={onMobileClose}
-                            />
-                          );
-                        })}
+                    {!collapsed && (
+                      <div
+                        className={cn(
+                          'grid transition-[grid-template-rows] duration-200 ease-in-out',
+                          isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+                        )}
+                      >
+                        <div className="overflow-hidden">
+                          <div className="mt-0.5 space-y-0.5 border-l border-slate-200 pl-3 dark:border-slate-800">
+                            {menu.items.map((item) => {
+                              const ItemIcon = resolveIcon(item.icon);
+                              const active = item.route === pathname;
+                              return (
+                                <NavLink
+                                  key={item.id}
+                                  href={item.route}
+                                  label={item.name}
+                                  icon={
+                                    <ItemIcon className="h-[16px] w-[16px]" />
+                                  }
+                                  active={active}
+                                  collapsed={false}
+                                  sub
+                                  onClick={onMobileClose}
+                                />
+                              );
+                            })}
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
