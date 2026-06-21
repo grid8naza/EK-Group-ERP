@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-erpgrip}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-erpgrip}
+      POSTGRES_DB: ${POSTGRES_DB:-erpgrip}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - erpgrip_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-erpgrip} -d ${POSTGRES_DB:-erpgrip}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-erpgrip}:${POSTGRES_PASSWORD:-erpgrip}@db:5432/${POSTGRES_DB:-erpgrip}?schema=public
+      BACKEND_PORT: 4000
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+      SEED_ADMIN_USERNAME: ${SEED_ADMIN_USERNAME:-superadmin}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Admin@123}
+      SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Super Administrator}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@erpgrip.local}
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000/api}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+
+volumes:
+  erpgrip_db:

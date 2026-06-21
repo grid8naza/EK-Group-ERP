@@ -1,0 +1,492 @@
+// Erp Grid8 data model — Cpanel module
+// Multi-company: each Company is an isolated tenant. The cpanel config tables
+// (objects, menus, user groups, gadgets, dashboards) carry a companyId so every
+// company is configured independently ("separate cpanel per company"). The
+// Module catalog and Lookups stay global; which modules are enabled is decided
+// per company via CompanyModule.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum ObjectType {
+  TABLE
+  FORM
+  REPORT
+  DASHBOARD
+}
+
+enum SecurityType {
+  PASSWORD // Layer 1 only
+  MAC // Layer 2: locked to one machine
+  MACOTP // Layer 2: MAC or one-time password
+}
+
+// How a dashboard gadget renders. BUILTIN = rendered by its `code` in the
+// frontend (the original seeded widgets). The rest are data-driven so admins
+// can create working gadgets without any code change.
+enum GadgetType {
+  BUILTIN // rendered by code (USERS_COUNT, QUICK_LINKS, ...)
+  STAT // a single count, config.source selects what to count
+  LINKS // quick links to the module's screens
+  NOTE // free text / rich note, config.text
+  EMBED // an external page, config.url (+ config.height)
+}
+
+// ---------------------------------------------------------------------------
+// Module Master — global catalog of module types. Enablement is per-company
+// via CompanyModule.
+// ---------------------------------------------------------------------------
+
+model Module {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique // e.g. CPANEL, CRM, ACCOUNTS
+  name        String
+  description String?
+  icon        String? // lucide icon name, e.g. "settings"
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  isCore      Boolean  @default(false) // core modules (Cpanel) cannot be removed
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  objects         ObjectMaster[]
+  mainMenus       MainMenu[]
+  userGroups      UserGroupModule[]
+  userAccess      UserModule[]
+  gadgets         Gadget[]
+  dashboards      Dashboard[]
+  companyModules  CompanyModule[]
+  defaultForUsers User[]            @relation("UserDefaultModule")
+
+  @@map("modules")
+}
+
+// ---------------------------------------------------------------------------
+// Lookups — generic configurable dropdowns (global reference data).
+// ---------------------------------------------------------------------------
+
+model Lookup {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique // e.g. DEVELOPERS, ICONS
+  name        String
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  values LookupValue[]
+
+  @@map("lookups")
+}
+
+model LookupValue {
+  id        Int      @id @default(autoincrement())
+  lookupId  Int
+  value     String
+  label     String
+  extra     String?
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lookup Lookup @relation(fields: [lookupId], references: [id], onDelete: Cascade)
+
+  @@unique([lookupId, value])
+  @@map("lookup_values")
+}
+
+// ---------------------------------------------------------------------------
+// Company Master — the tenant. Each company is configured independently.
+// ---------------------------------------------------------------------------
+
+model Company {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  name      String
+  legalName String?
+  email     String?
+  phone     String?
+  address   String?
+  city      String?
+  state     String?
+  country   String?
+  taxNumber String?
+  logo      String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  modules     CompanyModule[]
+  users       UserCompany[]
+  userModules UserModule[]
+  objects     ObjectMaster[]
+  mainMenus   MainMenu[]
+  userGroups  UserGroup[]
+  gadgets     Gadget[]
+  dashboards  Dashboard[]
+
+  @@map("companies")
+}
+
+// Which modules are enabled for a company ("module selected per company").
+model CompanyModule {
+  id        Int     @id @default(autoincrement())
+  companyId Int
+  moduleId  Int
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  module  Module  @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, moduleId])
+  @@map("company_modules")
+}
+
+// Which companies a user may log into. isDefault selects the company that
+// loads automatically after login.
+model UserCompany {
+  id        Int     @id @default(autoincrement())
+  userId    Int
+  companyId Int
+  isDefault Boolean @default(false)
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId])
+  @@map("user_companies")
+}
+
+// ---------------------------------------------------------------------------
+// Object Master — registry of every Table/Form/Report/Dashboard (per company).
+// ---------------------------------------------------------------------------
+
+model ObjectMaster {
+  id          Int        @id @default(autoincrement())
+  companyId   Int
+  moduleId    Int
+  author      String
+  objectType  ObjectType
+  objectName  String
+  notes       String?
+  showInMenu  Boolean    @default(false)
+  nameInMenu  String?
+  description String?
+  route       String? // e.g. /crm/enquiry/amc
+  icon        String?
+  help        Boolean    @default(false)
+  attachment  String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  company    Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  module     Module           @relation(fields: [moduleId], references: [id])
+  revisions  ObjectRevision[]
+  subMenus   SubMenu[]
+  dashboards Dashboard[]
+
+  @@map("object_master")
+}
+
+model ObjectRevision {
+  id             Int      @id @default(autoincrement())
+  objectId       Int
+  revisionNumber String
+  revisedBy      String
+  reason         String?
+  changesDone    String?
+  dateRevised    DateTime @default(now())
+
+  object ObjectMaster @relation(fields: [objectId], references: [id], onDelete: Cascade)
+
+  @@map("object_revisions")
+}
+
+// ---------------------------------------------------------------------------
+// Menu Setup — Main Menu with nested Sub Menus (per company).
+// ---------------------------------------------------------------------------
+
+model MainMenu {
+  id         Int        @id @default(autoincrement())
+  companyId  Int
+  moduleId   Int
+  sortOrder  Int        @default(0)
+  menuName   String
+  objectType ObjectType @default(FORM)
+  isUserMenu Boolean    @default(true)
+  icon       String?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  company    Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  module     Module                @relation(fields: [moduleId], references: [id])
+  subMenus   SubMenu[]
+  privileges GroupMainMenuAccess[]
+
+  @@map("main_menus")
+}
+
+model SubMenu {
+  id          Int        @id @default(autoincrement())
+  mainMenuId  Int
+  objectId    Int?
+  sortOrder   Int        @default(0)
+  subMenuName String
+  objectType  ObjectType @default(FORM)
+  description String?
+  route       String?
+  icon        String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  mainMenu   MainMenu                @relation(fields: [mainMenuId], references: [id], onDelete: Cascade)
+  object     ObjectMaster?           @relation(fields: [objectId], references: [id])
+  privileges GroupSubMenuPrivilege[]
+
+  @@map("sub_menus")
+}
+
+// ---------------------------------------------------------------------------
+// User Groups & Privileges (per company).
+// ---------------------------------------------------------------------------
+
+model UserGroup {
+  id          Int      @id @default(autoincrement())
+  companyId   Int
+  name        String
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company         Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  modules         UserGroupModule[]
+  mainMenuAccess  GroupMainMenuAccess[]
+  subMenuPrivs    GroupSubMenuPrivilege[]
+  userAssignments UserGroupAssignment[]
+  gadgetAccess    GroupGadget[]
+  dashboards      Dashboard[]
+
+  @@unique([companyId, name])
+  @@map("user_groups")
+}
+
+model UserGroupModule {
+  id          Int @id @default(autoincrement())
+  userGroupId Int
+  moduleId    Int
+
+  userGroup UserGroup @relation(fields: [userGroupId], references: [id], onDelete: Cascade)
+  module    Module    @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([userGroupId, moduleId])
+  @@map("user_group_modules")
+}
+
+model GroupMainMenuAccess {
+  id          Int     @id @default(autoincrement())
+  userGroupId Int
+  mainMenuId  Int
+  visible     Boolean @default(false)
+
+  userGroup UserGroup @relation(fields: [userGroupId], references: [id], onDelete: Cascade)
+  mainMenu  MainMenu  @relation(fields: [mainMenuId], references: [id], onDelete: Cascade)
+
+  @@unique([userGroupId, mainMenuId])
+  @@map("group_main_menu_access")
+}
+
+model GroupSubMenuPrivilege {
+  id               Int     @id @default(autoincrement())
+  userGroupId      Int
+  subMenuId        Int
+  canMenu          Boolean @default(false)
+  canView          Boolean @default(false)
+  canAdd           Boolean @default(false)
+  canEdit          Boolean @default(false)
+  canDelete        Boolean @default(false)
+  canPrint         Boolean @default(false)
+  canDownloadPdf   Boolean @default(false)
+  canDownloadExcel Boolean @default(false)
+
+  userGroup UserGroup @relation(fields: [userGroupId], references: [id], onDelete: Cascade)
+  subMenu   SubMenu   @relation(fields: [subMenuId], references: [id], onDelete: Cascade)
+
+  @@unique([userGroupId, subMenuId])
+  @@map("group_sub_menu_privileges")
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard gadgets — per-company-and-module catalog of widgets.
+// ---------------------------------------------------------------------------
+
+model Gadget {
+  id          Int        @id @default(autoincrement())
+  companyId   Int
+  moduleId    Int
+  code        String // unique per company+module; BUILTIN gadgets render by it
+  name        String
+  description String?
+  type        GadgetType @default(BUILTIN)
+  config      Json? // type-specific settings (source / text / url / height)
+  sortOrder   Int        @default(0)
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  company     Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  module      Module            @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  groupAccess GroupGadget[]
+  placements  DashboardWidget[]
+
+  @@unique([companyId, moduleId, code])
+  @@map("gadgets")
+}
+
+model GroupGadget {
+  id          Int @id @default(autoincrement())
+  userGroupId Int
+  gadgetId    Int
+
+  userGroup UserGroup @relation(fields: [userGroupId], references: [id], onDelete: Cascade)
+  gadget    Gadget    @relation(fields: [gadgetId], references: [id], onDelete: Cascade)
+
+  @@unique([userGroupId, gadgetId])
+  @@map("group_gadgets")
+}
+
+// ---------------------------------------------------------------------------
+// Dashboards — multiple named dashboards per (company, module, user group).
+// Selectable from the sidebar. Widgets have a default order; each user can
+// override the arrangement (saved in UserDashboardLayout).
+// ---------------------------------------------------------------------------
+
+model Dashboard {
+  id          Int      @id @default(autoincrement())
+  companyId   Int
+  moduleId    Int
+  userGroupId Int? // null = visible to everyone in the module
+  objectId    Int? // optional link to its ObjectMaster DASHBOARD object
+  name        String
+  icon        String?
+  sortOrder   Int      @default(0)
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  module      Module                @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  userGroup   UserGroup?            @relation(fields: [userGroupId], references: [id], onDelete: SetNull)
+  object      ObjectMaster?         @relation(fields: [objectId], references: [id], onDelete: SetNull)
+  widgets     DashboardWidget[]
+  userLayouts UserDashboardLayout[]
+
+  @@map("dashboards")
+}
+
+// Default widget placement on a dashboard.
+model DashboardWidget {
+  id          Int @id @default(autoincrement())
+  dashboardId Int
+  gadgetId    Int
+  sortOrder   Int @default(0)
+  width       Int @default(1) // grid span hint (1 = stat, 2 = wide)
+
+  dashboard Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+  gadget    Gadget    @relation(fields: [gadgetId], references: [id], onDelete: Cascade)
+
+  @@unique([dashboardId, gadgetId])
+  @@map("dashboard_widgets")
+}
+
+// A user's personal arrangement of a dashboard's widgets (drag-and-drop).
+model UserDashboardLayout {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  dashboardId Int
+  layout      Json // [{ gadgetId, sortOrder, hidden }]
+  updatedAt   DateTime @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dashboard Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dashboardId])
+  @@map("user_dashboard_layouts")
+}
+
+// ---------------------------------------------------------------------------
+// Users & Data Security. A user is a global identity with access to one or
+// more companies; their group (and therefore rights) is decided per company.
+// ---------------------------------------------------------------------------
+
+model User {
+  id              Int          @id @default(autoincrement())
+  userCode        String       @unique
+  username        String       @unique
+  name            String
+  email           String?      @unique
+  passwordHash    String
+  mobile          String?
+  mobileMac       String?
+  webEnabled      Boolean      @default(true) // can sign in to the web app
+  mobileEnabled   Boolean      @default(false) // can sign in to the mobile app
+  computerMac     String?
+  securityType    SecurityType @default(PASSWORD)
+  isSuperAdmin    Boolean      @default(false)
+  isActive        Boolean      @default(true)
+  remarks         String?
+  defaultModuleId Int?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  groupAssignments UserGroupAssignment[]
+  modules          UserModule[]
+  companies        UserCompany[]
+  dashboardLayouts UserDashboardLayout[]
+  defaultModule    Module?               @relation("UserDefaultModule", fields: [defaultModuleId], references: [id])
+
+  @@map("users")
+}
+
+// Modules assigned to a user *within a company*. A user can be given a
+// different module set per company (a subset of the company's enabled modules).
+model UserModule {
+  id        Int @id @default(autoincrement())
+  userId    Int
+  companyId Int
+  moduleId  Int
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  module  Module  @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, companyId, moduleId])
+  @@map("user_modules")
+}
+
+// Assigns a user to a user group. Because groups carry a companyId, a user's
+// effective group (and rights) varies by company.
+model UserGroupAssignment {
+  id          Int @id @default(autoincrement())
+  userId      Int
+  userGroupId Int
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userGroup UserGroup @relation(fields: [userGroupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, userGroupId])
+  @@map("user_group_assignments")
+}

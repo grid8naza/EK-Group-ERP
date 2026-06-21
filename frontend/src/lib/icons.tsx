@@ -1,0 +1,141 @@
+import {
+  LayoutDashboard,
+  Settings,
+  Box,
+  Users,
+  UserCog,
+  Building2,
+  List,
+  ListTree,
+  Menu as MenuIcon,
+  FileText,
+  Table2,
+  BarChart3,
+  ShieldCheck,
+  Database,
+  Palette,
+  Image as ImageIcon,
+  Workflow,
+  Languages,
+  Mail,
+  Lightbulb,
+  Cog,
+  Folder,
+  Layers,
+  Tag,
+  KeyRound,
+  type LucideIcon,
+} from 'lucide-react';
+
+// Map common icon names (lucide-style or fontawesome-style "fa fa-*") to lucide components.
+const MAP: Record<string, LucideIcon> = {
+  dashboard: LayoutDashboard,
+  'layout-dashboard': LayoutDashboard,
+  settings: Settings,
+  cog: Cog,
+  cogs: Settings,
+  'fa-cogs': Settings,
+  'fa-cog': Settings,
+  box: Box,
+  cube: Box,
+  'fa-cube': Box,
+  object: Box,
+  objects: Box,
+  users: Users,
+  'fa-users': Users,
+  user: Users,
+  usercog: UserCog,
+  'user-cog': UserCog,
+  group: Users,
+  groups: Users,
+  building: Building2,
+  building2: Building2,
+  company: Building2,
+  'fa-building': Building2,
+  list: List,
+  'fa-list': List,
+  listtree: ListTree,
+  lookup: List,
+  lookups: List,
+  menu: MenuIcon,
+  'fa-bars': MenuIcon,
+  file: FileText,
+  'file-text': FileText,
+  form: FileText,
+  forms: FileText,
+  table: Table2,
+  table2: Table2,
+  tables: Table2,
+  report: BarChart3,
+  reports: BarChart3,
+  chart: BarChart3,
+  shield: ShieldCheck,
+  shieldcheck: ShieldCheck,
+  security: ShieldCheck,
+  database: Database,
+  palette: Palette,
+  theme: Palette,
+  image: ImageIcon,
+  workflow: Workflow,
+  language: Languages,
+  languages: Languages,
+  mail: Mail,
+  email: Mail,
+  lightbulb: Lightbulb,
+  thought: Lightbulb,
+  folder: Folder,
+  layers: Layers,
+  module: Layers,
+  modules: Layers,
+  tag: Tag,
+  key: KeyRound,
+};
+
+export function resolveIcon(name?: string | null): LucideIcon {
+  if (!name) return Folder;
+  const key = name
+    .toLowerCase()
+    .replace(/^fa\s+/, '')
+    .replace(/^fa-/, '')
+    .trim();
+  return MAP[key] || MAP[name.toLowerCase()] || Folder;
+}
+
+/**
+ * Curated list of selectable icons for the icon picker. The `name` is what gets
+ * stored in the DB (and resolved back via {@link resolveIcon}); `label` is the
+ * human-readable text shown next to the glyph.
+ */
+export interface IconOption {
+  name: string;
+  label: string;
+  Icon: LucideIcon;
+}
+
+export const ICON_OPTIONS: IconOption[] = [
+  { name: 'dashboard', label: 'Dashboard', Icon: LayoutDashboard },
+  { name: 'settings', label: 'Settings', Icon: Settings },
+  { name: 'cog', label: 'Cog', Icon: Cog },
+  { name: 'box', label: 'Box / Object', Icon: Box },
+  { name: 'users', label: 'Users', Icon: Users },
+  { name: 'user-cog', label: 'User Settings', Icon: UserCog },
+  { name: 'building2', label: 'Company / Building', Icon: Building2 },
+  { name: 'list', label: 'List', Icon: List },
+  { name: 'listtree', label: 'List Tree', Icon: ListTree },
+  { name: 'menu', label: 'Menu', Icon: MenuIcon },
+  { name: 'file-text', label: 'Form / File', Icon: FileText },
+  { name: 'table2', label: 'Table', Icon: Table2 },
+  { name: 'report', label: 'Report / Chart', Icon: BarChart3 },
+  { name: 'shieldcheck', label: 'Security', Icon: ShieldCheck },
+  { name: 'database', label: 'Database', Icon: Database },
+  { name: 'palette', label: 'Theme / Palette', Icon: Palette },
+  { name: 'image', label: 'Image', Icon: ImageIcon },
+  { name: 'workflow', label: 'Workflow', Icon: Workflow },
+  { name: 'languages', label: 'Languages', Icon: Languages },
+  { name: 'mail', label: 'Mail', Icon: Mail },
+  { name: 'lightbulb', label: 'Lightbulb', Icon: Lightbulb },
+  { name: 'folder', label: 'Folder', Icon: Folder },
+  { name: 'layers', label: 'Layers / Module', Icon: Layers },
+  { name: 'tag', label: 'Tag', Icon: Tag },
+  { name: 'key', label: 'Key', Icon: KeyRound },
+];
