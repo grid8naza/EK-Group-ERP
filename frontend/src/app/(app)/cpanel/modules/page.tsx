@@ -11,6 +11,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
 import { Input, Textarea, Checkbox } from '@/components/ui/Field';
+import { IconPicker } from '@/components/ui/IconPicker';
 import { Badge } from '@/components/ui/Badge';
 import type { Module } from '@/lib/types';
 
@@ -222,11 +223,10 @@ export default function ModulesPage() {
             onChange={(e) => setForm({ ...form, name: e.target.value })}
             placeholder="e.g. Control Panel"
           />
-          <Input
+          <IconPicker
             label="Icon"
             value={form.icon}
-            onChange={(e) => setForm({ ...form, icon: e.target.value })}
-            placeholder="e.g. settings"
+            onChange={(icon) => setForm({ ...form, icon })}
           />
           <Input
             label="Sort Order"
