@@ -38,8 +38,20 @@ export class UserGroupService {
     return { ...group, modules: group.modules.map((m) => m.module) };
   }
 
+  // Core modules are super-admin only and cannot be granted to a user group.
+  private async withoutCoreModules(moduleIds: number[]) {
+    if (!moduleIds.length) return moduleIds;
+    const core = await this.prisma.module.findMany({
+      where: { id: { in: moduleIds }, isCore: true },
+      select: { id: true },
+    });
+    const coreSet = new Set(core.map((c) => c.id));
+    return moduleIds.filter((mId) => !coreSet.has(mId));
+  }
+
   async create(dto: CreateUserGroupDto, companyId: number) {
-    const { moduleIds, ...rest } = dto;
+    const { moduleIds: rawIds, ...rest } = dto;
+    const moduleIds = await this.withoutCoreModules(rawIds);
     const group = await this.prisma.userGroup.create({
       data: {
         ...rest,
@@ -52,7 +64,8 @@ export class UserGroupService {
 
   async update(id: number, dto: UpdateUserGroupDto) {
     const existing = await this.findOne(id);
-    const { moduleIds, ...rest } = dto;
+    const { moduleIds: rawIds, ...rest } = dto;
+    const moduleIds = rawIds ? await this.withoutCoreModules(rawIds) : rawIds;
 
     const ops: any[] = [
       this.prisma.userGroup.update({ where: { id }, data: rest }),

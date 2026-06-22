@@ -118,7 +118,8 @@ export default function UserGroupsPage() {
   useEffect(() => {
     api
       .get<Module[]>('/companies/enabled-modules')
-      .then((m) => setModules(m ?? []))
+      // Core modules are super-admin only and cannot be granted to a group.
+      .then((m) => setModules((m ?? []).filter((x) => !x.isCore)))
       .catch(() => {});
   }, [activeCompanyId]);
 

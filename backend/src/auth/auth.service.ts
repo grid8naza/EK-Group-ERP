@@ -135,9 +135,30 @@ export class AuthService {
       },
       orderBy: { sortOrder: 'asc' },
     });
-    const enabledModules = companyModules
-      .filter((cm) => cm.module.isActive)
+    // Core modules are universal (available in every company) and visible only
+    // to super admins, so fetch them directly with the same per-company menu /
+    // gadget data instead of relying on company_modules links.
+    const coreModules = await this.prisma.module.findMany({
+      where: { isCore: true, isActive: true },
+      include: {
+        mainMenus: {
+          where: { companyId: activeCompanyId },
+          orderBy: { sortOrder: 'asc' },
+          include: { subMenus: { orderBy: { sortOrder: 'asc' } } },
+        },
+        gadgets: {
+          where: { companyId: activeCompanyId, isActive: true },
+          orderBy: { sortOrder: 'asc' },
+        },
+      },
+      orderBy: { sortOrder: 'asc' },
+    });
+    const linkedUserModules = companyModules
+      .filter((cm) => cm.module.isActive && !cm.module.isCore)
       .map((cm) => cm.module);
+    const enabledModules = [...coreModules, ...linkedUserModules].sort(
+      (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0),
+    );
     const enabledModuleIds = enabledModules.map((m) => m.id);
 
     // The user's groups *in this company*.
@@ -174,6 +195,8 @@ export class AuthService {
       ? enabledModules
       : enabledModules.filter(
           (m) =>
+            // Core modules are super-admin only.
+            !m.isCore &&
             groupModuleIds!.has(m.id) &&
             (assignedModuleIds.size === 0 || assignedModuleIds.has(m.id)),
         );

@@ -94,6 +94,8 @@ export interface Module {
   sortOrder?: number | null;
   isActive: boolean;
   isCore: boolean;
+  // Companies a (non-core) module is enabled for. Empty/undefined for core.
+  companyIds?: number[];
 }
 
 export interface Lookup {

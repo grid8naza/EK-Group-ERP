@@ -147,7 +147,11 @@ export default function UsersPage() {
       missing.map((id) =>
         api
           .get<CompanyModule[]>(`/companies/${id}/modules`)
-          .then((m) => [id, (m ?? []).filter((x) => x.enabled)] as const)
+          // Exclude core modules — they are super-admin only.
+          .then(
+            (m) =>
+              [id, (m ?? []).filter((x) => x.enabled && !x.isCore)] as const,
+          )
           .catch(() => [id, [] as CompanyModule[]] as const),
       ),
     ).then((results) => {

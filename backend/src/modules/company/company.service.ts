@@ -70,14 +70,28 @@ export class CompanyService {
     }));
   }
 
-  /** The active company's enabled modules (joined catalog), for dropdowns. */
+  /**
+   * The active company's enabled modules (joined catalog), for dropdowns.
+   * Core modules are universal, so they are always included regardless of the
+   * per-company links.
+   */
   async getEnabledModules(companyId: number) {
-    const rows = await this.prisma.companyModule.findMany({
-      where: { companyId, isActive: true },
-      include: { module: true },
-      orderBy: { sortOrder: 'asc' },
-    });
-    return rows.map((r) => r.module);
+    const [rows, coreModules] = await Promise.all([
+      this.prisma.companyModule.findMany({
+        where: { companyId, isActive: true },
+        include: { module: true },
+        orderBy: { sortOrder: 'asc' },
+      }),
+      this.prisma.module.findMany({
+        where: { isCore: true, isActive: true },
+        orderBy: { sortOrder: 'asc' },
+      }),
+    ]);
+    const userModules = rows.map((r) => r.module).filter((m) => !m.isCore);
+    // Core first (universal), then the company's user modules.
+    return [...coreModules, ...userModules].sort(
+      (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0),
+    );
   }
 
   /** Replace the set of enabled modules for a company. */

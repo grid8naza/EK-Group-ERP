@@ -43,6 +43,11 @@ services:
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Admin@123}
       SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Super Administrator}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@erpgrip.local}
+      # Poll the filesystem so the TypeScript watcher picks up edits made on
+      # the Windows host (inotify events don't cross the bind mount).
+      TSC_WATCHFILE: DynamicPriorityPolling
+      TSC_WATCHDIRECTORY: DynamicPriorityPolling
+      CHOKIDAR_USEPOLLING: "true"
     volumes:
       - ./backend:/app
       # Keep the image's node_modules and generated Prisma client.

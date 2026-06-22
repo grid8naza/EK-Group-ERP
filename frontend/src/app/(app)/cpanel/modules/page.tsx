@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Plus, Layers, Lock } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Plus, Layers, Lock, Building2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
@@ -13,7 +13,8 @@ import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
 import { Input, Textarea, Checkbox } from '@/components/ui/Field';
 import { IconPicker } from '@/components/ui/IconPicker';
 import { Badge } from '@/components/ui/Badge';
-import type { Module } from '@/lib/types';
+import { cn } from '@/lib/utils';
+import type { Module, Company } from '@/lib/types';
 
 const ROUTE = '/cpanel/modules';
 
@@ -25,6 +26,7 @@ const empty = {
   sortOrder: 0,
   isActive: true,
   isCore: false,
+  companyIds: [] as number[],
 };
 
 export default function ModulesPage() {
@@ -32,6 +34,7 @@ export default function ModulesPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<Module[]>('/modules');
+  const [companies, setCompanies] = useState<Company[]>([]);
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Module | null>(null);
@@ -42,9 +45,16 @@ export default function ModulesPage() {
   const canEdit = can(ROUTE, 'edit');
   const canDelete = can(ROUTE, 'delete');
 
+  useEffect(() => {
+    api
+      .get<Company[]>('/companies')
+      .then((c) => setCompanies(c ?? []))
+      .catch(() => {});
+  }, []);
+
   const openAdd = () => {
     setEditing(null);
-    setForm({ ...empty });
+    setForm({ ...empty, companyIds: [] });
     setOpen(true);
   };
 
@@ -58,9 +68,18 @@ export default function ModulesPage() {
       sortOrder: m.sortOrder ?? 0,
       isActive: m.isActive,
       isCore: m.isCore,
+      companyIds: m.companyIds ?? [],
     });
     setOpen(true);
   };
+
+  const toggleCompany = (id: number) =>
+    setForm((f) => ({
+      ...f,
+      companyIds: f.companyIds.includes(id)
+        ? f.companyIds.filter((c) => c !== id)
+        : [...f.companyIds, id],
+    }));
 
   const save = async (again = false) => {
     if (!form.code.trim() || !form.name.trim()) {
@@ -83,7 +102,7 @@ export default function ModulesPage() {
       await refetch();
       if (again) {
         setEditing(null);
-        setForm({ ...empty });
+        setForm({ ...empty, companyIds: [] });
       } else {
         setOpen(false);
       }
@@ -244,7 +263,7 @@ export default function ModulesPage() {
               setForm({ ...form, description: e.target.value })
             }
           />
-          <div className="flex items-center gap-6 sm:col-span-2">
+          <div className="sm:col-span-2">
             <Checkbox
               label="Active"
               checked={form.isActive}
@@ -252,12 +271,65 @@ export default function ModulesPage() {
                 setForm({ ...form, isActive: e.target.checked })
               }
             />
-            <Checkbox
-              label="Core module"
-              checked={form.isCore}
-              onChange={(e) => setForm({ ...form, isCore: e.target.checked })}
-            />
           </div>
+
+          {/* Module type — Core (universal, super-admin only) vs User
+              (available only to the selected companies). Mutually exclusive. */}
+          <div className="sm:col-span-2">
+            <label className="label">Module type</label>
+            <div className="flex items-center gap-6">
+              <Checkbox
+                label="Core module"
+                checked={form.isCore}
+                onChange={() => setForm({ ...form, isCore: true })}
+              />
+              <Checkbox
+                label="User module"
+                checked={!form.isCore}
+                onChange={() => setForm({ ...form, isCore: false })}
+              />
+            </div>
+            <p className="mt-1 text-xs text-slate-400">
+              {form.isCore
+                ? 'Core modules are available to all companies and accessible only to super admins.'
+                : 'User modules are available only to the companies selected below.'}
+            </p>
+          </div>
+
+          {!form.isCore && (
+            <div className="sm:col-span-2">
+              <label className="label flex items-center gap-1.5">
+                <Building2 className="h-4 w-4 text-slate-400" /> Companies
+              </label>
+              <p className="mb-2 text-xs text-slate-400">
+                This module will be available only for the selected companies.
+              </p>
+              {companies.length === 0 ? (
+                <p className="text-sm text-slate-400">No companies available</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {companies.map((c) => {
+                    const active = form.companyIds.includes(c.id);
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => toggleCompany(c.id)}
+                        className={cn(
+                          'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition',
+                          active
+                            ? 'border-brand-600 bg-brand-600 text-white'
+                            : 'border-slate-300 bg-white text-slate-600 hover:border-brand-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+                        )}
+                      >
+                        {c.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </Drawer>
     </div>
