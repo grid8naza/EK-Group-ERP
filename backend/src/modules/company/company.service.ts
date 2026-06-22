@@ -5,6 +5,7 @@ import {
   SetCompanyModulesDto,
   UpdateCompanyDto,
 } from './company.dto';
+import { provisionCompanyCpanel } from './company-provisioning';
 
 @Injectable()
 export class CompanyService {
@@ -30,8 +31,12 @@ export class CompanyService {
     return company;
   }
 
-  create(dto: CreateCompanyDto) {
-    return this.prisma.company.create({ data: dto });
+  async create(dto: CreateCompanyDto) {
+    const company = await this.prisma.company.create({ data: dto });
+    // Scaffold the Cpanel module (menus, gadgets, dashboards, admin group) so
+    // a freshly created company is immediately usable.
+    await provisionCompanyCpanel(this.prisma, company.id);
+    return company;
   }
 
   async update(id: number, dto: UpdateCompanyDto) {

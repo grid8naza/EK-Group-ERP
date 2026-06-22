@@ -1,34 +1,12 @@
 /* eslint-disable no-console */
 import { PrismaClient, ObjectType } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import {
+  CPANEL_SUBS,
+  provisionCompanyCpanel,
+} from '../src/modules/company/company-provisioning';
 
 const prisma = new PrismaClient();
-
-// Cpanel sub-menu screens (shared routes; data is company-scoped at runtime).
-const CPANEL_SUBS = [
-  { name: 'Object Master', route: '/cpanel/objects', icon: 'database', order: 1 },
-  { name: 'Module Master', route: '/cpanel/modules', icon: 'layers', order: 2 },
-  { name: 'Menu Setup', route: '/cpanel/menus', icon: 'menu', order: 3 },
-  { name: 'User Groups', route: '/cpanel/user-groups', icon: 'shield', order: 4 },
-  { name: 'Dashboards', route: '/cpanel/dashboards', icon: 'layout-dashboard', order: 5 },
-  { name: 'Gadgets', route: '/cpanel/gadgets', icon: 'box', order: 6 },
-  { name: 'Company Master', route: '/cpanel/companies', icon: 'building', order: 7 },
-  { name: 'Lookups', route: '/cpanel/lookups', icon: 'list', order: 8 },
-  { name: 'Users & Data Security', route: '/cpanel/users', icon: 'users', order: 9 },
-];
-
-const CPANEL_GADGETS = [
-  { code: 'USERS_COUNT', name: 'Users', description: 'Total system users', width: 1 },
-  { code: 'GROUPS_COUNT', name: 'User Groups', description: 'Privilege groups', width: 1 },
-  { code: 'MODULES_COUNT', name: 'Modules', description: 'Enabled modules', width: 1 },
-  { code: 'COMPANIES_COUNT', name: 'Companies', description: 'Registered companies', width: 1 },
-  { code: 'FORMS_COUNT', name: 'Forms', description: 'Form objects', width: 1 },
-  { code: 'REPORTS_COUNT', name: 'Reports', description: 'Report objects', width: 1 },
-  { code: 'TABLES_COUNT', name: 'Tables', description: 'Table objects', width: 1 },
-  { code: 'RECENT_OBJECTS', name: 'Recent Objects', description: 'Latest objects added', width: 2 },
-  { code: 'QUICK_LINKS', name: 'Quick Links', description: 'Shortcuts to admin screens', width: 2 },
-  { code: 'ACCOUNT_INFO', name: 'Account', description: 'Your account details', width: 2 },
-];
 
 async function main() {
   console.log('Seeding Erp Grid8 (multi-company)…');
@@ -76,7 +54,8 @@ async function main() {
     });
   }
   // DASHBOARD object that each company's Admin Overview dashboard links to.
-  const adminDashObj = await prisma.objectMaster.create({
+  // Cpanel provisioning looks this up by name when wiring up dashboards.
+  await prisma.objectMaster.create({
     data: {
       moduleId: modules['CPANEL'],
       author: OBJECT_AUTHOR,
@@ -90,7 +69,6 @@ async function main() {
       isLocked: true,
     },
   });
-  const dashObjId = adminDashObj.id;
 
   // -------------------------------------------------------------------------
   // Lookups (global) — Developers, Icons.
@@ -140,49 +118,20 @@ async function main() {
       });
     }
 
-    // ---- Cpanel menu (objects are global; created once above) ----
-    const cpanelId = modules['CPANEL'];
-    const cpanelMain = await prisma.mainMenu.create({
-      data: { companyId: cid, moduleId: cpanelId, menuName: 'Cpanel', sortOrder: 1, objectType: ObjectType.FORM, isUserMenu: true, icon: 'settings' },
-    });
-    const cpanelSubIds: number[] = [];
-    for (const s of CPANEL_SUBS) {
-      const sub = await prisma.subMenu.create({
-        data: { mainMenuId: cpanelMain.id, subMenuName: s.name, route: s.route, icon: s.icon, sortOrder: s.order, objectType: ObjectType.FORM },
-      });
-      cpanelSubIds.push(sub.id);
-    }
-
-    // ---- Cpanel gadgets ----
-    const cpanelGadgetIds: number[] = [];
-    for (const [i, g] of CPANEL_GADGETS.entries()) {
-      const rec = await prisma.gadget.create({
-        data: { companyId: cid, moduleId: cpanelId, code: g.code, name: g.name, description: g.description, sortOrder: i + 1 },
-      });
-      cpanelGadgetIds.push(rec.id);
+    // ---- Cpanel scaffold (menus, gadgets, Administrators group, dashboards) ----
+    // Shared with the runtime "create company" endpoint so the two never drift.
+    const provisioned = await provisionCompanyCpanel(prisma, cid);
+    if (!provisioned) throw new Error(`Company ${cid} was already provisioned`);
+    const adminGroup = provisioned.adminGroup;
+    // The Administrators group also manages every enabled user module
+    // (Cpanel is already linked by provisioning).
+    for (const code of opts.enabledModules) {
+      if (code === 'CPANEL') continue;
+      await prisma.userGroupModule.create({ data: { userGroupId: adminGroup.id, moduleId: modules[code] } });
     }
 
     // ---- CRM (if enabled) ----
     const crmEnabled = opts.enabledModules.includes('CRM');
-
-    // ---- User groups ----
-    const adminGroup = await prisma.userGroup.create({
-      data: { companyId: cid, name: 'Administrators', description: 'Full access to enabled modules.' },
-    });
-    // Admin group manages every enabled module.
-    for (const code of opts.enabledModules) {
-      await prisma.userGroupModule.create({ data: { userGroupId: adminGroup.id, moduleId: modules[code] } });
-    }
-    // Grant full Cpanel privileges.
-    await prisma.groupMainMenuAccess.create({ data: { userGroupId: adminGroup.id, mainMenuId: cpanelMain.id, visible: true } });
-    for (const subId of cpanelSubIds) {
-      await prisma.groupSubMenuPrivilege.create({
-        data: { userGroupId: adminGroup.id, subMenuId: subId, canMenu: true, canView: true, canAdd: true, canEdit: true, canDelete: true },
-      });
-    }
-    for (const gid of cpanelGadgetIds) {
-      await prisma.groupGadget.create({ data: { userGroupId: adminGroup.id, gadgetId: gid } });
-    }
 
     // A CRM-only group (demonstrates per-company group variation).
     let crmGroup: { id: number } | null = null;
@@ -191,31 +140,6 @@ async function main() {
         data: { companyId: cid, name: 'CRM Team', description: 'CRM users.' },
       });
       await prisma.userGroupModule.create({ data: { userGroupId: crmGroup.id, moduleId: modules['CRM'] } });
-    }
-
-    // ---- Dashboards (multiple per module + group) ----
-    // Build the dashboard from the global Admin Overview object.
-    const adminDash = await prisma.dashboard.create({
-      data: { companyId: cid, moduleId: cpanelId, userGroupId: adminGroup.id, objectId: dashObjId, name: 'Admin Overview', icon: 'layout-dashboard', sortOrder: 1, isDefault: true },
-    });
-    const adminWidgetCodes = ['USERS_COUNT', 'GROUPS_COUNT', 'MODULES_COUNT', 'COMPANIES_COUNT', 'RECENT_OBJECTS', 'QUICK_LINKS'];
-    for (const [i, code] of adminWidgetCodes.entries()) {
-      const g = await prisma.gadget.findFirst({ where: { companyId: cid, moduleId: cpanelId, code } });
-      if (g) {
-        const meta = CPANEL_GADGETS.find((x) => x.code === code);
-        await prisma.dashboardWidget.create({ data: { dashboardId: adminDash.id, gadgetId: g.id, sortOrder: i + 1, width: meta?.width ?? 1 } });
-      }
-    }
-    // A second Cpanel dashboard (objects-focused) for the admin group.
-    const objDash = await prisma.dashboard.create({
-      data: { companyId: cid, moduleId: cpanelId, userGroupId: adminGroup.id, name: 'Objects Overview', icon: 'database', sortOrder: 2 },
-    });
-    for (const [i, code] of ['FORMS_COUNT', 'REPORTS_COUNT', 'TABLES_COUNT', 'RECENT_OBJECTS'].entries()) {
-      const g = await prisma.gadget.findFirst({ where: { companyId: cid, moduleId: cpanelId, code } });
-      if (g) {
-        const meta = CPANEL_GADGETS.find((x) => x.code === code);
-        await prisma.dashboardWidget.create({ data: { dashboardId: objDash.id, gadgetId: g.id, sortOrder: i + 1, width: meta?.width ?? 1 } });
-      }
     }
 
     return { company, adminGroup, crmGroup };
