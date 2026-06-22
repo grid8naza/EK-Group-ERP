@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   CreateCompanyDto,
@@ -46,6 +50,32 @@ export class CompanyService {
 
   async remove(id: number) {
     await this.findOne(id);
+
+    // Block deletion while active (non-super-admin) users still belong to the
+    // company — deleting would silently drop their company membership. Super
+    // admins are system-wide accounts (members of every company), so they are
+    // not counted.
+    const activeUsers = await this.prisma.user.findMany({
+      where: {
+        isActive: true,
+        isSuperAdmin: false,
+        companies: { some: { companyId: id } },
+      },
+      select: { name: true, username: true },
+      orderBy: { name: 'asc' },
+    });
+    if (activeUsers.length > 0) {
+      const MAX = 10;
+      const shown = activeUsers
+        .slice(0, MAX)
+        .map((u) => `${u.name} (${u.username})`);
+      const extra = activeUsers.length - shown.length;
+      const list = shown.join(', ') + (extra > 0 ? `, +${extra} more` : '');
+      throw new ConflictException(
+        `Cannot delete this company — ${activeUsers.length} active user(s) still belong to it: ${list}. Deactivate or move them to another company first.`,
+      );
+    }
+
     await this.prisma.company.delete({ where: { id } });
     return { success: true };
   }
