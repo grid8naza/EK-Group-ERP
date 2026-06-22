@@ -266,7 +266,6 @@ export interface UserGroup {
   id: number;
   name: string;
   description?: string | null;
-  isSystem: boolean;
   /** Modules this group can manage (many-to-many). */
   modules?: Module[];
 }

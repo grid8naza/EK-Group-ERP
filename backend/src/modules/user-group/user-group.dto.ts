@@ -17,7 +17,6 @@ export class CreateUserGroupDto {
   name: string;
 
   @IsOptional() @IsString() description?: string;
-  @IsOptional() @IsBoolean() isSystem?: boolean;
 
   // One or more modules this group can manage.
   @IsArray()

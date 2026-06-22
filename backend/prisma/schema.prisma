@@ -273,7 +273,6 @@ model UserGroup {
   companyId   Int
   name        String
   description String?
-  isSystem    Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

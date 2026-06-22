@@ -207,7 +207,7 @@ async function main() {
 
     // ---- User groups ----
     const adminGroup = await prisma.userGroup.create({
-      data: { companyId: cid, name: 'Administrators', description: 'Full access to enabled modules.', isSystem: true },
+      data: { companyId: cid, name: 'Administrators', description: 'Full access to enabled modules.' },
     });
     // Admin group manages every enabled module.
     for (const code of opts.enabledModules) {
