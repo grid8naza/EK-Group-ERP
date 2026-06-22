@@ -16,7 +16,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
-import { Input, Textarea, Checkbox } from '@/components/ui/Field';
+import { Input, Textarea } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import { resolveIcon } from '@/lib/icons';
 import { cn } from '@/lib/utils';
@@ -32,7 +32,6 @@ const ROUTE = '/cpanel/user-groups';
 const empty = {
   name: '',
   description: '',
-  isSystem: false,
   moduleIds: [] as number[],
 };
 
@@ -134,7 +133,6 @@ export default function UserGroupsPage() {
     setForm({
       name: g.name,
       description: g.description ?? '',
-      isSystem: g.isSystem,
       moduleIds: g.modules?.map((m) => m.id) ?? [],
     });
     setOpen(true);
@@ -160,7 +158,6 @@ export default function UserGroupsPage() {
       const payload = {
         name: form.name,
         description: form.description || null,
-        isSystem: form.isSystem,
         moduleIds: form.moduleIds,
       };
       if (editing) {
@@ -346,7 +343,6 @@ export default function UserGroupsPage() {
       render: (r) => (
         <span className="flex items-center gap-2 font-medium text-slate-800 dark:text-slate-100">
           {r.name}
-          {r.isSystem && <Badge color="violet">System</Badge>}
         </span>
       ),
     },
@@ -471,11 +467,6 @@ export default function UserGroupsPage() {
             onChange={(e) =>
               setForm({ ...form, description: e.target.value })
             }
-          />
-          <Checkbox
-            label="System group"
-            checked={form.isSystem}
-            onChange={(e) => setForm({ ...form, isSystem: e.target.checked })}
           />
         </div>
       </Drawer>
