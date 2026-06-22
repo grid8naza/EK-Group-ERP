@@ -30,12 +30,6 @@ const CPANEL_GADGETS = [
   { code: 'ACCOUNT_INFO', name: 'Account', description: 'Your account details', width: 2 },
 ];
 
-const CRM_GADGETS = [
-  { code: 'CRM_ENQUIRIES', name: 'Enquiries', description: 'Total enquiry objects', width: 1 },
-  { code: 'CRM_WELCOME', name: 'Welcome', description: 'CRM module overview', width: 2 },
-  { code: 'CRM_QUICK_LINKS', name: 'Quick Links', description: 'CRM shortcuts', width: 2 },
-];
-
 async function main() {
   console.log('Seeding Erp Grid8 (multi-company)…');
 
@@ -168,22 +162,8 @@ async function main() {
       cpanelGadgetIds.push(rec.id);
     }
 
-    // ---- CRM objects + menu + gadgets (if enabled) ----
-    let crmMain: { id: number } | null = null;
-    let crmSubIds: number[] = [];
-    let crmGadgetIds: number[] = [];
-    if (opts.enabledModules.includes('CRM')) {
-      const crmId = modules['CRM'];
-      crmMain = await prisma.mainMenu.create({
-        data: { companyId: cid, moduleId: crmId, menuName: 'Enquiry', sortOrder: 1, objectType: ObjectType.FORM, isUserMenu: true, icon: 'list' },
-      });
-      for (const [i, g] of CRM_GADGETS.entries()) {
-        const rec = await prisma.gadget.create({
-          data: { companyId: cid, moduleId: crmId, code: g.code, name: g.name, description: g.description, sortOrder: i + 1 },
-        });
-        crmGadgetIds.push(rec.id);
-      }
-    }
+    // ---- CRM (if enabled) ----
+    const crmEnabled = opts.enabledModules.includes('CRM');
 
     // ---- User groups ----
     const adminGroup = await prisma.userGroup.create({
@@ -206,20 +186,11 @@ async function main() {
 
     // A CRM-only group (demonstrates per-company group variation).
     let crmGroup: { id: number } | null = null;
-    if (crmMain) {
+    if (crmEnabled) {
       crmGroup = await prisma.userGroup.create({
         data: { companyId: cid, name: 'CRM Team', description: 'CRM users.' },
       });
       await prisma.userGroupModule.create({ data: { userGroupId: crmGroup.id, moduleId: modules['CRM'] } });
-      await prisma.groupMainMenuAccess.create({ data: { userGroupId: crmGroup.id, mainMenuId: crmMain.id, visible: true } });
-      for (const subId of crmSubIds) {
-        await prisma.groupSubMenuPrivilege.create({
-          data: { userGroupId: crmGroup.id, subMenuId: subId, canMenu: true, canView: true, canAdd: true, canEdit: false, canDelete: false },
-        });
-      }
-      for (const gid of crmGadgetIds) {
-        await prisma.groupGadget.create({ data: { userGroupId: crmGroup.id, gadgetId: gid } });
-      }
     }
 
     // ---- Dashboards (multiple per module + group) ----
@@ -244,19 +215,6 @@ async function main() {
       if (g) {
         const meta = CPANEL_GADGETS.find((x) => x.code === code);
         await prisma.dashboardWidget.create({ data: { dashboardId: objDash.id, gadgetId: g.id, sortOrder: i + 1, width: meta?.width ?? 1 } });
-      }
-    }
-
-    if (crmMain && crmGroup) {
-      const crmDash = await prisma.dashboard.create({
-        data: { companyId: cid, moduleId: modules['CRM'], userGroupId: crmGroup.id, name: 'Sales Overview', icon: 'list', sortOrder: 1, isDefault: true },
-      });
-      for (const [i, code] of ['CRM_ENQUIRIES', 'CRM_WELCOME', 'CRM_QUICK_LINKS'].entries()) {
-        const g = await prisma.gadget.findFirst({ where: { companyId: cid, moduleId: modules['CRM'], code } });
-        if (g) {
-          const meta = CRM_GADGETS.find((x) => x.code === code);
-          await prisma.dashboardWidget.create({ data: { dashboardId: crmDash.id, gadgetId: g.id, sortOrder: i + 1, width: meta?.width ?? 1 } });
-        }
       }
     }
 
