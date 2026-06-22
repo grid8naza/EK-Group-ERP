@@ -172,9 +172,24 @@ export default function MenusPage() {
   }, [selectedMain?.id]);
 
   const moduleOptions = modules.map((m) => ({ value: m.id, label: m.name }));
-  // Objects available to the sub-menu form, filtered by the chosen object type.
+  // Objects already attached to a sub menu of this main menu (excluding the one
+  // currently being edited) so they aren't offered again — no duplicates, and
+  // the list only shows objects not yet added. We match on object id and on
+  // route, so sub menus added without an object link are still de-duplicated.
+  const otherSubs = subMenus.filter((s) => s.id !== sEditing?.id);
+  const usedObjectIds = new Set(
+    otherSubs.filter((s) => s.objectId != null).map((s) => s.objectId),
+  );
+  const usedRoutes = new Set(
+    otherSubs.filter((s) => s.route).map((s) => s.route),
+  );
+  // Objects available to the sub-menu form, filtered by the chosen object type
+  // and excluding objects already used by this main menu's sub menus.
   const objectOptions = objects
     .filter((o) => !sForm.objectType || o.objectType === sForm.objectType)
+    .filter(
+      (o) => !usedObjectIds.has(o.id) && !(o.route && usedRoutes.has(o.route)),
+    )
     .map((o) => ({ value: o.id, label: o.nameInMenu || o.objectName }));
 
   // ---- Drag reorder ----
@@ -685,7 +700,11 @@ export default function MenusPage() {
             wrapClassName="sm:col-span-2"
             value={sForm.objectId}
             onChange={(e) => onPickObject(e.target.value)}
-            placeholder="Select from Object Master"
+            placeholder={
+              objectOptions.length
+                ? 'Select from Object Master'
+                : 'All objects already added to this menu'
+            }
             options={objectOptions}
           />
           <Input
