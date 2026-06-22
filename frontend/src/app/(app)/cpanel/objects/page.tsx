@@ -23,6 +23,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
+import { IconPicker } from '@/components/ui/IconPicker';
 import { StatCard } from '@/components/ui/StatCard';
 import { Badge } from '@/components/ui/Badge';
 import { Tabs } from '@/components/ui/Tabs';
@@ -234,6 +235,10 @@ export default function ObjectsPage() {
   const save = async (again = false) => {
     if (!form.moduleId || !form.author.trim() || !form.objectName.trim()) {
       toast.error('Module, Author and Object Name are required.');
+      return;
+    }
+    if (form.showInMenu && !form.nameInMenu.trim()) {
+      toast.error('Name in Menu is required when "Show in Menu" is checked.');
       return;
     }
     setSaving(true);
@@ -647,6 +652,7 @@ export default function ObjectsPage() {
             </div>
             <Input
               label="Name in Menu"
+              required={form.showInMenu}
               value={form.nameInMenu}
               onChange={(e) =>
                 setForm({ ...form, nameInMenu: e.target.value })
@@ -677,11 +683,10 @@ export default function ObjectsPage() {
               onChange={(e) => setForm({ ...form, route: e.target.value })}
               placeholder="e.g. /cpanel/objects"
             />
-            <Input
+            <IconPicker
               label="Icon"
               value={form.icon}
-              onChange={(e) => setForm({ ...form, icon: e.target.value })}
-              placeholder="e.g. box"
+              onChange={(icon) => setForm({ ...form, icon })}
             />
             <div className="flex items-end pb-2">
               <Checkbox
