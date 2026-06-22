@@ -39,7 +39,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     (message: string, type: ToastType = 'info') => {
       const id = ++idRef.current;
       setToasts((prev) => [...prev, { id, type, message }]);
-      setTimeout(() => remove(id), 4000);
+      // Errors stay open until the user dismisses them (they usually need to be
+      // read and acted on); success/info toasts auto-dismiss.
+      if (type !== 'error') {
+        setTimeout(() => remove(id), 4000);
+      }
     },
     [remove],
   );
