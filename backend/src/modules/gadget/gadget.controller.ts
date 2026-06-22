@@ -13,6 +13,9 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { GadgetService } from './gadget.service';
 import { CompanyId } from '../../auth/company.decorator';
+import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
+import { assertSuperAdmin } from '../../common/assert-super-admin';
+import { LockDto } from '../../common/lock.dto';
 import { CreateGadgetDto, UpdateGadgetDto } from './gadget.dto';
 
 function requireCompany(companyId?: number): number {
@@ -47,5 +50,16 @@ export class GadgetController {
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.service.remove(id);
+  }
+
+  // Lock / unlock a gadget (must be unlocked before edit or delete).
+  @Patch(':id/lock')
+  setLock(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: LockDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    assertSuperAdmin(user);
+    return this.service.setLock(id, dto.locked);
   }
 }

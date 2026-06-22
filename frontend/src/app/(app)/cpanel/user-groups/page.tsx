@@ -13,8 +13,10 @@ import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
+import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
+import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
 import { Input, Textarea } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -84,6 +86,12 @@ export default function UserGroupsPage() {
 
   const { data: groups, loading, refetch } =
     useFetch<UserGroup[]>('/user-groups');
+  const { canToggle, toggleLock, guardEdit, guardDelete } = useLock<UserGroup>({
+    endpoint: '/user-groups',
+    noun: 'user group',
+    nameOf: (g) => g.name,
+    reload: refetch,
+  });
   const [modules, setModules] = useState<Module[]>([]);
 
   const canAdd = can(ROUTE, 'add');
@@ -387,19 +395,26 @@ export default function UserGroupsPage() {
         loading={loading}
         onRefresh={refetch}
         searchPlaceholder="Search groups..."
-        onEdit={openEdit}
-        onDelete={remove}
+        onEdit={(r) => guardEdit(r, () => openEdit(r))}
+        onDelete={(r) => guardDelete(r, () => remove(r))}
         canEdit={canEdit}
         canDelete={canDelete}
         emptyMessage="No user groups found"
         rowActions={(r) => (
-          <button
-            onClick={() => openPrivileges(r)}
-            className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950"
-            title="Privileges"
-          >
-            <KeyRound className="h-4 w-4" /> Privileges
-          </button>
+          <>
+            <button
+              onClick={() => openPrivileges(r)}
+              className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950"
+              title="Privileges"
+            >
+              <KeyRound className="h-4 w-4" /> Privileges
+            </button>
+            <LockButton
+              locked={r.isLocked}
+              canToggle={canToggle}
+              onToggle={() => toggleLock(r)}
+            />
+          </>
         )}
       />
 

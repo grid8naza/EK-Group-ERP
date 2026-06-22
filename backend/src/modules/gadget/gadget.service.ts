@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateGadgetDto, UpdateGadgetDto } from './gadget.dto';
@@ -36,7 +40,12 @@ export class GadgetService {
   }
 
   async update(id: number, dto: UpdateGadgetDto) {
-    await this.ensure(id);
+    const existing = await this.ensure(id);
+    if (existing.isLocked) {
+      throw new ConflictException(
+        'This gadget is locked. Unlock it before editing.',
+      );
+    }
     const { code, config, ...rest } = dto;
     return this.prisma.gadget.update({
       where: { id },
@@ -49,8 +58,21 @@ export class GadgetService {
     });
   }
 
-  async remove(id: number) {
+  async setLock(id: number, locked: boolean) {
     await this.ensure(id);
+    return this.prisma.gadget.update({
+      where: { id },
+      data: { isLocked: locked },
+    });
+  }
+
+  async remove(id: number) {
+    const existing = await this.ensure(id);
+    if (existing.isLocked) {
+      throw new ConflictException(
+        'This gadget is locked. Unlock it before deleting.',
+      );
+    }
     await this.prisma.gadget.delete({ where: { id } });
     return { success: true };
   }

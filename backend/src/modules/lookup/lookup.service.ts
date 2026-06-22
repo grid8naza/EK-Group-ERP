@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   CreateLookupDto,
@@ -33,12 +37,30 @@ export class LookupService {
   }
 
   async update(id: number, dto: UpdateLookupDto) {
-    await this.ensureLookup(id);
+    const existing = await this.ensureLookup(id);
+    if (existing.isLocked) {
+      throw new ConflictException(
+        'This lookup is locked. Unlock it before editing.',
+      );
+    }
     return this.prisma.lookup.update({ where: { id }, data: dto });
   }
 
-  async remove(id: number) {
+  async setLock(id: number, locked: boolean) {
     await this.ensureLookup(id);
+    return this.prisma.lookup.update({
+      where: { id },
+      data: { isLocked: locked },
+    });
+  }
+
+  async remove(id: number) {
+    const existing = await this.ensureLookup(id);
+    if (existing.isLocked) {
+      throw new ConflictException(
+        'This lookup is locked. Unlock it before deleting.',
+      );
+    }
     await this.prisma.lookup.delete({ where: { id } });
     return { success: true };
   }
@@ -74,12 +96,30 @@ export class LookupService {
   }
 
   async updateValue(id: number, dto: UpdateLookupValueDto) {
-    await this.findOneValue(id);
+    const existing = await this.findOneValue(id);
+    if (existing.isLocked) {
+      throw new ConflictException(
+        'This lookup value is locked. Unlock it before editing.',
+      );
+    }
     return this.prisma.lookupValue.update({ where: { id }, data: dto });
   }
 
-  async removeValue(id: number) {
+  async setLockValue(id: number, locked: boolean) {
     await this.findOneValue(id);
+    return this.prisma.lookupValue.update({
+      where: { id },
+      data: { isLocked: locked },
+    });
+  }
+
+  async removeValue(id: number) {
+    const existing = await this.findOneValue(id);
+    if (existing.isLocked) {
+      throw new ConflictException(
+        'This lookup value is locked. Unlock it before deleting.',
+      );
+    }
     await this.prisma.lookupValue.delete({ where: { id } });
     return { success: true };
   }

@@ -1,14 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plus, Layers, Lock, Building2 } from 'lucide-react';
+import { Plus, Layers, Building2, Lock } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
+import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
+import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
 import { Input, Textarea, Checkbox } from '@/components/ui/Field';
 import { IconPicker } from '@/components/ui/IconPicker';
@@ -34,6 +36,12 @@ export default function ModulesPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<Module[]>('/modules');
+  const { canToggle, toggleLock, guardEdit, guardDelete } = useLock<Module>({
+    endpoint: '/modules',
+    noun: 'module',
+    nameOf: (m) => m.name,
+    reload: refetch,
+  });
   const [companies, setCompanies] = useState<Company[]>([]);
 
   const [open, setOpen] = useState(false);
@@ -205,10 +213,17 @@ export default function ModulesPage() {
         loading={loading}
         onRefresh={refetch}
         searchPlaceholder="Search modules..."
-        onEdit={openEdit}
-        onDelete={remove}
+        onEdit={(r) => guardEdit(r, () => openEdit(r))}
+        onDelete={(r) => guardDelete(r, () => remove(r))}
         canEdit={canEdit}
         canDelete={canDelete}
+        rowActions={(r) => (
+          <LockButton
+            locked={r.isLocked}
+            canToggle={canToggle}
+            onToggle={() => toggleLock(r)}
+          />
+        )}
         emptyMessage="No modules found"
       />
 

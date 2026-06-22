@@ -7,8 +7,10 @@ import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
+import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
+import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
 import { Input, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -36,6 +38,12 @@ export default function CompaniesPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<Company[]>('/companies');
+  const { canToggle, toggleLock, guardEdit, guardDelete } = useLock<Company>({
+    endpoint: '/companies',
+    noun: 'company',
+    nameOf: (c) => c.name,
+    reload: refetch,
+  });
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Company | null>(null);
@@ -211,23 +219,28 @@ export default function CompaniesPage() {
         loading={loading}
         onRefresh={refetch}
         searchPlaceholder="Search companies..."
-        onEdit={openEdit}
-        onDelete={remove}
+        onEdit={(r) => guardEdit(r, () => openEdit(r))}
+        onDelete={(r) => guardDelete(r, () => remove(r))}
         canEdit={canEdit}
         canDelete={canDelete}
-        rowActions={
-          canEdit
-            ? (r) => (
-                <button
-                  onClick={() => openModules(r)}
-                  className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
-                  title="Modules"
-                >
-                  <Layers className="h-4 w-4" />
-                </button>
-              )
-            : undefined
-        }
+        rowActions={(r) => (
+          <>
+            {canEdit && (
+              <button
+                onClick={() => openModules(r)}
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
+                title="Modules"
+              >
+                <Layers className="h-4 w-4" />
+              </button>
+            )}
+            <LockButton
+              locked={r.isLocked}
+              canToggle={canToggle}
+              onToggle={() => toggleLock(r)}
+            />
+          </>
+        )}
         emptyMessage="No companies found"
       />
 

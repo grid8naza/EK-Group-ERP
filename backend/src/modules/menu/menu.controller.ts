@@ -13,6 +13,9 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { MenuService } from './menu.service';
 import { CompanyId } from '../../auth/company.decorator';
+import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
+import { assertSuperAdmin } from '../../common/assert-super-admin';
+import { LockDto } from '../../common/lock.dto';
 import {
   CreateMainMenuDto,
   CreateSubMenuDto,
@@ -68,6 +71,17 @@ export class MainMenuController {
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.service.removeMainMenu(id);
   }
+
+  // Lock / unlock a main menu (must be unlocked before edit or delete).
+  @Patch(':id/lock')
+  setLock(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: LockDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    assertSuperAdmin(user);
+    return this.service.setLockMainMenu(id, dto.locked);
+  }
 }
 
 @ApiTags('sub-menus')
@@ -106,6 +120,17 @@ export class SubMenuController {
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.service.removeSubMenu(id);
+  }
+
+  // Lock / unlock a sub-menu (must be unlocked before edit or delete).
+  @Patch(':id/lock')
+  setLock(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: LockDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    assertSuperAdmin(user);
+    return this.service.setLockSubMenu(id, dto.locked);
   }
 }
 

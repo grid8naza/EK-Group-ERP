@@ -29,7 +29,9 @@ import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
+import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
 import { Input, Select, Checkbox } from '@/components/ui/Field';
 import { IconPicker } from '@/components/ui/IconPicker';
@@ -135,6 +137,14 @@ export default function DashboardsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const { canToggle, toggleLock, guardEdit, guardDelete } =
+    useLock<DashboardSummary>({
+      endpoint: '/dashboards',
+      noun: 'dashboard',
+      nameOf: (d) => d.name,
+      reload: load,
+    });
 
   const moduleOptions = modules.map((m) => ({ value: m.id, label: m.name }));
   const groupOptions = groups.map((g) => ({ value: g.id, label: g.name }));
@@ -333,7 +343,7 @@ export default function DashboardsPage() {
                   </button>
                   {canEdit && (
                     <button
-                      onClick={() => openEdit(d)}
+                      onClick={() => guardEdit(d, () => openEdit(d))}
                       className="rounded-lg p-2 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
                       title="Edit"
                     >
@@ -342,13 +352,18 @@ export default function DashboardsPage() {
                   )}
                   {canDelete && (
                     <button
-                      onClick={() => remove(d)}
+                      onClick={() => guardDelete(d, () => remove(d))}
                       className="rounded-lg p-2 text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"
                       title="Delete"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
                   )}
+                  <LockButton
+                    locked={d.isLocked}
+                    canToggle={canToggle}
+                    onToggle={() => toggleLock(d)}
+                  />
                 </div>
               </div>
             );

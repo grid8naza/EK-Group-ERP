@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   CreateMainMenuDto,
@@ -41,12 +45,30 @@ export class MenuService {
   }
 
   async updateMainMenu(id: number, dto: UpdateMainMenuDto) {
-    await this.ensureMainMenu(id);
+    const existing = await this.ensureMainMenu(id);
+    if (existing.isLocked) {
+      throw new ConflictException(
+        'This menu is locked. Unlock it before editing.',
+      );
+    }
     return this.prisma.mainMenu.update({ where: { id }, data: dto });
   }
 
-  async removeMainMenu(id: number) {
+  async setLockMainMenu(id: number, locked: boolean) {
     await this.ensureMainMenu(id);
+    return this.prisma.mainMenu.update({
+      where: { id },
+      data: { isLocked: locked },
+    });
+  }
+
+  async removeMainMenu(id: number) {
+    const existing = await this.ensureMainMenu(id);
+    if (existing.isLocked) {
+      throw new ConflictException(
+        'This menu is locked. Unlock it before deleting.',
+      );
+    }
     await this.prisma.mainMenu.delete({ where: { id } });
     return { success: true };
   }
@@ -83,12 +105,30 @@ export class MenuService {
   }
 
   async updateSubMenu(id: number, dto: UpdateSubMenuDto) {
-    await this.findOneSubMenu(id);
+    const existing = await this.findOneSubMenu(id);
+    if (existing.isLocked) {
+      throw new ConflictException(
+        'This sub-menu is locked. Unlock it before editing.',
+      );
+    }
     return this.prisma.subMenu.update({ where: { id }, data: dto });
   }
 
-  async removeSubMenu(id: number) {
+  async setLockSubMenu(id: number, locked: boolean) {
     await this.findOneSubMenu(id);
+    return this.prisma.subMenu.update({
+      where: { id },
+      data: { isLocked: locked },
+    });
+  }
+
+  async removeSubMenu(id: number) {
+    const existing = await this.findOneSubMenu(id);
+    if (existing.isLocked) {
+      throw new ConflictException(
+        'This sub-menu is locked. Unlock it before deleting.',
+      );
+    }
     await this.prisma.subMenu.delete({ where: { id } });
     return { success: true };
   }

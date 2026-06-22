@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
@@ -45,13 +49,26 @@ export class DashboardService {
   }
 
   async update(id: number, dto: UpdateDashboardDto) {
-    await this.ensure(id);
+    const existing = await this.ensure(id);
+    if (existing.isLocked) {
+      throw new ConflictException(
+        'This dashboard is locked. Unlock it before editing.',
+      );
+    }
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.dashboard.update({ where: { id }, data: dto });
       if (updated.isDefault) {
         await this.clearOtherDefaults(tx, updated);
       }
       return updated;
+    });
+  }
+
+  async setLock(id: number, locked: boolean) {
+    await this.ensure(id);
+    return this.prisma.dashboard.update({
+      where: { id },
+      data: { isLocked: locked },
     });
   }
 
@@ -76,7 +93,12 @@ export class DashboardService {
   }
 
   async remove(id: number) {
-    await this.ensure(id);
+    const existing = await this.ensure(id);
+    if (existing.isLocked) {
+      throw new ConflictException(
+        'This dashboard is locked. Unlock it before deleting.',
+      );
+    }
     await this.prisma.dashboard.delete({ where: { id } });
     return { success: true };
   }

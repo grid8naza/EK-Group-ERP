@@ -7,8 +7,10 @@ import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
+import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
+import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
 import { Input, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -66,6 +68,21 @@ export default function LookupsPage() {
       setValuesLoading(false);
     }
   };
+
+  const lookupLock = useLock<Lookup>({
+    endpoint: '/lookups',
+    noun: 'lookup',
+    nameOf: (l) => l.name,
+    reload: refetch,
+  });
+  const valueLock = useLock<LookupValue>({
+    endpoint: '/lookup-values',
+    noun: 'lookup value',
+    nameOf: (v) => v.label,
+    reload: () => {
+      if (selected) loadValues(selected);
+    },
+  });
 
   useEffect(() => {
     if (selected) loadValues(selected);
@@ -285,12 +302,14 @@ export default function LookupsPage() {
               )}
             </div>
           </div>
-          {selected && (canEdit || canDelete) && (
-            <div className="mt-3 flex gap-2">
+          {selected && (canEdit || canDelete || lookupLock.canToggle) && (
+            <div className="mt-3 flex items-center gap-2">
               {canEdit && (
                 <button
                   className="btn-secondary"
-                  onClick={() => openEditLookup(selected)}
+                  onClick={() =>
+                    lookupLock.guardEdit(selected, () => openEditLookup(selected))
+                  }
                 >
                   Edit Lookup
                 </button>
@@ -298,11 +317,20 @@ export default function LookupsPage() {
               {canDelete && !selected.isSystem && (
                 <button
                   className="btn-danger"
-                  onClick={() => removeLookup(selected)}
+                  onClick={() =>
+                    lookupLock.guardDelete(selected, () =>
+                      removeLookup(selected),
+                    )
+                  }
                 >
                   Delete Lookup
                 </button>
               )}
+              <LockButton
+                locked={selected.isLocked}
+                canToggle={lookupLock.canToggle}
+                onToggle={() => lookupLock.toggleLock(selected)}
+              />
             </div>
           )}
         </div>
@@ -327,10 +355,19 @@ export default function LookupsPage() {
                 rowKey={(r) => r.id}
                 loading={valuesLoading}
                 searchPlaceholder="Search values..."
-                onEdit={openEditValue}
-                onDelete={removeValue}
+                onEdit={(r) => valueLock.guardEdit(r, () => openEditValue(r))}
+                onDelete={(r) =>
+                  valueLock.guardDelete(r, () => removeValue(r))
+                }
                 canEdit={canEdit}
                 canDelete={canDelete}
+                rowActions={(r) => (
+                  <LockButton
+                    locked={r.isLocked}
+                    canToggle={valueLock.canToggle}
+                    onToggle={() => valueLock.toggleLock(r)}
+                  />
+                )}
                 pageSize={8}
                 emptyMessage="No values for this lookup"
               />

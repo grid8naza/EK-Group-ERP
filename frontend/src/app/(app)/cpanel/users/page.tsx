@@ -15,8 +15,10 @@ import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
+import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
+import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -98,6 +100,13 @@ export default function UsersPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
+
+  const { canToggle, toggleLock, guardEdit, guardDelete } = useLock<AppUser>({
+    endpoint: '/users',
+    noun: 'user',
+    nameOf: (u) => u.name,
+    reload: load,
+  });
 
   useEffect(() => {
     const t = setTimeout(load, 300);
@@ -554,10 +563,17 @@ export default function UsersPage() {
         onSearchChange={setSearch}
         serverSearch
         searchPlaceholder="Search users..."
-        onEdit={openEdit}
-        onDelete={remove}
+        onEdit={(r) => guardEdit(r, () => openEdit(r))}
+        onDelete={(r) => guardDelete(r, () => remove(r))}
         canEdit={canEdit}
         canDelete={canDelete}
+        rowActions={(r) => (
+          <LockButton
+            locked={r.isLocked}
+            canToggle={canToggle}
+            onToggle={() => toggleLock(r)}
+          />
+        )}
         emptyMessage="No users found"
       />
 

@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -161,7 +165,12 @@ export class UserService {
   }
 
   async update(id: number, dto: UpdateUserDto) {
-    await this.ensureUser(id);
+    const existing = await this.ensureUser(id);
+    if (existing.isLocked) {
+      throw new ConflictException(
+        'This user is locked. Unlock it before editing.',
+      );
+    }
     const {
       password,
       groupIds,
@@ -240,8 +249,21 @@ export class UserService {
     });
   }
 
-  async remove(id: number) {
+  async setLock(id: number, locked: boolean) {
     await this.ensureUser(id);
+    return this.prisma.user.update({
+      where: { id },
+      data: { isLocked: locked },
+    });
+  }
+
+  async remove(id: number) {
+    const existing = await this.ensureUser(id);
+    if (existing.isLocked) {
+      throw new ConflictException(
+        'This user is locked. Unlock it before deleting.',
+      );
+    }
     await this.prisma.user.delete({ where: { id } });
     return { success: true };
   }

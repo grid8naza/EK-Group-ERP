@@ -94,6 +94,7 @@ export interface Module {
   sortOrder?: number | null;
   isActive: boolean;
   isCore: boolean;
+  isLocked?: boolean;
   // Companies a (non-core) module is enabled for. Empty/undefined for core.
   companyIds?: number[];
 }
@@ -104,6 +105,7 @@ export interface Lookup {
   name: string;
   description?: string | null;
   isSystem: boolean;
+  isLocked?: boolean;
 }
 
 export interface LookupValue {
@@ -114,6 +116,7 @@ export interface LookupValue {
   extra?: string | null;
   sortOrder?: number | null;
   isActive: boolean;
+  isLocked?: boolean;
 }
 
 export interface Company {
@@ -129,6 +132,7 @@ export interface Company {
   country?: string | null;
   taxNumber?: string | null;
   isActive: boolean;
+  isLocked?: boolean;
 }
 
 export type ObjectType = 'TABLE' | 'FORM' | 'REPORT' | 'DASHBOARD';
@@ -197,6 +201,7 @@ export interface GadgetCatalogItem {
   config?: GadgetConfig | null;
   sortOrder: number;
   isActive: boolean;
+  isLocked?: boolean;
   module?: { id: number; name: string; code: string } | null;
   _count?: { placements: number };
 }
@@ -235,6 +240,7 @@ export interface DashboardSummary {
   sortOrder: number;
   isDefault: boolean;
   isActive: boolean;
+  isLocked?: boolean;
   module?: { id: number; name: string; code: string } | null;
   userGroup?: { id: number; name: string } | null;
   _count?: { widgets: number };
@@ -248,6 +254,7 @@ export interface MainMenu {
   objectType?: string | null;
   isUserMenu: boolean;
   icon?: string | null;
+  isLocked?: boolean;
 }
 
 export interface SubMenu {
@@ -260,12 +267,14 @@ export interface SubMenu {
   description?: string | null;
   route?: string | null;
   icon?: string | null;
+  isLocked?: boolean;
 }
 
 export interface UserGroup {
   id: number;
   name: string;
   description?: string | null;
+  isLocked?: boolean;
   /** Modules this group can manage (many-to-many). */
   modules?: Module[];
 }
@@ -340,6 +349,7 @@ export interface AppUser {
   securityType: SecurityType;
   isSuperAdmin?: boolean;
   isActive: boolean;
+  isLocked?: boolean;
   remarks?: string | null;
   groupIds?: number[];
   groups?: UserGroupRef[];

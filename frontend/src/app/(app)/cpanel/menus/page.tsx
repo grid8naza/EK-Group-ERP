@@ -29,7 +29,9 @@ import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
+import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
 import {
   Input,
@@ -237,6 +239,21 @@ export default function MenusPage() {
     setMForm({ ...emptyMain, sortOrder: mainMenus.length + 1 });
     setMOpen(true);
   };
+  const mainLock = useLock<MainMenu>({
+    endpoint: '/main-menus',
+    noun: 'menu',
+    nameOf: (m) => m.menuName,
+    reload: loadMainMenus,
+  });
+  const subLock = useLock<SubMenu>({
+    endpoint: '/sub-menus',
+    noun: 'sub-menu',
+    nameOf: (s) => s.subMenuName,
+    reload: () => {
+      if (selectedMain) loadSubMenus(selectedMain);
+    },
+  });
+
   const openEditMain = (m: MainMenu) => {
     setMEditing(m);
     setMForm({
@@ -478,7 +495,9 @@ export default function MenusPage() {
                             <div className="flex flex-none items-center gap-0.5">
                               {canEdit && (
                                 <button
-                                  onClick={() => openEditMain(m)}
+                                  onClick={() =>
+                                    mainLock.guardEdit(m, () => openEditMain(m))
+                                  }
                                   className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
                                   title="Edit"
                                 >
@@ -487,13 +506,20 @@ export default function MenusPage() {
                               )}
                               {canDelete && (
                                 <button
-                                  onClick={() => removeMain(m)}
+                                  onClick={() =>
+                                    mainLock.guardDelete(m, () => removeMain(m))
+                                  }
                                   className="rounded-lg p-1.5 text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"
                                   title="Delete"
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </button>
                               )}
+                              <LockButton
+                                locked={m.isLocked}
+                                canToggle={mainLock.canToggle}
+                                onToggle={() => mainLock.toggleLock(m)}
+                              />
                               <ChevronRight
                                 className={cn(
                                   'ml-0.5 h-4 w-4 flex-none text-slate-300',
@@ -568,7 +594,9 @@ export default function MenusPage() {
                               <div className="flex flex-none items-center gap-0.5">
                                 {canEdit && (
                                   <button
-                                    onClick={() => openEditSub(s)}
+                                    onClick={() =>
+                                      subLock.guardEdit(s, () => openEditSub(s))
+                                    }
                                     className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
                                     title="Edit"
                                   >
@@ -577,13 +605,20 @@ export default function MenusPage() {
                                 )}
                                 {canDelete && (
                                   <button
-                                    onClick={() => removeSub(s)}
+                                    onClick={() =>
+                                      subLock.guardDelete(s, () => removeSub(s))
+                                    }
                                     className="rounded-lg p-1.5 text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"
                                     title="Delete"
                                   >
                                     <Trash2 className="h-4 w-4" />
                                   </button>
                                 )}
+                                <LockButton
+                                  locked={s.isLocked}
+                                  canToggle={subLock.canToggle}
+                                  onToggle={() => subLock.toggleLock(s)}
+                                />
                               </div>
                             </div>
                           )}

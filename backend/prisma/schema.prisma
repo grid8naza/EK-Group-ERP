@@ -56,6 +56,7 @@ model Module {
   sortOrder   Int      @default(0)
   isActive    Boolean  @default(true)
   isCore      Boolean  @default(false) // core modules (Cpanel) cannot be removed
+  isLocked    Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -82,6 +83,7 @@ model Lookup {
   name        String
   description String?
   isSystem    Boolean  @default(false)
+  isLocked    Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -98,6 +100,7 @@ model LookupValue {
   extra     String?
   sortOrder Int      @default(0)
   isActive  Boolean  @default(true)
+  isLocked  Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -125,6 +128,7 @@ model Company {
   taxNumber String?
   logo      String?
   isActive  Boolean  @default(true)
+  isLocked  Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -233,6 +237,7 @@ model MainMenu {
   objectType ObjectType @default(FORM)
   isUserMenu Boolean    @default(true)
   icon       String?
+  isLocked   Boolean    @default(false) // when locked, must be unlocked before edit/delete
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
 
@@ -254,6 +259,7 @@ model SubMenu {
   description String?
   route       String?
   icon        String?
+  isLocked    Boolean    @default(false) // when locked, must be unlocked before edit/delete
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
@@ -273,6 +279,7 @@ model UserGroup {
   companyId   Int
   name        String
   description String?
+  isLocked    Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -348,6 +355,7 @@ model Gadget {
   config      Json? // type-specific settings (source / text / url / height)
   sortOrder   Int        @default(0)
   isActive    Boolean    @default(true)
+  isLocked    Boolean    @default(false) // when locked, must be unlocked before edit/delete
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
@@ -389,6 +397,7 @@ model Dashboard {
   sortOrder   Int      @default(0)
   isDefault   Boolean  @default(false)
   isActive    Boolean  @default(true)
+  isLocked    Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -452,6 +461,7 @@ model User {
   securityType    SecurityType @default(PASSWORD)
   isSuperAdmin    Boolean      @default(false)
   isActive        Boolean      @default(true)
+  isLocked        Boolean      @default(false) // when locked, must be unlocked before edit/delete
   remarks         String?
   defaultModuleId Int?
   createdAt       DateTime     @default(now())

@@ -14,6 +14,9 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CompanyService } from './company.service';
 import { CompanyId } from '../../auth/company.decorator';
+import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
+import { assertSuperAdmin } from '../../common/assert-super-admin';
+import { LockDto } from '../../common/lock.dto';
 import {
   CreateCompanyDto,
   SetCompanyModulesDto,
@@ -56,6 +59,17 @@ export class CompanyController {
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.service.remove(id);
+  }
+
+  // Lock / unlock a company (must be unlocked before edit or delete).
+  @Patch(':id/lock')
+  setLock(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: LockDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    assertSuperAdmin(user);
+    return this.service.setLock(id, dto.locked);
   }
 
   @Get(':id/modules')

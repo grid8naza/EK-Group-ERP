@@ -11,6 +11,9 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserService } from './user.service';
+import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
+import { assertSuperAdmin } from '../../common/assert-super-admin';
+import { LockDto } from '../../common/lock.dto';
 import { CreateUserDto, UpdateUserDto } from './user.dto';
 
 @ApiTags('users')
@@ -42,5 +45,16 @@ export class UserController {
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.service.remove(id);
+  }
+
+  // Lock / unlock a user (must be unlocked before edit or delete).
+  @Patch(':id/lock')
+  setLock(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: LockDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    assertSuperAdmin(user);
+    return this.service.setLock(id, dto.locked);
   }
 }

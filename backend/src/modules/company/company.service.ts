@@ -44,12 +44,30 @@ export class CompanyService {
   }
 
   async update(id: number, dto: UpdateCompanyDto) {
-    await this.findOne(id);
+    const existing = await this.findOne(id);
+    if (existing.isLocked) {
+      throw new ConflictException(
+        'This company is locked. Unlock it before editing.',
+      );
+    }
     return this.prisma.company.update({ where: { id }, data: dto });
   }
 
-  async remove(id: number) {
+  async setLock(id: number, locked: boolean) {
     await this.findOne(id);
+    return this.prisma.company.update({
+      where: { id },
+      data: { isLocked: locked },
+    });
+  }
+
+  async remove(id: number) {
+    const existing = await this.findOne(id);
+    if (existing.isLocked) {
+      throw new ConflictException(
+        'This company is locked. Unlock it before deleting.',
+      );
+    }
 
     // Block deletion while active (non-super-admin) users still belong to the
     // company — deleting would silently drop their company membership. Super

@@ -15,6 +15,8 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { DashboardService } from './dashboard.service';
 import { CompanyId } from '../../auth/company.decorator';
 import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
+import { assertSuperAdmin } from '../../common/assert-super-admin';
+import { LockDto } from '../../common/lock.dto';
 import {
   CreateDashboardDto,
   SaveLayoutDto,
@@ -75,6 +77,17 @@ export class DashboardController {
   @Delete(':id')
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.service.remove(id);
+  }
+
+  // Lock / unlock a dashboard (must be unlocked before edit or delete).
+  @Patch(':id/lock')
+  setLock(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: LockDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    assertSuperAdmin(user);
+    return this.service.setLock(id, dto.locked);
   }
 
   // Admin: set the default widget set + order for a dashboard.

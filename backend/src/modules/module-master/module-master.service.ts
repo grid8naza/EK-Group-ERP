@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -74,6 +75,11 @@ export class ModuleMasterService {
 
   async update(id: number, dto: UpdateModuleDto) {
     const existing = await this.findOne(id);
+    if (existing.isLocked) {
+      throw new ConflictException(
+        'This module is locked. Unlock it before editing.',
+      );
+    }
     const { companyIds, ...data } = dto;
     const module = await this.prisma.module.update({ where: { id }, data });
     const isCore = module.isCore ?? existing.isCore;
@@ -81,8 +87,21 @@ export class ModuleMasterService {
     return this.findOne(id);
   }
 
+  async setLock(id: number, locked: boolean) {
+    await this.findOne(id);
+    return this.prisma.module.update({
+      where: { id },
+      data: { isLocked: locked },
+    });
+  }
+
   async remove(id: number) {
     const module = await this.findOne(id);
+    if (module.isLocked) {
+      throw new ConflictException(
+        'This module is locked. Unlock it before deleting.',
+      );
+    }
     if (module.isCore)
       throw new BadRequestException('Core modules cannot be removed');
     await this.prisma.module.delete({ where: { id } });
