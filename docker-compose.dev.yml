@@ -24,9 +24,13 @@ services:
       retries: 10
 
   backend:
+    # Build the image (for prisma engines / node_modules), but run the NestJS
+    # watch server against the bind-mounted source so backend edits hot-reload.
     build:
       context: ./backend
     restart: unless-stopped
+    working_dir: /app
+    command: sh -c "npx prisma db push --skip-generate --accept-data-loss && npm run seed && npm run start:dev"
     depends_on:
       db:
         condition: service_healthy
@@ -39,6 +43,10 @@ services:
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Admin@123}
       SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Super Administrator}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@erpgrip.local}
+    volumes:
+      - ./backend:/app
+      # Keep the image's node_modules and generated Prisma client.
+      - /app/node_modules
     ports:
       - "${BACKEND_PORT:-4000}:4000"
 

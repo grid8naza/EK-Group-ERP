@@ -107,9 +107,11 @@ export class UserGroupService {
     const group = await this.findOne(id);
     const moduleIds = group.modules.map((m) => m.id);
 
+    // Main menus are per-company, so scope to the group's company — otherwise
+    // a module shared across companies would surface duplicate main menus.
     const mainMenus = moduleIds.length
       ? await this.prisma.mainMenu.findMany({
-          where: { moduleId: { in: moduleIds } },
+          where: { companyId: group.companyId, moduleId: { in: moduleIds } },
           include: { subMenus: { orderBy: { sortOrder: 'asc' } } },
           orderBy: { sortOrder: 'asc' },
         })
