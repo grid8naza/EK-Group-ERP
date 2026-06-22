@@ -81,20 +81,6 @@ async function main() {
       },
     });
   }
-  for (const name of ['Enquiry AMC', 'Enquiry OT', 'Enquiry EMG COT']) {
-    await prisma.objectMaster.create({
-      data: {
-        moduleId: modules['CRM'],
-        author: OBJECT_AUTHOR,
-        objectType: ObjectType.FORM,
-        objectName: name,
-        nameInMenu: name,
-        showInMenu: true,
-        route: `/crm/enquiry/${name.toLowerCase().replace(/\s+/g, '-')}`,
-        icon: 'list',
-      },
-    });
-  }
   // DASHBOARD object that each company's Admin Overview dashboard links to.
   const adminDashObj = await prisma.objectMaster.create({
     data: {
@@ -191,12 +177,6 @@ async function main() {
       crmMain = await prisma.mainMenu.create({
         data: { companyId: cid, moduleId: crmId, menuName: 'Enquiry', sortOrder: 1, objectType: ObjectType.FORM, isUserMenu: true, icon: 'list' },
       });
-      for (const [i, name] of ['Enquiry AMC', 'Enquiry OT', 'Enquiry EMG COT'].entries()) {
-        const sub = await prisma.subMenu.create({
-          data: { mainMenuId: crmMain.id, subMenuName: name, route: `/crm/enquiry/${name.toLowerCase().replace(/\s+/g, '-')}`, icon: 'list', sortOrder: i + 1, objectType: ObjectType.FORM },
-        });
-        crmSubIds.push(sub.id);
-      }
       for (const [i, g] of CRM_GADGETS.entries()) {
         const rec = await prisma.gadget.create({
           data: { companyId: cid, moduleId: crmId, code: g.code, name: g.name, description: g.description, sortOrder: i + 1 },
