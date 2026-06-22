@@ -31,7 +31,13 @@ import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
-import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
+import {
+  Input,
+  Select,
+  Textarea,
+  Checkbox,
+  FieldWrap,
+} from '@/components/ui/Field';
 import { IconPicker } from '@/components/ui/IconPicker';
 import { Badge } from '@/components/ui/Badge';
 import { cn } from '@/lib/utils';
@@ -39,6 +45,14 @@ import { resolveIcon } from '@/lib/icons';
 import type { Module, MainMenu, SubMenu, ErpObject } from '@/lib/types';
 
 const ROUTE = '/cpanel/menus';
+
+// Object types, mirroring the Object Master classification.
+const OBJECT_TYPE_OPTIONS = [
+  { value: 'FORM', label: 'Form' },
+  { value: 'REPORT', label: 'Report' },
+  { value: 'TABLE', label: 'Table' },
+  { value: 'DASHBOARD', label: 'Dashboard' },
+];
 
 const emptyMain = {
   sortOrder: 0,
@@ -158,12 +172,10 @@ export default function MenusPage() {
   }, [selectedMain?.id]);
 
   const moduleOptions = modules.map((m) => ({ value: m.id, label: m.name }));
+  // Objects available to the sub-menu form, filtered by the chosen object type.
   const objectOptions = objects
-    .filter(
-      (o) =>
-        !selectedMain?.objectType || o.objectType === selectedMain.objectType,
-    )
-    .map((o) => ({ value: o.id, label: o.objectName }));
+    .filter((o) => !sForm.objectType || o.objectType === sForm.objectType)
+    .map((o) => ({ value: o.id, label: o.nameInMenu || o.objectName }));
 
   // ---- Drag reorder ----
   const onReorderMain = async (e: DragEndEvent) => {
@@ -289,7 +301,8 @@ export default function MenusPage() {
       objectId: s.objectId ? String(s.objectId) : '',
       sortOrder: s.sortOrder ?? 0,
       subMenuName: s.subMenuName,
-      objectType: s.objectType ?? 'FORM',
+      // Object type is inherited from the parent main menu and cannot change.
+      objectType: selectedMain?.objectType ?? s.objectType ?? 'FORM',
       description: s.description ?? '',
       route: s.route ?? '',
       icon: s.icon ?? '',
@@ -349,15 +362,16 @@ export default function MenusPage() {
     }
   };
 
+  // Picking an object from the master fills the sub-menu name, route and icon.
+  // The object type is fixed by the parent main menu, so it is not touched here.
   const onPickObject = (id: string) => {
     const obj = objects.find((o) => String(o.id) === id);
     setSForm((f) => ({
       ...f,
       objectId: id,
-      subMenuName: f.subMenuName || obj?.nameInMenu || obj?.objectName || '',
-      route: f.route || obj?.route || '',
-      objectType: obj?.objectType || f.objectType,
-      icon: f.icon || obj?.icon || '',
+      subMenuName: obj?.nameInMenu || obj?.objectName || '',
+      route: obj?.route || '',
+      icon: obj?.icon || '',
     }));
   };
 
@@ -614,12 +628,7 @@ export default function MenusPage() {
             label="Object Type"
             value={mForm.objectType}
             onChange={(e) => setMForm({ ...mForm, objectType: e.target.value })}
-            options={[
-              { value: 'FORM', label: 'Form' },
-              { value: 'REPORT', label: 'Report' },
-              { value: 'TABLE', label: 'Table' },
-              { value: 'DASHBOARD', label: 'Dashboard' },
-            ]}
+            options={OBJECT_TYPE_OPTIONS}
           />
           <IconPicker
             label="Icon"
@@ -664,34 +673,46 @@ export default function MenusPage() {
             }
           />
           <Select
-            label={
-              selectedMain?.objectType
-                ? `Object (${selectedMain.objectType})`
-                : 'Object'
-            }
-            value={sForm.objectId}
-            onChange={(e) => onPickObject(e.target.value)}
-            placeholder="Select object (optional)"
-            options={objectOptions}
+            label="Object Type"
+            value={sForm.objectType}
+            disabled
+            title="Inherited from the main menu"
+            options={OBJECT_TYPE_OPTIONS}
           />
-          <Input
+          <Select
             label="Sub Menu Name"
             required
             wrapClassName="sm:col-span-2"
-            value={sForm.subMenuName}
-            onChange={(e) => setSForm({ ...sForm, subMenuName: e.target.value })}
+            value={sForm.objectId}
+            onChange={(e) => onPickObject(e.target.value)}
+            placeholder="Select from Object Master"
+            options={objectOptions}
           />
           <Input
             label="Route"
             value={sForm.route}
-            onChange={(e) => setSForm({ ...sForm, route: e.target.value })}
-            placeholder="e.g. /cpanel/objects"
+            readOnly
+            disabled
+            placeholder="Loaded from object"
           />
-          <IconPicker
-            label="Icon"
-            value={sForm.icon}
-            onChange={(icon) => setSForm({ ...sForm, icon })}
-          />
+          <FieldWrap label="Icon">
+            <div className="input-base flex items-center gap-2 text-slate-600 dark:text-slate-300">
+              {(() => {
+                const Icon = resolveIcon(sForm.icon);
+                return (
+                  <Icon className="h-[18px] w-[18px] flex-none" />
+                );
+              })()}
+              <span
+                className={cn(
+                  'flex-1 truncate',
+                  !sForm.icon && 'text-slate-400',
+                )}
+              >
+                {sForm.icon || 'Loaded from object'}
+              </span>
+            </div>
+          </FieldWrap>
           <Textarea
             label="Description"
             wrapClassName="sm:col-span-2"
