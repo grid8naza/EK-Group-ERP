@@ -10,6 +10,7 @@ import {
   UpdateCompanyDto,
 } from './company.dto';
 import { provisionCompanyCpanel } from './company-provisioning';
+import { assertUnlocked } from '../../common/assert-unlocked';
 
 @Injectable()
 export class CompanyService {
@@ -36,20 +37,23 @@ export class CompanyService {
   }
 
   async create(dto: CreateCompanyDto) {
-    const company = await this.prisma.company.create({ data: dto });
-    // Scaffold the Cpanel module (menus, gadgets, dashboards, admin group) so
-    // a freshly created company is immediately usable.
-    await provisionCompanyCpanel(this.prisma, company.id);
-    return company;
+    // Create + scaffold atomically: if provisioning fails partway, the company
+    // insert rolls back instead of leaving a half-provisioned company behind.
+    return this.prisma.$transaction(
+      async (tx) => {
+        const company = await tx.company.create({ data: dto });
+        // Scaffold the Cpanel module (menus, gadgets, dashboards, admin group)
+        // so a freshly created company is immediately usable.
+        await provisionCompanyCpanel(tx, company.id);
+        return company;
+      },
+      { timeout: 20000 },
+    );
   }
 
   async update(id: number, dto: UpdateCompanyDto) {
     const existing = await this.findOne(id);
-    if (existing.isLocked) {
-      throw new ConflictException(
-        'This company is locked. Unlock it before editing.',
-      );
-    }
+    assertUnlocked(existing, 'company', 'editing');
     return this.prisma.company.update({ where: { id }, data: dto });
   }
 
@@ -63,11 +67,7 @@ export class CompanyService {
 
   async remove(id: number) {
     const existing = await this.findOne(id);
-    if (existing.isLocked) {
-      throw new ConflictException(
-        'This company is locked. Unlock it before deleting.',
-      );
-    }
+    assertUnlocked(existing, 'company', 'deleting');
 
     // Block deletion while active (non-super-admin) users still belong to the
     // company — deleting would silently drop their company membership. Super

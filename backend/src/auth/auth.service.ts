@@ -115,44 +115,47 @@ export class AuthService {
       };
     }
 
-    // Modules enabled for the active company, joined to the catalog.
-    const companyModules = await this.prisma.companyModule.findMany({
-      where: { companyId: activeCompanyId, isActive: true },
-      include: {
-        module: {
-          include: {
-            mainMenus: {
-              where: { companyId: activeCompanyId },
-              orderBy: { sortOrder: 'asc' },
-              include: { subMenus: { orderBy: { sortOrder: 'asc' } } },
-            },
-            gadgets: {
-              where: { companyId: activeCompanyId, isActive: true },
-              orderBy: { sortOrder: 'asc' },
+    // These two queries are independent — run them concurrently to halve the
+    // module-loading latency on the login / company-switch hot path.
+    // - companyModules: modules enabled for the active company, joined to catalog.
+    // - coreModules: universal modules (super-admin only), fetched directly with
+    //   the same per-company menu/gadget data rather than via company_modules.
+    const [companyModules, coreModules] = await Promise.all([
+      this.prisma.companyModule.findMany({
+        where: { companyId: activeCompanyId, isActive: true },
+        include: {
+          module: {
+            include: {
+              mainMenus: {
+                where: { companyId: activeCompanyId },
+                orderBy: { sortOrder: 'asc' },
+                include: { subMenus: { orderBy: { sortOrder: 'asc' } } },
+              },
+              gadgets: {
+                where: { companyId: activeCompanyId, isActive: true },
+                orderBy: { sortOrder: 'asc' },
+              },
             },
           },
         },
-      },
-      orderBy: { sortOrder: 'asc' },
-    });
-    // Core modules are universal (available in every company) and visible only
-    // to super admins, so fetch them directly with the same per-company menu /
-    // gadget data instead of relying on company_modules links.
-    const coreModules = await this.prisma.module.findMany({
-      where: { isCore: true, isActive: true },
-      include: {
-        mainMenus: {
-          where: { companyId: activeCompanyId },
-          orderBy: { sortOrder: 'asc' },
-          include: { subMenus: { orderBy: { sortOrder: 'asc' } } },
+        orderBy: { sortOrder: 'asc' },
+      }),
+      this.prisma.module.findMany({
+        where: { isCore: true, isActive: true },
+        include: {
+          mainMenus: {
+            where: { companyId: activeCompanyId },
+            orderBy: { sortOrder: 'asc' },
+            include: { subMenus: { orderBy: { sortOrder: 'asc' } } },
+          },
+          gadgets: {
+            where: { companyId: activeCompanyId, isActive: true },
+            orderBy: { sortOrder: 'asc' },
+          },
         },
-        gadgets: {
-          where: { companyId: activeCompanyId, isActive: true },
-          orderBy: { sortOrder: 'asc' },
-        },
-      },
-      orderBy: { sortOrder: 'asc' },
-    });
+        orderBy: { sortOrder: 'asc' },
+      }),
+    ]);
     const linkedUserModules = companyModules
       .filter((cm) => cm.module.isActive && !cm.module.isCore)
       .map((cm) => cm.module);

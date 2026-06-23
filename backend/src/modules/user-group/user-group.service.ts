@@ -1,9 +1,6 @@
-import {
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { assertUnlocked } from '../../common/assert-unlocked';
 import {
   CreateUserGroupDto,
   UpdatePrivilegesDto,
@@ -68,11 +65,7 @@ export class UserGroupService {
 
   async update(id: number, dto: UpdateUserGroupDto) {
     const existing = await this.findOne(id);
-    if (existing.isLocked) {
-      throw new ConflictException(
-        'This user group is locked. Unlock it before editing.',
-      );
-    }
+    assertUnlocked(existing, 'user group', 'editing');
     const { moduleIds: rawIds, ...rest } = dto;
     const moduleIds = rawIds ? await this.withoutCoreModules(rawIds) : rawIds;
 
@@ -129,11 +122,7 @@ export class UserGroupService {
 
   async remove(id: number) {
     const existing = await this.findOne(id);
-    if (existing.isLocked) {
-      throw new ConflictException(
-        'This user group is locked. Unlock it before deleting.',
-      );
-    }
+    assertUnlocked(existing, 'user group', 'deleting');
     await this.prisma.userGroup.delete({ where: { id } });
     return { success: true };
   }

@@ -1,10 +1,10 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { assertUnlocked } from '../../common/assert-unlocked';
 import { CreateModuleDto, UpdateModuleDto } from './module-master.dto';
 
 @Injectable()
@@ -75,11 +75,7 @@ export class ModuleMasterService {
 
   async update(id: number, dto: UpdateModuleDto) {
     const existing = await this.findOne(id);
-    if (existing.isLocked) {
-      throw new ConflictException(
-        'This module is locked. Unlock it before editing.',
-      );
-    }
+    assertUnlocked(existing, 'module', 'editing');
     const { companyIds, ...data } = dto;
     const module = await this.prisma.module.update({ where: { id }, data });
     const isCore = module.isCore ?? existing.isCore;
@@ -97,11 +93,7 @@ export class ModuleMasterService {
 
   async remove(id: number) {
     const module = await this.findOne(id);
-    if (module.isLocked) {
-      throw new ConflictException(
-        'This module is locked. Unlock it before deleting.',
-      );
-    }
+    assertUnlocked(module, 'module', 'deleting');
     if (module.isCore)
       throw new BadRequestException('Core modules cannot be removed');
     await this.prisma.module.delete({ where: { id } });

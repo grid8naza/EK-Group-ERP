@@ -10,12 +10,12 @@ import {
   Post,
   Put,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CompanyService } from './company.service';
 import { CompanyId } from '../../auth/company.decorator';
-import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
-import { assertSuperAdmin } from '../../common/assert-super-admin';
+import { SuperAdminGuard } from '../../auth/super-admin.guard';
 import { LockDto } from '../../common/lock.dto';
 import {
   CreateCompanyDto,
@@ -62,13 +62,12 @@ export class CompanyController {
   }
 
   // Lock / unlock a company (must be unlocked before edit or delete).
+  @UseGuards(SuperAdminGuard)
   @Patch(':id/lock')
   setLock(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: LockDto,
-    @CurrentUser() user: AuthUser,
   ) {
-    assertSuperAdmin(user);
     return this.service.setLock(id, dto.locked);
   }
 

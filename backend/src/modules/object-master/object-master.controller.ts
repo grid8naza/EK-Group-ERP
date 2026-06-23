@@ -8,11 +8,13 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { ObjectType } from '@prisma/client';
 import { ObjectMasterService } from './object-master.service';
 import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
+import { SuperAdminGuard } from '../../auth/super-admin.guard';
 import {
   CreateObjectDto,
   CreateObjectRevisionDto,
@@ -76,8 +78,13 @@ export class ObjectMasterController {
   }
 
   // Lock / unlock an object (must be unlocked before edit or delete).
+  // Super-admin only, matching every other cpanel master's lock endpoint.
+  @UseGuards(SuperAdminGuard)
   @Patch(':id/lock')
-  setLock(@Param('id', ParseIntPipe) id: number, @Body() dto: LockObjectDto) {
+  setLock(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: LockObjectDto,
+  ) {
     return this.service.setLock(id, dto.locked);
   }
 

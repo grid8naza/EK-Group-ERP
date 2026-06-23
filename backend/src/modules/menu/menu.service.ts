@@ -1,9 +1,6 @@
-import {
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { assertUnlocked } from '../../common/assert-unlocked';
 import {
   CreateMainMenuDto,
   CreateSubMenuDto,
@@ -46,11 +43,7 @@ export class MenuService {
 
   async updateMainMenu(id: number, dto: UpdateMainMenuDto) {
     const existing = await this.ensureMainMenu(id);
-    if (existing.isLocked) {
-      throw new ConflictException(
-        'This menu is locked. Unlock it before editing.',
-      );
-    }
+    assertUnlocked(existing, 'menu', 'editing');
     return this.prisma.mainMenu.update({ where: { id }, data: dto });
   }
 
@@ -64,11 +57,7 @@ export class MenuService {
 
   async removeMainMenu(id: number) {
     const existing = await this.ensureMainMenu(id);
-    if (existing.isLocked) {
-      throw new ConflictException(
-        'This menu is locked. Unlock it before deleting.',
-      );
-    }
+    assertUnlocked(existing, 'menu', 'deleting');
     await this.prisma.mainMenu.delete({ where: { id } });
     return { success: true };
   }
@@ -106,11 +95,7 @@ export class MenuService {
 
   async updateSubMenu(id: number, dto: UpdateSubMenuDto) {
     const existing = await this.findOneSubMenu(id);
-    if (existing.isLocked) {
-      throw new ConflictException(
-        'This sub-menu is locked. Unlock it before editing.',
-      );
-    }
+    assertUnlocked(existing, 'sub-menu', 'editing');
     return this.prisma.subMenu.update({ where: { id }, data: dto });
   }
 
@@ -124,11 +109,7 @@ export class MenuService {
 
   async removeSubMenu(id: number) {
     const existing = await this.findOneSubMenu(id);
-    if (existing.isLocked) {
-      throw new ConflictException(
-        'This sub-menu is locked. Unlock it before deleting.',
-      );
-    }
+    assertUnlocked(existing, 'sub-menu', 'deleting');
     await this.prisma.subMenu.delete({ where: { id } });
     return { success: true };
   }

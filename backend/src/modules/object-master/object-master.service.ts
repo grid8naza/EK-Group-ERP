@@ -1,10 +1,7 @@
-import {
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { ObjectType, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { assertUnlocked } from '../../common/assert-unlocked';
 import {
   CreateObjectDto,
   CreateObjectRevisionDto,
@@ -104,21 +101,13 @@ export class ObjectMasterService {
 
   async update(id: number, dto: UpdateObjectDto) {
     const existing = await this.ensureObject(id);
-    if (existing.isLocked) {
-      throw new ConflictException(
-        'This object is locked. Unlock it before editing.',
-      );
-    }
+    assertUnlocked(existing, 'object', 'editing');
     return this.prisma.objectMaster.update({ where: { id }, data: dto });
   }
 
   async remove(id: number) {
     const existing = await this.ensureObject(id);
-    if (existing.isLocked) {
-      throw new ConflictException(
-        'This object is locked. Unlock it before deleting.',
-      );
-    }
+    assertUnlocked(existing, 'object', 'deleting');
     await this.prisma.objectMaster.delete({ where: { id } });
     return { success: true };
   }

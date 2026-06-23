@@ -1,9 +1,6 @@
-import {
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { assertUnlocked } from '../../common/assert-unlocked';
 import {
   CreateLookupDto,
   CreateLookupValueDto,
@@ -38,11 +35,7 @@ export class LookupService {
 
   async update(id: number, dto: UpdateLookupDto) {
     const existing = await this.ensureLookup(id);
-    if (existing.isLocked) {
-      throw new ConflictException(
-        'This lookup is locked. Unlock it before editing.',
-      );
-    }
+    assertUnlocked(existing, 'lookup', 'editing');
     return this.prisma.lookup.update({ where: { id }, data: dto });
   }
 
@@ -56,11 +49,7 @@ export class LookupService {
 
   async remove(id: number) {
     const existing = await this.ensureLookup(id);
-    if (existing.isLocked) {
-      throw new ConflictException(
-        'This lookup is locked. Unlock it before deleting.',
-      );
-    }
+    assertUnlocked(existing, 'lookup', 'deleting');
     await this.prisma.lookup.delete({ where: { id } });
     return { success: true };
   }
@@ -97,11 +86,7 @@ export class LookupService {
 
   async updateValue(id: number, dto: UpdateLookupValueDto) {
     const existing = await this.findOneValue(id);
-    if (existing.isLocked) {
-      throw new ConflictException(
-        'This lookup value is locked. Unlock it before editing.',
-      );
-    }
+    assertUnlocked(existing, 'lookup value', 'editing');
     return this.prisma.lookupValue.update({ where: { id }, data: dto });
   }
 
@@ -115,11 +100,7 @@ export class LookupService {
 
   async removeValue(id: number) {
     const existing = await this.findOneValue(id);
-    if (existing.isLocked) {
-      throw new ConflictException(
-        'This lookup value is locked. Unlock it before deleting.',
-      );
-    }
+    assertUnlocked(existing, 'lookup value', 'deleting');
     await this.prisma.lookupValue.delete({ where: { id } });
     return { success: true };
   }

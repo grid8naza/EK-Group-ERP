@@ -81,13 +81,12 @@ export class PrismaExceptionFilter implements ExceptionFilter {
   /** Best-effort human name(s) of the field(s) that triggered the error. */
   private fields(e: Prisma.PrismaClientKnownRequestError): string | null {
     const target = e.meta?.target;
-    if (Array.isArray(target)) return target.join(', ');
-    if (typeof target === 'string') {
-      // Postgres sometimes reports the constraint name (e.g. companies_code_key);
-      // strip the table prefix and the trailing _key for a friendlier label.
-      const m = target.match(/^.*?_(.+)_key$/);
-      return m ? m[1].replace(/_/g, ', ') : target;
-    }
+    // Prisma usually reports an array of field names — use them directly.
+    if (Array.isArray(target)) return target.length ? target.join(', ') : null;
+    // Some setups report a raw constraint-name string (e.g.
+    // production_orders_companyId_orderNo_key). Table names and composite keys
+    // both contain underscores, so the field names can't be recovered reliably
+    // — fall back to the generic message instead of a garbled label.
     return null;
   }
 }

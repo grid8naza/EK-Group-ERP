@@ -7,12 +7,12 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { ModuleMasterService } from './module-master.service';
 import { CreateModuleDto, UpdateModuleDto } from './module-master.dto';
-import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
-import { assertSuperAdmin } from '../../common/assert-super-admin';
+import { SuperAdminGuard } from '../../auth/super-admin.guard';
 import { LockDto } from '../../common/lock.dto';
 
 @ApiTags('modules')
@@ -47,13 +47,12 @@ export class ModuleMasterController {
   }
 
   // Lock / unlock a module (must be unlocked before edit or delete).
+  @UseGuards(SuperAdminGuard)
   @Patch(':id/lock')
   setLock(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: LockDto,
-    @CurrentUser() user: AuthUser,
   ) {
-    assertSuperAdmin(user);
     return this.service.setLock(id, dto.locked);
   }
 }

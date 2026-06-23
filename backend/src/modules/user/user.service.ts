@@ -1,11 +1,8 @@
-import {
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
+import { assertUnlocked } from '../../common/assert-unlocked';
 import { CreateUserDto, UpdateUserDto } from './user.dto';
 
 const userSelect = {
@@ -166,11 +163,7 @@ export class UserService {
 
   async update(id: number, dto: UpdateUserDto) {
     const existing = await this.ensureUser(id);
-    if (existing.isLocked) {
-      throw new ConflictException(
-        'This user is locked. Unlock it before editing.',
-      );
-    }
+    assertUnlocked(existing, 'user', 'editing');
     const {
       password,
       groupIds,
@@ -196,6 +189,18 @@ export class UserService {
       }
 
       if (companyIds !== undefined) {
+        // Preserve each company's saved default module when the caller isn't
+        // also updating module assignments — otherwise recreating the rows
+        // below would wipe every default to null. When moduleAssignments IS
+        // provided, the block further down re-syncs defaults from it.
+        const existingDefaults = new Map(
+          (
+            await tx.userCompany.findMany({
+              where: { userId: id },
+              select: { companyId: true, defaultModuleId: true },
+            })
+          ).map((r) => [r.companyId, r.defaultModuleId]),
+        );
         await tx.userCompany.deleteMany({ where: { userId: id } });
         if (companyIds.length) {
           await tx.userCompany.createMany({
@@ -203,7 +208,10 @@ export class UserService {
               userId: id,
               companyId,
               isDefault: companyId === defaultCompanyId,
-              defaultModuleId: resolveDefaultModule(companyId, moduleAssignments),
+              defaultModuleId:
+                moduleAssignments !== undefined
+                  ? resolveDefaultModule(companyId, moduleAssignments)
+                  : (existingDefaults.get(companyId) ?? null),
             })),
           });
         }
@@ -259,11 +267,7 @@ export class UserService {
 
   async remove(id: number) {
     const existing = await this.ensureUser(id);
-    if (existing.isLocked) {
-      throw new ConflictException(
-        'This user is locked. Unlock it before deleting.',
-      );
-    }
+    assertUnlocked(existing, 'user', 'deleting');
     await this.prisma.user.delete({ where: { id } });
     return { success: true };
   }

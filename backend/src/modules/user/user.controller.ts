@@ -8,11 +8,11 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserService } from './user.service';
-import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
-import { assertSuperAdmin } from '../../common/assert-super-admin';
+import { SuperAdminGuard } from '../../auth/super-admin.guard';
 import { LockDto } from '../../common/lock.dto';
 import { CreateUserDto, UpdateUserDto } from './user.dto';
 
@@ -48,13 +48,12 @@ export class UserController {
   }
 
   // Lock / unlock a user (must be unlocked before edit or delete).
+  @UseGuards(SuperAdminGuard)
   @Patch(':id/lock')
   setLock(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: LockDto,
-    @CurrentUser() user: AuthUser,
   ) {
-    assertSuperAdmin(user);
     return this.service.setLock(id, dto.locked);
   }
 }

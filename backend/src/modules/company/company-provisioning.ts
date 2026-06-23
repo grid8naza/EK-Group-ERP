@@ -1,4 +1,4 @@
-import { ObjectType, PrismaClient } from '@prisma/client';
+import { ObjectType, Prisma } from '@prisma/client';
 
 /**
  * Per-company Cpanel provisioning. This is the single source of truth for the
@@ -63,7 +63,7 @@ export interface ProvisionResult {
  * and `null` is returned.
  */
 export async function provisionCompanyCpanel(
-  prisma: PrismaClient,
+  prisma: Prisma.TransactionClient,
   companyId: number,
 ): Promise<ProvisionResult | null> {
   const cpanel = await prisma.module.findUnique({ where: { code: 'CPANEL' } });
@@ -90,36 +90,50 @@ export async function provisionCompanyCpanel(
       icon: 'settings',
     },
   });
-  const cpanelSubIds: number[] = [];
-  for (const s of CPANEL_SUBS) {
-    const sub = await prisma.subMenu.create({
-      data: {
-        mainMenuId: cpanelMain.id,
-        subMenuName: s.name,
-        route: s.route,
-        icon: s.icon,
-        sortOrder: s.order,
-        objectType: ObjectType.FORM,
-      },
-    });
-    cpanelSubIds.push(sub.id);
-  }
+  // Sub-menus, batched. createMany doesn't return ids, so read them back
+  // (ordered) for the privilege rows below.
+  await prisma.subMenu.createMany({
+    data: CPANEL_SUBS.map((s) => ({
+      mainMenuId: cpanelMain.id,
+      subMenuName: s.name,
+      route: s.route,
+      icon: s.icon,
+      sortOrder: s.order,
+      objectType: ObjectType.FORM,
+    })),
+  });
+  const cpanelSubIds = (
+    await prisma.subMenu.findMany({
+      where: { mainMenuId: cpanelMain.id },
+      select: { id: true },
+      orderBy: { sortOrder: 'asc' },
+    })
+  ).map((s) => s.id);
 
-  // ---- Cpanel gadgets ----
-  const cpanelGadgetIds: number[] = [];
-  for (const [i, g] of CPANEL_GADGETS.entries()) {
-    const rec = await prisma.gadget.create({
-      data: {
-        companyId,
-        moduleId: cpanelId,
-        code: g.code,
-        name: g.name,
-        description: g.description,
-        sortOrder: i + 1,
-      },
-    });
-    cpanelGadgetIds.push(rec.id);
-  }
+  // ---- Cpanel gadgets (batched) ----
+  await prisma.gadget.createMany({
+    data: CPANEL_GADGETS.map((g, i) => ({
+      companyId,
+      moduleId: cpanelId,
+      code: g.code,
+      name: g.name,
+      description: g.description,
+      sortOrder: i + 1,
+    })),
+  });
+  // Read ids back keyed by code, so dashboards can reference them without a
+  // per-widget lookup query.
+  const gadgetIdByCode = new Map(
+    (
+      await prisma.gadget.findMany({
+        where: { companyId, moduleId: cpanelId },
+        select: { id: true, code: true },
+      })
+    ).map((g) => [g.code, g.id]),
+  );
+  const cpanelGadgetIds = CPANEL_GADGETS.map(
+    (g) => gadgetIdByCode.get(g.code),
+  ).filter((id): id is number => id != null);
 
   // ---- Administrators group with full Cpanel privileges ----
   const adminGroup = await prisma.userGroup.create({
@@ -135,24 +149,23 @@ export async function provisionCompanyCpanel(
   await prisma.groupMainMenuAccess.create({
     data: { userGroupId: adminGroup.id, mainMenuId: cpanelMain.id, visible: true },
   });
-  for (const subId of cpanelSubIds) {
-    await prisma.groupSubMenuPrivilege.create({
-      data: {
-        userGroupId: adminGroup.id,
-        subMenuId: subId,
-        canMenu: true,
-        canView: true,
-        canAdd: true,
-        canEdit: true,
-        canDelete: true,
-      },
-    });
-  }
-  for (const gid of cpanelGadgetIds) {
-    await prisma.groupGadget.create({
-      data: { userGroupId: adminGroup.id, gadgetId: gid },
-    });
-  }
+  await prisma.groupSubMenuPrivilege.createMany({
+    data: cpanelSubIds.map((subMenuId) => ({
+      userGroupId: adminGroup.id,
+      subMenuId,
+      canMenu: true,
+      canView: true,
+      canAdd: true,
+      canEdit: true,
+      canDelete: true,
+    })),
+  });
+  await prisma.groupGadget.createMany({
+    data: cpanelGadgetIds.map((gadgetId) => ({
+      userGroupId: adminGroup.id,
+      gadgetId,
+    })),
+  });
 
   // ---- Dashboards (Admin Overview + Objects Overview) ----
   // Admin Overview links to the global Admin Overview DASHBOARD object.
@@ -171,7 +184,7 @@ export async function provisionCompanyCpanel(
       isDefault: true,
     },
   });
-  await addWidgets(prisma, adminDash.id, companyId, cpanelId, ADMIN_DASH_WIDGETS);
+  await addWidgets(prisma, adminDash.id, gadgetIdByCode, ADMIN_DASH_WIDGETS);
 
   const objectsDash = await prisma.dashboard.create({
     data: {
@@ -183,38 +196,28 @@ export async function provisionCompanyCpanel(
       sortOrder: 2,
     },
   });
-  await addWidgets(
-    prisma,
-    objectsDash.id,
-    companyId,
-    cpanelId,
-    OBJECTS_DASH_WIDGETS,
-  );
+  await addWidgets(prisma, objectsDash.id, gadgetIdByCode, OBJECTS_DASH_WIDGETS);
 
   return { adminGroup, cpanelMain, cpanelSubIds, cpanelGadgetIds };
 }
 
-/** Attach the gadgets named by `codes` to a dashboard, in order. */
+/**
+ * Attach the gadgets named by `codes` to a dashboard, in order, in one batch.
+ * Gadget ids are looked up from the provided code→id map (no DB round-trips).
+ */
 async function addWidgets(
-  prisma: PrismaClient,
+  prisma: Prisma.TransactionClient,
   dashboardId: number,
-  companyId: number,
-  moduleId: number,
+  gadgetIdByCode: Map<string, number>,
   codes: string[],
 ): Promise<void> {
-  for (const [i, code] of codes.entries()) {
-    const gadget = await prisma.gadget.findFirst({
-      where: { companyId, moduleId, code },
-    });
-    if (!gadget) continue;
-    const meta = CPANEL_GADGETS.find((x) => x.code === code);
-    await prisma.dashboardWidget.create({
-      data: {
-        dashboardId,
-        gadgetId: gadget.id,
-        sortOrder: i + 1,
-        width: meta?.width ?? 1,
-      },
-    });
-  }
+  const data = codes
+    .map((code, i) => {
+      const gadgetId = gadgetIdByCode.get(code);
+      if (gadgetId == null) return null;
+      const meta = CPANEL_GADGETS.find((x) => x.code === code);
+      return { dashboardId, gadgetId, sortOrder: i + 1, width: meta?.width ?? 1 };
+    })
+    .filter((w): w is NonNullable<typeof w> => w != null);
+  if (data.length) await prisma.dashboardWidget.createMany({ data });
 }

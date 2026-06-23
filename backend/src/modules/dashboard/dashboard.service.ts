@@ -1,10 +1,7 @@
-import {
-  ConflictException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { assertUnlocked } from '../../common/assert-unlocked';
 import {
   CreateDashboardDto,
   SaveLayoutDto,
@@ -50,11 +47,7 @@ export class DashboardService {
 
   async update(id: number, dto: UpdateDashboardDto) {
     const existing = await this.ensure(id);
-    if (existing.isLocked) {
-      throw new ConflictException(
-        'This dashboard is locked. Unlock it before editing.',
-      );
-    }
+    assertUnlocked(existing, 'dashboard', 'editing');
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.dashboard.update({ where: { id }, data: dto });
       if (updated.isDefault) {
@@ -94,11 +87,7 @@ export class DashboardService {
 
   async remove(id: number) {
     const existing = await this.ensure(id);
-    if (existing.isLocked) {
-      throw new ConflictException(
-        'This dashboard is locked. Unlock it before deleting.',
-      );
-    }
+    assertUnlocked(existing, 'dashboard', 'deleting');
     await this.prisma.dashboard.delete({ where: { id } });
     return { success: true };
   }

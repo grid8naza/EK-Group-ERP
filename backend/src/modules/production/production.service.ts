@@ -11,6 +11,7 @@ import {
   USER_LOOKUP,
   UserLookupPort,
 } from '../../contracts/user-lookup.port';
+import { assertUnlocked } from '../../common/assert-unlocked';
 import {
   CreateProductionOrderDto,
   UpdateProductionOrderDto,
@@ -77,11 +78,7 @@ export class ProductionService {
 
   async update(companyId: number, id: number, dto: UpdateProductionOrderDto) {
     const existing = await this.findOne(companyId, id);
-    if (existing.isLocked) {
-      throw new ConflictException(
-        'This production order is locked. Unlock it before editing.',
-      );
-    }
+    assertUnlocked(existing, 'production order', 'editing');
     if (dto.assignedUserId !== undefined) {
       await this.validateAssignedUser(companyId, dto.assignedUserId);
     }
@@ -117,11 +114,7 @@ export class ProductionService {
 
   async remove(companyId: number, id: number) {
     const existing = await this.findOne(companyId, id);
-    if (existing.isLocked) {
-      throw new ConflictException(
-        'This production order is locked. Unlock it before deleting.',
-      );
-    }
+    assertUnlocked(existing, 'production order', 'deleting');
     await this.prisma.productionOrder.delete({ where: { id } });
     return { success: true };
   }
