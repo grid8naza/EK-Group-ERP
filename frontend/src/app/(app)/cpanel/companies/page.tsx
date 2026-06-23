@@ -13,12 +13,17 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
-import { Input, Textarea, Checkbox } from '@/components/ui/Field';
+import { Input, Textarea, Checkbox, Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import { resolveIcon } from '@/lib/icons';
-import type { Company, CompanyModule } from '@/lib/types';
+import type { Company, CompanyModule, Currency } from '@/lib/types';
 
 const ROUTE = '/cpanel/companies';
+
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
 
 const empty = {
   code: '',
@@ -31,6 +36,16 @@ const empty = {
   state: '',
   country: '',
   taxNumber: '',
+  // Financial / statutory (kept as strings for the form controls).
+  financialYearStartMonth: '',
+  booksStartDate: '',
+  costCenterApplicable: false,
+  currencyId: '',
+  gstin: '',
+  pan: '',
+  tan: '',
+  ptrn: '',
+  ptec: '',
   isActive: true,
 };
 
@@ -39,6 +54,7 @@ export default function CompaniesPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<Company[]>('/companies');
+  const { data: currencies } = useFetch<Currency[]>('/currencies');
   const { canToggle, toggleLock, guardEdit, guardDelete } = useLock<Company>({
     endpoint: '/companies',
     noun: 'company',
@@ -81,6 +97,16 @@ export default function CompaniesPage() {
     state: c.state ?? '',
     country: c.country ?? '',
     taxNumber: c.taxNumber ?? '',
+    financialYearStartMonth:
+      c.financialYearStartMonth != null ? String(c.financialYearStartMonth) : '',
+    booksStartDate: c.booksStartDate ? c.booksStartDate.slice(0, 10) : '',
+    costCenterApplicable: !!c.costCenterApplicable,
+    currencyId: c.currencyId != null ? String(c.currencyId) : '',
+    gstin: c.gstin ?? '',
+    pan: c.pan ?? '',
+    tan: c.tan ?? '',
+    ptrn: c.ptrn ?? '',
+    ptec: c.ptec ?? '',
     isActive: c.isActive,
   });
 
@@ -112,12 +138,22 @@ export default function CompaniesPage() {
       return;
     }
     setSaving(true);
+    // Numbers/dates come from form controls as strings; send numbers (or omit
+    // when blank) so the API's validators are happy.
+    const payload = {
+      ...form,
+      financialYearStartMonth: form.financialYearStartMonth
+        ? Number(form.financialYearStartMonth)
+        : undefined,
+      currencyId: form.currencyId ? Number(form.currencyId) : undefined,
+      booksStartDate: form.booksStartDate || undefined,
+    };
     try {
       if (editing) {
-        await api.patch(`/companies/${editing.id}`, form);
+        await api.patch(`/companies/${editing.id}`, payload);
         toast.success('Company updated.');
       } else {
-        await api.post('/companies', form);
+        await api.post('/companies', payload);
         toast.success('Company created.');
       }
       await refetch();
@@ -342,6 +378,91 @@ export default function CompaniesPage() {
             label="Tax Number"
             value={form.taxNumber}
             onChange={(e) => setForm({ ...form, taxNumber: e.target.value })}
+          />
+
+          <div className="mt-1 border-t border-slate-200 pt-3 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300 sm:col-span-2">
+            Financial &amp; statutory
+          </div>
+          <Select
+            label="Currency"
+            placeholder="Select currency"
+            value={form.currencyId}
+            onChange={(e) => setForm({ ...form, currencyId: e.target.value })}
+            options={(currencies ?? []).map((c) => ({
+              value: c.id,
+              label: `${c.code} — ${c.name} (${c.symbol})`,
+            }))}
+          />
+          <Select
+            label="Financial Year Start Month"
+            placeholder="Select month"
+            value={form.financialYearStartMonth}
+            onChange={(e) =>
+              setForm({ ...form, financialYearStartMonth: e.target.value })
+            }
+            options={MONTHS.map((m, i) => ({ value: i + 1, label: m }))}
+          />
+          <Input
+            label="Books of Accounts Start From"
+            type="date"
+            value={form.booksStartDate}
+            onChange={(e) =>
+              setForm({ ...form, booksStartDate: e.target.value })
+            }
+          />
+          <Select
+            label="Cost Center Applicable"
+            value={form.costCenterApplicable ? 'yes' : 'no'}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                costCenterApplicable: e.target.value === 'yes',
+              })
+            }
+            options={[
+              { value: 'no', label: 'No' },
+              { value: 'yes', label: 'Yes' },
+            ]}
+          />
+          <Input
+            label="GSTIN"
+            maxLength={15}
+            value={form.gstin}
+            onChange={(e) =>
+              setForm({ ...form, gstin: e.target.value.toUpperCase() })
+            }
+          />
+          <Input
+            label="PAN"
+            maxLength={12}
+            value={form.pan}
+            onChange={(e) =>
+              setForm({ ...form, pan: e.target.value.toUpperCase() })
+            }
+          />
+          <Input
+            label="TAN"
+            maxLength={10}
+            value={form.tan}
+            onChange={(e) =>
+              setForm({ ...form, tan: e.target.value.toUpperCase() })
+            }
+          />
+          <Input
+            label="PTRN"
+            maxLength={12}
+            value={form.ptrn}
+            onChange={(e) =>
+              setForm({ ...form, ptrn: e.target.value.toUpperCase() })
+            }
+          />
+          <Input
+            label="PTEC"
+            maxLength={12}
+            value={form.ptec}
+            onChange={(e) =>
+              setForm({ ...form, ptec: e.target.value.toUpperCase() })
+            }
           />
             <div className="sm:col-span-2">
               <Checkbox

@@ -8,6 +8,7 @@ import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { ModuleMasterModule } from './modules/module-master/module-master.module';
 import { LookupModule } from './modules/lookup/lookup.module';
 import { CompanyModule } from './modules/company/company.module';
+import { CurrencyModule } from './modules/currency/currency.module';
 import { ObjectMasterModule } from './modules/object-master/object-master.module';
 import { MenuModule } from './modules/menu/menu.module';
 import { UserGroupModule } from './modules/user-group/user-group.module';
@@ -25,6 +26,7 @@ import { ProductionModule } from './modules/production/production.module';
     ModuleMasterModule,
     LookupModule,
     CompanyModule,
+    CurrencyModule,
     ObjectMasterModule,
     MenuModule,
     UserGroupModule,

@@ -88,6 +88,19 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
+  // Currency master (global) — the source for a company's currency.
+  // -------------------------------------------------------------------------
+  for (const c of [
+    { code: 'INR', name: 'Indian Rupee', symbol: '₹', fractionalUnit: 'Paisa' },
+    { code: 'USD', name: 'US Dollar', symbol: '$', fractionalUnit: 'Cent' },
+    { code: 'EUR', name: 'Euro', symbol: '€', fractionalUnit: 'Cent' },
+    { code: 'GBP', name: 'Pound Sterling', symbol: '£', fractionalUnit: 'Penny' },
+    { code: 'AED', name: 'UAE Dirham', symbol: 'د.إ', fractionalUnit: 'Fils' },
+  ]) {
+    await prisma.currency.create({ data: c });
+  }
+
+  // -------------------------------------------------------------------------
   // Per-company configuration helper.
   // -------------------------------------------------------------------------
   async function seedCompany(opts: {

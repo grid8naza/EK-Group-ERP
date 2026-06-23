@@ -39,9 +39,17 @@ export class CompanyService {
   async create(dto: CreateCompanyDto) {
     // Create + scaffold atomically: if provisioning fails partway, the company
     // insert rolls back instead of leaving a half-provisioned company behind.
+    const { booksStartDate, ...rest } = dto;
     return this.prisma.$transaction(
       async (tx) => {
-        const company = await tx.company.create({ data: dto });
+        const company = await tx.company.create({
+          data: {
+            ...rest,
+            booksStartDate: booksStartDate
+              ? new Date(booksStartDate)
+              : undefined,
+          },
+        });
         // Scaffold the Cpanel module (menus, gadgets, dashboards, admin group)
         // so a freshly created company is immediately usable.
         await provisionCompanyCpanel(tx, company.id);
@@ -54,7 +62,16 @@ export class CompanyService {
   async update(id: number, dto: UpdateCompanyDto) {
     const existing = await this.findOne(id);
     assertUnlocked(existing, 'company', 'editing');
-    return this.prisma.company.update({ where: { id }, data: dto });
+    const { booksStartDate, ...rest } = dto;
+    return this.prisma.company.update({
+      where: { id },
+      data: {
+        ...rest,
+        ...(booksStartDate !== undefined
+          ? { booksStartDate: booksStartDate ? new Date(booksStartDate) : null }
+          : {}),
+      },
+    });
   }
 
   async setLock(id: number, locked: boolean) {

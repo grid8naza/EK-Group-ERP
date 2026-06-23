@@ -15,8 +15,9 @@ export const CPANEL_SUBS = [
   { name: 'Dashboards', route: '/cpanel/dashboards', icon: 'layout-dashboard', order: 5 },
   { name: 'Gadgets', route: '/cpanel/gadgets', icon: 'box', order: 6 },
   { name: 'Company Master', route: '/cpanel/companies', icon: 'building', order: 7 },
-  { name: 'Lookups', route: '/cpanel/lookups', icon: 'list', order: 8 },
-  { name: 'Users & Data Security', route: '/cpanel/users', icon: 'users', order: 9 },
+  { name: 'Currency Master', route: '/cpanel/currencies', icon: 'wallet', order: 8 },
+  { name: 'Lookups', route: '/cpanel/lookups', icon: 'list', order: 9 },
+  { name: 'Users & Data Security', route: '/cpanel/users', icon: 'users', order: 10 },
 ];
 
 export const CPANEL_GADGETS = [

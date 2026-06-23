@@ -95,11 +95,24 @@ model Company {
   country   String?
   taxNumber String?
   logo      String?
+
+  // --- Financial / statutory details ---
+  financialYearStartMonth Int? // 1 = January … 12 = December
+  booksStartDate          DateTime? // books of accounts start from
+  costCenterApplicable    Boolean   @default(false)
+  currencyId              Int?
+  gstin                   String? // GST identification number (15)
+  pan                     String? // PAN (12)
+  tan                     String? // TAN (10)
+  ptrn                    String? // Professional Tax Registration No. (12)
+  ptec                    String? // Professional Tax Enrolment Certificate (12)
+
   isActive  Boolean  @default(true)
   isLocked  Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  currency    Currency?       @relation(fields: [currencyId], references: [id])
   modules     CompanyModule[]
   users       UserCompany[]
   userModules UserModule[]
@@ -109,6 +122,26 @@ model Company {
   dashboards  Dashboard[]
 
   @@map("companies")
+}
+
+// ---------------------------------------------------------------------------
+// Currency master — global reference data; the source for a company's currency.
+// ---------------------------------------------------------------------------
+
+model Currency {
+  id             Int      @id @default(autoincrement())
+  code           String   @unique // e.g. INR, USD
+  name           String // e.g. Indian Rupee
+  symbol         String // e.g. ₹
+  fractionalUnit String // e.g. Paisa
+  isActive       Boolean  @default(true)
+  isLocked       Boolean  @default(false) // when locked, must be unlocked before edit/delete
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  companies Company[]
+
+  @@map("currencies")
 }
 
 // Which modules are enabled for a company ("module selected per company").

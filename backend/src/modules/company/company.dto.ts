@@ -2,11 +2,15 @@ import { PartialType } from '@nestjs/swagger';
 import {
   IsArray,
   IsBoolean,
+  IsDateString,
   IsEmail,
   IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
+  Max,
+  MaxLength,
+  Min,
 } from 'class-validator';
 
 export class CreateCompanyDto {
@@ -27,6 +31,18 @@ export class CreateCompanyDto {
   @IsOptional() @IsString() country?: string;
   @IsOptional() @IsString() taxNumber?: string;
   @IsOptional() @IsString() logo?: string;
+
+  // --- Financial / statutory details ---
+  @IsOptional() @IsInt() @Min(1) @Max(12) financialYearStartMonth?: number;
+  @IsOptional() @IsDateString() booksStartDate?: string;
+  @IsOptional() @IsBoolean() costCenterApplicable?: boolean;
+  @IsOptional() @IsInt() currencyId?: number;
+  @IsOptional() @IsString() @MaxLength(15) gstin?: string;
+  @IsOptional() @IsString() @MaxLength(12) pan?: string;
+  @IsOptional() @IsString() @MaxLength(10) tan?: string;
+  @IsOptional() @IsString() @MaxLength(12) ptrn?: string;
+  @IsOptional() @IsString() @MaxLength(12) ptec?: string;
+
   @IsOptional() @IsBoolean() isActive?: boolean;
 }
 

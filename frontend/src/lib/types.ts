@@ -119,6 +119,16 @@ export interface LookupValue {
   isLocked?: boolean;
 }
 
+export interface Currency {
+  id: number;
+  code: string;
+  name: string;
+  symbol: string;
+  fractionalUnit: string;
+  isActive: boolean;
+  isLocked?: boolean;
+}
+
 export interface Company {
   id: number;
   code: string;
@@ -131,6 +141,16 @@ export interface Company {
   state?: string | null;
   country?: string | null;
   taxNumber?: string | null;
+  // Financial / statutory details
+  financialYearStartMonth?: number | null;
+  booksStartDate?: string | null;
+  costCenterApplicable?: boolean;
+  currencyId?: number | null;
+  gstin?: string | null;
+  pan?: string | null;
+  tan?: string | null;
+  ptrn?: string | null;
+  ptec?: string | null;
   isActive: boolean;
   isLocked?: boolean;
 }
