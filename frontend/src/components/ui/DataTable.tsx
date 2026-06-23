@@ -5,6 +5,7 @@ import {
   Search,
   Pencil,
   Trash2,
+  Eye,
   ChevronLeft,
   ChevronRight,
   Inbox,
@@ -37,11 +38,20 @@ interface DataTableProps<T> {
   serverSearch?: boolean;
 
   // actions
+  onView?: (row: T) => void;
   onEdit?: (row: T) => void;
   onDelete?: (row: T) => void;
+  canView?: boolean;
   canEdit?: boolean;
   canDelete?: boolean;
+  /** Extra secondary actions, rendered to the LEFT of View/Edit/Delete/Lock. */
   rowActions?: (row: T) => React.ReactNode;
+  /**
+   * Lock/unlock toggle, rendered LAST (after Delete). Pass the Lock here — not
+   * in rowActions — so every listing keeps the standard
+   * View, Edit, Delete, Lock order.
+   */
+  renderLock?: (row: T) => React.ReactNode;
   onRowClick?: (row: T) => void;
 
   // toolbar
@@ -72,11 +82,14 @@ export function DataTable<T>({
   onSearchChange,
   searchPlaceholder = 'Search...',
   serverSearch,
+  onView,
   onEdit,
   onDelete,
+  canView = true,
   canEdit = true,
   canDelete = true,
   rowActions,
+  renderLock,
   onRowClick,
   toolbar,
   toolbarRight,
@@ -95,7 +108,8 @@ export function DataTable<T>({
     if (!serverPagination) setPage(1);
   };
 
-  const hasActions = !!onEdit || !!onDelete || !!rowActions;
+  const hasActions =
+    !!onView || !!onEdit || !!onDelete || !!rowActions || !!renderLock;
 
   // Client-side filtering (only when not in serverSearch mode)
   const filtered = useMemo(() => {
@@ -231,6 +245,15 @@ export function DataTable<T>({
                         onClick={(e) => e.stopPropagation()}
                       >
                         {rowActions?.(row)}
+                        {onView && canView && (
+                          <button
+                            onClick={() => onView(row)}
+                            className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
+                            title="View"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                        )}
                         {onEdit && canEdit && (
                           <button
                             onClick={() => onEdit(row)}
@@ -249,6 +272,7 @@ export function DataTable<T>({
                             <Trash2 className="h-4 w-4" />
                           </button>
                         )}
+                        {renderLock?.(row)}
                       </div>
                     </td>
                   )}

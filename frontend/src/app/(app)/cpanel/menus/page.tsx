@@ -24,6 +24,7 @@ import {
   Pencil,
   Trash2,
   GripVertical,
+  Eye,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/providers/ToastProvider';
@@ -98,12 +99,14 @@ export default function MenusPage() {
   // main menu drawer
   const [mOpen, setMOpen] = useState(false);
   const [mEditing, setMEditing] = useState<MainMenu | null>(null);
+  const [mView, setMView] = useState(false); // read-only view (e.g. for locked records)
   const [mForm, setMForm] = useState({ ...emptyMain });
   const [mSaving, setMSaving] = useState(false);
 
   // sub menu drawer
   const [sOpen, setSOpen] = useState(false);
   const [sEditing, setSEditing] = useState<SubMenu | null>(null);
+  const [sView, setSView] = useState(false); // read-only view (e.g. for locked records)
   const [sForm, setSForm] = useState({ ...emptySub });
   const [sSaving, setSSaving] = useState(false);
 
@@ -236,6 +239,7 @@ export default function MenusPage() {
       return;
     }
     setMEditing(null);
+    setMView(false);
     setMForm({ ...emptyMain, sortOrder: mainMenus.length + 1 });
     setMOpen(true);
   };
@@ -256,6 +260,7 @@ export default function MenusPage() {
 
   const openEditMain = (m: MainMenu) => {
     setMEditing(m);
+    setMView(false);
     setMForm({
       sortOrder: m.sortOrder ?? 0,
       menuName: m.menuName,
@@ -264,6 +269,23 @@ export default function MenusPage() {
       icon: m.icon ?? '',
     });
     setMOpen(true);
+  };
+  // Read-only view — works for locked records without unlocking them.
+  const openViewMain = (m: MainMenu) => {
+    setMEditing(m);
+    setMView(true);
+    setMForm({
+      sortOrder: m.sortOrder ?? 0,
+      menuName: m.menuName,
+      objectType: m.objectType ?? 'FORM',
+      isUserMenu: m.isUserMenu,
+      icon: m.icon ?? '',
+    });
+    setMOpen(true);
+  };
+  const closeMain = () => {
+    setMOpen(false);
+    setMView(false);
   };
   const saveMain = async (again = false) => {
     if (!mForm.menuName.trim()) {
@@ -320,6 +342,7 @@ export default function MenusPage() {
   const openAddSub = () => {
     if (!selectedMain) return;
     setSEditing(null);
+    setSView(false);
     setSForm({
       ...emptySub,
       sortOrder: subMenus.length + 1,
@@ -329,6 +352,7 @@ export default function MenusPage() {
   };
   const openEditSub = (s: SubMenu) => {
     setSEditing(s);
+    setSView(false);
     setSForm({
       objectId: s.objectId ? String(s.objectId) : '',
       sortOrder: s.sortOrder ?? 0,
@@ -340,6 +364,25 @@ export default function MenusPage() {
       icon: s.icon ?? '',
     });
     setSOpen(true);
+  };
+  // Read-only view — works for locked records without unlocking them.
+  const openViewSub = (s: SubMenu) => {
+    setSEditing(s);
+    setSView(true);
+    setSForm({
+      objectId: s.objectId ? String(s.objectId) : '',
+      sortOrder: s.sortOrder ?? 0,
+      subMenuName: s.subMenuName,
+      objectType: selectedMain?.objectType ?? s.objectType ?? 'FORM',
+      description: s.description ?? '',
+      route: s.route ?? '',
+      icon: s.icon ?? '',
+    });
+    setSOpen(true);
+  };
+  const closeSub = () => {
+    setSOpen(false);
+    setSView(false);
   };
   const saveSub = async (again = false) => {
     if (!selectedMain) return;
@@ -493,6 +536,13 @@ export default function MenusPage() {
                               </div>
                             </button>
                             <div className="flex flex-none items-center gap-0.5">
+                              <button
+                                onClick={() => openViewMain(m)}
+                                className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
+                                title="View"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </button>
                               {canEdit && (
                                 <button
                                   onClick={() =>
@@ -592,6 +642,13 @@ export default function MenusPage() {
                                 </p>
                               </div>
                               <div className="flex flex-none items-center gap-0.5">
+                                <button
+                                  onClick={() => openViewSub(s)}
+                                  className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
+                                  title="View"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </button>
                                 {canEdit && (
                                   <button
                                     onClick={() =>
@@ -640,142 +697,166 @@ export default function MenusPage() {
       {/* Main menu drawer */}
       <Drawer
         open={mOpen}
-        onClose={() => setMOpen(false)}
-        title={mEditing ? 'Edit Main Menu' : 'New Main Menu'}
+        onClose={closeMain}
+        title={
+          mView ? 'View Main Menu' : mEditing ? 'Edit Main Menu' : 'New Main Menu'
+        }
         subtitle="Main Menu"
         icon={<MenuIcon className="h-5 w-5" />}
         footer={
-          <DrawerFooter
-            onCancel={() => setMOpen(false)}
-            onSave={() => saveMain(false)}
-            onSaveNew={mEditing ? undefined : () => saveMain(true)}
-            saving={mSaving}
-          />
+          mView ? (
+            <div className="flex items-center justify-end">
+              <button type="button" className="btn-secondary" onClick={closeMain}>
+                Close
+              </button>
+            </div>
+          ) : (
+            <DrawerFooter
+              onCancel={closeMain}
+              onSave={() => saveMain(false)}
+              onSaveNew={mEditing ? undefined : () => saveMain(true)}
+              saving={mSaving}
+            />
+          )
         }
       >
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Input
-            label="Sort Order"
-            type="number"
-            value={mForm.sortOrder}
-            onChange={(e) =>
-              setMForm({ ...mForm, sortOrder: Number(e.target.value) })
-            }
-          />
-          <Input
-            label="Menu Name"
-            required
-            value={mForm.menuName}
-            onChange={(e) => setMForm({ ...mForm, menuName: e.target.value })}
-          />
-          <Select
-            label="Module"
-            value={moduleId}
-            disabled
-            options={moduleOptions}
-          />
-          <Select
-            label="Object Type"
-            value={mForm.objectType}
-            onChange={(e) => setMForm({ ...mForm, objectType: e.target.value })}
-            options={OBJECT_TYPE_OPTIONS}
-          />
-          <IconPicker
-            label="Icon"
-            value={mForm.icon}
-            onChange={(icon) => setMForm({ ...mForm, icon })}
-          />
-          <div className="flex items-end pb-2">
-            <Checkbox
-              label="User Menu"
-              checked={mForm.isUserMenu}
+        <fieldset disabled={mView} className="m-0 min-w-0 border-0 p-0">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Input
+              label="Sort Order"
+              type="number"
+              value={mForm.sortOrder}
               onChange={(e) =>
-                setMForm({ ...mForm, isUserMenu: e.target.checked })
+                setMForm({ ...mForm, sortOrder: Number(e.target.value) })
               }
             />
+            <Input
+              label="Menu Name"
+              required
+              value={mForm.menuName}
+              onChange={(e) => setMForm({ ...mForm, menuName: e.target.value })}
+            />
+            <Select
+              label="Module"
+              value={moduleId}
+              disabled
+              options={moduleOptions}
+            />
+            <Select
+              label="Object Type"
+              value={mForm.objectType}
+              onChange={(e) =>
+                setMForm({ ...mForm, objectType: e.target.value })
+              }
+              options={OBJECT_TYPE_OPTIONS}
+            />
+            <IconPicker
+              label="Icon"
+              value={mForm.icon}
+              onChange={(icon) => setMForm({ ...mForm, icon })}
+            />
+            <div className="flex items-end pb-2">
+              <Checkbox
+                label="User Menu"
+                checked={mForm.isUserMenu}
+                onChange={(e) =>
+                  setMForm({ ...mForm, isUserMenu: e.target.checked })
+                }
+              />
+            </div>
           </div>
-        </div>
+        </fieldset>
       </Drawer>
 
       {/* Sub menu drawer */}
       <Drawer
         open={sOpen}
-        onClose={() => setSOpen(false)}
-        title={sEditing ? 'Edit Sub Menu' : 'New Sub Menu'}
+        onClose={closeSub}
+        title={sView ? 'View Sub Menu' : sEditing ? 'Edit Sub Menu' : 'New Sub Menu'}
         subtitle={selectedMain?.menuName}
         icon={<ListTree className="h-5 w-5" />}
         footer={
-          <DrawerFooter
-            onCancel={() => setSOpen(false)}
-            onSave={() => saveSub(false)}
-            onSaveNew={sEditing ? undefined : () => saveSub(true)}
-            saving={sSaving}
-          />
+          sView ? (
+            <div className="flex items-center justify-end">
+              <button type="button" className="btn-secondary" onClick={closeSub}>
+                Close
+              </button>
+            </div>
+          ) : (
+            <DrawerFooter
+              onCancel={closeSub}
+              onSave={() => saveSub(false)}
+              onSaveNew={sEditing ? undefined : () => saveSub(true)}
+              saving={sSaving}
+            />
+          )
         }
       >
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Input
-            label="Sort Order"
-            type="number"
-            value={sForm.sortOrder}
-            onChange={(e) =>
-              setSForm({ ...sForm, sortOrder: Number(e.target.value) })
-            }
-          />
-          <Select
-            label="Object Type"
-            value={sForm.objectType}
-            disabled
-            title="Inherited from the main menu"
-            options={OBJECT_TYPE_OPTIONS}
-          />
-          <Select
-            label="Sub Menu Name"
-            required
-            wrapClassName="sm:col-span-2"
-            value={sForm.objectId}
-            onChange={(e) => onPickObject(e.target.value)}
-            placeholder={
-              objectOptions.length
-                ? 'Select from Object Master'
-                : 'All objects already added to this menu'
-            }
-            options={objectOptions}
-          />
-          <Input
-            label="Route"
-            value={sForm.route}
-            readOnly
-            disabled
-            placeholder="Loaded from object"
-          />
-          <FieldWrap label="Icon">
-            <div className="input-base flex items-center gap-2 text-slate-600 dark:text-slate-300">
-              {(() => {
-                const Icon = resolveIcon(sForm.icon);
-                return (
-                  <Icon className="h-[18px] w-[18px] flex-none" />
-                );
-              })()}
-              <span
-                className={cn(
-                  'flex-1 truncate',
-                  !sForm.icon && 'text-slate-400',
-                )}
-              >
-                {sForm.icon || 'Loaded from object'}
-              </span>
-            </div>
-          </FieldWrap>
-          <Textarea
-            label="Description"
-            wrapClassName="sm:col-span-2"
-            value={sForm.description}
-            onChange={(e) =>
-              setSForm({ ...sForm, description: e.target.value })
-            }
-          />
-        </div>
+        <fieldset disabled={sView} className="m-0 min-w-0 border-0 p-0">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Input
+              label="Sort Order"
+              type="number"
+              value={sForm.sortOrder}
+              onChange={(e) =>
+                setSForm({ ...sForm, sortOrder: Number(e.target.value) })
+              }
+            />
+            <Select
+              label="Object Type"
+              value={sForm.objectType}
+              disabled
+              title="Inherited from the main menu"
+              options={OBJECT_TYPE_OPTIONS}
+            />
+            <Select
+              label="Sub Menu Name"
+              required
+              wrapClassName="sm:col-span-2"
+              value={sForm.objectId}
+              onChange={(e) => onPickObject(e.target.value)}
+              placeholder={
+                objectOptions.length
+                  ? 'Select from Object Master'
+                  : 'All objects already added to this menu'
+              }
+              options={objectOptions}
+            />
+            <Input
+              label="Route"
+              value={sForm.route}
+              readOnly
+              disabled
+              placeholder="Loaded from object"
+            />
+            <FieldWrap label="Icon">
+              <div className="input-base flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                {(() => {
+                  const Icon = resolveIcon(sForm.icon);
+                  return (
+                    <Icon className="h-[18px] w-[18px] flex-none" />
+                  );
+                })()}
+                <span
+                  className={cn(
+                    'flex-1 truncate',
+                    !sForm.icon && 'text-slate-400',
+                  )}
+                >
+                  {sForm.icon || 'Loaded from object'}
+                </span>
+              </div>
+            </FieldWrap>
+            <Textarea
+              label="Description"
+              wrapClassName="sm:col-span-2"
+              value={sForm.description}
+              onChange={(e) =>
+                setSForm({ ...sForm, description: e.target.value })
+              }
+            />
+          </div>
+        </fieldset>
       </Drawer>
     </div>
   );

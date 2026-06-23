@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Box, Pencil, Trash2, BarChart3, Link2, StickyNote, Globe, Settings2 } from 'lucide-react';
+import { Plus, Box, Pencil, Trash2, BarChart3, Link2, StickyNote, Globe, Settings2, Eye } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -68,11 +68,18 @@ export default function GadgetsPage() {
   const canAdd = can(ROUTE, 'add');
   const canEdit = can(ROUTE, 'edit');
   const canDelete = can(ROUTE, 'delete');
+  const canView = can(ROUTE, 'view');
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<GadgetCatalogItem | null>(null);
+  const [view, setView] = useState(false); // read-only view (e.g. for locked records)
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
+
+  const closeDrawer = () => {
+    setOpen(false);
+    setView(false);
+  };
 
   useEffect(() => {
     api
@@ -122,22 +129,32 @@ export default function GadgetsPage() {
       return;
     }
     setEditing(null);
+    setView(false);
     setForm({ ...empty });
     setOpen(true);
   };
+  const formFrom = (g: GadgetCatalogItem) => ({
+    name: g.name,
+    type: g.type,
+    description: g.description ?? '',
+    isActive: g.isActive,
+    source: g.config?.source ?? 'users',
+    hint: g.config?.hint ?? '',
+    text: g.config?.text ?? '',
+    url: g.config?.url ?? '',
+    height: g.config?.height ?? 240,
+  });
   const openEdit = (g: GadgetCatalogItem) => {
     setEditing(g);
-    setForm({
-      name: g.name,
-      type: g.type,
-      description: g.description ?? '',
-      isActive: g.isActive,
-      source: g.config?.source ?? 'users',
-      hint: g.config?.hint ?? '',
-      text: g.config?.text ?? '',
-      url: g.config?.url ?? '',
-      height: g.config?.height ?? 240,
-    });
+    setView(false);
+    setForm(formFrom(g));
+    setOpen(true);
+  };
+  // Read-only view — works for locked records without unlocking them.
+  const openView = (g: GadgetCatalogItem) => {
+    setEditing(g);
+    setView(true);
+    setForm(formFrom(g));
     setOpen(true);
   };
 
@@ -270,6 +287,15 @@ export default function GadgetsPage() {
                 )}
                 <div className="mt-4 flex items-center justify-end gap-1">
                   {!g.isActive && <Badge color="slate">Inactive</Badge>}
+                  {canView && (
+                    <button
+                      onClick={() => openView(g)}
+                      className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
+                      title="View"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
+                  )}
                   {canEdit && (
                     <button
                       onClick={() => guardEdit(g, () => openEdit(g))}
@@ -302,14 +328,23 @@ export default function GadgetsPage() {
 
       <Drawer
         open={open}
-        onClose={() => setOpen(false)}
-        title={editing ? 'Edit Gadget' : 'New Gadget'}
+        onClose={closeDrawer}
+        title={view ? 'View Gadget' : editing ? 'Edit Gadget' : 'New Gadget'}
         subtitle="Dashboard gadget"
         icon={<Box className="h-5 w-5" />}
         footer={
-          <DrawerFooter onCancel={() => setOpen(false)} onSave={save} saving={saving} />
+          view ? (
+            <div className="flex items-center justify-end">
+              <button type="button" className="btn-secondary" onClick={closeDrawer}>
+                Close
+              </button>
+            </div>
+          ) : (
+            <DrawerFooter onCancel={closeDrawer} onSave={save} saving={saving} />
+          )
         }
       >
+        <fieldset disabled={view} className="m-0 min-w-0 border-0 p-0">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input
             label="Name"
@@ -406,6 +441,7 @@ export default function GadgetsPage() {
             />
           </div>
         </div>
+        </fieldset>
       </Drawer>
     </div>
   );

@@ -24,6 +24,7 @@ import {
   GripVertical,
   Star,
   LayoutGrid,
+  Eye,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/providers/ToastProvider';
@@ -79,6 +80,7 @@ export default function DashboardsPage() {
   const canAdd = can(ROUTE, 'add');
   const canEdit = can(ROUTE, 'edit');
   const canDelete = can(ROUTE, 'delete');
+  const canView = can(ROUTE, 'view');
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -87,8 +89,14 @@ export default function DashboardsPage() {
   // dashboard drawer
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<DashboardSummary | null>(null);
+  const [view, setView] = useState(false); // read-only view (e.g. for locked records)
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
+
+  const closeDrawer = () => {
+    setOpen(false);
+    setView(false);
+  };
 
   // widget editor drawer
   const [wOpen, setWOpen] = useState(false);
@@ -156,18 +164,28 @@ export default function DashboardsPage() {
       return;
     }
     setEditing(null);
+    setView(false);
     setForm({ ...emptyForm });
     setOpen(true);
   };
+  const formFrom = (d: DashboardSummary) => ({
+    name: d.name,
+    icon: d.icon ?? 'layout-dashboard',
+    userGroupId: d.userGroupId ? String(d.userGroupId) : '',
+    isDefault: d.isDefault,
+    isActive: d.isActive,
+  });
   const openEdit = (d: DashboardSummary) => {
     setEditing(d);
-    setForm({
-      name: d.name,
-      icon: d.icon ?? 'layout-dashboard',
-      userGroupId: d.userGroupId ? String(d.userGroupId) : '',
-      isDefault: d.isDefault,
-      isActive: d.isActive,
-    });
+    setView(false);
+    setForm(formFrom(d));
+    setOpen(true);
+  };
+  // Read-only view — works for locked records without unlocking them.
+  const openView = (d: DashboardSummary) => {
+    setEditing(d);
+    setView(true);
+    setForm(formFrom(d));
     setOpen(true);
   };
   const save = async () => {
@@ -341,6 +359,15 @@ export default function DashboardsPage() {
                   >
                     <LayoutGrid className="h-4 w-4" /> Widgets
                   </button>
+                  {canView && (
+                    <button
+                      onClick={() => openView(d)}
+                      className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
+                      title="View"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
+                  )}
                   {canEdit && (
                     <button
                       onClick={() => guardEdit(d, () => openEdit(d))}
@@ -374,14 +401,23 @@ export default function DashboardsPage() {
       {/* Dashboard form drawer */}
       <Drawer
         open={open}
-        onClose={() => setOpen(false)}
-        title={editing ? 'Edit Dashboard' : 'New Dashboard'}
+        onClose={closeDrawer}
+        title={view ? 'View Dashboard' : editing ? 'Edit Dashboard' : 'New Dashboard'}
         subtitle="Dashboard"
         icon={<LayoutDashboard className="h-5 w-5" />}
         footer={
-          <DrawerFooter onCancel={() => setOpen(false)} onSave={save} saving={saving} />
+          view ? (
+            <div className="flex items-center justify-end">
+              <button type="button" className="btn-secondary" onClick={closeDrawer}>
+                Close
+              </button>
+            </div>
+          ) : (
+            <DrawerFooter onCancel={closeDrawer} onSave={save} saving={saving} />
+          )
         }
       >
+        <fieldset disabled={view} className="m-0 min-w-0 border-0 p-0">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input
             label="Name"
@@ -427,6 +463,7 @@ export default function DashboardsPage() {
             </p>
           </div>
         </div>
+        </fieldset>
       </Drawer>
 
       {/* Widget editor drawer */}

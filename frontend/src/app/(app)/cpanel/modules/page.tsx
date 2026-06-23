@@ -46,12 +46,19 @@ export default function ModulesPage() {
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Module | null>(null);
+  const [view, setView] = useState(false); // read-only view (e.g. for locked records)
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
 
   const canAdd = can(ROUTE, 'add');
   const canEdit = can(ROUTE, 'edit');
   const canDelete = can(ROUTE, 'delete');
+  const canView = can(ROUTE, 'view');
+
+  const closeDrawer = () => {
+    setOpen(false);
+    setView(false);
+  };
 
   useEffect(() => {
     api
@@ -62,12 +69,31 @@ export default function ModulesPage() {
 
   const openAdd = () => {
     setEditing(null);
+    setView(false);
     setForm({ ...empty, companyIds: [] });
     setOpen(true);
   };
 
   const openEdit = (m: Module) => {
     setEditing(m);
+    setView(false);
+    setForm({
+      code: m.code,
+      name: m.name,
+      description: m.description ?? '',
+      icon: m.icon ?? '',
+      sortOrder: m.sortOrder ?? 0,
+      isActive: m.isActive,
+      isCore: m.isCore,
+      companyIds: m.companyIds ?? [],
+    });
+    setOpen(true);
+  };
+
+  // Read-only view — works for locked records without unlocking them.
+  const openView = (m: Module) => {
+    setEditing(m);
+    setView(true);
     setForm({
       code: m.code,
       name: m.name,
@@ -213,11 +239,13 @@ export default function ModulesPage() {
         loading={loading}
         onRefresh={refetch}
         searchPlaceholder="Search modules..."
+        onView={openView}
         onEdit={(r) => guardEdit(r, () => openEdit(r))}
         onDelete={(r) => guardDelete(r, () => remove(r))}
+        canView={canView}
         canEdit={canEdit}
         canDelete={canDelete}
-        rowActions={(r) => (
+        renderLock={(r) => (
           <LockButton
             locked={r.isLocked}
             canToggle={canToggle}
@@ -229,20 +257,31 @@ export default function ModulesPage() {
 
       <Drawer
         open={open}
-        onClose={() => setOpen(false)}
-        title={editing ? 'Edit Module' : 'New Module'}
+        onClose={closeDrawer}
+        title={view ? 'View Module' : editing ? 'Edit Module' : 'New Module'}
         subtitle="Module configuration"
         icon={<Layers className="h-5 w-5" />}
         footer={
-          <DrawerFooter
-            onCancel={() => setOpen(false)}
-            onSave={() => save(false)}
-            onSaveNew={editing ? undefined : () => save(true)}
-            saving={saving}
-          />
+          view ? (
+            <div className="flex items-center justify-end">
+              <button type="button" className="btn-secondary" onClick={closeDrawer}>
+                Close
+              </button>
+            </div>
+          ) : (
+            <DrawerFooter
+              onCancel={closeDrawer}
+              onSave={() => save(false)}
+              onSaveNew={editing ? undefined : () => save(true)}
+              saving={saving}
+            />
+          )
         }
       >
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {/* Disabled fieldset = read-only: it cascades `disabled` to every input
+            below without changing the layout. */}
+        <fieldset disabled={view} className="m-0 min-w-0 border-0 p-0">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input
             label="Code"
             required
@@ -345,7 +384,8 @@ export default function ModulesPage() {
               )}
             </div>
           )}
-        </div>
+          </div>
+        </fieldset>
       </Drawer>
     </div>
   );

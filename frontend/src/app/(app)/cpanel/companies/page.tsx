@@ -47,6 +47,7 @@ export default function CompaniesPage() {
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Company | null>(null);
+  const [view, setView] = useState(false); // read-only view (e.g. for locked records)
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
 
@@ -61,28 +62,46 @@ export default function CompaniesPage() {
   const canAdd = can(ROUTE, 'add');
   const canEdit = can(ROUTE, 'edit');
   const canDelete = can(ROUTE, 'delete');
+  const canView = can(ROUTE, 'view');
+
+  const closeDrawer = () => {
+    setOpen(false);
+    setView(false);
+  };
+
+  const formFrom = (c: Company) => ({
+    code: c.code,
+    name: c.name,
+    legalName: c.legalName ?? '',
+    email: c.email ?? '',
+    phone: c.phone ?? '',
+    address: c.address ?? '',
+    city: c.city ?? '',
+    state: c.state ?? '',
+    country: c.country ?? '',
+    taxNumber: c.taxNumber ?? '',
+    isActive: c.isActive,
+  });
 
   const openAdd = () => {
     setEditing(null);
+    setView(false);
     setForm({ ...empty });
     setOpen(true);
   };
 
   const openEdit = (c: Company) => {
     setEditing(c);
-    setForm({
-      code: c.code,
-      name: c.name,
-      legalName: c.legalName ?? '',
-      email: c.email ?? '',
-      phone: c.phone ?? '',
-      address: c.address ?? '',
-      city: c.city ?? '',
-      state: c.state ?? '',
-      country: c.country ?? '',
-      taxNumber: c.taxNumber ?? '',
-      isActive: c.isActive,
-    });
+    setView(false);
+    setForm(formFrom(c));
+    setOpen(true);
+  };
+
+  // Read-only view — works for locked records without unlocking them.
+  const openView = (c: Company) => {
+    setEditing(c);
+    setView(true);
+    setForm(formFrom(c));
     setOpen(true);
   };
 
@@ -219,48 +238,61 @@ export default function CompaniesPage() {
         loading={loading}
         onRefresh={refetch}
         searchPlaceholder="Search companies..."
+        onView={openView}
         onEdit={(r) => guardEdit(r, () => openEdit(r))}
         onDelete={(r) => guardDelete(r, () => remove(r))}
+        canView={canView}
         canEdit={canEdit}
         canDelete={canDelete}
-        rowActions={(r) => (
-          <>
-            {canEdit && (
-              <button
-                onClick={() => openModules(r)}
-                className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
-                title="Modules"
-              >
-                <Layers className="h-4 w-4" />
-              </button>
-            )}
-            <LockButton
-              locked={r.isLocked}
-              canToggle={canToggle}
-              onToggle={() => toggleLock(r)}
-            />
-          </>
+        rowActions={(r) =>
+          canEdit ? (
+            <button
+              onClick={() => openModules(r)}
+              className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
+              title="Modules"
+            >
+              <Layers className="h-4 w-4" />
+            </button>
+          ) : null
+        }
+        renderLock={(r) => (
+          <LockButton
+            locked={r.isLocked}
+            canToggle={canToggle}
+            onToggle={() => toggleLock(r)}
+          />
         )}
         emptyMessage="No companies found"
       />
 
       <Drawer
         open={open}
-        onClose={() => setOpen(false)}
-        title={editing ? 'Edit Company' : 'New Company'}
-        subtitle="Company details"
+        onClose={closeDrawer}
+        title={view ? 'View Company' : editing ? 'Edit Company' : 'New Company'}
+        subtitle={view ? 'Read-only — locked or view mode' : 'Company details'}
         icon={<Building2 className="h-5 w-5" />}
         width="lg"
         footer={
-          <DrawerFooter
-            onCancel={() => setOpen(false)}
-            onSave={() => save(false)}
-            onSaveNew={editing ? undefined : () => save(true)}
-            saving={saving}
-          />
+          view ? (
+            <div className="flex items-center justify-end">
+              <button type="button" className="btn-secondary" onClick={closeDrawer}>
+                Close
+              </button>
+            </div>
+          ) : (
+            <DrawerFooter
+              onCancel={closeDrawer}
+              onSave={() => save(false)}
+              onSaveNew={editing ? undefined : () => save(true)}
+              saving={saving}
+            />
+          )
         }
       >
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {/* Disabled fieldset = read-only: it cascades `disabled` to every input
+            below without changing the layout. */}
+        <fieldset disabled={view} className="m-0 min-w-0 border-0 p-0">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input
             label="Code"
             required
@@ -316,16 +348,17 @@ export default function CompaniesPage() {
             value={form.taxNumber}
             onChange={(e) => setForm({ ...form, taxNumber: e.target.value })}
           />
-          <div className="sm:col-span-2">
-            <Checkbox
-              label="Active"
-              checked={form.isActive}
-              onChange={(e) =>
-                setForm({ ...form, isActive: e.target.checked })
-              }
-            />
+            <div className="sm:col-span-2">
+              <Checkbox
+                label="Active"
+                checked={form.isActive}
+                onChange={(e) =>
+                  setForm({ ...form, isActive: e.target.checked })
+                }
+              />
+            </div>
           </div>
-        </div>
+        </fieldset>
       </Drawer>
 
       <Drawer

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plus, List, ChevronRight } from 'lucide-react';
+import { Plus, List, ChevronRight, Eye } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
@@ -43,16 +43,19 @@ export default function LookupsPage() {
   const canAdd = can(ROUTE, 'add');
   const canEdit = can(ROUTE, 'edit');
   const canDelete = can(ROUTE, 'delete');
+  const canView = can(ROUTE, 'view');
 
   // lookup drawer
   const [lkOpen, setLkOpen] = useState(false);
   const [lkEditing, setLkEditing] = useState<Lookup | null>(null);
+  const [lkView, setLkView] = useState(false); // read-only view (e.g. for locked records)
   const [lkForm, setLkForm] = useState({ ...emptyLookup });
   const [lkSaving, setLkSaving] = useState(false);
 
   // value drawer
   const [vOpen, setVOpen] = useState(false);
   const [vEditing, setVEditing] = useState<LookupValue | null>(null);
+  const [vView, setVView] = useState(false); // read-only view (e.g. for locked records)
   const [vForm, setVForm] = useState({ ...emptyValue });
   const [vSaving, setVSaving] = useState(false);
 
@@ -91,19 +94,33 @@ export default function LookupsPage() {
   }, [selected?.id]);
 
   // ---- Lookup CRUD ----
+  const closeLookupDrawer = () => {
+    setLkOpen(false);
+    setLkView(false);
+  };
+  const lookupFormFrom = (l: Lookup) => ({
+    code: l.code,
+    name: l.name,
+    description: l.description ?? '',
+    isSystem: l.isSystem,
+  });
   const openAddLookup = () => {
     setLkEditing(null);
+    setLkView(false);
     setLkForm({ ...emptyLookup });
     setLkOpen(true);
   };
   const openEditLookup = (l: Lookup) => {
     setLkEditing(l);
-    setLkForm({
-      code: l.code,
-      name: l.name,
-      description: l.description ?? '',
-      isSystem: l.isSystem,
-    });
+    setLkView(false);
+    setLkForm(lookupFormFrom(l));
+    setLkOpen(true);
+  };
+  // Read-only view — works for locked records without unlocking them.
+  const openViewLookup = (l: Lookup) => {
+    setLkEditing(l);
+    setLkView(true);
+    setLkForm(lookupFormFrom(l));
     setLkOpen(true);
   };
   const saveLookup = async (again = false) => {
@@ -150,20 +167,34 @@ export default function LookupsPage() {
   };
 
   // ---- Value CRUD ----
+  const closeValueDrawer = () => {
+    setVOpen(false);
+    setVView(false);
+  };
+  const valueFormFrom = (val: LookupValue) => ({
+    value: val.value,
+    label: val.label,
+    extra: val.extra ?? '',
+    sortOrder: val.sortOrder ?? 0,
+    isActive: val.isActive,
+  });
   const openAddValue = () => {
     setVEditing(null);
+    setVView(false);
     setVForm({ ...emptyValue });
     setVOpen(true);
   };
   const openEditValue = (val: LookupValue) => {
     setVEditing(val);
-    setVForm({
-      value: val.value,
-      label: val.label,
-      extra: val.extra ?? '',
-      sortOrder: val.sortOrder ?? 0,
-      isActive: val.isActive,
-    });
+    setVView(false);
+    setVForm(valueFormFrom(val));
+    setVOpen(true);
+  };
+  // Read-only view — works for locked records without unlocking them.
+  const openViewValue = (val: LookupValue) => {
+    setVEditing(val);
+    setVView(true);
+    setVForm(valueFormFrom(val));
     setVOpen(true);
   };
   const saveValue = async (again = false) => {
@@ -302,8 +333,18 @@ export default function LookupsPage() {
               )}
             </div>
           </div>
-          {selected && (canEdit || canDelete || lookupLock.canToggle) && (
+          {selected &&
+            (canView || canEdit || canDelete || lookupLock.canToggle) && (
             <div className="mt-3 flex items-center gap-2">
+              {canView && (
+                <button
+                  onClick={() => openViewLookup(selected)}
+                  className="rounded-lg p-2 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
+                  title="View"
+                >
+                  <Eye className="h-4 w-4" />
+                </button>
+              )}
               {canEdit && (
                 <button
                   className="btn-secondary"
@@ -355,13 +396,15 @@ export default function LookupsPage() {
                 rowKey={(r) => r.id}
                 loading={valuesLoading}
                 searchPlaceholder="Search values..."
+                onView={openViewValue}
                 onEdit={(r) => valueLock.guardEdit(r, () => openEditValue(r))}
                 onDelete={(r) =>
                   valueLock.guardDelete(r, () => removeValue(r))
                 }
+                canView={canView}
                 canEdit={canEdit}
                 canDelete={canDelete}
-                rowActions={(r) => (
+                renderLock={(r) => (
                   <LockButton
                     locked={r.isLocked}
                     canToggle={valueLock.canToggle}
@@ -383,101 +426,129 @@ export default function LookupsPage() {
       {/* Lookup drawer */}
       <Drawer
         open={lkOpen}
-        onClose={() => setLkOpen(false)}
-        title={lkEditing ? 'Edit Lookup' : 'New Lookup'}
+        onClose={closeLookupDrawer}
+        title={lkView ? 'View Lookup' : lkEditing ? 'Edit Lookup' : 'New Lookup'}
         subtitle="Lookup master"
         icon={<List className="h-5 w-5" />}
         footer={
-          <DrawerFooter
-            onCancel={() => setLkOpen(false)}
-            onSave={() => saveLookup(false)}
-            onSaveNew={lkEditing ? undefined : () => saveLookup(true)}
-            saving={lkSaving}
-          />
+          lkView ? (
+            <div className="flex items-center justify-end">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={closeLookupDrawer}
+              >
+                Close
+              </button>
+            </div>
+          ) : (
+            <DrawerFooter
+              onCancel={closeLookupDrawer}
+              onSave={() => saveLookup(false)}
+              onSaveNew={lkEditing ? undefined : () => saveLookup(true)}
+              saving={lkSaving}
+            />
+          )
         }
       >
-        <div className="space-y-4">
-          <Input
-            label="Code"
-            required
-            value={lkForm.code}
-            onChange={(e) => setLkForm({ ...lkForm, code: e.target.value })}
-          />
-          <Input
-            label="Name"
-            required
-            value={lkForm.name}
-            onChange={(e) => setLkForm({ ...lkForm, name: e.target.value })}
-          />
-          <Textarea
-            label="Description"
-            value={lkForm.description}
-            onChange={(e) =>
-              setLkForm({ ...lkForm, description: e.target.value })
-            }
-          />
-          <Checkbox
-            label="System lookup"
-            checked={lkForm.isSystem}
-            onChange={(e) =>
-              setLkForm({ ...lkForm, isSystem: e.target.checked })
-            }
-          />
-        </div>
+        <fieldset disabled={lkView} className="m-0 min-w-0 border-0 p-0">
+          <div className="space-y-4">
+            <Input
+              label="Code"
+              required
+              value={lkForm.code}
+              onChange={(e) => setLkForm({ ...lkForm, code: e.target.value })}
+            />
+            <Input
+              label="Name"
+              required
+              value={lkForm.name}
+              onChange={(e) => setLkForm({ ...lkForm, name: e.target.value })}
+            />
+            <Textarea
+              label="Description"
+              value={lkForm.description}
+              onChange={(e) =>
+                setLkForm({ ...lkForm, description: e.target.value })
+              }
+            />
+            <Checkbox
+              label="System lookup"
+              checked={lkForm.isSystem}
+              onChange={(e) =>
+                setLkForm({ ...lkForm, isSystem: e.target.checked })
+              }
+            />
+          </div>
+        </fieldset>
       </Drawer>
 
       {/* Value drawer */}
       <Drawer
         open={vOpen}
-        onClose={() => setVOpen(false)}
-        title={vEditing ? 'Edit Value' : 'New Value'}
+        onClose={closeValueDrawer}
+        title={vView ? 'View Value' : vEditing ? 'Edit Value' : 'New Value'}
         subtitle={selected?.name}
         icon={<List className="h-5 w-5" />}
         footer={
-          <DrawerFooter
-            onCancel={() => setVOpen(false)}
-            onSave={() => saveValue(false)}
-            onSaveNew={vEditing ? undefined : () => saveValue(true)}
-            saving={vSaving}
-          />
+          vView ? (
+            <div className="flex items-center justify-end">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={closeValueDrawer}
+              >
+                Close
+              </button>
+            </div>
+          ) : (
+            <DrawerFooter
+              onCancel={closeValueDrawer}
+              onSave={() => saveValue(false)}
+              onSaveNew={vEditing ? undefined : () => saveValue(true)}
+              saving={vSaving}
+            />
+          )
         }
       >
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Input
-            label="Value"
-            required
-            value={vForm.value}
-            onChange={(e) => setVForm({ ...vForm, value: e.target.value })}
-          />
-          <Input
-            label="Label"
-            required
-            value={vForm.label}
-            onChange={(e) => setVForm({ ...vForm, label: e.target.value })}
-          />
-          <Input
-            label="Extra"
-            value={vForm.extra}
-            onChange={(e) => setVForm({ ...vForm, extra: e.target.value })}
-          />
-          <Input
-            label="Sort Order"
-            type="number"
-            value={vForm.sortOrder}
-            onChange={(e) =>
-              setVForm({ ...vForm, sortOrder: Number(e.target.value) })
-            }
-          />
-          <div className="sm:col-span-2">
-            <Checkbox
-              label="Active"
-              checked={vForm.isActive}
+        <fieldset disabled={vView} className="m-0 min-w-0 border-0 p-0">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Input
+              label="Value"
+              required
+              value={vForm.value}
+              onChange={(e) => setVForm({ ...vForm, value: e.target.value })}
+            />
+            <Input
+              label="Label"
+              required
+              value={vForm.label}
+              onChange={(e) => setVForm({ ...vForm, label: e.target.value })}
+            />
+            <Input
+              label="Extra"
+              value={vForm.extra}
+              onChange={(e) => setVForm({ ...vForm, extra: e.target.value })}
+            />
+            <Input
+              label="Sort Order"
+              type="number"
+              value={vForm.sortOrder}
               onChange={(e) =>
-                setVForm({ ...vForm, isActive: e.target.checked })
+                setVForm({ ...vForm, sortOrder: Number(e.target.value) })
               }
             />
+            <div className="sm:col-span-2">
+              <Checkbox
+                label="Active"
+                checked={vForm.isActive}
+                onChange={(e) =>
+                  setVForm({ ...vForm, isActive: e.target.checked })
+                }
+              />
+            </div>
           </div>
-        </div>
+        </fieldset>
       </Drawer>
     </div>
   );

@@ -97,12 +97,19 @@ export default function UserGroupsPage() {
   const canAdd = can(ROUTE, 'add');
   const canEdit = can(ROUTE, 'edit');
   const canDelete = can(ROUTE, 'delete');
+  const canView = can(ROUTE, 'view');
 
   // group drawer
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<UserGroup | null>(null);
+  const [view, setView] = useState(false); // read-only view (e.g. for locked records)
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
+
+  const closeDrawer = () => {
+    setOpen(false);
+    setView(false);
+  };
 
   // privileges drawer
   const [privOpen, setPrivOpen] = useState(false);
@@ -133,11 +140,24 @@ export default function UserGroupsPage() {
   // ---- Group CRUD ----
   const openAdd = () => {
     setEditing(null);
+    setView(false);
     setForm({ ...empty, moduleIds: [] });
     setOpen(true);
   };
   const openEdit = (g: UserGroup) => {
     setEditing(g);
+    setView(false);
+    setForm({
+      name: g.name,
+      description: g.description ?? '',
+      moduleIds: g.modules?.map((m) => m.id) ?? [],
+    });
+    setOpen(true);
+  };
+  // Read-only view — works for locked records without unlocking them.
+  const openView = (g: UserGroup) => {
+    setEditing(g);
+    setView(true);
     setForm({
       name: g.name,
       description: g.description ?? '',
@@ -395,45 +415,56 @@ export default function UserGroupsPage() {
         loading={loading}
         onRefresh={refetch}
         searchPlaceholder="Search groups..."
+        onView={openView}
         onEdit={(r) => guardEdit(r, () => openEdit(r))}
         onDelete={(r) => guardDelete(r, () => remove(r))}
+        canView={canView}
         canEdit={canEdit}
         canDelete={canDelete}
         emptyMessage="No user groups found"
         rowActions={(r) => (
-          <>
-            <button
-              onClick={() => openPrivileges(r)}
-              className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950"
-              title="Privileges"
-            >
-              <KeyRound className="h-4 w-4" /> Privileges
-            </button>
-            <LockButton
-              locked={r.isLocked}
-              canToggle={canToggle}
-              onToggle={() => toggleLock(r)}
-            />
-          </>
+          <button
+            onClick={() => openPrivileges(r)}
+            className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-xs font-medium text-brand-600 hover:bg-brand-50 dark:hover:bg-brand-950"
+            title="Privileges"
+          >
+            <KeyRound className="h-4 w-4" /> Privileges
+          </button>
+        )}
+        renderLock={(r) => (
+          <LockButton
+            locked={r.isLocked}
+            canToggle={canToggle}
+            onToggle={() => toggleLock(r)}
+          />
         )}
       />
 
       {/* Group drawer */}
       <Drawer
         open={open}
-        onClose={() => setOpen(false)}
-        title={editing ? 'Edit Group' : 'New Group'}
+        onClose={closeDrawer}
+        title={view ? 'View Group' : editing ? 'Edit Group' : 'New Group'}
         subtitle="User group"
         icon={<ShieldCheck className="h-5 w-5" />}
         footer={
-          <DrawerFooter
-            onCancel={() => setOpen(false)}
-            onSave={() => save(false)}
-            onSaveNew={editing ? undefined : () => save(true)}
-            saving={saving}
-          />
+          view ? (
+            <div className="flex items-center justify-end">
+              <button type="button" className="btn-secondary" onClick={closeDrawer}>
+                Close
+              </button>
+            </div>
+          ) : (
+            <DrawerFooter
+              onCancel={closeDrawer}
+              onSave={() => save(false)}
+              onSaveNew={editing ? undefined : () => save(true)}
+              saving={saving}
+            />
+          )
         }
       >
+        <fieldset disabled={view} className="m-0 min-w-0 border-0 p-0">
         <div className="space-y-4">
           <Input
             label="Name"
@@ -484,6 +515,7 @@ export default function UserGroupsPage() {
             }
           />
         </div>
+        </fieldset>
       </Drawer>
 
       {/* Privileges matrix drawer */}

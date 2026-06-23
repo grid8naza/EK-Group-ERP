@@ -81,10 +81,12 @@ export default function ObjectsPage() {
   const canAdd = can(ROUTE, 'add');
   const canEdit = can(ROUTE, 'edit');
   const canDelete = can(ROUTE, 'delete');
+  const canView = can(ROUTE, 'view');
 
   // drawer state
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<ErpObject | null>(null);
+  const [view, setView] = useState(false); // read-only view (e.g. for locked records)
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState('object');
@@ -180,8 +182,14 @@ export default function ObjectsPage() {
         ]
       : developerOptions;
 
+  const closeDrawer = () => {
+    setOpen(false);
+    setView(false);
+  };
+
   const openAdd = () => {
     setEditing(null);
+    setView(false);
     setForm({ ...emptyForm });
     setRevisions([]);
     setTab('object');
@@ -190,6 +198,37 @@ export default function ObjectsPage() {
 
   const openEdit = async (o: ErpObject) => {
     setEditing(o);
+    setView(false);
+    setForm({
+      moduleId: String(o.moduleId ?? ''),
+      author: o.author ?? '',
+      objectType: o.objectType,
+      objectName: o.objectName ?? '',
+      showInMenu: o.showInMenu,
+      nameInMenu: o.nameInMenu ?? '',
+      description: o.description ?? '',
+      route: o.route ?? '',
+      icon: o.icon ?? '',
+      help: !!o.help,
+      isSystem: !!o.isSystem,
+      notes: o.notes ?? '',
+    });
+    setRevisions([]);
+    setTab('object');
+    setOpen(true);
+    // load full detail (incl. revisions)
+    try {
+      const detail = await api.get<ErpObject>(`/objects/${o.id}`);
+      setRevisions(detail.revisions ?? []);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  // Read-only view — works for locked records without unlocking them.
+  const openView = async (o: ErpObject) => {
+    setEditing(o);
+    setView(true);
     setForm({
       moduleId: String(o.moduleId ?? ''),
       author: o.author ?? '',
@@ -490,11 +529,13 @@ export default function ObjectsPage() {
         onSearchChange={setSearch}
         serverSearch
         searchPlaceholder="Search objects..."
+        onView={(r) => openView(r)}
         onEdit={handleEdit}
         onDelete={handleDelete}
+        canView={canView}
         canEdit={canEdit}
         canDelete={canDelete}
-        rowActions={
+        renderLock={
           canEdit
             ? (r) => (
                 <button
@@ -563,15 +604,21 @@ export default function ObjectsPage() {
       {/* Drawer */}
       <Drawer
         open={open}
-        onClose={() => setOpen(false)}
-        title={editing ? 'Edit Object' : 'New Object'}
+        onClose={closeDrawer}
+        title={view ? 'View Object' : editing ? 'Edit Object' : 'New Object'}
         subtitle={editing ? editing.objectName : 'Object Master'}
         icon={<Monitor className="h-5 w-5" />}
         width="lg"
         footer={
-          tab === 'object' ? (
+          view ? (
+            <div className="flex items-center justify-end">
+              <button type="button" className="btn-secondary" onClick={closeDrawer}>
+                Close
+              </button>
+            </div>
+          ) : tab === 'object' ? (
             <DrawerFooter
-              onCancel={() => setOpen(false)}
+              onCancel={closeDrawer}
               onSave={() => save(false)}
               onSaveNew={editing ? undefined : () => save(true)}
               saving={saving}
@@ -598,6 +645,10 @@ export default function ObjectsPage() {
           className="mb-5"
         />
 
+        {/* Disabled fieldset = read-only: it cascades `disabled` to every input
+            below without changing the layout. Tab navigation stays outside so
+            tabs remain switchable in view mode. */}
+        <fieldset disabled={view} className="m-0 min-w-0 border-0 p-0">
         {tab === 'object' ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Select
@@ -815,6 +866,7 @@ export default function ObjectsPage() {
             </div>
           </div>
         )}
+        </fieldset>
       </Drawer>
     </div>
   );

@@ -80,11 +80,18 @@ export default function UsersPage() {
   const canAdd = can(ROUTE, 'add');
   const canEdit = can(ROUTE, 'edit');
   const canDelete = can(ROUTE, 'delete');
+  const canView = can(ROUTE, 'view');
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AppUser | null>(null);
+  const [view, setView] = useState(false); // read-only view (e.g. for locked records)
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
+
+  const closeDrawer = () => {
+    setOpen(false);
+    setView(false);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -231,11 +238,12 @@ export default function UsersPage() {
 
   const openAdd = () => {
     setEditing(null);
+    setView(false);
     setForm({ ...empty, moduleAssignments: {}, defaultModuleByCompany: {} });
     setExpanded({});
     setOpen(true);
   };
-  const openEdit = (u: AppUser) => {
+  const loadInto = (u: AppUser) => {
     setEditing(u);
     const companyIds = u.companyIds ?? u.companies?.map((c) => c.id) ?? [];
     const defaultCompanyId =
@@ -271,6 +279,17 @@ export default function UsersPage() {
       defaultModuleByCompany,
     });
     setOpen(true);
+  };
+
+  const openEdit = (u: AppUser) => {
+    setView(false);
+    loadInto(u);
+  };
+
+  // Read-only view — works for locked records without unlocking them.
+  const openView = (u: AppUser) => {
+    setView(true);
+    loadInto(u);
   };
 
   const toggleCompany = (id: number) => {
@@ -563,11 +582,13 @@ export default function UsersPage() {
         onSearchChange={setSearch}
         serverSearch
         searchPlaceholder="Search users..."
+        onView={openView}
         onEdit={(r) => guardEdit(r, () => openEdit(r))}
         onDelete={(r) => guardDelete(r, () => remove(r))}
+        canView={canView}
         canEdit={canEdit}
         canDelete={canDelete}
-        rowActions={(r) => (
+        renderLock={(r) => (
           <LockButton
             locked={r.isLocked}
             canToggle={canToggle}
@@ -579,20 +600,31 @@ export default function UsersPage() {
 
       <Drawer
         open={open}
-        onClose={() => setOpen(false)}
-        title={editing ? 'Edit User' : 'New User'}
+        onClose={closeDrawer}
+        title={view ? 'View User' : editing ? 'Edit User' : 'New User'}
         subtitle="User & data security"
         icon={<Users className="h-5 w-5" />}
         width="lg"
         footer={
-          <DrawerFooter
-            onCancel={() => setOpen(false)}
-            onSave={() => save(false)}
-            onSaveNew={editing ? undefined : () => save(true)}
-            saving={saving}
-          />
+          view ? (
+            <div className="flex items-center justify-end">
+              <button type="button" className="btn-secondary" onClick={closeDrawer}>
+                Close
+              </button>
+            </div>
+          ) : (
+            <DrawerFooter
+              onCancel={closeDrawer}
+              onSave={() => save(false)}
+              onSaveNew={editing ? undefined : () => save(true)}
+              saving={saving}
+            />
+          )
         }
       >
+        {/* Disabled fieldset = read-only: it cascades `disabled` to every input
+            below without changing the layout. */}
+        <fieldset disabled={view} className="m-0 min-w-0 border-0 p-0">
         <div className="space-y-6">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input
@@ -973,6 +1005,7 @@ export default function UsersPage() {
             onChange={(e) => setForm({ ...form, remarks: e.target.value })}
           />
         </div>
+        </fieldset>
       </Drawer>
     </div>
   );
