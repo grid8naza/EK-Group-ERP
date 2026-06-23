@@ -1,46 +1,14 @@
-// Erp Grid8 data model — Cpanel module
+// Cpanel domain — the Control Panel module's tables.
+//
 // Multi-company: each Company is an isolated tenant. The cpanel config tables
 // (objects, menus, user groups, gadgets, dashboards) carry a companyId so every
 // company is configured independently ("separate cpanel per company"). The
 // Module catalog and Lookups stay global; which modules are enabled is decided
 // per company via CompanyModule.
-
-generator client {
-  provider = "prisma-client-js"
-}
-
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
-
-// ---------------------------------------------------------------------------
-// Enums
-// ---------------------------------------------------------------------------
-
-enum ObjectType {
-  TABLE
-  FORM
-  REPORT
-  DASHBOARD
-}
-
-enum SecurityType {
-  PASSWORD // Layer 1 only
-  MAC // Layer 2: locked to one machine
-  MACOTP // Layer 2: MAC or one-time password
-}
-
-// How a dashboard gadget renders. BUILTIN = rendered by its `code` in the
-// frontend (the original seeded widgets). The rest are data-driven so admins
-// can create working gadgets without any code change.
-enum GadgetType {
-  BUILTIN // rendered by code (USERS_COUNT, QUICK_LINKS, ...)
-  STAT // a single count, config.source selects what to count
-  LINKS // quick links to the module's screens
-  NOTE // free text / rich note, config.text
-  EMBED // an external page, config.url (+ config.height)
-}
+//
+// Every model here is FK-connected to the rest of Cpanel, which is why they all
+// live in one domain file. A future module (CRM, Accounts, ...) gets its OWN
+// file and references these by id only — never via @relation. See schema.prisma.
 
 // ---------------------------------------------------------------------------
 // Module Master — global catalog of module types. Enablement is per-company

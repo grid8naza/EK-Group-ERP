@@ -25,6 +25,7 @@ async function main() {
     { code: 'ACCOUNTS', name: 'Accounts', icon: 'wallet', sortOrder: 3, isActive: true, description: 'Finance & accounting.' },
     { code: 'INVENTORY', name: 'Inventory', icon: 'package', sortOrder: 4, isActive: true, description: 'Stock & inventory.' },
     { code: 'HR', name: 'Human Resources', icon: 'id-card', sortOrder: 5, isActive: true, description: 'HR & employees.' },
+    { code: 'PRODUCTION', name: 'Production', icon: 'factory', sortOrder: 6, isActive: true, description: 'Manufacturing & production orders.' },
   ];
   const modules: Record<string, number> = {};
   for (const m of moduleDefs) {
@@ -82,7 +83,7 @@ async function main() {
   const iconLookup = await prisma.lookup.create({
     data: { code: 'ICONS', name: 'Icons', description: 'Selectable menu icons (lucide names)', isSystem: true },
   });
-  for (const [i, value] of ['settings', 'users', 'list', 'database', 'building', 'shield', 'menu', 'wallet', 'layout-dashboard'].entries()) {
+  for (const [i, value] of ['settings', 'users', 'list', 'database', 'building', 'shield', 'menu', 'wallet', 'layout-dashboard', 'factory', 'package'].entries()) {
     await prisma.lookupValue.create({ data: { lookupId: iconLookup.id, value, label: value, sortOrder: i + 1 } });
   }
 
@@ -153,7 +154,7 @@ async function main() {
     name: 'Acme Industries',
     legalName: 'Acme Industries Private Limited',
     city: 'Kochi',
-    enabledModules: ['CPANEL', 'CRM', 'ACCOUNTS'],
+    enabledModules: ['CPANEL', 'CRM', 'ACCOUNTS', 'PRODUCTION'],
     author: 'Pavani',
   });
   const globex = await seedCompany({

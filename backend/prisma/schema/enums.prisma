@@ -1,0 +1,26 @@
+// Shared enums. Kept in the base layer because they are referenced by the
+// Cpanel domain today and may be referenced by future domains too.
+
+enum ObjectType {
+  TABLE
+  FORM
+  REPORT
+  DASHBOARD
+}
+
+enum SecurityType {
+  PASSWORD // Layer 1 only
+  MAC // Layer 2: locked to one machine
+  MACOTP // Layer 2: MAC or one-time password
+}
+
+// How a dashboard gadget renders. BUILTIN = rendered by its `code` in the
+// frontend (the original seeded widgets). The rest are data-driven so admins
+// can create working gadgets without any code change.
+enum GadgetType {
+  BUILTIN // rendered by code (USERS_COUNT, QUICK_LINKS, ...)
+  STAT // a single count, config.source selects what to count
+  LINKS // quick links to the module's screens
+  NOTE // free text / rich note, config.text
+  EMBED // an external page, config.url (+ config.height)
+}

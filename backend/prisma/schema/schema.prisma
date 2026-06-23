@@ -1,0 +1,35 @@
+// Erp Grid8 data model — base (datasource + generator).
+//
+// The schema is split per domain across this folder (multi-file schema,
+// Prisma `prismaSchemaFolder`). One file per business domain:
+//
+//   schema.prisma   <- this file: datasource + generator (shared)
+//   enums.prisma    <- shared enums
+//   cpanel.prisma   <- the Cpanel module's tables
+//   crm.prisma      <- (future) the CRM module's tables
+//   accounts.prisma <- (future) the Accounts module's tables
+//   ...
+//
+// THE OWNERSHIP RULE (this is what keeps modules independently extractable):
+//   * Every model belongs to exactly ONE domain file — the module that owns it.
+//   * A model may declare `@relation` (a real FK) ONLY to models in the SAME
+//     domain file. Across domains, reference by a plain id column (e.g.
+//     `userId Int`) with NO @relation. A cross-domain FK cannot survive when a
+//     module is later split into its own database/service.
+//
+// Why is everything currently in cpanel.prisma? Because every table today is
+// FK-connected to the rest of Cpanel — so it is, correctly, a single domain.
+// New modules (CRM, Accounts, Inventory, HR) arrive as new files here and must
+// reference Cpanel data (users, companies, modules) by id, never by FK.
+//
+// See prisma/schema/README.md and src/contracts/ for the runtime counterpart.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["prismaSchemaFolder"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

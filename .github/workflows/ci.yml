@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend — boundaries, build & boot
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    # Real Postgres so the boot smoke test below exercises the full wiring.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: erpgrip
+          POSTGRES_PASSWORD: erpgrip
+          POSTGRES_DB: erpgrip
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U erpgrip -d erpgrip"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://erpgrip:erpgrip@localhost:5432/erpgrip?schema=public
+      JWT_SECRET: ci-secret
+      BACKEND_PORT: 4000
+      SEED_ADMIN_USERNAME: superadmin
+      SEED_ADMIN_PASSWORD: Admin@123
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      # The module-isolation guardrail. Fails if one feature module imports
+      # another directly instead of going through src/contracts.
+      - name: Check module boundaries
+        run: npm run lint:boundaries
+
+      # `npm run build` also runs the boundary check via its `prebuild` hook,
+      # so isolation is enforced even if the step above is ever removed.
+      - name: Build
+        run: npm run build
+
+      # Boot the app for real. `nest build` (tsc) does NOT catch dependency-
+      # injection errors — an unresolved provider in a new module compiles fine
+      # and only fails at startup. This step catches exactly that: it syncs the
+      # schema, seeds, starts the API, and confirms it answers. If any module's
+      # dependencies don't resolve, the server never comes up and CI goes red.
+      - name: Smoke test — boot + verify runtime wiring
+        run: |
+          set -e
+          npx prisma db push --skip-generate
+          npm run seed
+          node dist/main.js & APP_PID=$!
+          for i in $(seq 1 30); do
+            if curl -sf "http://localhost:${BACKEND_PORT}/api/docs" >/dev/null; then UP=1; break; fi
+            sleep 2
+          done
+          if [ -z "$UP" ]; then
+            echo "::error::Backend failed to start — likely a module dependency/DI error."
+            kill $APP_PID 2>/dev/null || true
+            exit 1
+          fi
+          CODE=$(curl -s -o /dev/null -w '%{http_code}' \
+            -X POST "http://localhost:${BACKEND_PORT}/api/auth/login" \
+            -H 'Content-Type: application/json' \
+            -d '{"username":"superadmin","password":"Admin@123"}')
+          kill $APP_PID 2>/dev/null || true
+          echo "login responded HTTP $CODE"
+          case "$CODE" in 200|201) echo "Boot smoke test passed." ;; *) exit 1 ;; esac
+
+  frontend:
+    name: Frontend — build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          # Baked into the client bundle at build time; the real value is set
+          # per environment at deploy. A placeholder is fine for a build check.
+          NEXT_PUBLIC_API_URL: http://localhost:4000/api

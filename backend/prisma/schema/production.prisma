@@ -1,0 +1,35 @@
+// Production domain — manufacturing / production orders.
+//
+// This is the Production module's own domain file. Per the ownership rule in
+// schema.prisma, cross-domain references (companyId -> Cpanel Company,
+// assignedUserId -> Cpanel User) are PLAIN id columns with NO @relation, so the
+// Production tables stay a self-contained unit that can move to its own database
+// when this module is extracted into a service.
+
+enum ProductionStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model ProductionOrder {
+  id             Int              @id @default(autoincrement())
+  companyId      Int // -> Cpanel Company, by id (no cross-domain FK)
+  orderNo        String
+  productName    String
+  quantity       Int
+  unit           String?
+  status         ProductionStatus @default(PLANNED)
+  plannedDate    DateTime?
+  completedDate  DateTime?
+  assignedUserId Int? // -> Cpanel User, by id (no cross-domain FK)
+  remarks        String?
+  isLocked       Boolean          @default(false) // when locked, must be unlocked before edit/delete
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([companyId, orderNo])
+  @@index([companyId])
+  @@map("production_orders")
+}
