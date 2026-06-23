@@ -11,7 +11,8 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
+import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
+import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Textarea, Checkbox } from '@/components/ui/Field';
 import { IconPicker } from '@/components/ui/IconPicker';
 import { Badge } from '@/components/ui/Badge';
@@ -263,11 +264,7 @@ export default function ModulesPage() {
         icon={<Layers className="h-5 w-5" />}
         footer={
           view ? (
-            <div className="flex items-center justify-end">
-              <button type="button" className="btn-secondary" onClick={closeDrawer}>
-                Close
-              </button>
-            </div>
+            <CloseFooter onClose={closeDrawer} />
           ) : (
             <DrawerFooter
               onCancel={closeDrawer}
@@ -278,9 +275,7 @@ export default function ModulesPage() {
           )
         }
       >
-        {/* Disabled fieldset = read-only: it cascades `disabled` to every input
-            below without changing the layout. */}
-        <fieldset disabled={view} className="m-0 min-w-0 border-0 p-0">
+        <ReadOnlyFieldset readOnly={view}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input
             label="Code"
@@ -385,7 +380,7 @@ export default function ModulesPage() {
             </div>
           )}
           </div>
-        </fieldset>
+        </ReadOnlyFieldset>
       </Drawer>
     </div>
   );

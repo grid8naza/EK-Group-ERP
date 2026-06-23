@@ -21,10 +21,7 @@ import {
   Menu as MenuIcon,
   ChevronRight,
   ListTree,
-  Pencil,
-  Trash2,
   GripVertical,
-  Eye,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/providers/ToastProvider';
@@ -33,7 +30,9 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
+import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
+import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
+import { RowActions } from '@/components/ui/RowActions';
 import {
   Input,
   Select,
@@ -536,39 +535,23 @@ export default function MenusPage() {
                               </div>
                             </button>
                             <div className="flex flex-none items-center gap-0.5">
-                              <button
-                                onClick={() => openViewMain(m)}
-                                className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
-                                title="View"
-                              >
-                                <Eye className="h-4 w-4" />
-                              </button>
-                              {canEdit && (
-                                <button
-                                  onClick={() =>
-                                    mainLock.guardEdit(m, () => openEditMain(m))
-                                  }
-                                  className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
-                                  title="Edit"
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </button>
-                              )}
-                              {canDelete && (
-                                <button
-                                  onClick={() =>
-                                    mainLock.guardDelete(m, () => removeMain(m))
-                                  }
-                                  className="rounded-lg p-1.5 text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"
-                                  title="Delete"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
-                              )}
-                              <LockButton
-                                locked={m.isLocked}
-                                canToggle={mainLock.canToggle}
-                                onToggle={() => mainLock.toggleLock(m)}
+                              <RowActions
+                                onView={() => openViewMain(m)}
+                                onEdit={() =>
+                                  mainLock.guardEdit(m, () => openEditMain(m))
+                                }
+                                onDelete={() =>
+                                  mainLock.guardDelete(m, () => removeMain(m))
+                                }
+                                canEdit={canEdit}
+                                canDelete={canDelete}
+                                lock={
+                                  <LockButton
+                                    locked={m.isLocked}
+                                    canToggle={mainLock.canToggle}
+                                    onToggle={() => mainLock.toggleLock(m)}
+                                  />
+                                }
                               />
                               <ChevronRight
                                 className={cn(
@@ -642,39 +625,23 @@ export default function MenusPage() {
                                 </p>
                               </div>
                               <div className="flex flex-none items-center gap-0.5">
-                                <button
-                                  onClick={() => openViewSub(s)}
-                                  className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
-                                  title="View"
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </button>
-                                {canEdit && (
-                                  <button
-                                    onClick={() =>
-                                      subLock.guardEdit(s, () => openEditSub(s))
-                                    }
-                                    className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
-                                    title="Edit"
-                                  >
-                                    <Pencil className="h-4 w-4" />
-                                  </button>
-                                )}
-                                {canDelete && (
-                                  <button
-                                    onClick={() =>
-                                      subLock.guardDelete(s, () => removeSub(s))
-                                    }
-                                    className="rounded-lg p-1.5 text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"
-                                    title="Delete"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
-                                )}
-                                <LockButton
-                                  locked={s.isLocked}
-                                  canToggle={subLock.canToggle}
-                                  onToggle={() => subLock.toggleLock(s)}
+                                <RowActions
+                                  onView={() => openViewSub(s)}
+                                  onEdit={() =>
+                                    subLock.guardEdit(s, () => openEditSub(s))
+                                  }
+                                  onDelete={() =>
+                                    subLock.guardDelete(s, () => removeSub(s))
+                                  }
+                                  canEdit={canEdit}
+                                  canDelete={canDelete}
+                                  lock={
+                                    <LockButton
+                                      locked={s.isLocked}
+                                      canToggle={subLock.canToggle}
+                                      onToggle={() => subLock.toggleLock(s)}
+                                    />
+                                  }
                                 />
                               </div>
                             </div>
@@ -705,11 +672,7 @@ export default function MenusPage() {
         icon={<MenuIcon className="h-5 w-5" />}
         footer={
           mView ? (
-            <div className="flex items-center justify-end">
-              <button type="button" className="btn-secondary" onClick={closeMain}>
-                Close
-              </button>
-            </div>
+            <CloseFooter onClose={closeMain} />
           ) : (
             <DrawerFooter
               onCancel={closeMain}
@@ -720,7 +683,7 @@ export default function MenusPage() {
           )
         }
       >
-        <fieldset disabled={mView} className="m-0 min-w-0 border-0 p-0">
+        <ReadOnlyFieldset readOnly={mView}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input
               label="Sort Order"
@@ -765,7 +728,7 @@ export default function MenusPage() {
               />
             </div>
           </div>
-        </fieldset>
+        </ReadOnlyFieldset>
       </Drawer>
 
       {/* Sub menu drawer */}
@@ -777,11 +740,7 @@ export default function MenusPage() {
         icon={<ListTree className="h-5 w-5" />}
         footer={
           sView ? (
-            <div className="flex items-center justify-end">
-              <button type="button" className="btn-secondary" onClick={closeSub}>
-                Close
-              </button>
-            </div>
+            <CloseFooter onClose={closeSub} />
           ) : (
             <DrawerFooter
               onCancel={closeSub}
@@ -792,7 +751,7 @@ export default function MenusPage() {
           )
         }
       >
-        <fieldset disabled={sView} className="m-0 min-w-0 border-0 p-0">
+        <ReadOnlyFieldset readOnly={sView}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input
               label="Sort Order"
@@ -856,7 +815,7 @@ export default function MenusPage() {
               }
             />
           </div>
-        </fieldset>
+        </ReadOnlyFieldset>
       </Drawer>
     </div>
   );

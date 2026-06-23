@@ -11,7 +11,8 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
+import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
+import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import { cn } from '@/lib/utils';
@@ -432,15 +433,7 @@ export default function LookupsPage() {
         icon={<List className="h-5 w-5" />}
         footer={
           lkView ? (
-            <div className="flex items-center justify-end">
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={closeLookupDrawer}
-              >
-                Close
-              </button>
-            </div>
+            <CloseFooter onClose={closeLookupDrawer} />
           ) : (
             <DrawerFooter
               onCancel={closeLookupDrawer}
@@ -451,7 +444,7 @@ export default function LookupsPage() {
           )
         }
       >
-        <fieldset disabled={lkView} className="m-0 min-w-0 border-0 p-0">
+        <ReadOnlyFieldset readOnly={lkView}>
           <div className="space-y-4">
             <Input
               label="Code"
@@ -480,7 +473,7 @@ export default function LookupsPage() {
               }
             />
           </div>
-        </fieldset>
+        </ReadOnlyFieldset>
       </Drawer>
 
       {/* Value drawer */}
@@ -492,15 +485,7 @@ export default function LookupsPage() {
         icon={<List className="h-5 w-5" />}
         footer={
           vView ? (
-            <div className="flex items-center justify-end">
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={closeValueDrawer}
-              >
-                Close
-              </button>
-            </div>
+            <CloseFooter onClose={closeValueDrawer} />
           ) : (
             <DrawerFooter
               onCancel={closeValueDrawer}
@@ -511,7 +496,7 @@ export default function LookupsPage() {
           )
         }
       >
-        <fieldset disabled={vView} className="m-0 min-w-0 border-0 p-0">
+        <ReadOnlyFieldset readOnly={vView}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input
               label="Value"
@@ -548,7 +533,7 @@ export default function LookupsPage() {
               />
             </div>
           </div>
-        </fieldset>
+        </ReadOnlyFieldset>
       </Drawer>
     </div>
   );

@@ -3,15 +3,13 @@
 import { useMemo, useState } from 'react';
 import {
   Search,
-  Pencil,
-  Trash2,
-  Eye,
   ChevronLeft,
   ChevronRight,
   Inbox,
   RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { RowActions } from './RowActions';
 
 export interface Column<T> {
   key: string;
@@ -244,35 +242,16 @@ export function DataTable<T>({
                         className="flex items-center justify-end gap-1"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        {rowActions?.(row)}
-                        {onView && canView && (
-                          <button
-                            onClick={() => onView(row)}
-                            className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
-                            title="View"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </button>
-                        )}
-                        {onEdit && canEdit && (
-                          <button
-                            onClick={() => onEdit(row)}
-                            className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
-                            title="Edit"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </button>
-                        )}
-                        {onDelete && canDelete && (
-                          <button
-                            onClick={() => onDelete(row)}
-                            className="rounded-lg p-1.5 text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"
-                            title="Delete"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                        {renderLock?.(row)}
+                        <RowActions
+                          before={rowActions?.(row)}
+                          onView={onView ? () => onView(row) : undefined}
+                          onEdit={onEdit ? () => onEdit(row) : undefined}
+                          onDelete={onDelete ? () => onDelete(row) : undefined}
+                          canView={canView}
+                          canEdit={canEdit}
+                          canDelete={canDelete}
+                          lock={renderLock?.(row)}
+                        />
                       </div>
                     </td>
                   )}

@@ -11,7 +11,6 @@ import {
   Monitor,
   LayoutDashboard,
   Lock,
-  Unlock,
   ShieldCheck,
   User as UserIcon,
 } from 'lucide-react';
@@ -19,15 +18,18 @@ import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
+import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
-import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
+import { LockButton } from '@/components/ui/LockButton';
+import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
+import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { IconPicker } from '@/components/ui/IconPicker';
 import { StatCard } from '@/components/ui/StatCard';
 import { Badge } from '@/components/ui/Badge';
 import { Tabs } from '@/components/ui/Tabs';
-import { formatDate, cn } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
 import type {
   ErpObject,
   ObjectListResponse,
@@ -127,6 +129,14 @@ export default function ObjectsPage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Shared lock/unlock behavior (super-admin only), same as the other masters.
+  const { canToggle, toggleLock, guardEdit, guardDelete } = useLock<ErpObject>({
+    endpoint: '/objects',
+    noun: 'object',
+    nameOf: (o) => o.objectName,
+    reload: load,
+  });
 
   // Objects are global, so the Module filter uses the global module catalog
   // (not the active company's enabled modules).
@@ -321,41 +331,6 @@ export default function ObjectsPage() {
     }
   };
 
-  // Locked objects must be unlocked before they can be edited or deleted.
-  const handleEdit = (o: ErpObject) => {
-    if (o.isLocked) {
-      toast.error('This object is locked. Unlock it first to edit.');
-      return;
-    }
-    openEdit(o);
-  };
-  const handleDelete = (o: ErpObject) => {
-    if (o.isLocked) {
-      toast.error('This object is locked. Unlock it first to delete.');
-      return;
-    }
-    remove(o);
-  };
-
-  const toggleLock = async (o: ErpObject) => {
-    const locking = !o.isLocked;
-    if (locking) {
-      const ok = await confirm({
-        title: 'Lock object',
-        message: `Lock "${o.objectName}"? It can't be edited or deleted until unlocked.`,
-        confirmText: 'Lock',
-      });
-      if (!ok) return;
-    }
-    try {
-      await api.patch(`/objects/${o.id}/lock`, { locked: locking });
-      toast.success(locking ? 'Object locked.' : 'Object unlocked.');
-      load();
-    } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Failed to update lock.');
-    }
-  };
-
   const addRevision = async () => {
     if (!editing) return;
     if (!revForm.revisedBy.trim()) {
@@ -530,33 +505,18 @@ export default function ObjectsPage() {
         serverSearch
         searchPlaceholder="Search objects..."
         onView={(r) => openView(r)}
-        onEdit={handleEdit}
-        onDelete={handleDelete}
+        onEdit={(r) => guardEdit(r, () => openEdit(r))}
+        onDelete={(r) => guardDelete(r, () => remove(r))}
         canView={canView}
         canEdit={canEdit}
         canDelete={canDelete}
-        renderLock={
-          canEdit
-            ? (r) => (
-                <button
-                  onClick={() => toggleLock(r)}
-                  className={cn(
-                    'rounded-lg p-1.5 transition',
-                    r.isLocked
-                      ? 'text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/40'
-                      : 'text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800',
-                  )}
-                  title={r.isLocked ? 'Unlock to allow edit/delete' : 'Lock'}
-                >
-                  {r.isLocked ? (
-                    <Lock className="h-4 w-4" />
-                  ) : (
-                    <Unlock className="h-4 w-4" />
-                  )}
-                </button>
-              )
-            : undefined
-        }
+        renderLock={(r) => (
+          <LockButton
+            locked={r.isLocked}
+            canToggle={canToggle}
+            onToggle={() => toggleLock(r)}
+          />
+        )}
         emptyMessage="No objects found"
         serverPagination={{
           page,
@@ -611,11 +571,7 @@ export default function ObjectsPage() {
         width="lg"
         footer={
           view ? (
-            <div className="flex items-center justify-end">
-              <button type="button" className="btn-secondary" onClick={closeDrawer}>
-                Close
-              </button>
-            </div>
+            <CloseFooter onClose={closeDrawer} />
           ) : tab === 'object' ? (
             <DrawerFooter
               onCancel={closeDrawer}
@@ -645,10 +601,9 @@ export default function ObjectsPage() {
           className="mb-5"
         />
 
-        {/* Disabled fieldset = read-only: it cascades `disabled` to every input
-            below without changing the layout. Tab navigation stays outside so
-            tabs remain switchable in view mode. */}
-        <fieldset disabled={view} className="m-0 min-w-0 border-0 p-0">
+        {/* Tab navigation stays outside the read-only wrapper so tabs remain
+            switchable in view mode. */}
+        <ReadOnlyFieldset readOnly={view}>
         {tab === 'object' ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Select
@@ -866,7 +821,7 @@ export default function ObjectsPage() {
             </div>
           </div>
         )}
-        </fieldset>
+        </ReadOnlyFieldset>
       </Drawer>
     </div>
   );

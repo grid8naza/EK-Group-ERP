@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Box, Pencil, Trash2, BarChart3, Link2, StickyNote, Globe, Settings2, Eye } from 'lucide-react';
+import { Plus, Box, BarChart3, Link2, StickyNote, Globe, Settings2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -9,7 +9,9 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
+import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
+import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
+import { RowActions } from '@/components/ui/RowActions';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import type { Module, GadgetCatalogItem, GadgetType } from '@/lib/types';
@@ -286,38 +288,21 @@ export default function GadgetsPage() {
                   </p>
                 )}
                 <div className="mt-4 flex items-center justify-end gap-1">
-                  {!g.isActive && <Badge color="slate">Inactive</Badge>}
-                  {canView && (
-                    <button
-                      onClick={() => openView(g)}
-                      className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
-                      title="View"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </button>
-                  )}
-                  {canEdit && (
-                    <button
-                      onClick={() => guardEdit(g, () => openEdit(g))}
-                      className="rounded-lg p-2 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
-                      title="Edit"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
-                  )}
-                  {canDelete && (
-                    <button
-                      onClick={() => guardDelete(g, () => remove(g))}
-                      className="rounded-lg p-2 text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"
-                      title="Delete"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  )}
-                  <LockButton
-                    locked={g.isLocked}
-                    canToggle={canToggle}
-                    onToggle={() => toggleLock(g)}
+                  <RowActions
+                    before={!g.isActive ? <Badge color="slate">Inactive</Badge> : undefined}
+                    onView={() => openView(g)}
+                    onEdit={() => guardEdit(g, () => openEdit(g))}
+                    onDelete={() => guardDelete(g, () => remove(g))}
+                    canView={canView}
+                    canEdit={canEdit}
+                    canDelete={canDelete}
+                    lock={
+                      <LockButton
+                        locked={g.isLocked}
+                        canToggle={canToggle}
+                        onToggle={() => toggleLock(g)}
+                      />
+                    }
                   />
                 </div>
               </div>
@@ -334,17 +319,13 @@ export default function GadgetsPage() {
         icon={<Box className="h-5 w-5" />}
         footer={
           view ? (
-            <div className="flex items-center justify-end">
-              <button type="button" className="btn-secondary" onClick={closeDrawer}>
-                Close
-              </button>
-            </div>
+            <CloseFooter onClose={closeDrawer} />
           ) : (
             <DrawerFooter onCancel={closeDrawer} onSave={save} saving={saving} />
           )
         }
       >
-        <fieldset disabled={view} className="m-0 min-w-0 border-0 p-0">
+        <ReadOnlyFieldset readOnly={view}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Input
             label="Name"
@@ -441,7 +422,7 @@ export default function GadgetsPage() {
             />
           </div>
         </div>
-        </fieldset>
+        </ReadOnlyFieldset>
       </Drawer>
     </div>
   );

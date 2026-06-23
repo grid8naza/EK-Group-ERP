@@ -113,6 +113,17 @@ export function Drawer({
   );
 }
 
+/** Footer for read-only (view) drawers: a single Close button. */
+export function CloseFooter({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="flex items-center justify-end">
+      <button type="button" className="btn-secondary" onClick={onClose}>
+        Close
+      </button>
+    </div>
+  );
+}
+
 interface DrawerFooterProps {
   onCancel: () => void;
   onSave: () => void;

@@ -17,7 +17,8 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
+import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
+import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Textarea } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import { resolveIcon } from '@/lib/icons';
@@ -449,11 +450,7 @@ export default function UserGroupsPage() {
         icon={<ShieldCheck className="h-5 w-5" />}
         footer={
           view ? (
-            <div className="flex items-center justify-end">
-              <button type="button" className="btn-secondary" onClick={closeDrawer}>
-                Close
-              </button>
-            </div>
+            <CloseFooter onClose={closeDrawer} />
           ) : (
             <DrawerFooter
               onCancel={closeDrawer}
@@ -464,7 +461,7 @@ export default function UserGroupsPage() {
           )
         }
       >
-        <fieldset disabled={view} className="m-0 min-w-0 border-0 p-0">
+        <ReadOnlyFieldset readOnly={view}>
         <div className="space-y-4">
           <Input
             label="Name"
@@ -515,7 +512,7 @@ export default function UserGroupsPage() {
             }
           />
         </div>
-        </fieldset>
+        </ReadOnlyFieldset>
       </Drawer>
 
       {/* Privileges matrix drawer */}

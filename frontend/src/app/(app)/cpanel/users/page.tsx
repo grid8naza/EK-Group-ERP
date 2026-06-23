@@ -19,7 +19,8 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
+import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
+import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import { cn } from '@/lib/utils';
@@ -205,7 +206,9 @@ export default function UsersPage() {
   // Keep module assignments within what the selected groups allow. Runs when
   // groups, companies, or the loaded group/module data change.
   useEffect(() => {
-    if (!open) return;
+    // Never normalize in read-only View mode — the drawer must show exactly
+    // what is saved, not a re-pruned version of it.
+    if (!open || view) return;
     setForm((f) => {
       let changed = false;
       const next = { ...f.moduleAssignments };
@@ -234,7 +237,7 @@ export default function UsersPage() {
         ? { ...f, moduleAssignments: next, defaultModuleByCompany: nextDefaults }
         : f;
     });
-  }, [open, form.groupIds, form.companyIds, groupsByCompany, modulesByCompany, availableModuleIds]);
+  }, [open, view, form.groupIds, form.companyIds, groupsByCompany, modulesByCompany, availableModuleIds]);
 
   const openAdd = () => {
     setEditing(null);
@@ -607,11 +610,7 @@ export default function UsersPage() {
         width="lg"
         footer={
           view ? (
-            <div className="flex items-center justify-end">
-              <button type="button" className="btn-secondary" onClick={closeDrawer}>
-                Close
-              </button>
-            </div>
+            <CloseFooter onClose={closeDrawer} />
           ) : (
             <DrawerFooter
               onCancel={closeDrawer}
@@ -622,9 +621,7 @@ export default function UsersPage() {
           )
         }
       >
-        {/* Disabled fieldset = read-only: it cascades `disabled` to every input
-            below without changing the layout. */}
-        <fieldset disabled={view} className="m-0 min-w-0 border-0 p-0">
+        <ReadOnlyFieldset readOnly={view}>
         <div className="space-y-6">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input
@@ -1005,7 +1002,7 @@ export default function UsersPage() {
             onChange={(e) => setForm({ ...form, remarks: e.target.value })}
           />
         </div>
-        </fieldset>
+        </ReadOnlyFieldset>
       </Drawer>
     </div>
   );
