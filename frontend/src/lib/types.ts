@@ -140,9 +140,9 @@ export interface Company {
   city?: string | null;
   state?: string | null;
   country?: string | null;
-  taxNumber?: string | null;
   // Financial / statutory details
   financialYearStartMonth?: number | null;
+  financialYearEndMonth?: number | null;
   booksStartDate?: string | null;
   costCenterApplicable?: boolean;
   currencyId?: number | null;

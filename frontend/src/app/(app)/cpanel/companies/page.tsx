@@ -35,9 +35,9 @@ const empty = {
   city: '',
   state: '',
   country: '',
-  taxNumber: '',
   // Financial / statutory (kept as strings for the form controls).
   financialYearStartMonth: '',
+  financialYearEndMonth: '',
   booksStartDate: '',
   costCenterApplicable: false,
   currencyId: '',
@@ -96,9 +96,10 @@ export default function CompaniesPage() {
     city: c.city ?? '',
     state: c.state ?? '',
     country: c.country ?? '',
-    taxNumber: c.taxNumber ?? '',
     financialYearStartMonth:
       c.financialYearStartMonth != null ? String(c.financialYearStartMonth) : '',
+    financialYearEndMonth:
+      c.financialYearEndMonth != null ? String(c.financialYearEndMonth) : '',
     booksStartDate: c.booksStartDate ? c.booksStartDate.slice(0, 10) : '',
     costCenterApplicable: !!c.costCenterApplicable,
     currencyId: c.currencyId != null ? String(c.currencyId) : '',
@@ -144,6 +145,9 @@ export default function CompaniesPage() {
       ...form,
       financialYearStartMonth: form.financialYearStartMonth
         ? Number(form.financialYearStartMonth)
+        : undefined,
+      financialYearEndMonth: form.financialYearEndMonth
+        ? Number(form.financialYearEndMonth)
         : undefined,
       currencyId: form.currencyId ? Number(form.currencyId) : undefined,
       booksStartDate: form.booksStartDate || undefined,
@@ -374,12 +378,6 @@ export default function CompaniesPage() {
             value={form.country}
             onChange={(e) => setForm({ ...form, country: e.target.value })}
           />
-          <Input
-            label="Tax Number"
-            value={form.taxNumber}
-            onChange={(e) => setForm({ ...form, taxNumber: e.target.value })}
-          />
-
           <div className="mt-1 border-t border-slate-200 pt-3 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300 sm:col-span-2">
             Financial &amp; statutory
           </div>
@@ -399,6 +397,15 @@ export default function CompaniesPage() {
             value={form.financialYearStartMonth}
             onChange={(e) =>
               setForm({ ...form, financialYearStartMonth: e.target.value })
+            }
+            options={MONTHS.map((m, i) => ({ value: i + 1, label: m }))}
+          />
+          <Select
+            label="Financial Year End Month"
+            placeholder="Select month"
+            value={form.financialYearEndMonth}
+            onChange={(e) =>
+              setForm({ ...form, financialYearEndMonth: e.target.value })
             }
             options={MONTHS.map((m, i) => ({ value: i + 1, label: m }))}
           />

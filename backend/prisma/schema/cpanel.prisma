@@ -93,11 +93,11 @@ model Company {
   city      String?
   state     String?
   country   String?
-  taxNumber String?
   logo      String?
 
   // --- Financial / statutory details ---
   financialYearStartMonth Int? // 1 = January … 12 = December
+  financialYearEndMonth   Int? // 1 = January … 12 = December
   booksStartDate          DateTime? // books of accounts start from
   costCenterApplicable    Boolean   @default(false)
   currencyId              Int?

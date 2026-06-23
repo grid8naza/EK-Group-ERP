@@ -29,11 +29,11 @@ export class CreateCompanyDto {
   @IsOptional() @IsString() city?: string;
   @IsOptional() @IsString() state?: string;
   @IsOptional() @IsString() country?: string;
-  @IsOptional() @IsString() taxNumber?: string;
   @IsOptional() @IsString() logo?: string;
 
   // --- Financial / statutory details ---
   @IsOptional() @IsInt() @Min(1) @Max(12) financialYearStartMonth?: number;
+  @IsOptional() @IsInt() @Min(1) @Max(12) financialYearEndMonth?: number;
   @IsOptional() @IsDateString() booksStartDate?: string;
   @IsOptional() @IsBoolean() costCenterApplicable?: boolean;
   @IsOptional() @IsInt() currencyId?: number;
