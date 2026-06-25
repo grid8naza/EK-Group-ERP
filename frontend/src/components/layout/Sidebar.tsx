@@ -59,33 +59,53 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
         {!activeModule && !collapsed && (
           <p className="px-2 text-xs text-slate-400">No navigation available</p>
         )}
-        {/* Dashboards for the active module (selectable from the left panel). */}
-        {activeModule && (activeModule.dashboards?.length ?? 0) > 0 && (
-          <div>
-            {!collapsed && (
-              <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                Dashboards
-              </p>
-            )}
-            <div className="space-y-0.5">
-              {activeModule.dashboards!.map((d) => {
-                const DIcon = resolveIcon(d.icon) || LayoutDashboard;
-                const active = d.route === pathname;
-                return (
-                  <NavLink
-                    key={`dash-${d.id}`}
-                    href={d.route}
-                    label={d.name}
-                    icon={<DIcon className="h-[18px] w-[18px]" />}
-                    active={active}
-                    collapsed={collapsed}
-                    onClick={onMobileClose}
-                  />
-                );
-              })}
-            </div>
-          </div>
-        )}
+        {/* Dashboards for the active module (selectable from the left panel).
+            Split into Company (company-wide) and Branch dashboards when both
+            kinds are present; otherwise show a single "Dashboards" group. */}
+        {activeModule &&
+          (() => {
+            const all = activeModule.dashboards ?? [];
+            if (all.length === 0) return null;
+            const company = all.filter((d) => !d.branchId);
+            const branch = all.filter((d) => d.branchId);
+            const split = company.length > 0 && branch.length > 0;
+
+            const renderGroup = (label: string, list: typeof all) =>
+              list.length > 0 && (
+                <div>
+                  {!collapsed && (
+                    <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                      {label}
+                    </p>
+                  )}
+                  <div className="space-y-0.5">
+                    {list.map((d) => {
+                      const DIcon = resolveIcon(d.icon) || LayoutDashboard;
+                      return (
+                        <NavLink
+                          key={`dash-${d.id}`}
+                          href={d.route}
+                          label={d.name}
+                          icon={<DIcon className="h-[18px] w-[18px]" />}
+                          active={d.route === pathname}
+                          collapsed={collapsed}
+                          onClick={onMobileClose}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+
+            return split ? (
+              <div className="space-y-4">
+                {renderGroup('Company Dashboards', company)}
+                {renderGroup('Branch Dashboards', branch)}
+              </div>
+            ) : (
+              renderGroup('Dashboards', all)
+            );
+          })()}
 
         {activeModule && (
           <div>

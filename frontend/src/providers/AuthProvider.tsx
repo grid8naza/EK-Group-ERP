@@ -16,6 +16,7 @@ import {
   clearToken,
   getCompanyId,
   setCompanyId,
+  setBranchId,
 } from '@/lib/api';
 import type {
   User,
@@ -25,6 +26,7 @@ import type {
   MeResponse,
   Permission,
   CompanyLite,
+  BranchLite,
 } from '@/lib/types';
 import { moduleLandingRoute } from '@/lib/nav';
 
@@ -38,6 +40,15 @@ interface AuthContextValue {
   activeCompanyId: number | null;
   activeCompany: CompanyLite | null;
   switchCompany: (id: number) => Promise<void>;
+  /** Branches of the active company this user can access + the active one.
+   * Empty unless the active company is branch-applicable. */
+  branches: BranchLite[];
+  activeBranchId: number | null;
+  activeBranch: BranchLite | null;
+  switchBranch: (id: number) => Promise<void>;
+  /** Re-fetch the profile for the active company/branch (e.g. after branches
+   * change in Company Master) so the top-bar switcher stays in sync. */
+  refreshProfile: () => Promise<void>;
   /** Currently selected module (drives the sidebar). */
   activeModule: NavModule | null;
   activeModuleId: number | null;
@@ -62,6 +73,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [companies, setCompanies] = useState<CompanyLite[]>([]);
   const [activeCompanyId, setActiveCompanyId] = useState<number | null>(null);
+  const [branches, setBranches] = useState<BranchLite[]>([]);
+  const [activeBranchId, setActiveBranchId] = useState<number | null>(null);
   const [activeModuleId, setActiveModuleId] = useState<number | null>(null);
 
   // Apply a login/me payload to state, keeping the company header in sync.
@@ -70,6 +83,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user: User;
       companies: CompanyLite[];
       activeCompanyId: number | null;
+      branches?: BranchLite[];
+      activeBranchId?: number | null;
       navigation: NavModule[];
       permissions: Permissions;
     }) => {
@@ -77,6 +92,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setCompanies(p.companies || []);
       setActiveCompanyId(p.activeCompanyId);
       setCompanyId(p.activeCompanyId); // persist for the X-Company-Id header
+      setBranches(p.branches || []);
+      setActiveBranchId(p.activeBranchId ?? null);
+      setBranchId(p.activeBranchId ?? null); // persist for the X-Branch-Id header
       setNavigation(p.navigation || []);
       setPermissions(p.permissions || {});
     },
@@ -168,6 +186,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [activeCompanyId, applyProfile, router],
   );
 
+  // Switching branch changes which dashboards are visible (dashboards are
+  // branch-scoped), so refetch the profile with the new X-Branch-Id and
+  // re-apply nav/permissions. Only redirect when the current page is a
+  // dashboard route that may no longer exist for the new branch — otherwise
+  // leave the user where they are (e.g. mid-form on a cpanel screen).
+  const switchBranch = useCallback(
+    async (id: number) => {
+      if (id === activeBranchId) return;
+      setLoading(true);
+      setBranchId(id); // header switches before we refetch
+      try {
+        const me = await api.get<MeResponse>('/auth/me');
+        applyProfile(me);
+        if (pathname.startsWith('/dashboard/')) {
+          const nav = me.navigation || [];
+          const defId = me.user?.defaultModuleId ?? null;
+          const mod =
+            (defId ? nav.find((m) => m.id === defId) : undefined) ??
+            nav[0] ??
+            null;
+          router.replace(moduleLandingRoute(mod));
+        }
+      } finally {
+        setLoading(false);
+      }
+    },
+    [activeBranchId, applyProfile, pathname, router],
+  );
+
+  // Re-fetch the profile for the current company/branch headers. Used after
+  // mutations that change what the switchers should show (e.g. adding or
+  // removing a company's branches), so the UI doesn't need a manual reload.
+  const refreshProfile = useCallback(async () => {
+    try {
+      const me = await api.get<MeResponse>('/auth/me');
+      applyProfile(me);
+    } catch {
+      /* ignore — a failed refresh just leaves the prior state in place */
+    }
+  }, [applyProfile]);
+
   const activeModule = useMemo(
     () => navigation.find((m) => m.id === activeModuleId) ?? null,
     [navigation, activeModuleId],
@@ -175,6 +234,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const activeCompany = useMemo(
     () => companies.find((c) => c.id === activeCompanyId) ?? null,
     [companies, activeCompanyId],
+  );
+  const activeBranch = useMemo(
+    () => branches.find((b) => b.id === activeBranchId) ?? null,
+    [branches, activeBranchId],
   );
 
   // Redirect guard.
@@ -211,11 +274,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     clearToken();
     setCompanyId(null);
+    setBranchId(null);
     setUser(null);
     setNavigation([]);
     setPermissions({});
     setCompanies([]);
     setActiveCompanyId(null);
+    setBranches([]);
+    setActiveBranchId(null);
     setActiveModuleId(null);
     router.replace('/login');
   }, [router]);
@@ -241,6 +307,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         activeCompanyId,
         activeCompany,
         switchCompany,
+        branches,
+        activeBranchId,
+        activeBranch,
+        switchBranch,
+        refreshProfile,
         activeModule,
         activeModuleId,
         setActiveModule,

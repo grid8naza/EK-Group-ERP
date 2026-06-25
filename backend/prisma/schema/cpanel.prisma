@@ -100,6 +100,8 @@ model Company {
   financialYearEndMonth   Int? // 1 = January … 12 = December
   booksStartDate          DateTime? // books of accounts start from
   costCenterApplicable    Boolean   @default(false)
+  costObjectApplicable    Boolean   @default(false) // when true, cost objects can be created (requires costCenterApplicable)
+  branchApplicable        Boolean   @default(false) // when true, branches can be created for this company
   currencyId              Int?
   cin                     String? // Corporate Identification Number (21)
   gstin                   String? // GST identification number (15)
@@ -121,8 +123,85 @@ model Company {
   userGroups  UserGroup[]
   gadgets     Gadget[]
   dashboards  Dashboard[]
+  branches    Branch[]
+  costCenters CostCenter[]
+  costObjects CostObject[]
 
   @@map("companies")
+}
+
+// ---------------------------------------------------------------------------
+// Cost Center & Cost Object masters — per company. Only relevant when the
+// company has costCenterApplicable / costObjectApplicable. A cost object always
+// lives under a cost center.
+// ---------------------------------------------------------------------------
+
+model CostCenter {
+  id          Int      @id @default(autoincrement())
+  companyId   Int
+  code        String
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  isLocked    Boolean  @default(false) // when locked, must be unlocked before edit/delete
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  costObjects CostObject[]
+
+  @@unique([companyId, code])
+  @@map("cost_centers")
+}
+
+model CostObject {
+  id           Int      @id @default(autoincrement())
+  companyId    Int
+  costCenterId Int
+  code         String
+  name         String
+  description  String?
+  isActive     Boolean  @default(true)
+  isLocked     Boolean  @default(false) // when locked, must be unlocked before edit/delete
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company    Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  costCenter CostCenter @relation(fields: [costCenterId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, code])
+  @@map("cost_objects")
+}
+
+// ---------------------------------------------------------------------------
+// Branch Master — a company's operating locations. Only relevant when the
+// company has branchApplicable = true. A branch is purely a context selector
+// for now (no business table is partitioned by branch yet); UserBranch gates
+// which branches a user may switch to.
+// ---------------------------------------------------------------------------
+
+model Branch {
+  id        Int      @id @default(autoincrement())
+  companyId Int
+  code      String
+  name      String
+  address   String?
+  city      String?
+  state     String?
+  country   String?
+  phone     String?
+  email     String?
+  isActive  Boolean  @default(true)
+  isLocked  Boolean  @default(false) // when locked, must be unlocked before edit/delete
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userBranches UserBranch[]
+  dashboards   Dashboard[]
+
+  @@unique([companyId, code])
+  @@map("branches")
 }
 
 // ---------------------------------------------------------------------------
@@ -393,6 +472,7 @@ model Dashboard {
   companyId   Int
   moduleId    Int
   userGroupId Int? // null = visible to everyone in the module
+  branchId    Int? // null = company-wide; otherwise scoped to one branch
   objectId    Int? // optional link to its ObjectMaster DASHBOARD object
   name        String
   icon        String?
@@ -406,6 +486,7 @@ model Dashboard {
   company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
   module      Module                @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   userGroup   UserGroup?            @relation(fields: [userGroupId], references: [id], onDelete: SetNull)
+  branch      Branch?               @relation(fields: [branchId], references: [id], onDelete: Cascade)
   object      ObjectMaster?         @relation(fields: [objectId], references: [id], onDelete: SetNull)
   widgets     DashboardWidget[]
   userLayouts UserDashboardLayout[]
@@ -472,6 +553,7 @@ model User {
   groupAssignments UserGroupAssignment[]
   modules          UserModule[]
   companies        UserCompany[]
+  branches         UserBranch[]
   dashboardLayouts UserDashboardLayout[]
   defaultModule    Module?               @relation("UserDefaultModule", fields: [defaultModuleId], references: [id])
 
@@ -506,4 +588,19 @@ model UserGroupAssignment {
 
   @@unique([userId, userGroupId])
   @@map("user_group_assignments")
+}
+
+// Branches a user may access, within a branch-applicable company. Mirrors
+// UserCompany: the top-bar branch switcher lists only the user's branches.
+model UserBranch {
+  id        Int     @id @default(autoincrement())
+  userId    Int
+  branchId  Int
+  isDefault Boolean @default(false) // the user's default branch within its company
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, branchId])
+  @@map("user_branches")
 }

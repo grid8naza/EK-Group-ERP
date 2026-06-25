@@ -21,12 +21,17 @@ export class DashboardService {
 
   // ---- Admin listing / CRUD (cpanel) ----
 
-  findAll(companyId: number, moduleId?: number) {
+  findAll(companyId: number, moduleId?: number, branchId?: number) {
     return this.prisma.dashboard.findMany({
-      where: { companyId, ...(moduleId ? { moduleId } : {}) },
+      where: {
+        companyId,
+        ...(moduleId ? { moduleId } : {}),
+        ...(branchId ? { branchId } : {}),
+      },
       include: {
         module: { select: { id: true, name: true, code: true } },
         userGroup: { select: { id: true, name: true } },
+        branch: { select: { id: true, name: true } },
         _count: { select: { widgets: true } },
       },
       orderBy: [{ moduleId: 'asc' }, { sortOrder: 'asc' }],
@@ -66,18 +71,25 @@ export class DashboardService {
   }
 
   /**
-   * Only one dashboard per (company, module) may be the default. Whenever a
-   * dashboard is marked default, unset the flag on every other dashboard in
-   * the same company + module.
+   * Only one dashboard per (company, module, branch) may be the default.
+   * Whenever a dashboard is marked default, unset the flag on every other
+   * dashboard in the same company + module + branch (branchId null = the
+   * company-wide set keeps its own single default).
    */
   private clearOtherDefaults(
     tx: Prisma.TransactionClient,
-    dashboard: { id: number; companyId: number; moduleId: number },
+    dashboard: {
+      id: number;
+      companyId: number;
+      moduleId: number;
+      branchId: number | null;
+    },
   ) {
     return tx.dashboard.updateMany({
       where: {
         companyId: dashboard.companyId,
         moduleId: dashboard.moduleId,
+        branchId: dashboard.branchId,
         id: { not: dashboard.id },
         isDefault: true,
       },

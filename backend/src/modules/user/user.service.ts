@@ -19,6 +19,7 @@ const userSelect = {
   securityType: true,
   isSuperAdmin: true,
   isActive: true,
+  isLocked: true,
   remarks: true,
   defaultModuleId: true,
   createdAt: true,
@@ -39,6 +40,7 @@ const userSelect = {
     },
   },
   modules: { select: { companyId: true, moduleId: true } },
+  branches: { select: { branchId: true, isDefault: true } },
 } satisfies Prisma.UserSelect;
 
 type RawUser = Prisma.UserGetPayload<{ select: typeof userSelect }>;
@@ -61,6 +63,10 @@ function shape(user: RawUser) {
     groupIds: user.groupAssignments.map((g) => g.userGroupId),
     groups: user.groupAssignments.map((g) => g.userGroup),
     companyIds: user.companies.map((c) => c.companyId),
+    branchIds: user.branches.map((b) => b.branchId),
+    defaultBranchIds: user.branches
+      .filter((b) => b.isDefault)
+      .map((b) => b.branchId),
     companies: user.companies.map((c) => ({
       ...c.company,
       isDefault: c.isDefault,
@@ -122,6 +128,8 @@ export class UserService {
       password,
       groupIds,
       companyIds,
+      branchIds,
+      defaultBranchIds,
       defaultCompanyId,
       moduleAssignments,
       ...rest
@@ -132,6 +140,9 @@ export class UserService {
     const moduleRows = (moduleAssignments ?? []).flatMap((a) =>
       a.moduleIds.map((moduleId) => ({ companyId: a.companyId, moduleId })),
     );
+
+    // Keep only branches that belong to a company the user has access to.
+    const branchRows = await this.resolveBranchRows(branchIds, companyIds);
 
     return this.prisma.$transaction(async (tx) => {
       const user = await tx.user.create({
@@ -154,6 +165,14 @@ export class UserService {
               }
             : undefined,
           modules: moduleRows.length ? { create: moduleRows } : undefined,
+          branches: branchRows.length
+            ? {
+                create: branchRows.map((branchId) => ({
+                  branchId,
+                  isDefault: !!defaultBranchIds?.includes(branchId),
+                })),
+              }
+            : undefined,
         },
         select: userSelect,
       });
@@ -168,6 +187,8 @@ export class UserService {
       password,
       groupIds,
       companyIds,
+      branchIds,
+      defaultBranchIds,
       defaultCompanyId,
       moduleAssignments,
       ...rest
@@ -248,6 +269,34 @@ export class UserService {
         }
       }
 
+      if (branchIds !== undefined) {
+        // Valid companies = the set being saved now, else the user's current
+        // set. A branch is kept only if its company is in that set.
+        const validCompanyIds =
+          companyIds ??
+          (
+            await tx.userCompany.findMany({
+              where: { userId: id },
+              select: { companyId: true },
+            })
+          ).map((c) => c.companyId);
+        const branchRows = await this.resolveBranchRows(
+          branchIds,
+          validCompanyIds,
+          tx,
+        );
+        await tx.userBranch.deleteMany({ where: { userId: id } });
+        if (branchRows.length) {
+          await tx.userBranch.createMany({
+            data: branchRows.map((branchId) => ({
+              userId: id,
+              branchId,
+              isDefault: !!defaultBranchIds?.includes(branchId),
+            })),
+          });
+        }
+      }
+
       const user = await tx.user.update({
         where: { id },
         data,
@@ -255,6 +304,24 @@ export class UserService {
       });
       return shape(user);
     });
+  }
+
+  /**
+   * Filters the requested branch ids down to branches that actually exist and
+   * belong to one of the user's accessible companies — so a user can never be
+   * granted a branch of a company they can't enter.
+   */
+  private async resolveBranchRows(
+    branchIds: number[] | undefined,
+    companyIds: number[] | undefined,
+    tx: Prisma.TransactionClient = this.prisma,
+  ): Promise<number[]> {
+    if (!branchIds?.length || !companyIds?.length) return [];
+    const branches = await tx.branch.findMany({
+      where: { id: { in: branchIds }, companyId: { in: companyIds } },
+      select: { id: true },
+    });
+    return branches.map((b) => b.id);
   }
 
   async setLock(id: number, locked: boolean) {

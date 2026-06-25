@@ -20,6 +20,7 @@ export class CreateDashboardDto {
   name: string;
 
   @IsOptional() @IsInt() userGroupId?: number;
+  @IsOptional() @IsInt() branchId?: number | null; // null = company-wide
   @IsOptional() @IsInt() objectId?: number;
   @IsOptional() @IsString() icon?: string;
   @IsOptional() @IsInt() sortOrder?: number;

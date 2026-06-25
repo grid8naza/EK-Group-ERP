@@ -1,7 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Building2, Layers, Lock } from 'lucide-react';
+import {
+  Plus,
+  Building2,
+  Layers,
+  Lock,
+  GitBranch,
+  Pencil,
+  Trash2,
+  Network,
+  Boxes,
+} from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
@@ -16,7 +26,14 @@ import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Textarea, Checkbox, Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import { resolveIcon } from '@/lib/icons';
-import type { Company, CompanyModule, Currency } from '@/lib/types';
+import type {
+  Company,
+  CompanyModule,
+  Currency,
+  Branch,
+  CostCenter,
+  CostObject,
+} from '@/lib/types';
 
 const ROUTE = '/cpanel/companies';
 
@@ -40,6 +57,8 @@ const empty = {
   financialYearEndMonth: '',
   booksStartDate: '',
   costCenterApplicable: false,
+  costObjectApplicable: false,
+  branchApplicable: false,
   currencyId: '',
   cin: '',
   gstin: '',
@@ -51,7 +70,7 @@ const empty = {
 };
 
 export default function CompaniesPage() {
-  const { can } = useAuth();
+  const { can, activeCompanyId, refreshProfile } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<Company[]>('/companies');
@@ -61,6 +80,51 @@ export default function CompaniesPage() {
     noun: 'company',
     nameOf: (c) => c.name,
     reload: refetch,
+  });
+
+  // Lock/unlock for branches (inside the Branches drawer).
+  const {
+    canToggle: canToggleBranch,
+    toggleLock: toggleBranchLock,
+    guardEdit: guardBranchEdit,
+    guardDelete: guardBranchDelete,
+  } = useLock<Branch>({
+    endpoint: '/branches',
+    noun: 'branch',
+    nameOf: (b) => b.name,
+    reload: () => {
+      if (brCompany) void reloadBranches(brCompany.id);
+    },
+  });
+
+  // Lock/unlock for cost centers (inside the Cost Centers drawer).
+  const {
+    canToggle: canToggleCc,
+    toggleLock: toggleCcLock,
+    guardEdit: guardCcEdit,
+    guardDelete: guardCcDelete,
+  } = useLock<CostCenter>({
+    endpoint: '/cost-centers',
+    noun: 'cost center',
+    nameOf: (c) => c.name,
+    reload: () => {
+      if (ccCompany) void reloadCostCenters(ccCompany.id);
+    },
+  });
+
+  // Lock/unlock for cost objects (inside the Cost Objects drawer).
+  const {
+    canToggle: canToggleCo,
+    toggleLock: toggleCoLock,
+    guardEdit: guardCoEdit,
+    guardDelete: guardCoDelete,
+  } = useLock<CostObject>({
+    endpoint: '/cost-objects',
+    noun: 'cost object',
+    nameOf: (c) => c.name,
+    reload: () => {
+      if (coCenterId) void reloadCostObjects(Number(coCenterId));
+    },
   });
 
   const [open, setOpen] = useState(false);
@@ -76,6 +140,50 @@ export default function CompaniesPage() {
   const [modEnabled, setModEnabled] = useState<Record<number, boolean>>({});
   const [modLoading, setModLoading] = useState(false);
   const [modSaving, setModSaving] = useState(false);
+
+  // ---- Per-company branches ----
+  const branchEmpty = {
+    code: '',
+    name: '',
+    address: '',
+    city: '',
+    state: '',
+    country: '',
+    phone: '',
+    email: '',
+    isActive: true,
+  };
+  const [brOpen, setBrOpen] = useState(false);
+  const [brCompany, setBrCompany] = useState<Company | null>(null);
+  const [branchList, setBranchList] = useState<Branch[]>([]);
+  const [brLoading, setBrLoading] = useState(false);
+  const [brEditing, setBrEditing] = useState<Branch | null>(null);
+  const [brFormOpen, setBrFormOpen] = useState(false);
+  const [brForm, setBrForm] = useState({ ...branchEmpty });
+  const [brSaving, setBrSaving] = useState(false);
+
+  // ---- Per-company cost centers & cost objects ----
+  const costEmpty = { code: '', name: '', description: '', isActive: true };
+  // Cost centers
+  const [ccOpen, setCcOpen] = useState(false);
+  const [ccCompany, setCcCompany] = useState<Company | null>(null);
+  const [ccList, setCcList] = useState<CostCenter[]>([]);
+  const [ccLoading, setCcLoading] = useState(false);
+  const [ccEditing, setCcEditing] = useState<CostCenter | null>(null);
+  const [ccFormOpen, setCcFormOpen] = useState(false);
+  const [ccForm, setCcForm] = useState({ ...costEmpty });
+  const [ccSaving, setCcSaving] = useState(false);
+  // Cost objects
+  const [coOpen, setCoOpen] = useState(false);
+  const [coCompany, setCoCompany] = useState<Company | null>(null);
+  const [coCenters, setCoCenters] = useState<CostCenter[]>([]); // picker options
+  const [coCenterId, setCoCenterId] = useState(''); // selected parent cost center
+  const [coList, setCoList] = useState<CostObject[]>([]);
+  const [coLoading, setCoLoading] = useState(false);
+  const [coEditing, setCoEditing] = useState<CostObject | null>(null);
+  const [coFormOpen, setCoFormOpen] = useState(false);
+  const [coForm, setCoForm] = useState({ ...costEmpty });
+  const [coSaving, setCoSaving] = useState(false);
 
   const canAdd = can(ROUTE, 'add');
   const canEdit = can(ROUTE, 'edit');
@@ -103,6 +211,8 @@ export default function CompaniesPage() {
       c.financialYearEndMonth != null ? String(c.financialYearEndMonth) : '',
     booksStartDate: c.booksStartDate ? c.booksStartDate.slice(0, 10) : '',
     costCenterApplicable: !!c.costCenterApplicable,
+    costObjectApplicable: !!c.costObjectApplicable,
+    branchApplicable: !!c.branchApplicable,
     currencyId: c.currencyId != null ? String(c.currencyId) : '',
     cin: c.cin ?? '',
     gstin: c.gstin ?? '',
@@ -234,6 +344,295 @@ export default function CompaniesPage() {
     }
   };
 
+  // ---- Branches ----
+  const openBranches = async (c: Company) => {
+    setBrCompany(c);
+    setBranchList([]);
+    setBrEditing(null);
+    setBrFormOpen(false);
+    setBrForm({ ...branchEmpty });
+    setBrOpen(true);
+    void reloadBranches(c.id);
+  };
+
+  const reloadBranches = async (companyId: number) => {
+    setBrLoading(true);
+    try {
+      const data = await api.get<Branch[]>(`/branches?companyId=${companyId}`);
+      setBranchList(data ?? []);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Failed to load branches.');
+    } finally {
+      setBrLoading(false);
+    }
+  };
+
+  const openBranchAdd = () => {
+    setBrEditing(null);
+    setBrForm({ ...branchEmpty });
+    setBrFormOpen(true);
+  };
+
+  const openBranchEdit = (b: Branch) => {
+    setBrEditing(b);
+    setBrForm({
+      code: b.code,
+      name: b.name,
+      address: b.address ?? '',
+      city: b.city ?? '',
+      state: b.state ?? '',
+      country: b.country ?? '',
+      phone: b.phone ?? '',
+      email: b.email ?? '',
+      isActive: b.isActive,
+    });
+    setBrFormOpen(true);
+  };
+
+  const saveBranch = async () => {
+    if (!brCompany) return;
+    if (!brForm.code.trim() || !brForm.name.trim()) {
+      toast.error('Branch Code and Name are required.');
+      return;
+    }
+    setBrSaving(true);
+    try {
+      if (brEditing) {
+        await api.patch(`/branches/${brEditing.id}`, brForm);
+        toast.success('Branch updated.');
+      } else {
+        await api.post('/branches', { ...brForm, companyId: brCompany.id });
+        toast.success('Branch created.');
+      }
+      setBrFormOpen(false);
+      setBrEditing(null);
+      await reloadBranches(brCompany.id);
+      // Keep the top-bar branch switcher in sync when editing the active company.
+      if (brCompany.id === activeCompanyId) await refreshProfile();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Failed to save branch.');
+    } finally {
+      setBrSaving(false);
+    }
+  };
+
+  const deleteBranch = async (b: Branch) => {
+    const ok = await confirm({
+      title: 'Delete branch',
+      message: `Delete "${b.name}"?`,
+      danger: true,
+      confirmText: 'Delete',
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/branches/${b.id}`);
+      toast.success('Branch deleted.');
+      if (brCompany) await reloadBranches(brCompany.id);
+      if (brCompany && brCompany.id === activeCompanyId) await refreshProfile();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Failed to delete branch.');
+    }
+  };
+
+  // ---- Cost centers ----
+  const openCostCenters = (c: Company) => {
+    setCcCompany(c);
+    setCcList([]);
+    setCcEditing(null);
+    setCcFormOpen(false);
+    setCcForm({ ...costEmpty });
+    setCcOpen(true);
+    void reloadCostCenters(c.id);
+  };
+  const reloadCostCenters = async (companyId: number) => {
+    setCcLoading(true);
+    try {
+      const data = await api.get<CostCenter[]>(
+        `/cost-centers?companyId=${companyId}`,
+      );
+      setCcList(data ?? []);
+    } catch (e) {
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to load cost centers.',
+      );
+    } finally {
+      setCcLoading(false);
+    }
+  };
+  const openCcAdd = () => {
+    setCcEditing(null);
+    setCcForm({ ...costEmpty });
+    setCcFormOpen(true);
+  };
+  const openCcEdit = (c: CostCenter) => {
+    setCcEditing(c);
+    setCcForm({
+      code: c.code,
+      name: c.name,
+      description: c.description ?? '',
+      isActive: c.isActive,
+    });
+    setCcFormOpen(true);
+  };
+  const saveCostCenter = async () => {
+    if (!ccCompany) return;
+    if (!ccForm.code.trim() || !ccForm.name.trim()) {
+      toast.error('Cost Center Code and Name are required.');
+      return;
+    }
+    setCcSaving(true);
+    try {
+      if (ccEditing) {
+        await api.patch(`/cost-centers/${ccEditing.id}`, ccForm);
+        toast.success('Cost center updated.');
+      } else {
+        await api.post('/cost-centers', { ...ccForm, companyId: ccCompany.id });
+        toast.success('Cost center created.');
+      }
+      setCcFormOpen(false);
+      setCcEditing(null);
+      await reloadCostCenters(ccCompany.id);
+    } catch (e) {
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to save cost center.',
+      );
+    } finally {
+      setCcSaving(false);
+    }
+  };
+  const deleteCostCenter = async (c: CostCenter) => {
+    const ok = await confirm({
+      title: 'Delete cost center',
+      message: `Delete "${c.name}"?`,
+      danger: true,
+      confirmText: 'Delete',
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/cost-centers/${c.id}`);
+      toast.success('Cost center deleted.');
+      if (ccCompany) await reloadCostCenters(ccCompany.id);
+    } catch (e) {
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to delete cost center.',
+      );
+    }
+  };
+
+  // ---- Cost objects ----
+  const openCostObjects = async (c: Company) => {
+    setCoCompany(c);
+    setCoCenters([]);
+    setCoCenterId('');
+    setCoList([]);
+    setCoEditing(null);
+    setCoFormOpen(false);
+    setCoForm({ ...costEmpty });
+    setCoOpen(true);
+    try {
+      const centers = await api.get<CostCenter[]>(
+        `/cost-centers?companyId=${c.id}`,
+      );
+      setCoCenters(centers ?? []);
+      if (centers && centers.length) {
+        setCoCenterId(String(centers[0].id));
+        void reloadCostObjects(centers[0].id);
+      }
+    } catch (e) {
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to load cost centers.',
+      );
+    }
+  };
+  const reloadCostObjects = async (costCenterId: number) => {
+    setCoLoading(true);
+    try {
+      const data = await api.get<CostObject[]>(
+        `/cost-objects?costCenterId=${costCenterId}`,
+      );
+      setCoList(data ?? []);
+    } catch (e) {
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to load cost objects.',
+      );
+    } finally {
+      setCoLoading(false);
+    }
+  };
+  const selectCoCenter = (id: string) => {
+    setCoCenterId(id);
+    setCoFormOpen(false);
+    setCoEditing(null);
+    if (id) void reloadCostObjects(Number(id));
+    else setCoList([]);
+  };
+  const openCoAdd = () => {
+    if (!coCenterId) {
+      toast.error('Select a cost center first.');
+      return;
+    }
+    setCoEditing(null);
+    setCoForm({ ...costEmpty });
+    setCoFormOpen(true);
+  };
+  const openCoEdit = (c: CostObject) => {
+    setCoEditing(c);
+    setCoForm({
+      code: c.code,
+      name: c.name,
+      description: c.description ?? '',
+      isActive: c.isActive,
+    });
+    setCoFormOpen(true);
+  };
+  const saveCostObject = async () => {
+    if (!coCenterId) return;
+    if (!coForm.code.trim() || !coForm.name.trim()) {
+      toast.error('Cost Object Code and Name are required.');
+      return;
+    }
+    setCoSaving(true);
+    try {
+      if (coEditing) {
+        await api.patch(`/cost-objects/${coEditing.id}`, coForm);
+        toast.success('Cost object updated.');
+      } else {
+        await api.post('/cost-objects', {
+          ...coForm,
+          costCenterId: Number(coCenterId),
+        });
+        toast.success('Cost object created.');
+      }
+      setCoFormOpen(false);
+      setCoEditing(null);
+      await reloadCostObjects(Number(coCenterId));
+    } catch (e) {
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to save cost object.',
+      );
+    } finally {
+      setCoSaving(false);
+    }
+  };
+  const deleteCostObject = async (c: CostObject) => {
+    const ok = await confirm({
+      title: 'Delete cost object',
+      message: `Delete "${c.name}"?`,
+      danger: true,
+      confirmText: 'Delete',
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/cost-objects/${c.id}`);
+      toast.success('Cost object deleted.');
+      if (coCenterId) await reloadCostObjects(Number(coCenterId));
+    } catch (e) {
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to delete cost object.',
+      );
+    }
+  };
+
   const columns: Column<Company>[] = [
     { key: 'code', header: 'Code', accessor: (r) => r.code },
     {
@@ -289,13 +688,42 @@ export default function CompaniesPage() {
         canDelete={canDelete}
         rowActions={(r) =>
           canEdit ? (
-            <button
-              onClick={() => openModules(r)}
-              className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
-              title="Modules"
-            >
-              <Layers className="h-4 w-4" />
-            </button>
+            <>
+              <button
+                onClick={() => openModules(r)}
+                className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
+                title="Modules"
+              >
+                <Layers className="h-4 w-4" />
+              </button>
+              {r.branchApplicable && (
+                <button
+                  onClick={() => openBranches(r)}
+                  className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
+                  title="Branches"
+                >
+                  <GitBranch className="h-4 w-4" />
+                </button>
+              )}
+              {r.costCenterApplicable && (
+                <button
+                  onClick={() => openCostCenters(r)}
+                  className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
+                  title="Cost Centers"
+                >
+                  <Network className="h-4 w-4" />
+                </button>
+              )}
+              {r.costObjectApplicable && (
+                <button
+                  onClick={() => openCostObjects(r)}
+                  className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
+                  title="Cost Objects"
+                >
+                  <Boxes className="h-4 w-4" />
+                </button>
+              )}
+            </>
           ) : null
         }
         renderLock={(r) => (
@@ -422,11 +850,40 @@ export default function CompaniesPage() {
           <Select
             label="Cost Center Applicable"
             value={form.costCenterApplicable ? 'yes' : 'no'}
+            onChange={(e) => {
+              const on = e.target.value === 'yes';
+              setForm({
+                ...form,
+                costCenterApplicable: on,
+                // Cost objects require cost centers — turning this off clears it.
+                costObjectApplicable: on ? form.costObjectApplicable : false,
+              });
+            }}
+            options={[
+              { value: 'no', label: 'No' },
+              { value: 'yes', label: 'Yes' },
+            ]}
+          />
+          <Select
+            label="Cost Object Applicable"
+            value={form.costObjectApplicable ? 'yes' : 'no'}
+            disabled={!form.costCenterApplicable}
             onChange={(e) =>
               setForm({
                 ...form,
-                costCenterApplicable: e.target.value === 'yes',
+                costObjectApplicable: e.target.value === 'yes',
               })
+            }
+            options={[
+              { value: 'no', label: 'No' },
+              { value: 'yes', label: 'Yes' },
+            ]}
+          />
+          <Select
+            label="Branch Applicable"
+            value={form.branchApplicable ? 'yes' : 'no'}
+            onChange={(e) =>
+              setForm({ ...form, branchApplicable: e.target.value === 'yes' })
             }
             options={[
               { value: 'no', label: 'No' },
@@ -558,6 +1015,481 @@ export default function CompaniesPage() {
             })}
           </div>
         )}
+      </Drawer>
+
+      {/* Branches drawer — manage a branch-applicable company's branches */}
+      <Drawer
+        open={brOpen}
+        onClose={() => setBrOpen(false)}
+        title={`Branches — ${brCompany?.name ?? ''}`}
+        subtitle="Manage this company's branches"
+        icon={<GitBranch className="h-5 w-5" />}
+        width="lg"
+        footer={<CloseFooter onClose={() => setBrOpen(false)} />}
+      >
+        <div className="space-y-4">
+          {/* Add / edit inline form */}
+          {brFormOpen ? (
+            <div className="card space-y-4 p-4">
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                {brEditing ? 'Edit Branch' : 'New Branch'}
+              </h3>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Input
+                  label="Code"
+                  required
+                  value={brForm.code}
+                  onChange={(e) =>
+                    setBrForm({ ...brForm, code: e.target.value })
+                  }
+                />
+                <Input
+                  label="Name"
+                  required
+                  value={brForm.name}
+                  onChange={(e) =>
+                    setBrForm({ ...brForm, name: e.target.value })
+                  }
+                />
+                <Textarea
+                  label="Address"
+                  wrapClassName="sm:col-span-2"
+                  value={brForm.address}
+                  onChange={(e) =>
+                    setBrForm({ ...brForm, address: e.target.value })
+                  }
+                />
+                <Input
+                  label="City"
+                  value={brForm.city}
+                  onChange={(e) =>
+                    setBrForm({ ...brForm, city: e.target.value })
+                  }
+                />
+                <Input
+                  label="State"
+                  value={brForm.state}
+                  onChange={(e) =>
+                    setBrForm({ ...brForm, state: e.target.value })
+                  }
+                />
+                <Input
+                  label="Country"
+                  value={brForm.country}
+                  onChange={(e) =>
+                    setBrForm({ ...brForm, country: e.target.value })
+                  }
+                />
+                <Input
+                  label="Phone"
+                  value={brForm.phone}
+                  onChange={(e) =>
+                    setBrForm({ ...brForm, phone: e.target.value })
+                  }
+                />
+                <Input
+                  label="Email"
+                  type="email"
+                  wrapClassName="sm:col-span-2"
+                  value={brForm.email}
+                  onChange={(e) =>
+                    setBrForm({ ...brForm, email: e.target.value })
+                  }
+                />
+                <div className="sm:col-span-2">
+                  <Checkbox
+                    label="Active"
+                    checked={brForm.isActive}
+                    onChange={(e) =>
+                      setBrForm({ ...brForm, isActive: e.target.checked })
+                    }
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  className="btn-ghost"
+                  onClick={() => {
+                    setBrFormOpen(false);
+                    setBrEditing(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn-primary"
+                  onClick={saveBranch}
+                  disabled={brSaving}
+                >
+                  {brSaving ? 'Saving...' : brEditing ? 'Update' : 'Create'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button className="btn-primary" onClick={openBranchAdd}>
+              <Plus className="h-4 w-4" /> Add Branch
+            </button>
+          )}
+
+          {/* Branch list */}
+          {brLoading ? (
+            <p className="py-8 text-center text-sm text-slate-400">
+              Loading branches...
+            </p>
+          ) : branchList.length === 0 ? (
+            <p className="py-8 text-center text-sm text-slate-400">
+              No branches yet. Add the first one above.
+            </p>
+          ) : (
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {branchList.map((b) => (
+                <div
+                  key={b.id}
+                  className="flex items-center gap-3 py-3"
+                >
+                  <span className="mt-0.5 text-brand-600">
+                    <GitBranch className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2 font-medium text-slate-800 dark:text-slate-100">
+                      {b.name}
+                      <span className="text-xs font-normal text-slate-400">
+                        {b.code}
+                      </span>
+                      {!b.isActive && <Badge color="slate">Inactive</Badge>}
+                      {b.isLocked && (
+                        <Badge color="amber">
+                          <Lock className="mr-1 h-3 w-3" /> Locked
+                        </Badge>
+                      )}
+                    </span>
+                    {(b.city || b.state) && (
+                      <span className="mt-0.5 block text-sm text-slate-500 dark:text-slate-400">
+                        {[b.city, b.state].filter(Boolean).join(', ')}
+                      </span>
+                    )}
+                  </span>
+                  <button
+                    onClick={() => guardBranchEdit(b, () => openBranchEdit(b))}
+                    className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
+                    title="Edit"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => guardBranchDelete(b, () => deleteBranch(b))}
+                    className="rounded-lg p-1.5 text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"
+                    title="Delete"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                  <LockButton
+                    locked={b.isLocked}
+                    canToggle={canToggleBranch}
+                    onToggle={() => toggleBranchLock(b)}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Drawer>
+
+      {/* Cost Centers drawer */}
+      <Drawer
+        open={ccOpen}
+        onClose={() => setCcOpen(false)}
+        title={`Cost Centers — ${ccCompany?.name ?? ''}`}
+        subtitle="Manage this company's cost centers"
+        icon={<Network className="h-5 w-5" />}
+        width="lg"
+        footer={<CloseFooter onClose={() => setCcOpen(false)} />}
+      >
+        <div className="space-y-4">
+          {ccFormOpen ? (
+            <div className="card space-y-4 p-4">
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                {ccEditing ? 'Edit Cost Center' : 'New Cost Center'}
+              </h3>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Input
+                  label="Code"
+                  required
+                  value={ccForm.code}
+                  onChange={(e) =>
+                    setCcForm({ ...ccForm, code: e.target.value })
+                  }
+                />
+                <Input
+                  label="Name"
+                  required
+                  value={ccForm.name}
+                  onChange={(e) =>
+                    setCcForm({ ...ccForm, name: e.target.value })
+                  }
+                />
+                <Textarea
+                  label="Description"
+                  wrapClassName="sm:col-span-2"
+                  value={ccForm.description}
+                  onChange={(e) =>
+                    setCcForm({ ...ccForm, description: e.target.value })
+                  }
+                />
+                <div className="sm:col-span-2">
+                  <Checkbox
+                    label="Active"
+                    checked={ccForm.isActive}
+                    onChange={(e) =>
+                      setCcForm({ ...ccForm, isActive: e.target.checked })
+                    }
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  className="btn-ghost"
+                  onClick={() => {
+                    setCcFormOpen(false);
+                    setCcEditing(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn-primary"
+                  onClick={saveCostCenter}
+                  disabled={ccSaving}
+                >
+                  {ccSaving ? 'Saving...' : ccEditing ? 'Update' : 'Create'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button className="btn-primary" onClick={openCcAdd}>
+              <Plus className="h-4 w-4" /> Add Cost Center
+            </button>
+          )}
+
+          {ccLoading ? (
+            <p className="py-8 text-center text-sm text-slate-400">
+              Loading cost centers...
+            </p>
+          ) : ccList.length === 0 ? (
+            <p className="py-8 text-center text-sm text-slate-400">
+              No cost centers yet. Add the first one above.
+            </p>
+          ) : (
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {ccList.map((c) => (
+                <div key={c.id} className="flex items-center gap-3 py-3">
+                  <span className="text-brand-600">
+                    <Network className="h-5 w-5" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2 font-medium text-slate-800 dark:text-slate-100">
+                      {c.name}
+                      <span className="text-xs font-normal text-slate-400">
+                        {c.code}
+                      </span>
+                      {!c.isActive && <Badge color="slate">Inactive</Badge>}
+                      {c.isLocked && (
+                        <Badge color="amber">
+                          <Lock className="mr-1 h-3 w-3" /> Locked
+                        </Badge>
+                      )}
+                    </span>
+                    {c.description && (
+                      <span className="mt-0.5 block text-sm text-slate-500 dark:text-slate-400">
+                        {c.description}
+                      </span>
+                    )}
+                  </span>
+                  <button
+                    onClick={() => guardCcEdit(c, () => openCcEdit(c))}
+                    className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
+                    title="Edit"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => guardCcDelete(c, () => deleteCostCenter(c))}
+                    className="rounded-lg p-1.5 text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"
+                    title="Delete"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                  <LockButton
+                    locked={c.isLocked}
+                    canToggle={canToggleCc}
+                    onToggle={() => toggleCcLock(c)}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Drawer>
+
+      {/* Cost Objects drawer */}
+      <Drawer
+        open={coOpen}
+        onClose={() => setCoOpen(false)}
+        title={`Cost Objects — ${coCompany?.name ?? ''}`}
+        subtitle="Manage cost objects under a cost center"
+        icon={<Boxes className="h-5 w-5" />}
+        width="lg"
+        footer={<CloseFooter onClose={() => setCoOpen(false)} />}
+      >
+        <div className="space-y-4">
+          <Select
+            label="Cost Center"
+            value={coCenterId}
+            onChange={(e) => selectCoCenter(e.target.value)}
+            placeholder="Select cost center"
+            options={coCenters.map((c) => ({
+              value: c.id,
+              label: `${c.code} — ${c.name}`,
+            }))}
+          />
+
+          {coCenters.length === 0 ? (
+            <p className="py-8 text-center text-sm text-slate-400">
+              No cost centers yet. Add a cost center first (Cost Centers).
+            </p>
+          ) : !coCenterId ? (
+            <p className="py-8 text-center text-sm text-slate-400">
+              Select a cost center to manage its cost objects.
+            </p>
+          ) : (
+            <>
+              {coFormOpen ? (
+                <div className="card space-y-4 p-4">
+                  <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+                    {coEditing ? 'Edit Cost Object' : 'New Cost Object'}
+                  </h3>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <Input
+                      label="Code"
+                      required
+                      value={coForm.code}
+                      onChange={(e) =>
+                        setCoForm({ ...coForm, code: e.target.value })
+                      }
+                    />
+                    <Input
+                      label="Name"
+                      required
+                      value={coForm.name}
+                      onChange={(e) =>
+                        setCoForm({ ...coForm, name: e.target.value })
+                      }
+                    />
+                    <Textarea
+                      label="Description"
+                      wrapClassName="sm:col-span-2"
+                      value={coForm.description}
+                      onChange={(e) =>
+                        setCoForm({ ...coForm, description: e.target.value })
+                      }
+                    />
+                    <div className="sm:col-span-2">
+                      <Checkbox
+                        label="Active"
+                        checked={coForm.isActive}
+                        onChange={(e) =>
+                          setCoForm({ ...coForm, isActive: e.target.checked })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      className="btn-ghost"
+                      onClick={() => {
+                        setCoFormOpen(false);
+                        setCoEditing(null);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="btn-primary"
+                      onClick={saveCostObject}
+                      disabled={coSaving}
+                    >
+                      {coSaving ? 'Saving...' : coEditing ? 'Update' : 'Create'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button className="btn-primary" onClick={openCoAdd}>
+                  <Plus className="h-4 w-4" /> Add Cost Object
+                </button>
+              )}
+
+              {coLoading ? (
+                <p className="py-8 text-center text-sm text-slate-400">
+                  Loading cost objects...
+                </p>
+              ) : coList.length === 0 ? (
+                <p className="py-8 text-center text-sm text-slate-400">
+                  No cost objects under this cost center yet.
+                </p>
+              ) : (
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {coList.map((c) => (
+                    <div key={c.id} className="flex items-center gap-3 py-3">
+                      <span className="text-brand-600">
+                        <Boxes className="h-5 w-5" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2 font-medium text-slate-800 dark:text-slate-100">
+                          {c.name}
+                          <span className="text-xs font-normal text-slate-400">
+                            {c.code}
+                          </span>
+                          {!c.isActive && <Badge color="slate">Inactive</Badge>}
+                          {c.isLocked && (
+                            <Badge color="amber">
+                              <Lock className="mr-1 h-3 w-3" /> Locked
+                            </Badge>
+                          )}
+                        </span>
+                        {c.description && (
+                          <span className="mt-0.5 block text-sm text-slate-500 dark:text-slate-400">
+                            {c.description}
+                          </span>
+                        )}
+                      </span>
+                      <button
+                        onClick={() => guardCoEdit(c, () => openCoEdit(c))}
+                        className="rounded-lg p-1.5 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
+                        title="Edit"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() =>
+                          guardCoDelete(c, () => deleteCostObject(c))
+                        }
+                        className="rounded-lg p-1.5 text-slate-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950"
+                        title="Delete"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                      <LockButton
+                        locked={c.isLocked}
+                        canToggle={canToggleCo}
+                        onToggle={() => toggleCoLock(c)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </Drawer>
     </div>
   );

@@ -23,6 +23,7 @@ import {
   GripVertical,
   Star,
   LayoutGrid,
+  GitBranch,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/providers/ToastProvider';
@@ -62,17 +63,19 @@ const emptyForm = {
   name: '',
   icon: 'layout-dashboard',
   userGroupId: '',
+  branchId: '',
   isDefault: false,
   isActive: true,
 };
 
 export default function DashboardsPage() {
-  const { can, activeCompanyId } = useAuth();
+  const { can, activeCompanyId, branches } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
 
   const [modules, setModules] = useState<Module[]>([]);
   const [moduleId, setModuleId] = useState('');
+  const [branchFilter, setBranchFilter] = useState(''); // '' = all branches
   const [groups, setGroups] = useState<UserGroup[]>([]);
   const [dashboards, setDashboards] = useState<DashboardSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -129,8 +132,9 @@ export default function DashboardsPage() {
     }
     setLoading(true);
     try {
+      const bq = branchFilter ? `&branchId=${branchFilter}` : '';
       const res = await api.get<DashboardSummary[]>(
-        `/dashboards?moduleId=${moduleId}`,
+        `/dashboards?moduleId=${moduleId}${bq}`,
       );
       setDashboards(res ?? []);
     } catch (e) {
@@ -140,7 +144,7 @@ export default function DashboardsPage() {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [moduleId]);
+  }, [moduleId, branchFilter]);
 
   useEffect(() => {
     load();
@@ -156,6 +160,8 @@ export default function DashboardsPage() {
 
   const moduleOptions = modules.map((m) => ({ value: m.id, label: m.name }));
   const groupOptions = groups.map((g) => ({ value: g.id, label: g.name }));
+  const branchOptions = branches.map((b) => ({ value: b.id, label: b.name }));
+  const hasBranches = branches.length > 0;
 
   // ---- Dashboard CRUD ----
   const openAdd = () => {
@@ -165,13 +171,15 @@ export default function DashboardsPage() {
     }
     setEditing(null);
     setView(false);
-    setForm({ ...emptyForm });
+    // Pre-fill the branch from the active filter for convenience.
+    setForm({ ...emptyForm, branchId: branchFilter });
     setOpen(true);
   };
   const formFrom = (d: DashboardSummary) => ({
     name: d.name,
     icon: d.icon ?? 'layout-dashboard',
     userGroupId: d.userGroupId ? String(d.userGroupId) : '',
+    branchId: d.branchId ? String(d.branchId) : '',
     isDefault: d.isDefault,
     isActive: d.isActive,
   });
@@ -200,6 +208,7 @@ export default function DashboardsPage() {
         name: form.name,
         icon: form.icon || null,
         userGroupId: form.userGroupId ? Number(form.userGroupId) : null,
+        branchId: form.branchId ? Number(form.branchId) : null,
         isDefault: form.isDefault,
         isActive: form.isActive,
       };
@@ -308,6 +317,15 @@ export default function DashboardsPage() {
               placeholder="Select module"
               options={moduleOptions}
             />
+            {hasBranches && (
+              <Select
+                wrapClassName="w-44"
+                value={branchFilter}
+                onChange={(e) => setBranchFilter(e.target.value)}
+                placeholder="All branches"
+                options={branchOptions}
+              />
+            )}
             {canAdd && (
               <button className="btn-primary" onClick={openAdd}>
                 <Plus className="h-4 w-4" /> Dashboard
@@ -349,6 +367,16 @@ export default function DashboardsPage() {
                       {d.userGroup?.name ?? 'All groups'} · {d._count?.widgets ?? 0}{' '}
                       widgets
                     </p>
+                    {hasBranches && (
+                      <span className="mt-1 inline-flex items-center gap-1 text-xs">
+                        <GitBranch className="h-3 w-3 text-slate-400" />
+                        {d.branch ? (
+                          <Badge color="blue">{d.branch.name}</Badge>
+                        ) : (
+                          <Badge color="slate">All branches</Badge>
+                        )}
+                      </span>
+                    )}
                   </div>
                   {!d.isActive && <Badge color="slate">Inactive</Badge>}
                 </div>
@@ -415,6 +443,15 @@ export default function DashboardsPage() {
             placeholder="All groups"
             options={groupOptions}
           />
+          {hasBranches && (
+            <Select
+              label="Branch"
+              value={form.branchId}
+              onChange={(e) => setForm({ ...form, branchId: e.target.value })}
+              placeholder="All branches (company-wide)"
+              options={branchOptions}
+            />
+          )}
           <IconPicker
             label="Icon"
             value={form.icon}
@@ -439,8 +476,16 @@ export default function DashboardsPage() {
             </div>
             <p className="mt-1.5 text-xs text-slate-400">
               The default dashboard loads automatically when this module opens.
-              Only one dashboard per module can be the default — marking this one
-              clears it on the others.
+              Only one dashboard per module {hasBranches && 'and branch '}can be
+              the default — marking this one clears it on the others.
+              {hasBranches && (
+                <>
+                  {' '}
+                  A “company-wide” dashboard shows on every branch — but only to
+                  users who can access all of the company’s branches. Users with
+                  access to just some branches see only that branch’s dashboards.
+                </>
+              )}
             </p>
           </div>
         </div>

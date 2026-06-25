@@ -4,6 +4,7 @@ export const API_URL =
 
 const TOKEN_KEY = 'erpgrip_token';
 const COMPANY_KEY = 'erpgrip.activeCompany';
+const BRANCH_KEY = 'erpgrip.activeBranch';
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -32,6 +33,20 @@ export function setCompanyId(id: number | null) {
   if (typeof window === 'undefined') return;
   if (id == null) window.localStorage.removeItem(COMPANY_KEY);
   else window.localStorage.setItem(COMPANY_KEY, String(id));
+}
+
+// The active branch is attached as `X-Branch-Id` (only meaningful when the
+// active company is branch-applicable). Mirrors the company header above.
+export function getBranchId(): number | null {
+  if (typeof window === 'undefined') return null;
+  const n = Number(window.localStorage.getItem(BRANCH_KEY));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+export function setBranchId(id: number | null) {
+  if (typeof window === 'undefined') return;
+  if (id == null) window.localStorage.removeItem(BRANCH_KEY);
+  else window.localStorage.setItem(BRANCH_KEY, String(id));
 }
 
 export class ApiError extends Error {
@@ -64,6 +79,7 @@ export async function apiFetch<T = unknown>(
   const { body, silent401, headers, ...rest } = options;
   const token = getToken();
   const companyId = getCompanyId();
+  const branchId = getBranchId();
 
   const finalHeaders: Record<string, string> = {
     Accept: 'application/json',
@@ -77,6 +93,9 @@ export async function apiFetch<T = unknown>(
   }
   if (companyId) {
     finalHeaders['X-Company-Id'] = String(companyId);
+  }
+  if (branchId) {
+    finalHeaders['X-Branch-Id'] = String(branchId);
   }
 
   let res: Response;

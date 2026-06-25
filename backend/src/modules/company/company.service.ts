@@ -62,11 +62,64 @@ export class CompanyService {
   async update(id: number, dto: UpdateCompanyDto) {
     const existing = await this.findOne(id);
     assertUnlocked(existing, 'company', 'editing');
+
+    // Don't let a company be marked non-branch-applicable while branches still
+    // exist — that would orphan them (and the users' branch access).
+    if (dto.branchApplicable === false && existing.branchApplicable) {
+      const count = await this.prisma.branch.count({ where: { companyId: id } });
+      if (count > 0) {
+        throw new ConflictException(
+          `Cannot disable branches — this company still has ${count} branch(es). Delete them first.`,
+        );
+      }
+    }
+
+    // Cost center / cost object rules. Cost objects live under cost centers, so
+    // "cost object applicable" can only be on when "cost center applicable" is.
+    const effCostCenter =
+      dto.costCenterApplicable ?? existing.costCenterApplicable;
+    let effCostObject =
+      dto.costObjectApplicable ?? existing.costObjectApplicable;
+    if (!effCostCenter && effCostObject) {
+      if (dto.costObjectApplicable === true) {
+        throw new ConflictException(
+          'Cost Object Applicable requires Cost Center Applicable.',
+        );
+      }
+      // Turning cost center off implicitly turns cost objects off.
+      effCostObject = false;
+    }
+    // Block disabling cost centers while any still exist (objects live under
+    // them, so this also covers the cost-object case).
+    if (dto.costCenterApplicable === false && existing.costCenterApplicable) {
+      const count = await this.prisma.costCenter.count({
+        where: { companyId: id },
+      });
+      if (count > 0) {
+        throw new ConflictException(
+          `Cannot disable cost centers — this company still has ${count} cost center(s). Delete them first.`,
+        );
+      }
+    }
+    // Block disabling cost objects while any still exist.
+    if (!effCostObject && existing.costObjectApplicable) {
+      const count = await this.prisma.costObject.count({
+        where: { companyId: id },
+      });
+      if (count > 0) {
+        throw new ConflictException(
+          `Cannot disable cost objects — this company still has ${count} cost object(s). Delete them first.`,
+        );
+      }
+    }
+
     const { booksStartDate, ...rest } = dto;
     return this.prisma.company.update({
       where: { id },
       data: {
         ...rest,
+        // Persist the (possibly coerced) cost-object flag.
+        costObjectApplicable: effCostObject,
         ...(booksStartDate !== undefined
           ? { booksStartDate: booksStartDate ? new Date(booksStartDate) : null }
           : {}),

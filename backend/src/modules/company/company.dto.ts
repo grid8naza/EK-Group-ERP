@@ -36,6 +36,8 @@ export class CreateCompanyDto {
   @IsOptional() @IsInt() @Min(1) @Max(12) financialYearEndMonth?: number;
   @IsOptional() @IsDateString() booksStartDate?: string;
   @IsOptional() @IsBoolean() costCenterApplicable?: boolean;
+  @IsOptional() @IsBoolean() costObjectApplicable?: boolean;
+  @IsOptional() @IsBoolean() branchApplicable?: boolean;
   @IsOptional() @IsInt() currencyId?: number;
   @IsOptional() @IsString() @MaxLength(21) cin?: string;
   @IsOptional() @IsString() @MaxLength(15) gstin?: string;

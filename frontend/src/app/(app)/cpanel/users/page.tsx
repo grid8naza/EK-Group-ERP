@@ -10,6 +10,7 @@ import {
   ChevronDown,
   Smartphone,
   Globe,
+  GitBranch,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/providers/ToastProvider';
@@ -31,6 +32,7 @@ import type {
   CompanyModule,
   UserGroup,
   SecurityType,
+  Branch,
 } from '@/lib/types';
 
 const ROUTE = '/cpanel/users';
@@ -52,6 +54,8 @@ const empty = {
   companyIds: [] as number[],
   defaultCompanyId: null as number | null,
   groupIds: [] as number[],
+  branchIds: [] as number[],
+  defaultBranchIds: [] as number[],
   // companyId -> assigned module ids
   moduleAssignments: {} as Record<number, number[]>,
   // companyId -> the module that loads automatically in that company
@@ -74,6 +78,10 @@ export default function UsersPage() {
   // Enabled modules keyed by companyId.
   const [modulesByCompany, setModulesByCompany] = useState<
     Record<number, CompanyModule[]>
+  >({});
+  // Branches keyed by companyId (only for branch-applicable companies).
+  const [branchesByCompany, setBranchesByCompany] = useState<
+    Record<number, Branch[]>
   >({});
   // Which company panels are expanded in the access section.
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
@@ -184,6 +192,35 @@ export default function UsersPage() {
     };
   }, [open, form.companyIds, modulesByCompany]);
 
+  // Fetch branches for every selected branch-applicable company (lazy, cached).
+  useEffect(() => {
+    if (!open) return;
+    const missing = form.companyIds.filter((id) => {
+      const co = companies.find((c) => c.id === id);
+      return co?.branchApplicable && !branchesByCompany[id];
+    });
+    if (missing.length === 0) return;
+    let cancelled = false;
+    Promise.all(
+      missing.map((id) =>
+        api
+          .get<Branch[]>(`/branches?companyId=${id}`)
+          .then((b) => [id, (b ?? []).filter((x) => x.isActive)] as const)
+          .catch(() => [id, [] as Branch[]] as const),
+      ),
+    ).then((results) => {
+      if (cancelled) return;
+      setBranchesByCompany((prev) => {
+        const next = { ...prev };
+        for (const [id, b] of results) next[id] = b;
+        return next;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, form.companyIds, companies, branchesByCompany]);
+
   // Modules a company offers this user = enabled modules that are also managed
   // by at least one of the user's currently-selected groups for that company.
   const availableModuleIds = useCallback(
@@ -278,6 +315,8 @@ export default function UsersPage() {
       companyIds,
       defaultCompanyId,
       groupIds: u.groupIds ?? u.groups?.map((g) => g.id) ?? [],
+      branchIds: u.branchIds ?? [],
+      defaultBranchIds: u.defaultBranchIds ?? [],
       moduleAssignments,
       defaultModuleByCompany,
     });
@@ -299,8 +338,9 @@ export default function UsersPage() {
     setForm((f) => {
       const has = f.companyIds.includes(id);
       if (has) {
-        // Remove company: drop its groups + module assignment + defaults.
+        // Remove company: drop its groups + module assignment + defaults + branches.
         const companyGroupIds = (groupsByCompany[id] ?? []).map((g) => g.id);
+        const companyBranchIds = (branchesByCompany[id] ?? []).map((b) => b.id);
         const moduleAssignments = { ...f.moduleAssignments };
         delete moduleAssignments[id];
         const defaultModuleByCompany = { ...f.defaultModuleByCompany };
@@ -309,6 +349,10 @@ export default function UsersPage() {
           ...f,
           companyIds: f.companyIds.filter((c) => c !== id),
           groupIds: f.groupIds.filter((g) => !companyGroupIds.includes(g)),
+          branchIds: f.branchIds.filter((b) => !companyBranchIds.includes(b)),
+          defaultBranchIds: f.defaultBranchIds.filter(
+            (b) => !companyBranchIds.includes(b),
+          ),
           moduleAssignments,
           defaultModuleByCompany,
           defaultCompanyId:
@@ -337,6 +381,53 @@ export default function UsersPage() {
         ? f.groupIds.filter((g) => g !== id)
         : [...f.groupIds, id],
     }));
+  };
+
+  const toggleBranch = (id: number, companyId: number) => {
+    setForm((f) => {
+      const companyBranchIds = (branchesByCompany[companyId] ?? []).map(
+        (b) => b.id,
+      );
+      if (f.branchIds.includes(id)) {
+        // Removing: drop it; if it was this company's default, promote another
+        // selected branch of the same company to default.
+        const branchIds = f.branchIds.filter((b) => b !== id);
+        let defaultBranchIds = f.defaultBranchIds.filter((b) => b !== id);
+        if (f.defaultBranchIds.includes(id)) {
+          const next = branchIds.find((b) => companyBranchIds.includes(b));
+          if (next != null) defaultBranchIds = [...defaultBranchIds, next];
+        }
+        return { ...f, branchIds, defaultBranchIds };
+      }
+      // Adding: select it; if the company has no default yet, make this it.
+      const hasDefault = f.defaultBranchIds.some((b) =>
+        companyBranchIds.includes(b),
+      );
+      return {
+        ...f,
+        branchIds: [...f.branchIds, id],
+        defaultBranchIds: hasDefault
+          ? f.defaultBranchIds
+          : [...f.defaultBranchIds, id],
+      };
+    });
+  };
+
+  // Mark one branch as the user's default for its company (replaces any prior
+  // default among that company's branches).
+  const setDefaultBranch = (id: number, companyId: number) => {
+    setForm((f) => {
+      const companyBranchIds = (branchesByCompany[companyId] ?? []).map(
+        (b) => b.id,
+      );
+      return {
+        ...f,
+        defaultBranchIds: [
+          ...f.defaultBranchIds.filter((b) => !companyBranchIds.includes(b)),
+          id,
+        ],
+      };
+    });
   };
 
   const toggleModule = (companyId: number, moduleId: number) => {
@@ -424,6 +515,8 @@ export default function UsersPage() {
         companyIds: form.companyIds,
         defaultCompanyId: form.defaultCompanyId,
         groupIds: form.groupIds,
+        branchIds: form.branchIds,
+        defaultBranchIds: form.defaultBranchIds,
         // Only send assignments for companies the user actually has access to.
         moduleAssignments: form.companyIds.map((companyId) => ({
           companyId,
@@ -987,6 +1080,86 @@ export default function UsersPage() {
                               </div>
                             )}
                           </div>
+
+                          {/* Branches — only for branch-applicable companies */}
+                          {c.branchApplicable && (
+                            <div>
+                              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                <GitBranch className="h-3.5 w-3.5" /> Branches
+                              </p>
+                              {branchesByCompany[c.id] === undefined ? (
+                                <p className="text-sm text-slate-400">
+                                  Loading...
+                                </p>
+                              ) : branchesByCompany[c.id].length === 0 ? (
+                                <p className="text-sm text-slate-400">
+                                  No branches defined for this company.
+                                </p>
+                              ) : (
+                                <>
+                                  <div className="flex flex-wrap gap-2">
+                                    {branchesByCompany[c.id].map((b) => {
+                                      const active = form.branchIds.includes(
+                                        b.id,
+                                      );
+                                      return (
+                                        <button
+                                          key={b.id}
+                                          type="button"
+                                          onClick={() =>
+                                            toggleBranch(b.id, c.id)
+                                          }
+                                          className={cn(
+                                            'rounded-lg border px-3 py-1.5 text-sm font-medium transition',
+                                            active
+                                              ? 'border-brand-600 bg-brand-600 text-white'
+                                              : 'border-slate-300 bg-white text-slate-600 hover:border-brand-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+                                          )}
+                                        >
+                                          {b.name}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  {/* Default branch among the selected ones */}
+                                  {(() => {
+                                    const selected = branchesByCompany[
+                                      c.id
+                                    ].filter((b) =>
+                                      form.branchIds.includes(b.id),
+                                    );
+                                    if (selected.length === 0) return null;
+                                    return (
+                                      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-500 dark:text-slate-400">
+                                        <span className="font-medium">
+                                          Default branch:
+                                        </span>
+                                        {selected.map((b) => (
+                                          <label
+                                            key={b.id}
+                                            className="inline-flex cursor-pointer select-none items-center gap-1.5"
+                                          >
+                                            <input
+                                              type="radio"
+                                              name={`defaultBranch-${c.id}`}
+                                              className="h-3.5 w-3.5 border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
+                                              checked={form.defaultBranchIds.includes(
+                                                b.id,
+                                              )}
+                                              onChange={() =>
+                                                setDefaultBranch(b.id, c.id)
+                                              }
+                                            />
+                                            {b.name}
+                                          </label>
+                                        ))}
+                                      </div>
+                                    );
+                                  })()}
+                                </>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

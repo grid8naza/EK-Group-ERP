@@ -1,5 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
@@ -58,7 +59,11 @@ export class AuthService {
    *
    * Super admins get everything in the active company.
    */
-  async buildProfile(userId: number, requestedCompanyId?: number) {
+  async buildProfile(
+    userId: number,
+    requestedCompanyId?: number,
+    requestedBranchId?: number,
+  ) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -95,6 +100,54 @@ export class AuthService {
       user.companies.find((uc) => uc.company.id === activeCompanyId)
         ?.defaultModuleId ?? null;
 
+    // Branch context for the active company. Only relevant when the active
+    // company is branch-applicable; otherwise the branch switcher is hidden.
+    // Super admins see every active branch; other users see only the branches
+    // granted to them via UserBranch.
+    const activeCompany =
+      user.companies.find((uc) => uc.company.id === activeCompanyId)?.company ??
+      null;
+    let branchApplicable = false;
+    let branches: { id: number; code: string; name: string }[] = [];
+    let activeBranchId: number | null = null;
+    // Whether the user can access *every* branch of the active company. Such
+    // users (and super admins) also see the company-wide dashboards alongside
+    // the active branch's; users with only some branches see branch dashboards
+    // only.
+    let hasAllBranchAccess = false;
+    if (activeCompanyId && activeCompany?.branchApplicable) {
+      branchApplicable = true;
+      const allBranches = await this.prisma.branch.findMany({
+        where: { companyId: activeCompanyId, isActive: true },
+        orderBy: { name: 'asc' },
+        select: { id: true, code: true, name: true },
+      });
+      // The user's default branch for this company, used as the fallback active
+      // branch when none is explicitly requested.
+      let defaultBranchId: number | null = null;
+      if (user.isSuperAdmin) {
+        branches = allBranches;
+        hasAllBranchAccess = true;
+      } else {
+        const userBranches = await this.prisma.userBranch.findMany({
+          where: { userId, branch: { companyId: activeCompanyId } },
+          select: { branchId: true, isDefault: true },
+        });
+        const granted = new Set(userBranches.map((b) => b.branchId));
+        branches = allBranches.filter((b) => granted.has(b.id));
+        hasAllBranchAccess =
+          allBranches.length > 0 && allBranches.every((b) => granted.has(b.id));
+        const def = userBranches.find((b) => b.isDefault);
+        if (def && branches.some((b) => b.id === def.branchId)) {
+          defaultBranchId = def.branchId;
+        }
+      }
+      activeBranchId =
+        requestedBranchId && branches.some((b) => b.id === requestedBranchId)
+          ? requestedBranchId
+          : (defaultBranchId ?? branches[0]?.id ?? null);
+    }
+
     const profile = {
       id: user.id,
       userCode: user.userCode,
@@ -110,6 +163,9 @@ export class AuthService {
         user: profile,
         companies,
         activeCompanyId: null,
+        branchApplicable,
+        branches,
+        activeBranchId,
         navigation: [],
         permissions: {},
       };
@@ -246,14 +302,28 @@ export class AuthService {
     const visibleModuleIds = visibleModules.map((m) => m.id);
 
     // Dashboards the user may open in this company (their groups + shared).
+    // Branch scoping:
+    //  - Full branch access (or super admin): company-wide dashboards (branchId
+    //    null, constant across branches) PLUS the active branch's dashboards.
+    //  - Partial branch access: only the active branch's dashboards; company
+    //    dashboards are hidden.
+    //  - Non-branch company (activeBranchId null): company-wide dashboards.
+    const dashboardWhere: Prisma.DashboardWhereInput[] = [
+      hasAllBranchAccess
+        ? { OR: [{ branchId: null }, { branchId: activeBranchId }] }
+        : { branchId: activeBranchId },
+    ];
+    if (!user.isSuperAdmin) {
+      dashboardWhere.push({
+        OR: [{ userGroupId: null }, { userGroupId: { in: groupIds } }],
+      });
+    }
     const dashboards = await this.prisma.dashboard.findMany({
       where: {
         companyId: activeCompanyId,
         moduleId: { in: visibleModuleIds.length ? visibleModuleIds : [-1] },
         isActive: true,
-        ...(user.isSuperAdmin
-          ? {}
-          : { OR: [{ userGroupId: null }, { userGroupId: { in: groupIds } }] }),
+        AND: dashboardWhere,
       },
       orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
     });
@@ -340,6 +410,9 @@ export class AuthService {
           icon: d.icon,
           route: `/dashboard/${d.id}`,
           isDefault: d.isDefault,
+          // null = company-wide; otherwise the branch it belongs to. Lets the
+          // sidebar group dashboards into "Company" vs "Branch".
+          branchId: d.branchId,
         }));
 
       return {
@@ -357,6 +430,9 @@ export class AuthService {
       user: profile,
       companies,
       activeCompanyId,
+      branchApplicable,
+      branches,
+      activeBranchId,
       navigation,
       permissions,
     };

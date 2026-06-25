@@ -68,6 +68,21 @@ export class CreateUserDto {
   @IsInt({ each: true })
   companyIds?: number[];
 
+  // Branches this user may access (flat list across branch-applicable
+  // companies, like groupIds). Each branch carries its own companyId.
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  branchIds?: number[];
+
+  // The user's default branch per company (the branch that loads automatically
+  // when they enter that company). A subset of branchIds, at most one per
+  // company; a flat list since each branch carries its own company.
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  defaultBranchIds?: number[];
+
   // Per-company module assignment (a subset of each company's enabled modules).
   @IsOptional()
   @IsArray()

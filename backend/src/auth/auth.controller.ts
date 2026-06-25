@@ -5,6 +5,7 @@ import { LoginDto } from './dto/login.dto';
 import { Public } from './public.decorator';
 import { CurrentUser, AuthUser } from './current-user.decorator';
 import { CompanyId } from './company.decorator';
+import { BranchId } from './branch.decorator';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -19,7 +20,11 @@ export class AuthController {
 
   @ApiBearerAuth()
   @Get('me')
-  me(@CurrentUser() user: AuthUser, @CompanyId() companyId?: number) {
-    return this.auth.buildProfile(user.id, companyId);
+  me(
+    @CurrentUser() user: AuthUser,
+    @CompanyId() companyId?: number,
+    @BranchId() branchId?: number,
+  ) {
+    return this.auth.buildProfile(user.id, companyId, branchId);
   }
 }

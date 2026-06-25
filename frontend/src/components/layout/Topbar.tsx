@@ -12,6 +12,7 @@ import {
   UserCircle,
   LayoutGrid,
   Building2,
+  GitBranch,
   Check,
 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
@@ -41,13 +42,18 @@ export function Topbar({
     companies,
     activeCompany,
     switchCompany,
+    branches,
+    activeBranch,
+    switchBranch,
   } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [modOpen, setModOpen] = useState(false);
   const [coOpen, setCoOpen] = useState(false);
+  const [brOpen, setBrOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const modRef = useRef<HTMLDivElement>(null);
   const coRef = useRef<HTMLDivElement>(null);
+  const brRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -59,6 +65,9 @@ export function Topbar({
       }
       if (coRef.current && !coRef.current.contains(e.target as Node)) {
         setCoOpen(false);
+      }
+      if (brRef.current && !brRef.current.contains(e.target as Node)) {
+        setBrOpen(false);
       }
     };
     document.addEventListener('mousedown', onClick);
@@ -76,6 +85,11 @@ export function Topbar({
   const selectCompany = (id: number) => {
     setCoOpen(false);
     void switchCompany(id);
+  };
+
+  const selectBranch = (id: number) => {
+    setBrOpen(false);
+    void switchBranch(id);
   };
 
   return (
@@ -155,6 +169,60 @@ export function Topbar({
                         {co.name}
                         <span className="ml-1 text-xs text-slate-400">
                           {co.code}
+                        </span>
+                      </span>
+                      {active && <Check className="h-4 w-4 flex-none" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Branch switcher — only when the active company is branch-applicable */}
+        {branches.length > 0 && (
+          <div className="relative" ref={brRef}>
+            <button
+              onClick={() => setBrOpen((v) => !v)}
+              className="flex items-center gap-2 rounded-lg border border-slate-200 px-2.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              title="Switch branch"
+            >
+              <GitBranch className="h-[18px] w-[18px] text-brand-600" />
+              <span className="hidden max-w-[10rem] truncate sm:block">
+                {activeBranch?.name || 'Select branch'}
+              </span>
+              <ChevronDown
+                className={cn(
+                  'h-4 w-4 text-slate-400 transition-transform',
+                  brOpen && 'rotate-180',
+                )}
+              />
+            </button>
+
+            {brOpen && (
+              <div className="absolute right-0 mt-2 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-800 dark:bg-slate-900">
+                <p className="px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Branches
+                </p>
+                {branches.map((br) => {
+                  const active = br.id === activeBranch?.id;
+                  return (
+                    <button
+                      key={br.id}
+                      onClick={() => selectBranch(br.id)}
+                      className={cn(
+                        'flex w-full items-center gap-2.5 px-4 py-2 text-sm transition',
+                        active
+                          ? 'bg-brand-50 font-medium text-brand-700 dark:bg-brand-950 dark:text-brand-300'
+                          : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
+                      )}
+                    >
+                      <GitBranch className="h-[18px] w-[18px] flex-none" />
+                      <span className="flex-1 truncate text-left">
+                        {br.name}
+                        <span className="ml-1 text-xs text-slate-400">
+                          {br.code}
                         </span>
                       </span>
                       {active && <Check className="h-4 w-4 flex-none" />}

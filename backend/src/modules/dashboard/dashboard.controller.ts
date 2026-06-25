@@ -37,10 +37,15 @@ export class DashboardController {
   constructor(private readonly service: DashboardService) {}
 
   @Get()
-  findAll(@CompanyId() companyId?: number, @Query('moduleId') moduleId?: string) {
+  findAll(
+    @CompanyId() companyId?: number,
+    @Query('moduleId') moduleId?: string,
+    @Query('branchId') branchId?: string,
+  ) {
     return this.service.findAll(
       requireCompany(companyId),
       moduleId ? Number(moduleId) : undefined,
+      branchId ? Number(branchId) : undefined,
     );
   }
 

@@ -37,6 +37,8 @@ export interface NavDashboard {
   icon?: string | null;
   route: string;
   isDefault: boolean;
+  /** null = company-wide dashboard; otherwise the branch it belongs to. */
+  branchId?: number | null;
 }
 
 export interface NavModule {
@@ -56,6 +58,52 @@ export interface CompanyLite {
   isDefault?: boolean;
 }
 
+/** A branch as returned in the auth profile / top-bar switcher. */
+export interface BranchLite {
+  id: number;
+  code: string;
+  name: string;
+}
+
+/** Full branch record (Branch Master drawer). */
+export interface Branch {
+  id: number;
+  companyId: number;
+  code: string;
+  name: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  isActive: boolean;
+  isLocked?: boolean;
+}
+
+/** Cost center (per company). */
+export interface CostCenter {
+  id: number;
+  companyId: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+  isLocked?: boolean;
+}
+
+/** Cost object (per company, under a cost center). */
+export interface CostObject {
+  id: number;
+  companyId: number;
+  costCenterId: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+  isLocked?: boolean;
+}
+
 export interface Permission {
   view: boolean;
   add: boolean;
@@ -73,6 +121,9 @@ export interface LoginResponse {
   user: User;
   companies: CompanyLite[];
   activeCompanyId: number | null;
+  branchApplicable: boolean;
+  branches: BranchLite[];
+  activeBranchId: number | null;
   navigation: NavModule[];
   permissions: Permissions;
 }
@@ -81,6 +132,9 @@ export interface MeResponse {
   user: User;
   companies: CompanyLite[];
   activeCompanyId: number | null;
+  branchApplicable: boolean;
+  branches: BranchLite[];
+  activeBranchId: number | null;
   navigation: NavModule[];
   permissions: Permissions;
 }
@@ -145,6 +199,8 @@ export interface Company {
   financialYearEndMonth?: number | null;
   booksStartDate?: string | null;
   costCenterApplicable?: boolean;
+  costObjectApplicable?: boolean;
+  branchApplicable?: boolean;
   currencyId?: number | null;
   cin?: string | null;
   gstin?: string | null;
@@ -256,6 +312,8 @@ export interface DashboardSummary {
   companyId: number;
   moduleId: number;
   userGroupId?: number | null;
+  branchId?: number | null;
+  branch?: { id: number; name: string } | null;
   name: string;
   icon?: string | null;
   sortOrder: number;
@@ -376,6 +434,10 @@ export interface AppUser {
   groups?: UserGroupRef[];
   companyIds?: number[];
   companies?: UserCompanyRef[];
+  /** Branches this user may access (flat list across branch-applicable companies). */
+  branchIds?: number[];
+  /** The user's default branch per company (subset of branchIds, one per company). */
+  defaultBranchIds?: number[];
   /** Per-company module assignment + the default module for that company. */
   moduleAssignments?: {
     companyId: number;
