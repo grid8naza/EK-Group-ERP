@@ -101,6 +101,7 @@ model Company {
   booksStartDate          DateTime? // books of accounts start from
   costCenterApplicable    Boolean   @default(false)
   currencyId              Int?
+  cin                     String? // Corporate Identification Number (21)
   gstin                   String? // GST identification number (15)
   pan                     String? // PAN (12)
   tan                     String? // TAN (10)

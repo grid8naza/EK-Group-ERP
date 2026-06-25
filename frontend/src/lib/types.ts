@@ -146,6 +146,7 @@ export interface Company {
   booksStartDate?: string | null;
   costCenterApplicable?: boolean;
   currencyId?: number | null;
+  cin?: string | null;
   gstin?: string | null;
   pan?: string | null;
   tan?: string | null;

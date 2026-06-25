@@ -41,6 +41,7 @@ const empty = {
   booksStartDate: '',
   costCenterApplicable: false,
   currencyId: '',
+  cin: '',
   gstin: '',
   pan: '',
   tan: '',
@@ -103,6 +104,7 @@ export default function CompaniesPage() {
     booksStartDate: c.booksStartDate ? c.booksStartDate.slice(0, 10) : '',
     costCenterApplicable: !!c.costCenterApplicable,
     currencyId: c.currencyId != null ? String(c.currencyId) : '',
+    cin: c.cin ?? '',
     gstin: c.gstin ?? '',
     pan: c.pan ?? '',
     tan: c.tan ?? '',
@@ -430,6 +432,15 @@ export default function CompaniesPage() {
               { value: 'no', label: 'No' },
               { value: 'yes', label: 'Yes' },
             ]}
+          />
+          <Input
+            label="CIN"
+            labelTitle="Corporate Identification Number"
+            maxLength={21}
+            value={form.cin}
+            onChange={(e) =>
+              setForm({ ...form, cin: e.target.value.toUpperCase() })
+            }
           />
           <Input
             label="GSTIN"

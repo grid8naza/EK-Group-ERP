@@ -5,6 +5,8 @@ import { cn } from '@/lib/utils';
 
 interface FieldWrapProps {
   label?: string;
+  /** Tooltip shown on hover over the label (e.g. an abbreviation's full form). */
+  labelTitle?: string;
   required?: boolean;
   error?: string;
   className?: string;
@@ -13,6 +15,7 @@ interface FieldWrapProps {
 
 export function FieldWrap({
   label,
+  labelTitle,
   required,
   error,
   className,
@@ -21,7 +24,10 @@ export function FieldWrap({
   return (
     <div className={className}>
       {label && (
-        <label className="label">
+        <label
+          className={cn('label', labelTitle && 'cursor-help')}
+          title={labelTitle}
+        >
           {label}
           {required && <span className="ml-0.5 text-rose-500">*</span>}
         </label>
@@ -34,18 +40,20 @@ export function FieldWrap({
 
 type InputProps = React.InputHTMLAttributes<HTMLInputElement> & {
   label?: string;
+  labelTitle?: string;
   required?: boolean;
   error?: string;
   wrapClassName?: string;
 };
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
-  { label, required, error, wrapClassName, className, ...props },
+  { label, labelTitle, required, error, wrapClassName, className, ...props },
   ref,
 ) {
   return (
     <FieldWrap
       label={label}
+      labelTitle={labelTitle}
       required={required}
       error={error}
       className={wrapClassName}
