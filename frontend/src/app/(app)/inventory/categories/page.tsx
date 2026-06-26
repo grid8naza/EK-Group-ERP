@@ -13,9 +13,9 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
-import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
+import { Input, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import type { Category } from '@/lib/types';
+import type { Category, Company } from '@/lib/types';
 
 const ROUTE = '/inventory/categories';
 
@@ -23,17 +23,19 @@ const empty = {
   code: '',
   name: '',
   description: '',
-  scope: 'GLOBAL' as 'GLOBAL' | 'COMPANY',
+  allCompanies: true,
+  companyIds: [] as number[],
   forItem: true,
   forProduct: false,
   isActive: true,
 };
 
 export default function CategoriesPage() {
-  const { can, activeCompany } = useAuth();
+  const { can } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<Category[]>('/categories');
+  const { data: companies } = useFetch<Company[]>('/companies');
   const { canToggle, toggleLock, guardEdit, guardDelete } = useLock<Category>({
     endpoint: '/categories',
     noun: 'category',
@@ -52,7 +54,8 @@ export default function CategoriesPage() {
   const canDelete = can(ROUTE, 'delete');
   const canView = can(ROUTE, 'view');
 
-  const companyLabel = activeCompany?.name ?? 'this company';
+  const companyList = companies ?? [];
+  const nameById = new Map(companyList.map((c) => [c.id, c.name]));
 
   const closeDrawer = () => {
     setOpen(false);
@@ -63,7 +66,8 @@ export default function CategoriesPage() {
     code: c.code,
     name: c.name,
     description: c.description ?? '',
-    scope: (c.companyId == null ? 'GLOBAL' : 'COMPANY') as 'GLOBAL' | 'COMPANY',
+    allCompanies: c.allCompanies,
+    companyIds: c.companyIds ?? [],
     forItem: c.forItem,
     forProduct: c.forProduct,
     isActive: c.isActive,
@@ -90,6 +94,14 @@ export default function CategoriesPage() {
     setOpen(true);
   };
 
+  const toggleCompany = (id: number) =>
+    setForm((f) => ({
+      ...f,
+      companyIds: f.companyIds.includes(id)
+        ? f.companyIds.filter((x) => x !== id)
+        : [...f.companyIds, id],
+    }));
+
   const save = async (again = false) => {
     if (!form.code.trim() || !form.name.trim()) {
       toast.error('Code and Name are required.');
@@ -99,8 +111,8 @@ export default function CategoriesPage() {
       toast.error('Select Item, Product, or both.');
       return;
     }
-    if (form.scope === 'COMPANY' && !activeCompany) {
-      toast.error('Select a company first to create a company category.');
+    if (!form.allCompanies && form.companyIds.length === 0) {
+      toast.error('Select at least one company, or choose "All companies".');
       return;
     }
 
@@ -108,7 +120,8 @@ export default function CategoriesPage() {
       code: form.code.trim().toUpperCase(),
       name: form.name.trim(),
       description: form.description.trim() || undefined,
-      scope: form.scope,
+      allCompanies: form.allCompanies,
+      companyIds: form.allCompanies ? [] : form.companyIds,
       forItem: form.forItem,
       forProduct: form.forProduct,
       isActive: form.isActive,
@@ -154,6 +167,9 @@ export default function CategoriesPage() {
     }
   };
 
+  const availabilityText = (c: Category) =>
+    c.companyIds.map((id) => nameById.get(id) ?? `#${id}`).join(', ');
+
   const appliesTo = (c: Category) => {
     if (c.forItem && c.forProduct) return 'Item + Product';
     if (c.forItem) return 'Item';
@@ -173,13 +189,18 @@ export default function CategoriesPage() {
       ),
     },
     {
-      key: 'scope',
+      key: 'availability',
       header: 'Availability',
       render: (r) =>
-        r.companyId == null ? (
-          <Badge color="violet">Global</Badge>
+        r.allCompanies ? (
+          <Badge color="violet">All companies</Badge>
         ) : (
-          <Badge color="blue">{companyLabel}</Badge>
+          <Badge color="blue">
+            <span title={availabilityText(r)}>
+              {r.companyIds.length}{' '}
+              {r.companyIds.length === 1 ? 'company' : 'companies'}
+            </span>
+          </Badge>
         ),
     },
     {
@@ -212,7 +233,7 @@ export default function CategoriesPage() {
     <div className="mx-auto max-w-7xl">
       <PageHeader
         title="Category Master"
-        description="Categories for Items and Products — global, or scoped to a single company"
+        description="Categories for Items and Products — available to all or to selected companies"
         icon={<Tags className="h-5 w-5" />}
         actions={
           canAdd && (
@@ -292,24 +313,9 @@ export default function CategoriesPage() {
               }
               wrapClassName="sm:col-span-2"
             />
-            <Select
-              label="Availability"
-              value={form.scope}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  scope: e.target.value as 'GLOBAL' | 'COMPANY',
-                })
-              }
-              options={[
-                { value: 'GLOBAL', label: 'Global — all companies' },
-                {
-                  value: 'COMPANY',
-                  label: `Only ${activeCompany?.name ?? 'the active company'}`,
-                },
-              ]}
-            />
-            <div className="flex flex-col justify-center gap-2 sm:pt-5">
+
+            {/* Applies to */}
+            <div className="flex flex-col gap-2 sm:col-span-2">
               <span className="label !mb-0">Applies to</span>
               <div className="flex items-center gap-5">
                 <Checkbox
@@ -328,6 +334,41 @@ export default function CategoriesPage() {
                 />
               </div>
             </div>
+
+            {/* Availability — all companies or a chosen set */}
+            <div className="flex flex-col gap-2 sm:col-span-2">
+              <span className="label !mb-0">Availability</span>
+              <Checkbox
+                label="All companies (including ones added later)"
+                checked={form.allCompanies}
+                onChange={(e) =>
+                  setForm({ ...form, allCompanies: e.target.checked })
+                }
+              />
+              {!form.allCompanies && (
+                <div className="mt-1 max-h-52 space-y-1.5 overflow-y-auto rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                  {companyList.length === 0 ? (
+                    <p className="text-sm text-slate-400">No companies found.</p>
+                  ) : (
+                    companyList.map((co) => (
+                      <Checkbox
+                        key={co.id}
+                        label={`${co.name} (${co.code})`}
+                        checked={form.companyIds.includes(co.id)}
+                        onChange={() => toggleCompany(co.id)}
+                      />
+                    ))
+                  )}
+                </div>
+              )}
+              {!form.allCompanies && (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {form.companyIds.length} selected — the category is available
+                  only in these companies.
+                </p>
+              )}
+            </div>
+
             <div className="sm:col-span-2">
               <Checkbox
                 label="Active"

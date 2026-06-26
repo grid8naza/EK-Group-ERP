@@ -1,14 +1,13 @@
 import {
+  ArrayUnique,
+  IsArray,
   IsBoolean,
-  IsIn,
+  IsInt,
   IsOptional,
   IsString,
   MaxLength,
   MinLength,
 } from 'class-validator';
-
-/** GLOBAL = visible to all companies; COMPANY = only the active company. */
-export type CategoryScope = 'GLOBAL' | 'COMPANY';
 
 export class CreateCategoryDto {
   @IsString()
@@ -26,8 +25,17 @@ export class CreateCategoryDto {
   @MaxLength(200)
   description?: string;
 
-  @IsIn(['GLOBAL', 'COMPANY'])
-  scope!: CategoryScope;
+  /** true = available to every company; otherwise `companyIds` applies. */
+  @IsOptional()
+  @IsBoolean()
+  allCompanies?: boolean;
+
+  /** Companies this category is available in (when not allCompanies). */
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsInt({ each: true })
+  companyIds?: number[];
 
   @IsOptional()
   @IsBoolean()
@@ -61,8 +69,14 @@ export class UpdateCategoryDto {
   description?: string;
 
   @IsOptional()
-  @IsIn(['GLOBAL', 'COMPANY'])
-  scope?: CategoryScope;
+  @IsBoolean()
+  allCompanies?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsInt({ each: true })
+  companyIds?: number[];
 
   @IsOptional()
   @IsBoolean()

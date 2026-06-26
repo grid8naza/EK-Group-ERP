@@ -469,11 +469,13 @@ export interface Unit {
 // ---- Inventory: Category Master (one master for Items + Products) ----
 export interface Category {
   id: number;
-  /** null = global (all companies); otherwise scoped to that company. */
-  companyId: number | null;
   code: string;
   name: string;
   description?: string | null;
+  /** true = available to every company; otherwise companyIds applies. */
+  allCompanies: boolean;
+  /** Companies this category is available in (when not allCompanies). */
+  companyIds: number[];
   forItem: boolean;
   forProduct: boolean;
   isActive: boolean;

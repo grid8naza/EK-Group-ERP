@@ -7,26 +7,32 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
-import {
-  CategoryScope,
-  CreateCategoryDto,
-  UpdateCategoryDto,
-} from './category.dto';
+import { CreateCategoryDto, UpdateCategoryDto } from './category.dto';
+
+// A category row with its company links, flattened to companyIds for the API.
+const withCompanies = {
+  companies: { select: { companyId: true } },
+} satisfies Prisma.CategoryInclude;
 
 @Injectable()
 export class CategoryService {
   constructor(private prisma: PrismaService) {}
 
   /**
-   * Categories visible in the active company: global ones (companyId null) plus
-   * any scoped to this company. Company-scoped categories from other companies
-   * are never returned.
+   * Categories available in the active company: ones flagged for all companies
+   * plus any explicitly linked to this company. With no active company, only
+   * the all-companies ones are returned.
    */
-  findAll(companyId: number | undefined, search?: string) {
+  async findAll(companyId: number | undefined, search?: string) {
     const scopeFilter: Prisma.CategoryWhereInput = companyId
-      ? { OR: [{ companyId: null }, { companyId }] }
-      : { companyId: null };
-    return this.prisma.category.findMany({
+      ? {
+          OR: [
+            { allCompanies: true },
+            { companies: { some: { companyId } } },
+          ],
+        }
+      : { allCompanies: true };
+    const rows = await this.prisma.category.findMany({
       where: {
         AND: [
           scopeFilter,
@@ -40,92 +46,109 @@ export class CategoryService {
             : {},
         ],
       },
-      orderBy: [{ companyId: 'asc' }, { code: 'asc' }],
+      include: withCompanies,
+      orderBy: { code: 'asc' },
     });
+    return rows.map((r) => this.flatten(r));
   }
 
   async findOne(companyId: number | undefined, id: number) {
-    const category = await this.prisma.category.findUnique({ where: { id } });
+    const category = await this.prisma.category.findUnique({
+      where: { id },
+      include: withCompanies,
+    });
     if (!category || !this.isVisible(category, companyId)) {
       throw new NotFoundException('Category not found');
     }
-    return category;
+    return this.flatten(category);
   }
 
-  async create(companyId: number | undefined, dto: CreateCategoryDto) {
-    const targetCompanyId = this.resolveScope(dto.scope, companyId);
+  async create(dto: CreateCategoryDto) {
+    const allCompanies = dto.allCompanies ?? false;
+    const companyIds = this.resolveCompanies(allCompanies, dto.companyIds);
     const forItem = dto.forItem ?? true;
     const forProduct = dto.forProduct ?? false;
     this.assertAppliesToSomething(forItem, forProduct);
 
-    const code = dto.code.trim().toUpperCase();
-    await this.assertCodeFree(targetCompanyId, code);
     try {
-      return await this.prisma.category.create({
+      const created = await this.prisma.category.create({
         data: {
-          companyId: targetCompanyId,
-          code,
+          code: dto.code.trim().toUpperCase(),
           name: dto.name.trim(),
           description: dto.description?.trim() || null,
+          allCompanies,
           forItem,
           forProduct,
           isActive: dto.isActive ?? true,
+          companies: { create: companyIds.map((companyId) => ({ companyId })) },
         },
+        include: withCompanies,
       });
+      return this.flatten(created);
     } catch (e) {
-      throw this.asDuplicate(e, code);
+      throw this.asDuplicate(e, dto.code);
     }
   }
 
-  async update(
-    companyId: number | undefined,
-    id: number,
-    dto: UpdateCategoryDto,
-  ) {
+  async update(companyId: number | undefined, id: number, dto: UpdateCategoryDto) {
     const existing = await this.findOne(companyId, id);
     assertUnlocked(existing, 'category', 'editing');
 
-    const targetCompanyId =
-      dto.scope !== undefined
-        ? this.resolveScope(dto.scope, companyId)
-        : existing.companyId;
+    const allCompanies = dto.allCompanies ?? existing.allCompanies;
+    // Only recompute the links when the caller sent new availability data.
+    const wantsLinkChange =
+      dto.allCompanies !== undefined || dto.companyIds !== undefined;
+    const companyIds = wantsLinkChange
+      ? this.resolveCompanies(
+          allCompanies,
+          dto.companyIds ?? existing.companyIds,
+        )
+      : null;
+
     const forItem = dto.forItem ?? existing.forItem;
     const forProduct = dto.forProduct ?? existing.forProduct;
     this.assertAppliesToSomething(forItem, forProduct);
 
-    const code =
-      dto.code !== undefined ? dto.code.trim().toUpperCase() : existing.code;
-    if (code !== existing.code || targetCompanyId !== existing.companyId) {
-      await this.assertCodeFree(targetCompanyId, code, id);
-    }
-
     try {
-      return await this.prisma.category.update({
+      const updated = await this.prisma.category.update({
         where: { id },
         data: {
-          companyId: targetCompanyId,
-          code,
+          code: dto.code !== undefined ? dto.code.trim().toUpperCase() : undefined,
           name: dto.name?.trim(),
           description:
             dto.description !== undefined
               ? dto.description?.trim() || null
               : undefined,
+          allCompanies,
           forItem,
           forProduct,
           isActive: dto.isActive,
+          // Replace the link set when availability changed.
+          ...(companyIds
+            ? {
+                companies: {
+                  deleteMany: {},
+                  create: companyIds.map((cid) => ({ companyId: cid })),
+                },
+              }
+            : {}),
         },
+        include: withCompanies,
       });
+      return this.flatten(updated);
     } catch (e) {
-      throw this.asDuplicate(e, code);
+      throw this.asDuplicate(e, dto.code);
     }
   }
 
   async setLock(companyId: number | undefined, id: number, locked: boolean) {
     await this.findOne(companyId, id);
-    return this.prisma.category.update({
+    const updated = await this.prisma.category.update({
       where: { id },
       data: { isLocked: locked },
+      include: withCompanies,
     });
+    return this.flatten(updated);
   }
 
   async remove(companyId: number | undefined, id: number) {
@@ -137,54 +160,40 @@ export class CategoryService {
 
   // --- helpers ---
 
-  private isVisible(
-    category: { companyId: number | null },
-    companyId: number | undefined,
-  ): boolean {
-    return category.companyId === null || category.companyId === companyId;
+  private flatten<T extends { companies: { companyId: number }[] }>(row: T) {
+    const { companies, ...rest } = row;
+    return { ...rest, companyIds: companies.map((c) => c.companyId) };
   }
 
-  /** Map a scope to the stored companyId; COMPANY needs an active company. */
-  private resolveScope(
-    scope: CategoryScope,
+  private isVisible(
+    category: { allCompanies: boolean; companies: { companyId: number }[] },
     companyId: number | undefined,
-  ): number | null {
-    if (scope === 'GLOBAL') return null;
-    if (!companyId) {
+  ): boolean {
+    if (category.allCompanies) return true;
+    return companyId != null
+      ? category.companies.some((c) => c.companyId === companyId)
+      : false;
+  }
+
+  /** Validate + normalise the company selection for the chosen availability. */
+  private resolveCompanies(
+    allCompanies: boolean,
+    companyIds: number[] | undefined,
+  ): number[] {
+    if (allCompanies) return [];
+    const ids = Array.from(new Set(companyIds ?? [])).filter((n) => n > 0);
+    if (ids.length === 0) {
       throw new BadRequestException(
-        'No active company selected for a company-specific category.',
+        'Select at least one company, or choose "All companies".',
       );
     }
-    return companyId;
+    return ids;
   }
 
   private assertAppliesToSomething(forItem: boolean, forProduct: boolean) {
     if (!forItem && !forProduct) {
       throw new BadRequestException(
         'A category must apply to Item, Product, or both.',
-      );
-    }
-  }
-
-  /** Enforce code uniqueness within the scope (handles null companyId too). */
-  private async assertCodeFree(
-    companyId: number | null,
-    code: string,
-    excludeId?: number,
-  ) {
-    const clash = await this.prisma.category.findFirst({
-      where: {
-        companyId,
-        code,
-        ...(excludeId ? { id: { not: excludeId } } : {}),
-      },
-      select: { id: true },
-    });
-    if (clash) {
-      throw new ConflictException(
-        `Category code "${code}" already exists in this ${
-          companyId === null ? 'global list' : 'company'
-        }.`,
       );
     }
   }

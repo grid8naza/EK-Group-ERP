@@ -18,10 +18,9 @@ import { CategoryService } from './category.service';
 import { CreateCategoryDto, UpdateCategoryDto } from './category.dto';
 
 /**
- * Category Master (Inventory) — one master shared by Items and Products. The
- * list is company-aware: global categories plus those scoped to the active
- * company (X-Company-Id), so a company-specific category shows only while that
- * company is active.
+ * Category Master (Inventory) — one master shared by Items and Products. A
+ * category is available to all companies or to a chosen set of companies; the
+ * list is filtered to those available in the active company (X-Company-Id).
  */
 @ApiTags('categories')
 @ApiBearerAuth()
@@ -46,11 +45,8 @@ export class CategoryController {
   }
 
   @Post()
-  create(
-    @CompanyId() companyId: number | undefined,
-    @Body() dto: CreateCategoryDto,
-  ) {
-    return this.service.create(companyId, dto);
+  create(@Body() dto: CreateCategoryDto) {
+    return this.service.create(dto);
   }
 
   @Patch(':id')
