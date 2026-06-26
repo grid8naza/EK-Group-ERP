@@ -1,16 +1,34 @@
-import { ObjectType, Prisma } from '@prisma/client';
+import { GadgetType, ObjectType, Prisma } from '@prisma/client';
 
 /**
  * Inventory module scaffolding. Unit Master data is global, but the *menu* that
  * exposes it is per-company (like every other screen). This file enables the
- * Inventory module for every company and provisions its menu, mirroring the
- * Cpanel scaffold in company-provisioning.ts.
+ * Inventory module for every company and provisions its menu + a company-wide
+ * (all-branches) dashboard, mirroring the Cpanel scaffold in
+ * company-provisioning.ts.
  */
 
 // Inventory sub-menu screens (shared routes; the data they manage is global).
 export const INVENTORY_SUBS = [
   { name: 'Unit Master', route: '/inventory/units', icon: 'ruler', order: 1 },
+  { name: 'Category Master', route: '/inventory/categories', icon: 'tag', order: 2 },
 ];
+
+// Widgets for the Inventory Overview dashboard. UNITS_COUNT / CATEGORIES_COUNT
+// are BUILTIN stat cards (resolved by code in the frontend WidgetView);
+// INV_QUICK_LINKS is a LINKS gadget that lists the module's screens.
+const INVENTORY_GADGETS: {
+  code: string;
+  name: string;
+  description: string;
+  type: GadgetType;
+  width: number;
+}[] = [
+  { code: 'UNITS_COUNT', name: 'Units', description: 'Units of measure', type: 'BUILTIN', width: 1 },
+  { code: 'CATEGORIES_COUNT', name: 'Categories', description: 'Item & product categories', type: 'BUILTIN', width: 1 },
+  { code: 'INV_QUICK_LINKS', name: 'Quick Links', description: 'Jump to inventory screens', type: 'LINKS', width: 2 },
+];
+const INVENTORY_DASHBOARD_NAME = 'Inventory Overview';
 
 // Default units seeded once (only when the Unit table is empty), so the master
 // isn't blank on first use. Compounds reference a simple base by code.
@@ -84,6 +102,31 @@ export async function backfillInventoryScaffold(
         route: s.route,
         icon: s.icon,
       },
+    });
+  }
+
+  // Global DASHBOARD object the Inventory Overview dashboards link to.
+  let dashObject = await prisma.objectMaster.findFirst({
+    where: {
+      moduleId: invId,
+      objectType: ObjectType.DASHBOARD,
+      objectName: INVENTORY_DASHBOARD_NAME,
+    },
+    select: { id: true },
+  });
+  if (!dashObject) {
+    dashObject = await prisma.objectMaster.create({
+      data: {
+        moduleId: invId,
+        author: 'System',
+        objectType: ObjectType.DASHBOARD,
+        objectName: INVENTORY_DASHBOARD_NAME,
+        nameInMenu: INVENTORY_DASHBOARD_NAME,
+        showInMenu: true,
+        route: '/dashboard',
+        icon: 'package',
+      },
+      select: { id: true },
     });
   }
 
@@ -192,6 +235,69 @@ export async function backfillInventoryScaffold(
         })),
         skipDuplicates: true,
       });
+    }
+
+    // ---- Gadgets + the all-branches Inventory Overview dashboard ----
+    await prisma.gadget.createMany({
+      data: INVENTORY_GADGETS.map((g, i) => ({
+        companyId,
+        moduleId: invId,
+        code: g.code,
+        name: g.name,
+        description: g.description,
+        type: g.type,
+        sortOrder: i + 1,
+      })),
+      skipDuplicates: true, // unique [companyId, moduleId, code]
+    });
+    const gadgetIdByCode = new Map(
+      (
+        await prisma.gadget.findMany({
+          where: { companyId, moduleId: invId },
+          select: { id: true, code: true },
+        })
+      ).map((g) => [g.code, g.id]),
+    );
+
+    if (adminGroup) {
+      await prisma.groupGadget.createMany({
+        data: INVENTORY_GADGETS.map((g) => gadgetIdByCode.get(g.code))
+          .filter((id): id is number => id != null)
+          .map((gadgetId) => ({ userGroupId: adminGroup.id, gadgetId })),
+        skipDuplicates: true,
+      });
+    }
+
+    // One company-wide dashboard (branchId null = visible for every branch),
+    // set as the module default so it loads when Inventory or a branch is
+    // selected. Created once.
+    const existingDash = await prisma.dashboard.findFirst({
+      where: { companyId, moduleId: invId, name: INVENTORY_DASHBOARD_NAME },
+      select: { id: true },
+    });
+    if (!existingDash) {
+      const dash = await prisma.dashboard.create({
+        data: {
+          companyId,
+          moduleId: invId,
+          userGroupId: null, // visible to everyone in the module
+          branchId: null, // company-wide → all branches
+          objectId: dashObject?.id ?? null,
+          name: INVENTORY_DASHBOARD_NAME,
+          icon: 'package',
+          sortOrder: 1,
+          isDefault: true,
+        },
+      });
+      const widgets = INVENTORY_GADGETS.map((g, i) => {
+        const gadgetId = gadgetIdByCode.get(g.code);
+        return gadgetId
+          ? { dashboardId: dash.id, gadgetId, sortOrder: i + 1, width: g.width }
+          : null;
+      }).filter((w): w is NonNullable<typeof w> => w != null);
+      if (widgets.length) {
+        await prisma.dashboardWidget.createMany({ data: widgets });
+      }
     }
   }
 }

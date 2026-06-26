@@ -201,8 +201,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         applyProfile(me);
         if (pathname.startsWith('/dashboard/')) {
           const nav = me.navigation || [];
+          // Stay in the module the user is currently in (e.g. Inventory), so a
+          // branch switch reloads that module's default dashboard rather than
+          // bouncing to the user's global default module.
           const defId = me.user?.defaultModuleId ?? null;
           const mod =
+            (activeModuleId
+              ? nav.find((m) => m.id === activeModuleId)
+              : undefined) ??
             (defId ? nav.find((m) => m.id === defId) : undefined) ??
             nav[0] ??
             null;
@@ -212,7 +218,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       }
     },
-    [activeBranchId, applyProfile, pathname, router],
+    [activeBranchId, activeModuleId, applyProfile, pathname, router],
   );
 
   // Re-fetch the profile for the current company/branch headers. Used after

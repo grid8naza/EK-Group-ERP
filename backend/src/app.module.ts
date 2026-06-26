@@ -21,6 +21,7 @@ import { GadgetModule } from './modules/gadget/gadget.module';
 import { ProductionModule } from './modules/production/production.module';
 import { BackupModule } from './modules/backup/backup.module';
 import { UnitModule } from './modules/unit/unit.module';
+import { CategoryModule } from './modules/category/category.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { UnitModule } from './modules/unit/unit.module';
     ProductionModule,
     BackupModule,
     UnitModule,
+    CategoryModule,
   ],
   providers: [
     // JWT required everywhere except routes marked @Public()

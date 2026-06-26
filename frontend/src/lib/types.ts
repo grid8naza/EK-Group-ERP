@@ -466,6 +466,20 @@ export interface Unit {
   isLocked?: boolean;
 }
 
+// ---- Inventory: Category Master (one master for Items + Products) ----
+export interface Category {
+  id: number;
+  /** null = global (all companies); otherwise scoped to that company. */
+  companyId: number | null;
+  code: string;
+  name: string;
+  description?: string | null;
+  forItem: boolean;
+  forProduct: boolean;
+  isActive: boolean;
+  isLocked?: boolean;
+}
+
 // ---- Backup & Restore ----
 export interface Backup {
   fileName: string;

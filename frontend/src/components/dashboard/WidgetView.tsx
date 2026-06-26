@@ -12,6 +12,8 @@ import {
   Inbox,
   ArrowUpRight,
   LayoutDashboard,
+  Ruler,
+  Tags,
 } from 'lucide-react';
 import { StatCard } from '@/components/ui/StatCard';
 import type { NavModule, ErpObject, GadgetType, GadgetConfig } from '@/lib/types';
@@ -27,6 +29,8 @@ export interface DashAggregates {
   companies: number;
   recent: ErpObject[];
   moduleObjects: number;
+  units: number;
+  categories: number;
 }
 
 export interface WidgetUser {
@@ -50,6 +54,8 @@ const STAT: Record<
   REPORTS_COUNT: { label: 'Reports', pick: (d) => d.reports, icon: <BarChart3 className="h-6 w-6" />, accent: 'violet', hint: 'Report objects' },
   TABLES_COUNT: { label: 'Tables', pick: (d) => d.tables, icon: <Table2 className="h-6 w-6" />, accent: 'amber', hint: 'Table objects' },
   CRM_ENQUIRIES: { label: 'Enquiries', pick: (d) => d.moduleObjects, icon: <Inbox className="h-6 w-6" />, accent: 'blue', hint: 'Objects in this module' },
+  UNITS_COUNT: { label: 'Units', pick: (d) => d.units, icon: <Ruler className="h-6 w-6" />, accent: 'blue', hint: 'Units of measure' },
+  CATEGORIES_COUNT: { label: 'Categories', pick: (d) => d.categories, icon: <Tags className="h-6 w-6" />, accent: 'violet', hint: 'Item & product categories' },
 };
 
 // Sources an admin can pick for a STAT-type gadget.

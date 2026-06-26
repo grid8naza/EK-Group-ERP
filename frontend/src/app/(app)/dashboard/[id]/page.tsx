@@ -81,20 +81,31 @@ export default function DashboardViewPage() {
     setAggLoading(true);
     (async () => {
       const moduleId = detail?.moduleId;
-      const [objects, modules, groups, users, companies, recent, modObjects] =
-        await Promise.allSettled([
-          api.get<ObjectListResponse>('/objects?page=1&pageSize=1'),
-          api.get<Module[]>('/companies/enabled-modules'),
-          api.get<UserGroup[]>('/user-groups'),
-          api.get<AppUser[]>('/users'),
-          api.get<unknown[]>('/companies'),
-          api.get<ObjectListResponse>('/objects?page=1&pageSize=5'),
-          moduleId
-            ? api.get<ObjectListResponse>(
-                `/objects?moduleId=${moduleId}&page=1&pageSize=1`,
-              )
-            : Promise.resolve(null),
-        ]);
+      const [
+        objects,
+        modules,
+        groups,
+        users,
+        companies,
+        recent,
+        modObjects,
+        units,
+        categories,
+      ] = await Promise.allSettled([
+        api.get<ObjectListResponse>('/objects?page=1&pageSize=1'),
+        api.get<Module[]>('/companies/enabled-modules'),
+        api.get<UserGroup[]>('/user-groups'),
+        api.get<AppUser[]>('/users'),
+        api.get<unknown[]>('/companies'),
+        api.get<ObjectListResponse>('/objects?page=1&pageSize=5'),
+        moduleId
+          ? api.get<ObjectListResponse>(
+              `/objects?moduleId=${moduleId}&page=1&pageSize=1`,
+            )
+          : Promise.resolve(null),
+        api.get<unknown[]>('/units'),
+        api.get<unknown[]>('/categories'),
+      ]);
       if (cancelled) return;
       const ok = <T,>(r: PromiseSettledResult<T>): T | null =>
         r.status === 'fulfilled' ? r.value : null;
@@ -111,6 +122,8 @@ export default function DashboardViewPage() {
         recent: ok(recent)?.data ?? [],
         moduleObjects:
           ok(modObjects as PromiseSettledResult<ObjectListResponse>)?.total ?? 0,
+        units: ok(units)?.length ?? 0,
+        categories: ok(categories)?.length ?? 0,
       });
       setAggLoading(false);
     })();

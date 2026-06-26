@@ -1,0 +1,83 @@
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseIntPipe,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { CompanyId } from '../../auth/company.decorator';
+import { SuperAdminGuard } from '../../auth/super-admin.guard';
+import { LockDto } from '../../common/lock.dto';
+import { CategoryService } from './category.service';
+import { CreateCategoryDto, UpdateCategoryDto } from './category.dto';
+
+/**
+ * Category Master (Inventory) — one master shared by Items and Products. The
+ * list is company-aware: global categories plus those scoped to the active
+ * company (X-Company-Id), so a company-specific category shows only while that
+ * company is active.
+ */
+@ApiTags('categories')
+@ApiBearerAuth()
+@Controller('categories')
+export class CategoryController {
+  constructor(private readonly service: CategoryService) {}
+
+  @Get()
+  findAll(
+    @CompanyId() companyId: number | undefined,
+    @Query('search') search?: string,
+  ) {
+    return this.service.findAll(companyId, search);
+  }
+
+  @Get(':id')
+  findOne(
+    @CompanyId() companyId: number | undefined,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.service.findOne(companyId, id);
+  }
+
+  @Post()
+  create(
+    @CompanyId() companyId: number | undefined,
+    @Body() dto: CreateCategoryDto,
+  ) {
+    return this.service.create(companyId, dto);
+  }
+
+  @Patch(':id')
+  update(
+    @CompanyId() companyId: number | undefined,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateCategoryDto,
+  ) {
+    return this.service.update(companyId, id, dto);
+  }
+
+  @Delete(':id')
+  remove(
+    @CompanyId() companyId: number | undefined,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.service.remove(companyId, id);
+  }
+
+  // Lock / unlock (super-admin only), like every other master.
+  @UseGuards(SuperAdminGuard)
+  @Patch(':id/lock')
+  setLock(
+    @CompanyId() companyId: number | undefined,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: LockDto,
+  ) {
+    return this.service.setLock(companyId, id, dto.locked);
+  }
+}

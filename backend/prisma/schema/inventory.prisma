@@ -37,3 +37,29 @@ model Unit {
 
   @@map("units")
 }
+
+/// Category master shared by Items and Products. A category is GLOBAL when
+/// companyId is null (visible to every company); set companyId to scope it to a
+/// single company (then it shows only while that company is active). `forItem`
+/// / `forProduct` flag which masters the category applies to (at least one).
+/// companyId is a plain id → Cpanel Company (no @relation; cross-domain rule).
+model Category {
+  id          Int      @id @default(autoincrement())
+  companyId   Int? // null = global; set = only that company
+  code        String
+  name        String
+  description String?
+  forItem     Boolean  @default(true)
+  forProduct  Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  isLocked    Boolean  @default(false) // when locked, must be unlocked before edit/delete
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Unique per scope (global vs a given company). NULL companyId rows are also
+  // guarded against duplicate codes in the service, since SQL treats NULLs as
+  // distinct in a composite unique.
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@map("categories")
+}
