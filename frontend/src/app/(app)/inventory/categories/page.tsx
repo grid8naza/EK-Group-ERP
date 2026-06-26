@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, Tags } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
@@ -13,7 +13,7 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
-import { Input, Textarea, Checkbox } from '@/components/ui/Field';
+import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import type { Category, Company } from '@/lib/types';
 
@@ -48,6 +48,7 @@ export default function CategoriesPage() {
   const [view, setView] = useState(false);
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
+  const [sort, setSort] = useState<'code' | 'name'>('code');
 
   const canAdd = can(ROUTE, 'add');
   const canEdit = can(ROUTE, 'edit');
@@ -180,6 +181,16 @@ export default function CategoriesPage() {
     }
   };
 
+  const sortedRows = useMemo(() => {
+    const rows = [...(data ?? [])];
+    rows.sort((a, b) =>
+      sort === 'name'
+        ? a.name.localeCompare(b.name)
+        : a.code.localeCompare(b.code),
+    );
+    return rows;
+  }, [data, sort]);
+
   const availabilityText = (c: Category) =>
     c.companyIds.map((id) => nameById.get(id) ?? `#${id}`).join(', ');
 
@@ -243,7 +254,7 @@ export default function CategoriesPage() {
       : 'New Category';
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="Category Master"
         description="Categories for Items and Products — available to all or to selected companies"
@@ -262,11 +273,28 @@ export default function CategoriesPage() {
 
       <DataTable
         columns={columns}
-        rows={data ?? []}
+        rows={sortedRows}
         rowKey={(r) => r.id}
         loading={loading}
+        fillHeight
         onRefresh={refetch}
         searchPlaceholder="Search categories..."
+        toolbar={
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-500 dark:text-slate-400">
+              Sort by
+            </span>
+            <Select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as typeof sort)}
+              wrapClassName="w-36"
+              options={[
+                { value: 'code', label: 'Code' },
+                { value: 'name', label: 'Name' },
+              ]}
+            />
+          </div>
+        }
         onView={openView}
         onEdit={(r) => guardEdit(r, () => openEdit(r))}
         onDelete={(r) => guardDelete(r, () => remove(r))}

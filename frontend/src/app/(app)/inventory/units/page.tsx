@@ -226,7 +226,7 @@ export default function UnitsPage() {
   const title = view ? 'View Unit' : editing ? 'Edit Unit' : 'New Unit';
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="Unit Master"
         description="Units of measure (global) — simple units and compound units derived from them"
@@ -248,6 +248,7 @@ export default function UnitsPage() {
         rows={data ?? []}
         rowKey={(r) => r.id}
         loading={loading}
+        fillHeight
         onRefresh={refetch}
         searchPlaceholder="Search units..."
         onView={openView}

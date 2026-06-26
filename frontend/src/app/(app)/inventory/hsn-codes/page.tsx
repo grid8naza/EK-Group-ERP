@@ -204,7 +204,7 @@ export default function HsnCodesPage() {
       : 'New HSN Code';
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="HSN Code Master"
         description="HSN codes with their GST rates (CGST, SGST, IGST) — shared by all companies"
@@ -226,6 +226,7 @@ export default function HsnCodesPage() {
         rows={data ?? []}
         rowKey={(r) => r.id}
         loading={loading}
+        fillHeight
         onRefresh={refetch}
         searchPlaceholder="Search HSN codes..."
         onView={openView}

@@ -36,7 +36,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       />
       <div
         className={cn(
-          'flex min-h-screen flex-col transition-[padding] duration-200',
+          'flex h-screen flex-col transition-[padding] duration-200',
           collapsed ? 'lg:pl-[76px]' : 'lg:pl-64',
         )}
       >
@@ -45,7 +45,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           onToggleSidebar={() => setCollapsed((v) => !v)}
           onToggleMobile={() => setMobileOpen((v) => !v)}
         />
-        <main className="flex-1 p-4 sm:p-6">{children}</main>
+        {/* Scroll container for page content. Pages that want a frozen header +
+            internally-scrolling table use an `h-full` flex column + DataTable
+            `fillHeight`; normal pages just scroll here. */}
+        <main className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+          {children}
+        </main>
       </div>
     </div>
   );

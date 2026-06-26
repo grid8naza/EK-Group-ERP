@@ -289,7 +289,7 @@ export default function ItemsPage() {
   const title = view ? 'View Item' : editing ? 'Edit Item' : 'New Item';
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="Item Master"
         description="Items with unit, pricing, packing, HSN/GST and stock-control levels"
@@ -311,6 +311,7 @@ export default function ItemsPage() {
         rows={sortedRows}
         rowKey={(r) => r.id}
         loading={loading}
+        fillHeight
         onRefresh={refetch}
         searchPlaceholder="Search items..."
         toolbar={

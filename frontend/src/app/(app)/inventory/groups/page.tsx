@@ -272,7 +272,7 @@ export default function GroupsPage() {
   const title = view ? 'View Group' : editing ? 'Edit Group' : 'New Group';
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="Group Master"
         description="Groups under a category — for Items and Products, available to all or selected companies"
@@ -294,6 +294,7 @@ export default function GroupsPage() {
         rows={sortedRows}
         rowKey={(r) => r.id}
         loading={loading}
+        fillHeight
         onRefresh={refetch}
         searchPlaceholder="Search groups..."
         toolbar={

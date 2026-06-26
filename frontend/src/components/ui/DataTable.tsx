@@ -69,6 +69,13 @@ interface DataTableProps<T> {
   };
 
   emptyMessage?: string;
+
+  /**
+   * Fill the parent's height and scroll only the table body, keeping the
+   * toolbar, column headers and pagination frozen. The page must give the table
+   * a bounded height (e.g. an `h-full` flex column).
+   */
+  fillHeight?: boolean;
 }
 
 export function DataTable<T>({
@@ -95,6 +102,7 @@ export function DataTable<T>({
   pageSize = 10,
   serverPagination,
   emptyMessage = 'No records found',
+  fillHeight = false,
 }: DataTableProps<T>) {
   const [internalSearch, setInternalSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -145,7 +153,12 @@ export function DataTable<T>({
   const to = Math.min(currentPage * effPageSize, total);
 
   return (
-    <div className="card overflow-hidden">
+    <div
+      className={cn(
+        'card overflow-hidden',
+        fillHeight && 'flex min-h-0 flex-1 flex-col',
+      )}
+    >
       {/* Toolbar */}
       <div className="flex flex-col gap-3 border-b border-slate-200 p-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-1 flex-wrap items-center gap-2">{toolbar}</div>
@@ -173,20 +186,38 @@ export function DataTable<T>({
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto">
+      <div
+        className={cn(
+          'overflow-x-auto',
+          fillHeight && 'min-h-0 flex-1 overflow-y-auto',
+        )}
+      >
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
               {columns.map((c) => (
                 <th
                   key={c.key}
-                  className={cn('px-4 py-3', c.headerClassName)}
+                  className={cn(
+                    'px-4 py-3',
+                    fillHeight &&
+                      'sticky top-0 z-10 bg-slate-50 dark:bg-slate-900',
+                    c.headerClassName,
+                  )}
                 >
                   {c.header}
                 </th>
               ))}
               {hasActions && (
-                <th className="px-4 py-3 text-right">Actions</th>
+                <th
+                  className={cn(
+                    'px-4 py-3 text-right',
+                    fillHeight &&
+                      'sticky top-0 z-10 bg-slate-50 dark:bg-slate-900',
+                  )}
+                >
+                  Actions
+                </th>
               )}
             </tr>
           </thead>
