@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Layers } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
@@ -50,6 +50,8 @@ export default function GroupsPage() {
   const [view, setView] = useState(false);
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
+  const [sort, setSort] = useState<'code' | 'name' | 'category'>('code');
+  const codeRef = useRef<HTMLInputElement>(null);
 
   const canAdd = can(ROUTE, 'add');
   const canEdit = can(ROUTE, 'edit');
@@ -83,6 +85,19 @@ export default function GroupsPage() {
     setForm({ ...empty });
     setOpen(true);
   };
+
+  // Alt+A opens the New form (when allowed and no drawer is open).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.altKey && e.key.toLowerCase() === 'a' && canAdd && !open) {
+        e.preventDefault();
+        openAdd();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canAdd, open]);
 
   const openEdit = (g: Group) => {
     setEditing(g);
@@ -147,8 +162,11 @@ export default function GroupsPage() {
       }
       await refetch();
       if (again) {
+        // Fast entry: keep the context (category, applies-to, availability),
+        // clear only the per-record fields and refocus Code.
         setEditing(null);
-        setForm({ ...empty });
+        setForm((f) => ({ ...f, code: '', name: '', description: '' }));
+        setTimeout(() => codeRef.current?.focus(), 0);
       } else {
         setOpen(false);
       }
@@ -175,6 +193,20 @@ export default function GroupsPage() {
       toast.error(e instanceof ApiError ? e.message : 'Failed to delete.');
     }
   };
+
+  const sortedRows = useMemo(() => {
+    const rows = [...(data ?? [])];
+    rows.sort((a, b) => {
+      if (sort === 'name') return a.name.localeCompare(b.name);
+      if (sort === 'category')
+        return (
+          (a.category?.name ?? '').localeCompare(b.category?.name ?? '') ||
+          a.name.localeCompare(b.name)
+        );
+      return a.code.localeCompare(b.code);
+    });
+    return rows;
+  }, [data, sort]);
 
   const availabilityText = (g: Group) =>
     g.companyIds.map((id) => companyNameById.get(id) ?? `#${id}`).join(', ');
@@ -249,6 +281,9 @@ export default function GroupsPage() {
           canAdd && (
             <button className="btn-primary" onClick={openAdd}>
               <Plus className="h-4 w-4" /> Add New
+              <span className="ml-1 hidden text-[10px] opacity-70 sm:inline">
+                Alt+A
+              </span>
             </button>
           )
         }
@@ -256,11 +291,28 @@ export default function GroupsPage() {
 
       <DataTable
         columns={columns}
-        rows={data ?? []}
+        rows={sortedRows}
         rowKey={(r) => r.id}
         loading={loading}
         onRefresh={refetch}
         searchPlaceholder="Search groups..."
+        toolbar={
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-500 dark:text-slate-400">
+              Sort by
+            </span>
+            <Select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as typeof sort)}
+              wrapClassName="w-36"
+              options={[
+                { value: 'code', label: 'Code' },
+                { value: 'name', label: 'Name' },
+                { value: 'category', label: 'Category' },
+              ]}
+            />
+          </div>
+        }
         onView={openView}
         onEdit={(r) => guardEdit(r, () => openEdit(r))}
         onDelete={(r) => guardDelete(r, () => remove(r))}
@@ -313,6 +365,7 @@ export default function GroupsPage() {
               }))}
             />
             <Input
+              ref={codeRef}
               label="Code"
               required
               maxLength={30}

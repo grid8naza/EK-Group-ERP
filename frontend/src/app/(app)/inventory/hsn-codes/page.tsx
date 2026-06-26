@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Percent } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
@@ -87,6 +87,19 @@ export default function HsnCodesPage() {
     setForm(formFrom(h));
     setOpen(true);
   };
+
+  // Alt+A opens the New form (when allowed and no drawer is open).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.altKey && e.key.toLowerCase() === 'a' && canAdd && !open) {
+        e.preventDefault();
+        openAdd();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canAdd, open]);
 
   // Editing CGST or SGST auto-fills IGST with their sum (still editable), which
   // is the usual GST relationship (intra-state CGST+SGST = inter-state IGST).
@@ -200,6 +213,9 @@ export default function HsnCodesPage() {
           canAdd && (
             <button className="btn-primary" onClick={openAdd}>
               <Plus className="h-4 w-4" /> Add New
+              <span className="ml-1 hidden text-[10px] opacity-70 sm:inline">
+                Alt+A
+              </span>
             </button>
           )
         }

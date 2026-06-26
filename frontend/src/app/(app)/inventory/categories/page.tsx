@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Tags } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
@@ -101,6 +101,19 @@ export default function CategoriesPage() {
         ? f.companyIds.filter((x) => x !== id)
         : [...f.companyIds, id],
     }));
+
+  // Alt+A opens the New form (when allowed and no drawer is open).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.altKey && e.key.toLowerCase() === 'a' && canAdd && !open) {
+        e.preventDefault();
+        openAdd();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canAdd, open]);
 
   const save = async (again = false) => {
     if (!form.code.trim() || !form.name.trim()) {
@@ -239,6 +252,9 @@ export default function CategoriesPage() {
           canAdd && (
             <button className="btn-primary" onClick={openAdd}>
               <Plus className="h-4 w-4" /> Add New
+              <span className="ml-1 hidden text-[10px] opacity-70 sm:inline">
+                Alt+A
+              </span>
             </button>
           )
         }

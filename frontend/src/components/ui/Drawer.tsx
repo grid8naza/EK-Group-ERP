@@ -113,12 +113,21 @@ export function Drawer({
   );
 }
 
-/** Footer for read-only (view) drawers: a single Close button. */
+/** A subtle keyboard-shortcut hint shown next to a button label. */
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="ml-1.5 hidden rounded border border-slate-300/60 px-1 text-[10px] font-normal leading-tight opacity-70 dark:border-slate-600/60 sm:inline">
+      {children}
+    </span>
+  );
+}
+
+/** Footer for read-only (view) drawers: a single Close button. Esc also closes. */
 export function CloseFooter({ onClose }: { onClose: () => void }) {
   return (
     <div className="flex items-center justify-end">
       <button type="button" className="btn-secondary" onClick={onClose}>
-        Close
+        Close <Kbd>Esc</Kbd>
       </button>
     </div>
   );
@@ -139,10 +148,29 @@ export function DrawerFooter({
   saving,
   saveLabel = 'Save',
 }: DrawerFooterProps) {
+  // App-wide form shortcuts (active while a footer is mounted = a drawer is open):
+  //   Ctrl/⌘+S       → Save
+  //   Ctrl/⌘+Enter   → Save & New (falls back to Save when not available)
+  //   Esc            → Cancel (handled by the Drawer's own Escape listener)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || saving) return;
+      if (e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        onSave();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        (onSaveNew ?? onSave)();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onSave, onSaveNew, saving]);
+
   return (
     <div className="flex items-center justify-end gap-2">
       <button type="button" className="btn-secondary" onClick={onCancel}>
-        Cancel
+        Cancel <Kbd>Esc</Kbd>
       </button>
       {onSaveNew && (
         <button
@@ -151,7 +179,7 @@ export function DrawerFooter({
           onClick={onSaveNew}
           disabled={saving}
         >
-          Save &amp; New
+          Save &amp; New <Kbd>Ctrl+↵</Kbd>
         </button>
       )}
       <button
@@ -160,7 +188,7 @@ export function DrawerFooter({
         onClick={onSave}
         disabled={saving}
       >
-        {saving ? 'Saving...' : saveLabel}
+        {saving ? 'Saving...' : saveLabel} <Kbd>Ctrl+S</Kbd>
       </button>
     </div>
   );
