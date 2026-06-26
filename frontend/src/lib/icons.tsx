@@ -25,6 +25,9 @@ import {
   Tag,
   KeyRound,
   DatabaseBackup,
+  Package,
+  Ruler,
+  Factory,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -92,6 +95,12 @@ const MAP: Record<string, LucideIcon> = {
   modules: Layers,
   tag: Tag,
   key: KeyRound,
+  package: Package,
+  inventory: Package,
+  ruler: Ruler,
+  unit: Ruler,
+  units: Ruler,
+  factory: Factory,
 };
 
 export function resolveIcon(name?: string | null): LucideIcon {
@@ -132,6 +141,9 @@ export const ICON_OPTIONS: IconOption[] = [
   { name: 'shieldcheck', label: 'Security', Icon: ShieldCheck },
   { name: 'database', label: 'Database', Icon: Database },
   { name: 'database-backup', label: 'Backup / Restore', Icon: DatabaseBackup },
+  { name: 'package', label: 'Package / Inventory', Icon: Package },
+  { name: 'ruler', label: 'Ruler / Unit', Icon: Ruler },
+  { name: 'factory', label: 'Factory / Production', Icon: Factory },
   { name: 'palette', label: 'Theme / Palette', Icon: Palette },
   { name: 'image', label: 'Image', Icon: ImageIcon },
   { name: 'workflow', label: 'Workflow', Icon: Workflow },

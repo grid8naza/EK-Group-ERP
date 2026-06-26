@@ -448,6 +448,24 @@ export interface AppUser {
   defaultModuleId?: number | null;
 }
 
+// ---- Inventory: Unit Master (global) ----
+export type UnitType = 'SIMPLE' | 'COMPOUND';
+
+export interface Unit {
+  id: number;
+  code: string;
+  name: string;
+  symbol?: string | null;
+  type: UnitType;
+  /** COMPOUND only: the simple base unit and how many base units = 1 of this. */
+  baseUnitId?: number | null;
+  baseUnit?: { id: number; code: string; name: string } | null;
+  conversionFactor?: number | null;
+  decimalPlaces: number;
+  isActive: boolean;
+  isLocked?: boolean;
+}
+
 // ---- Backup & Restore ----
 export interface Backup {
   fileName: string;

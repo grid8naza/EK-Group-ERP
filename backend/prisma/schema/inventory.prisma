@@ -1,0 +1,39 @@
+// Inventory domain — stock & inventory master data.
+//
+// This is the Inventory module's own domain file. Per the ownership rule in
+// schema.prisma, any cross-domain reference (e.g. companyId -> Cpanel Company)
+// is a PLAIN id column with NO @relation. Unit Master is GLOBAL (company-
+// independent), like Currency, so it carries no companyId at all.
+
+enum UnitType {
+  SIMPLE
+  COMPOUND
+}
+
+/// Unit of Measure master (global). A SIMPLE unit stands alone (e.g. Piece,
+/// Kilogram). A COMPOUND unit is defined as `conversionFactor` × a simple base
+/// unit (e.g. 1 Box = 12 Pieces), so quantities in a compound unit can be
+/// converted to its base for stock keeping. The base→derived link is a
+/// self-relation, which is allowed because both rows live in this same domain.
+model Unit {
+  id               Int      @id @default(autoincrement())
+  code             String   @unique // global ⇒ globally unique
+  name             String
+  symbol           String?
+  type             UnitType @default(SIMPLE)
+  // COMPOUND only: the simple base unit and how many base units one of THIS
+  // unit equals (1 this = conversionFactor × base). Both null for SIMPLE.
+  baseUnitId       Int?
+  conversionFactor Float?
+  // Decimal places allowed when entering a quantity in this unit.
+  decimalPlaces    Int      @default(0)
+  isActive         Boolean  @default(true)
+  isLocked         Boolean  @default(false) // when locked, must be unlocked before edit/delete
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  baseUnit Unit?  @relation("UnitBase", fields: [baseUnitId], references: [id])
+  derived  Unit[] @relation("UnitBase")
+
+  @@map("units")
+}

@@ -20,6 +20,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { GadgetModule } from './modules/gadget/gadget.module';
 import { ProductionModule } from './modules/production/production.module';
 import { BackupModule } from './modules/backup/backup.module';
+import { UnitModule } from './modules/unit/unit.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { BackupModule } from './modules/backup/backup.module';
     GadgetModule,
     ProductionModule,
     BackupModule,
+    UnitModule,
   ],
   providers: [
     // JWT required everywhere except routes marked @Public()
