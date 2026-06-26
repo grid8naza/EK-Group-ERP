@@ -28,6 +28,7 @@ import {
   Package,
   Ruler,
   Factory,
+  Percent,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -101,6 +102,9 @@ const MAP: Record<string, LucideIcon> = {
   unit: Ruler,
   units: Ruler,
   factory: Factory,
+  percent: Percent,
+  tax: Percent,
+  hsn: Percent,
 };
 
 export function resolveIcon(name?: string | null): LucideIcon {
@@ -144,6 +148,7 @@ export const ICON_OPTIONS: IconOption[] = [
   { name: 'package', label: 'Package / Inventory', Icon: Package },
   { name: 'ruler', label: 'Ruler / Unit', Icon: Ruler },
   { name: 'factory', label: 'Factory / Production', Icon: Factory },
+  { name: 'percent', label: 'Percent / Tax', Icon: Percent },
   { name: 'palette', label: 'Theme / Palette', Icon: Palette },
   { name: 'image', label: 'Image', Icon: ImageIcon },
   { name: 'workflow', label: 'Workflow', Icon: Workflow },

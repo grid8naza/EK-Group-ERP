@@ -23,6 +23,7 @@ import { BackupModule } from './modules/backup/backup.module';
 import { UnitModule } from './modules/unit/unit.module';
 import { CategoryModule } from './modules/category/category.module';
 import { GroupModule } from './modules/group/group.module';
+import { HsnModule } from './modules/hsn/hsn.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { GroupModule } from './modules/group/group.module';
     UnitModule,
     CategoryModule,
     GroupModule,
+    HsnModule,
   ],
   providers: [
     // JWT required everywhere except routes marked @Public()

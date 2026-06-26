@@ -498,6 +498,18 @@ export interface Group {
   isLocked?: boolean;
 }
 
+// ---- Inventory: HSN Code Master (global; GST rates) ----
+export interface HsnCode {
+  id: number;
+  code: string;
+  description: string;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  isActive: boolean;
+  isLocked?: boolean;
+}
+
 // ---- Backup & Restore ----
 export interface Backup {
   fileName: string;
