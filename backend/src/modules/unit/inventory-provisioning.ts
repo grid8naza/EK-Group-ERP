@@ -163,9 +163,12 @@ export async function backfillInventoryScaffold(
       });
     }
 
-    // Inventory main menu (one per company).
+    // Reuse the company's existing Inventory main menu if there is one — matched
+    // by MODULE, not name, so a renamed menu (e.g. "Inventory Master") is reused
+    // instead of spawning a duplicate. Only create one when none exists.
     let main = await prisma.mainMenu.findFirst({
-      where: { companyId, moduleId: invId, menuName: 'Inventory' },
+      where: { companyId, moduleId: invId },
+      orderBy: { id: 'asc' },
     });
     if (!main) {
       main = await prisma.mainMenu.create({
