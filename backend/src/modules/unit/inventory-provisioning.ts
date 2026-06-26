@@ -14,6 +14,7 @@ export const INVENTORY_SUBS = [
   { name: 'Category Master', route: '/inventory/categories', icon: 'tag', order: 2 },
   { name: 'Group Master', route: '/inventory/groups', icon: 'layers', order: 3 },
   { name: 'HSN Code Master', route: '/inventory/hsn-codes', icon: 'percent', order: 4 },
+  { name: 'Item Master', route: '/inventory/items', icon: 'box', order: 5 },
 ];
 
 // Widgets for the Inventory Overview dashboard. UNITS_COUNT / CATEGORIES_COUNT

@@ -35,6 +35,9 @@ model Unit {
   baseUnit Unit?  @relation("UnitBase", fields: [baseUnitId], references: [id])
   derived  Unit[] @relation("UnitBase")
 
+  itemsAsUnit    Item[] @relation("ItemUnit")
+  itemsAsBoxUnit Item[] @relation("ItemBoxUnit")
+
   @@map("units")
 }
 
@@ -58,6 +61,7 @@ model Category {
 
   companies CategoryCompany[]
   groups    Group[]
+  items     Item[]
 
   @@map("categories")
 }
@@ -97,6 +101,7 @@ model Group {
 
   category  Category       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   companies GroupCompany[]
+  items     Item[]
 
   @@index([categoryId])
   @@map("groups")
@@ -130,5 +135,60 @@ model HsnCode {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  items Item[]
+
   @@map("hsn_codes")
+}
+
+/// Item master. Classified (optionally) under a Category/Group, stocked in a
+/// Unit, optionally packed in boxes (boxQty of boxUnit), taxed by an HSN code,
+/// with stock-control levels. Availability is multi-company (all companies or a
+/// chosen set, via ItemCompany). All masters referenced live in this domain, so
+/// they use real relations; only company links are plain cross-domain ids.
+model Item {
+  id           Int      @id @default(autoincrement())
+  code         String   @unique
+  name         String
+  description  String?
+  categoryId   Int?
+  groupId      Int?
+  unitId       Int // stock unit
+  unitPrice    Float    @default(0)
+  boxQty       Float    @default(0) // how many stock units per box
+  boxUnitId    Int? // unit that represents a box (e.g. BOX, CARTON)
+  hsnCodeId    Int?
+  minimumStock Float    @default(0)
+  maximumStock Float    @default(0)
+  reorderLevel Float    @default(0)
+  leadTime     Int      @default(0) // days
+  allCompanies Boolean  @default(false) // true = available to every company
+  isActive     Boolean  @default(true)
+  isLocked     Boolean  @default(false) // when locked, must be unlocked before edit/delete
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  category  Category?     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  group     Group?        @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  unit      Unit          @relation("ItemUnit", fields: [unitId], references: [id], onDelete: Restrict)
+  boxUnit   Unit?         @relation("ItemBoxUnit", fields: [boxUnitId], references: [id], onDelete: Restrict)
+  hsnCode   HsnCode?      @relation(fields: [hsnCodeId], references: [id], onDelete: Restrict)
+  companies ItemCompany[]
+
+  @@index([categoryId])
+  @@index([groupId])
+  @@index([unitId])
+  @@map("items")
+}
+
+/// Links an item to a company it is available in (when not `allCompanies`).
+model ItemCompany {
+  id        Int @id @default(autoincrement())
+  itemId    Int
+  companyId Int // -> Cpanel Company, by id (no cross-domain FK)
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, companyId])
+  @@index([companyId])
+  @@map("item_companies")
 }

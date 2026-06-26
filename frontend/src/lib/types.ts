@@ -510,6 +510,40 @@ export interface HsnCode {
   isLocked?: boolean;
 }
 
+// ---- Inventory: Item Master ----
+interface MasterRef {
+  id: number;
+  code: string;
+  name: string;
+}
+
+export interface Item {
+  id: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  categoryId?: number | null;
+  category?: MasterRef | null;
+  groupId?: number | null;
+  group?: MasterRef | null;
+  unitId: number;
+  unit?: MasterRef | null;
+  unitPrice: number;
+  boxQty: number;
+  boxUnitId?: number | null;
+  boxUnit?: MasterRef | null;
+  hsnCodeId?: number | null;
+  hsnCode?: { id: number; code: string; description: string } | null;
+  minimumStock: number;
+  maximumStock: number;
+  reorderLevel: number;
+  leadTime: number;
+  allCompanies: boolean;
+  companyIds: number[];
+  isActive: boolean;
+  isLocked?: boolean;
+}
+
 // ---- Backup & Restore ----
 export interface Backup {
   fileName: string;
