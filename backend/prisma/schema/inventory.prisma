@@ -57,6 +57,7 @@ model Category {
   updatedAt    DateTime @updatedAt
 
   companies CategoryCompany[]
+  groups    Group[]
 
   @@map("categories")
 }
@@ -74,4 +75,42 @@ model CategoryCompany {
   @@unique([categoryId, companyId])
   @@index([companyId])
   @@map("category_companies")
+}
+
+/// Group master — a sub-level under a Category (Category → Group). Mirrors
+/// Category: applies to Items and/or Products, and is available to all
+/// companies or a chosen set (GroupCompany). Deleting a category is blocked
+/// while it still has groups (Restrict).
+model Group {
+  id           Int      @id @default(autoincrement())
+  categoryId   Int
+  code         String   @unique
+  name         String
+  description  String?
+  allCompanies Boolean  @default(false) // true = available to every company
+  forItem      Boolean  @default(true)
+  forProduct   Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  isLocked     Boolean  @default(false) // when locked, must be unlocked before edit/delete
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  category  Category       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  companies GroupCompany[]
+
+  @@index([categoryId])
+  @@map("groups")
+}
+
+/// Links a group to a company it is available in (when not `allCompanies`).
+model GroupCompany {
+  id        Int @id @default(autoincrement())
+  groupId   Int
+  companyId Int // -> Cpanel Company, by id (no cross-domain FK)
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, companyId])
+  @@index([companyId])
+  @@map("group_companies")
 }

@@ -482,6 +482,22 @@ export interface Category {
   isLocked?: boolean;
 }
 
+// ---- Inventory: Group Master (sub-level under a Category) ----
+export interface Group {
+  id: number;
+  categoryId: number;
+  category?: { id: number; code: string; name: string } | null;
+  code: string;
+  name: string;
+  description?: string | null;
+  allCompanies: boolean;
+  companyIds: number[];
+  forItem: boolean;
+  forProduct: boolean;
+  isActive: boolean;
+  isLocked?: boolean;
+}
+
 // ---- Backup & Restore ----
 export interface Backup {
   fileName: string;

@@ -12,6 +12,7 @@ import { GadgetType, ObjectType, Prisma } from '@prisma/client';
 export const INVENTORY_SUBS = [
   { name: 'Unit Master', route: '/inventory/units', icon: 'ruler', order: 1 },
   { name: 'Category Master', route: '/inventory/categories', icon: 'tag', order: 2 },
+  { name: 'Group Master', route: '/inventory/groups', icon: 'layers', order: 3 },
 ];
 
 // Widgets for the Inventory Overview dashboard. UNITS_COUNT / CATEGORIES_COUNT
