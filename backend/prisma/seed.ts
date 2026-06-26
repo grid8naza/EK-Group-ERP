@@ -72,6 +72,19 @@ async function main() {
   });
 
   // -------------------------------------------------------------------------
+  // Security settings (global singleton) — the "high security password" gate
+  // for database backup / restore. Distinct from any login password.
+  // -------------------------------------------------------------------------
+  const highSecurityPassword =
+    process.env.SEED_HIGH_SECURITY_PASSWORD || 'Backup@123';
+  await prisma.securitySetting.create({
+    data: {
+      id: 1,
+      highSecurityPasswordHash: await bcrypt.hash(highSecurityPassword, 10),
+    },
+  });
+
+  // -------------------------------------------------------------------------
   // Lookups (global) — Developers, Icons.
   // -------------------------------------------------------------------------
   const devLookup = await prisma.lookup.create({
@@ -83,7 +96,7 @@ async function main() {
   const iconLookup = await prisma.lookup.create({
     data: { code: 'ICONS', name: 'Icons', description: 'Selectable menu icons (lucide names)', isSystem: true },
   });
-  for (const [i, value] of ['settings', 'users', 'list', 'database', 'building', 'shield', 'menu', 'wallet', 'layout-dashboard', 'factory', 'package'].entries()) {
+  for (const [i, value] of ['settings', 'users', 'list', 'database', 'database-backup', 'building', 'shield', 'menu', 'wallet', 'layout-dashboard', 'factory', 'package'].entries()) {
     await prisma.lookupValue.create({ data: { lookupId: iconLookup.id, value, label: value, sortOrder: i + 1 } });
   }
 
@@ -256,6 +269,7 @@ async function main() {
   });
 
   console.log(`Done. Super admin: ${username} / ${password}  |  Sample user: jdoe / User@123`);
+  console.log(`High security password (backup/restore): ${highSecurityPassword}`);
 }
 
 main()

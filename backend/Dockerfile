@@ -1,8 +1,9 @@
 # Erp Grid8 backend (NestJS + Prisma)
 FROM node:20-alpine
 
-# Prisma engines need openssl on alpine
-RUN apk add --no-cache openssl
+# openssl: Prisma engines. postgresql16-client: pg_dump / pg_restore / psql
+# used by the Backup & Restore feature (must match the postgres:16 server).
+RUN apk add --no-cache openssl postgresql16-client
 
 WORKDIR /app
 

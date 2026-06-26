@@ -448,6 +448,15 @@ export interface AppUser {
   defaultModuleId?: number | null;
 }
 
+// ---- Backup & Restore ----
+export interface Backup {
+  fileName: string;
+  sizeBytes: number;
+  createdAt: string;
+  note: string | null;
+  createdBy: string | null;
+}
+
 // Module catalog annotated with per-company enablement.
 export interface CompanyModule {
   id: number;

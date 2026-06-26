@@ -24,6 +24,7 @@ import {
   Layers,
   Tag,
   KeyRound,
+  DatabaseBackup,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -73,6 +74,8 @@ const MAP: Record<string, LucideIcon> = {
   shieldcheck: ShieldCheck,
   security: ShieldCheck,
   database: Database,
+  'database-backup': DatabaseBackup,
+  backup: DatabaseBackup,
   palette: Palette,
   theme: Palette,
   image: ImageIcon,
@@ -128,6 +131,7 @@ export const ICON_OPTIONS: IconOption[] = [
   { name: 'report', label: 'Report / Chart', Icon: BarChart3 },
   { name: 'shieldcheck', label: 'Security', Icon: ShieldCheck },
   { name: 'database', label: 'Database', Icon: Database },
+  { name: 'database-backup', label: 'Backup / Restore', Icon: DatabaseBackup },
   { name: 'palette', label: 'Theme / Palette', Icon: Palette },
   { name: 'image', label: 'Image', Icon: ImageIcon },
   { name: 'workflow', label: 'Workflow', Icon: Workflow },

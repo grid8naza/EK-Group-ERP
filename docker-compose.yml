@@ -32,6 +32,11 @@ services:
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Admin@123}
       SEED_ADMIN_NAME: ${SEED_ADMIN_NAME:-Super Administrator}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@erpgrip.local}
+      SEED_HIGH_SECURITY_PASSWORD: ${SEED_HIGH_SECURITY_PASSWORD:-Backup@123}
+      # Where database backup files are stored (persisted via the volume below).
+      BACKUP_DIR: /app/backups
+    volumes:
+      - erpgrip_backups:/app/backups
     ports:
       - "${BACKEND_PORT:-4000}:4000"
 
@@ -48,3 +53,4 @@ services:
 
 volumes:
   erpgrip_db:
+  erpgrip_backups:

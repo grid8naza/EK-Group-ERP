@@ -604,3 +604,17 @@ model UserBranch {
   @@unique([userId, branchId])
   @@map("user_branches")
 }
+
+// ---------------------------------------------------------------------------
+// Security settings — a single global row (id = 1) holding the "high security
+// password". This is a second gate, separate from any user's login password,
+// that must be supplied before sensitive system operations (database backup /
+// restore). Stored only as a bcrypt hash.
+// ---------------------------------------------------------------------------
+model SecuritySetting {
+  id                       Int      @id @default(1)
+  highSecurityPasswordHash String
+  updatedAt                DateTime @updatedAt
+
+  @@map("security_settings")
+}

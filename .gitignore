@@ -11,3 +11,4 @@ npm-debug.log*
 coverage/
 *.tsbuildinfo
 backend/uploads/
+backend/backups/
