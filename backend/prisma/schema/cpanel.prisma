@@ -431,7 +431,7 @@ model Widget {
   code        String // unique per company+module
   name        String
   description String?
-  type        WidgetType @default(STAT)
+  type        WidgetType @default(METRIC)
   config      Json? // type-specific settings (source / text / url / height)
   sortOrder   Int        @default(0)
   isActive    Boolean    @default(true)

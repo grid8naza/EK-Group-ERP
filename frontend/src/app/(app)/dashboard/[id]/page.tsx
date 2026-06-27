@@ -22,33 +22,24 @@ import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { resolveIcon } from '@/lib/icons';
-import {
-  WidgetView,
-  isStatWidget,
-  type DashAggregates,
-} from '@/components/dashboard/WidgetView';
+import { WidgetView, isStatWidget } from '@/components/dashboard/WidgetView';
 import type {
   DashboardDetail,
   DashboardWidget,
-  ObjectListResponse,
-  Module,
-  UserGroup,
-  AppUser,
   MetricValue,
 } from '@/lib/types';
 
 export default function DashboardViewPage() {
   const params = useParams();
   const id = Number(params?.id);
-  const { user, activeModule } = useAuth();
+  const { activeModule } = useAuth();
   const toast = useToast();
 
   const [detail, setDetail] = useState<DashboardDetail | null>(null);
   const [widgets, setWidgets] = useState<DashboardWidget[]>([]);
   const [loading, setLoading] = useState(true);
-  const [agg, setAgg] = useState<DashAggregates | null>(null);
-  const [aggLoading, setAggLoading] = useState(true);
   const [metricValues, setMetricValues] = useState<Record<string, MetricValue> | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(true);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -77,63 +68,6 @@ export default function DashboardViewPage() {
     loadDashboard();
   }, [loadDashboard]);
 
-  // Aggregate counts powering the stat widgets (company-scoped via header).
-  useEffect(() => {
-    let cancelled = false;
-    setAggLoading(true);
-    (async () => {
-      const moduleId = detail?.moduleId;
-      const [
-        objects,
-        modules,
-        groups,
-        users,
-        companies,
-        recent,
-        modObjects,
-        units,
-        categories,
-      ] = await Promise.allSettled([
-        api.get<ObjectListResponse>('/objects?page=1&pageSize=1'),
-        api.get<Module[]>('/companies/enabled-modules'),
-        api.get<UserGroup[]>('/user-groups'),
-        api.get<AppUser[]>('/users'),
-        api.get<unknown[]>('/companies'),
-        api.get<ObjectListResponse>('/objects?page=1&pageSize=5'),
-        moduleId
-          ? api.get<ObjectListResponse>(
-              `/objects?moduleId=${moduleId}&page=1&pageSize=1`,
-            )
-          : Promise.resolve(null),
-        api.get<unknown[]>('/units'),
-        api.get<unknown[]>('/categories'),
-      ]);
-      if (cancelled) return;
-      const ok = <T,>(r: PromiseSettledResult<T>): T | null =>
-        r.status === 'fulfilled' ? r.value : null;
-      const counts = ok(objects)?.counts ?? { forms: 0, reports: 0, tables: 0 };
-      setAgg({
-        forms: counts.forms ?? 0,
-        reports: counts.reports ?? 0,
-        tables: counts.tables ?? 0,
-        dashboards: counts.dashboards ?? 0,
-        modules: ok(modules)?.length ?? 0,
-        groups: ok(groups)?.length ?? 0,
-        users: ok(users)?.length ?? 0,
-        companies: ok(companies)?.length ?? 0,
-        recent: ok(recent)?.data ?? [],
-        moduleObjects:
-          ok(modObjects as PromiseSettledResult<ObjectListResponse>)?.total ?? 0,
-        units: ok(units)?.length ?? 0,
-        categories: ok(categories)?.length ?? 0,
-      });
-      setAggLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [detail?.moduleId]);
-
   // Live values for METRIC widgets — computed server-side for the active
   // company/branch from each module's metric registry.
   useEffect(() => {
@@ -142,15 +76,20 @@ export default function DashboardViewPage() {
       .map((w) => w.config!.metric as string);
     if (keys.length === 0) {
       setMetricValues(null);
+      setMetricsLoading(false);
       return;
     }
     let cancelled = false;
+    setMetricsLoading(true);
     api
       .post<Record<string, MetricValue>>('/widgets/metric-values', { keys })
       .then((res) => {
         if (!cancelled) setMetricValues(res ?? {});
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setMetricsLoading(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -284,10 +223,8 @@ export default function DashboardViewPage() {
                 <SortableWidget
                   key={w.widgetId}
                   widget={w}
-                  data={agg}
                   metrics={metricValues}
-                  loading={aggLoading}
-                  user={user}
+                  loading={metricsLoading}
                   activeModule={activeModule}
                 />
               ))}
@@ -301,17 +238,13 @@ export default function DashboardViewPage() {
 
 function SortableWidget({
   widget,
-  data,
   metrics,
   loading,
-  user,
   activeModule,
 }: {
   widget: DashboardWidget;
-  data: DashAggregates | null;
   metrics: Record<string, MetricValue> | null;
   loading: boolean;
-  user: ReturnType<typeof useAuth>['user'];
   activeModule: ReturnType<typeof useAuth>['activeModule'];
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -345,15 +278,12 @@ function SortableWidget({
         <GripVertical className="h-4 w-4" />
       </button>
       <WidgetView
-        code={widget.code}
         name={widget.name}
         description={widget.description}
         type={widget.type}
         config={widget.config}
-        data={data}
         metrics={metrics}
         loading={loading}
-        user={user}
         activeModule={activeModule}
       />
     </div>

@@ -1,70 +1,14 @@
 'use client';
 
 import Link from 'next/link';
-import {
-  FileText,
-  BarChart3,
-  Table2,
-  Layers,
-  Users,
-  ShieldCheck,
-  Building2,
-  Inbox,
-  ArrowUpRight,
-  LayoutDashboard,
-} from 'lucide-react';
+import { BarChart3, ArrowUpRight, LayoutDashboard } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { resolveWidgetStyle } from '@/lib/widget-style';
-import type {
-  NavModule,
-  ErpObject,
-  WidgetType,
-  WidgetConfig,
-  MetricValue,
-} from '@/lib/types';
-
-export interface DashAggregates {
-  forms: number;
-  reports: number;
-  tables: number;
-  dashboards: number;
-  modules: number;
-  groups: number;
-  users: number;
-  companies: number;
-  recent: ErpObject[];
-  moduleObjects: number;
-  units: number;
-  categories: number;
-}
-
-export interface WidgetUser {
-  name?: string;
-  username?: string;
-  userCode?: string;
-  email?: string;
-  isSuperAdmin?: boolean;
-}
-
-// Sources an admin can pick for a STAT-type widget.
-export const STAT_SOURCES: Record<
-  string,
-  { label: string; pick: (d: DashAggregates) => number; icon: React.ReactNode; accent: any }
-> = {
-  users: { label: 'Users', pick: (d) => d.users, icon: <Users className="h-6 w-6" />, accent: 'slate' },
-  groups: { label: 'User Groups', pick: (d) => d.groups, icon: <ShieldCheck className="h-6 w-6" />, accent: 'rose' },
-  modules: { label: 'Modules', pick: (d) => d.modules, icon: <Layers className="h-6 w-6" />, accent: 'emerald' },
-  companies: { label: 'Companies', pick: (d) => d.companies, icon: <Building2 className="h-6 w-6" />, accent: 'blue' },
-  forms: { label: 'Forms', pick: (d) => d.forms, icon: <FileText className="h-6 w-6" />, accent: 'blue' },
-  reports: { label: 'Reports', pick: (d) => d.reports, icon: <BarChart3 className="h-6 w-6" />, accent: 'violet' },
-  tables: { label: 'Tables', pick: (d) => d.tables, icon: <Table2 className="h-6 w-6" />, accent: 'amber' },
-  dashboards: { label: 'Dashboards', pick: (d) => d.dashboards, icon: <LayoutDashboard className="h-6 w-6" />, accent: 'emerald' },
-  moduleObjects: { label: 'Module Objects', pick: (d) => d.moduleObjects, icon: <Inbox className="h-6 w-6" />, accent: 'blue' },
-};
+import type { NavModule, WidgetType, WidgetConfig, MetricValue } from '@/lib/types';
 
 // True when a widget should occupy a single (stat-sized) cell.
 export function isStatWidget(type?: WidgetType) {
-  return type === 'STAT' || type === 'METRIC';
+  return type === 'METRIC';
 }
 
 // Format a metric value for display per its declared format.
@@ -79,24 +23,19 @@ export function WidgetView({
   description,
   type,
   config,
-  data,
   metrics,
   loading,
   activeModule,
 }: {
-  code: string;
   name: string;
   description?: string | null;
   type?: WidgetType;
   config?: WidgetConfig | null;
-  data: DashAggregates | null;
   metrics?: Record<string, MetricValue> | null;
   loading: boolean;
-  user: WidgetUser | null;
   activeModule: NavModule | null;
 }) {
   const r = resolveWidgetStyle(config?.style);
-  const v = (n?: number) => (loading || n == null ? '—' : n.toLocaleString());
 
   // The styled card shell every widget renders inside.
   const Shell = ({ children }: { children: React.ReactNode }) => (
@@ -105,56 +44,36 @@ export function WidgetView({
     </div>
   );
 
-  // Single-value card body shared by STAT and METRIC.
-  const StatBody = ({ value, icon }: { value: React.ReactNode; icon: React.ReactNode }) => (
-    <div className="flex items-center justify-between gap-3">
-      <div className="min-w-0">
-        <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          {name}
-        </p>
-        <p
-          className={cn('mt-1 text-slate-900 dark:text-white', r.valueClass)}
-          style={r.valueStyle}
-        >
-          {value}
-        </p>
-        {(config?.hint || description) && (
-          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
-            {config?.hint || description}
-          </p>
-        )}
-      </div>
-      <div
-        className={cn(
-          'flex h-12 w-12 flex-none items-center justify-center rounded-xl',
-          r.accentChip,
-        )}
-      >
-        {icon}
-      </div>
-    </div>
-  );
-
-  if (type === 'STAT') {
-    const src = STAT_SOURCES[config?.source ?? ''];
-    return (
-      <Shell>
-        <StatBody
-          value={data && src ? v(src.pick(data)) : '—'}
-          icon={src?.icon ?? <BarChart3 className="h-6 w-6" />}
-        />
-      </Shell>
-    );
-  }
-
   if (type === 'METRIC') {
     const m = config?.metric ? metrics?.[config.metric] ?? undefined : undefined;
     return (
       <Shell>
-        <StatBody
-          value={formatMetric(m, loading)}
-          icon={<BarChart3 className="h-6 w-6" />}
-        />
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              {name}
+            </p>
+            <p
+              className={cn('mt-1 text-slate-900 dark:text-white', r.valueClass)}
+              style={r.valueStyle}
+            >
+              {formatMetric(m, loading)}
+            </p>
+            {(config?.hint || description) && (
+              <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+                {config?.hint || description}
+              </p>
+            )}
+          </div>
+          <div
+            className={cn(
+              'flex h-12 w-12 flex-none items-center justify-center rounded-xl',
+              r.accentChip,
+            )}
+          >
+            <BarChart3 className="h-6 w-6" />
+          </div>
+        </div>
       </Shell>
     );
   }

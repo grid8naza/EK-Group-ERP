@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { USER_LOOKUP } from './user-lookup.port';
 import { UserLookupAdapter } from '../modules/user/user-lookup.adapter';
 import { METRIC_PROVIDER } from './metric-provider.port';
+import { CpanelMetricsAdapter } from '../modules/company/cpanel-metrics.adapter';
 import { ProductionMetricsAdapter } from '../modules/production/production-metrics.adapter';
 import { InventoryMetricsAdapter } from '../modules/item/inventory-metrics.adapter';
 
@@ -31,15 +32,21 @@ import { InventoryMetricsAdapter } from '../modules/item/inventory-metrics.adapt
 @Module({
   providers: [
     { provide: USER_LOOKUP, useClass: UserLookupAdapter },
+    CpanelMetricsAdapter,
     ProductionMetricsAdapter,
     InventoryMetricsAdapter,
     {
       provide: METRIC_PROVIDER,
       useFactory: (
+        cpanel: CpanelMetricsAdapter,
         production: ProductionMetricsAdapter,
         inventory: InventoryMetricsAdapter,
-      ) => [production, inventory],
-      inject: [ProductionMetricsAdapter, InventoryMetricsAdapter],
+      ) => [cpanel, production, inventory],
+      inject: [
+        CpanelMetricsAdapter,
+        ProductionMetricsAdapter,
+        InventoryMetricsAdapter,
+      ],
     },
   ],
   exports: [USER_LOOKUP, METRIC_PROVIDER],

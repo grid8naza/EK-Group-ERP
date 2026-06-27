@@ -248,7 +248,7 @@ export interface ObjectListResponse {
 }
 
 // ---- Widgets ----
-export type WidgetType = 'STAT' | 'METRIC' | 'LINKS' | 'NOTE' | 'EMBED';
+export type WidgetType = 'METRIC' | 'LINKS' | 'NOTE' | 'EMBED';
 
 export type MetricFormat = 'number' | 'percent' | 'currency';
 
@@ -269,7 +269,6 @@ export interface WidgetStyle {
 }
 
 export interface WidgetConfig {
-  source?: string; // STAT: what to count
   metric?: string; // METRIC: the registry key, e.g. 'production.orders.planned'
   text?: string; // NOTE
   url?: string; // EMBED

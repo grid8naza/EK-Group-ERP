@@ -34,27 +34,13 @@ import type {
 const ROUTE = '/cpanel/widgets';
 
 const TYPE_OPTIONS = [
-  { value: 'STAT', label: 'Stat — a preset count' },
   { value: 'METRIC', label: 'Metric — value from this module’s data' },
   { value: 'LINKS', label: 'Quick Links — module screens' },
   { value: 'NOTE', label: 'Note — free text' },
   { value: 'EMBED', label: 'Embed — external page (URL)' },
 ];
 
-const SOURCE_OPTIONS = [
-  { value: 'users', label: 'Users' },
-  { value: 'groups', label: 'User Groups' },
-  { value: 'modules', label: 'Modules' },
-  { value: 'companies', label: 'Companies' },
-  { value: 'forms', label: 'Forms' },
-  { value: 'reports', label: 'Reports' },
-  { value: 'tables', label: 'Tables' },
-  { value: 'dashboards', label: 'Dashboards' },
-  { value: 'moduleObjects', label: 'Objects in this module' },
-];
-
 const TYPE_META: Record<WidgetType, { label: string; color: 'blue' | 'violet' | 'amber' | 'green' | 'slate'; icon: React.ReactNode }> = {
-  STAT: { label: 'Stat', color: 'blue', icon: <BarChart3 className="h-4 w-4" /> },
   METRIC: { label: 'Metric', color: 'green', icon: <Sigma className="h-4 w-4" /> },
   LINKS: { label: 'Links', color: 'violet', icon: <Link2 className="h-4 w-4" /> },
   NOTE: { label: 'Note', color: 'amber', icon: <StickyNote className="h-4 w-4" /> },
@@ -63,10 +49,9 @@ const TYPE_META: Record<WidgetType, { label: string; color: 'blue' | 'violet' | 
 
 const empty = {
   name: '',
-  type: 'STAT' as WidgetType,
+  type: 'METRIC' as WidgetType,
   description: '',
   isActive: true,
-  source: 'users',
   metric: '',
   hint: '',
   text: '',
@@ -184,7 +169,6 @@ export default function WidgetsPage() {
       type: w.type,
       description: w.description ?? '',
       isActive: w.isActive,
-      source: w.config?.source ?? 'users',
       metric: w.config?.metric ?? '',
       hint: w.config?.hint ?? '',
       text: w.config?.text ?? '',
@@ -233,8 +217,6 @@ export default function WidgetsPage() {
     const style = buildStyle();
     const base = (() => {
       switch (form.type) {
-        case 'STAT':
-          return { source: form.source, hint: form.hint || undefined };
         case 'METRIC':
           return { metric: form.metric, hint: form.hint || undefined };
         case 'NOTE':
@@ -305,7 +287,7 @@ export default function WidgetsPage() {
   };
 
   // Live preview of the current appearance choices.
-  const isValueType = form.type === 'STAT' || form.type === 'METRIC';
+  const isValueType = form.type === 'METRIC';
   const pr = resolveWidgetStyle(buildStyle());
 
   return (
@@ -426,22 +408,6 @@ export default function WidgetsPage() {
           />
 
           {/* Type-specific config */}
-          {form.type === 'STAT' && (
-            <>
-              <Select
-                label="Count of"
-                value={form.source}
-                onChange={(e) => setForm({ ...form, source: e.target.value })}
-                options={SOURCE_OPTIONS}
-              />
-              <Input
-                label="Hint (subtitle)"
-                value={form.hint}
-                onChange={(e) => setForm({ ...form, hint: e.target.value })}
-                placeholder="e.g. Active records"
-              />
-            </>
-          )}
           {form.type === 'METRIC' && (
             <>
               <Select
