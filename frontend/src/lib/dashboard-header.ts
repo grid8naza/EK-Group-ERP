@@ -65,6 +65,7 @@ export interface ResolvedHeader {
   align: 'left' | 'center';
   pattern: boolean;
   subtitle: string;
+  hidden: boolean;
 }
 
 export function resolveDashboardHeader(
@@ -77,6 +78,7 @@ export function resolveDashboardHeader(
   const subtitle =
     h?.subtitle && h.subtitle.trim() ? h.subtitle : DEFAULT_HEADER_SUBTITLE;
   const padClass = PAD[size];
+  const hidden = h?.hidden === true;
 
   if (theme === 'custom') {
     const from = h?.gradientFrom || CUSTOM_DEFAULT_FROM;
@@ -92,6 +94,7 @@ export function resolveDashboardHeader(
       align,
       pattern,
       subtitle,
+      hidden,
     };
   }
 
@@ -105,5 +108,6 @@ export function resolveDashboardHeader(
     align,
     pattern,
     subtitle,
+    hidden,
   };
 }

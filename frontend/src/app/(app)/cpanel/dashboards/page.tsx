@@ -26,6 +26,7 @@ import {
   GitBranch,
   Paintbrush,
   RotateCcw,
+  EyeOff,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/providers/ToastProvider';
@@ -84,6 +85,7 @@ const emptyHeader: DashboardHeaderStyle = {
   pattern: true,
   align: 'left',
   size: 'md',
+  hidden: false,
 };
 
 export default function DashboardsPage() {
@@ -647,43 +649,50 @@ export default function DashboardsPage() {
                 <RotateCcw className="h-3.5 w-3.5" /> Reset
               </button>
             </h3>
-            <div className="overflow-hidden rounded-xl">
-              <div
-                className={cn(headerPreview.containerClass, 'p-5')}
-                style={headerPreview.containerStyle}
-              >
-                {headerPreview.pattern && (
-                  <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-white/10" />
-                )}
+            {headerPreview.hidden ? (
+              <div className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 p-6 text-center text-sm text-slate-400 dark:border-slate-700">
+                <EyeOff className="h-4 w-4" />
+                Header hidden — widgets show without a banner.
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-xl">
                 <div
-                  className={cn(
-                    'relative',
-                    headerPreview.align === 'center' && 'text-center',
-                  )}
+                  className={cn(headerPreview.containerClass, 'p-5')}
+                  style={headerPreview.containerStyle}
                 >
-                  <p
+                  {headerPreview.pattern && (
+                    <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-white/10" />
+                  )}
+                  <div
                     className={cn(
-                      'text-xs font-medium',
-                      headerPreview.labelClass,
+                      'relative',
+                      headerPreview.align === 'center' && 'text-center',
                     )}
                   >
-                    {hDashboard?.module?.name ?? 'Module'}
-                  </p>
-                  <h2 className="mt-0.5 text-lg font-bold text-white">
-                    {hDashboard?.name ?? 'Dashboard'}
-                  </h2>
-                  <p
-                    className={cn(
-                      'mt-1 text-xs',
-                      headerPreview.align === 'center' && 'mx-auto',
-                      headerPreview.subtitleClass,
-                    )}
-                  >
-                    {headerPreview.subtitle}
-                  </p>
+                    <p
+                      className={cn(
+                        'text-xs font-medium',
+                        headerPreview.labelClass,
+                      )}
+                    >
+                      {hDashboard?.module?.name ?? 'Module'}
+                    </p>
+                    <h2 className="mt-0.5 text-lg font-bold text-white">
+                      {hDashboard?.name ?? 'Dashboard'}
+                    </h2>
+                    <p
+                      className={cn(
+                        'mt-1 text-xs',
+                        headerPreview.align === 'center' && 'mx-auto',
+                        headerPreview.subtitleClass,
+                      )}
+                    >
+                      {headerPreview.subtitle}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Controls */}
@@ -769,16 +778,27 @@ export default function DashboardsPage() {
               }
             />
             <div className="sm:col-span-2">
-              <Checkbox
-                label="Decorative pattern"
-                checked={hForm.pattern !== false}
-                onChange={(e) =>
-                  setHForm({ ...hForm, pattern: e.target.checked })
-                }
-              />
+              <div className="flex flex-wrap items-center gap-4">
+                <Checkbox
+                  label="Decorative pattern"
+                  checked={hForm.pattern !== false}
+                  onChange={(e) =>
+                    setHForm({ ...hForm, pattern: e.target.checked })
+                  }
+                />
+                <Checkbox
+                  label="Hide header banner"
+                  checked={!!hForm.hidden}
+                  onChange={(e) =>
+                    setHForm({ ...hForm, hidden: e.target.checked })
+                  }
+                />
+              </div>
               <p className="mt-1.5 text-xs text-slate-400">
-                Leave the subtitle empty to use the default text. Custom colours
-                apply only when the theme is set to “Custom”.
+                Hiding the banner shows the widgets without a header (the layout
+                controls still appear when you rearrange widgets). Leave the
+                subtitle empty to use the default text. Custom colours apply only
+                when the theme is set to “Custom”.
               </p>
             </div>
           </div>

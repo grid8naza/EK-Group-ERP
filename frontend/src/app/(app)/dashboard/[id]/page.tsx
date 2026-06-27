@@ -162,9 +162,38 @@ export default function DashboardViewPage() {
     );
   }
 
+  // When the banner is hidden we still need the layout controls, so render a
+  // compact action row in its place (only when there's an action to offer).
+  const showActions = dirty || !!detail?.isCustomized;
+
   return (
     <div className="mx-auto max-w-7xl">
-      <div className="card mb-6 overflow-hidden">
+      {header.hidden ? (
+        showActions && (
+          <div className="mb-6 flex flex-wrap items-center justify-end gap-2">
+            {dirty && (
+              <button
+                onClick={saveLayout}
+                disabled={saving}
+                className="btn-primary !py-2"
+              >
+                <Save className="h-4 w-4" /> Save layout
+              </button>
+            )}
+            {detail?.isCustomized && (
+              <button
+                onClick={resetLayout}
+                disabled={saving}
+                className="btn-secondary !py-2"
+                title="Reset to the default layout"
+              >
+                <RotateCcw className="h-4 w-4" /> Reset
+              </button>
+            )}
+          </div>
+        )
+      ) : (
+        <div className="card mb-6 overflow-hidden">
         <div
           className={cn(header.containerClass, header.padClass)}
           style={header.containerStyle}
@@ -232,7 +261,8 @@ export default function DashboardViewPage() {
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      )}
 
       {loading ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">

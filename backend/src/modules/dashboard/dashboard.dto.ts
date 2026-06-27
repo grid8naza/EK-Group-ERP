@@ -24,6 +24,7 @@ export class DashboardHeaderDto {
   @IsOptional() @IsBoolean() solid?: boolean; // solid fill (gradientFrom) instead of gradient
   @IsOptional() @IsString() subtitle?: string; // override subtitle text
   @IsOptional() @IsBoolean() pattern?: boolean; // decorative circle, default true
+  @IsOptional() @IsBoolean() hidden?: boolean; // hide the banner entirely
 
   @IsOptional()
   @IsString()

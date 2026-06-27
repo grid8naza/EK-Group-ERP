@@ -330,6 +330,7 @@ export interface DashboardHeaderStyle {
   pattern?: boolean; // decorative circle, default true
   align?: 'left' | 'center';
   size?: 'sm' | 'md' | 'lg'; // banner padding / height
+  hidden?: boolean; // hide the banner entirely
 }
 
 export interface DashboardWidget {
