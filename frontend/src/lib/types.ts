@@ -8,13 +8,6 @@ export interface User {
   defaultModuleId?: number | null;
 }
 
-export interface Gadget {
-  id: number;
-  code: string;
-  name: string;
-  description?: string | null;
-}
-
 export interface NavItem {
   id: number;
   name: string;
@@ -47,7 +40,6 @@ export interface NavModule {
   name: string;
   icon?: string | null;
   menus: NavMenu[];
-  gadgets?: Gadget[];
   dashboards?: NavDashboard[];
 }
 
@@ -255,27 +247,61 @@ export interface ObjectListResponse {
   counts: { forms: number; reports: number; tables: number; dashboards?: number };
 }
 
-// ---- Gadgets ----
-export type GadgetType = 'BUILTIN' | 'STAT' | 'LINKS' | 'NOTE' | 'EMBED';
+// ---- Widgets ----
+export type WidgetType = 'STAT' | 'METRIC' | 'LINKS' | 'NOTE' | 'EMBED';
 
-export interface GadgetConfig {
+export type MetricFormat = 'number' | 'percent' | 'currency';
+
+// Per-widget appearance — colours, fonts, shape. All optional; sensible
+// defaults preserve the standard card look.
+export type WidgetAccent = 'blue' | 'emerald' | 'violet' | 'amber' | 'rose' | 'slate';
+
+export interface WidgetStyle {
+  accent?: WidgetAccent; // icon-chip colour
+  valueColor?: string; // hex override for the value text
+  background?: string; // hex card background
+  fontFamily?: 'sans' | 'serif' | 'mono';
+  fontSize?: 'sm' | 'md' | 'lg' | 'xl'; // value size
+  fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
+  shape?: 'rounded' | 'soft' | 'square' | 'pill'; // corner radius
+  border?: boolean; // default true
+  shadow?: boolean; // default true
+}
+
+export interface WidgetConfig {
   source?: string; // STAT: what to count
+  metric?: string; // METRIC: the registry key, e.g. 'production.orders.planned'
   text?: string; // NOTE
   url?: string; // EMBED
   height?: number; // EMBED
-  hint?: string; // STAT subtitle
+  hint?: string; // STAT / METRIC subtitle
   icon?: string; // STAT icon name
+  style?: WidgetStyle; // appearance overrides
 }
 
-export interface GadgetCatalogItem {
+// A metric offered for a module's METRIC widgets (builder dropdown).
+export interface MetricOption {
+  key: string;
+  label: string;
+  format: MetricFormat;
+}
+
+// A computed metric value returned by /widgets/metric-values.
+export interface MetricValue {
+  value: number;
+  format: MetricFormat;
+  label: string;
+}
+
+export interface WidgetCatalogItem {
   id: number;
   companyId: number;
   moduleId: number;
   code: string;
   name: string;
   description?: string | null;
-  type: GadgetType;
-  config?: GadgetConfig | null;
+  type: WidgetType;
+  config?: WidgetConfig | null;
   sortOrder: number;
   isActive: boolean;
   isLocked?: boolean;
@@ -285,12 +311,12 @@ export interface GadgetCatalogItem {
 
 // ---- Dashboards ----
 export interface DashboardWidget {
-  gadgetId: number;
+  widgetId: number;
   code: string;
   name: string;
   description?: string | null;
-  type?: GadgetType;
-  config?: GadgetConfig | null;
+  type?: WidgetType;
+  config?: WidgetConfig | null;
   width: number;
   hidden?: boolean;
   sortOrder: number;
@@ -302,7 +328,6 @@ export interface DashboardDetail {
   icon?: string | null;
   moduleId: number;
   module?: { id: number; name: string; code: string } | null;
-  userGroup?: { id: number; name: string } | null;
   isCustomized: boolean;
   widgets: DashboardWidget[];
 }
@@ -311,7 +336,6 @@ export interface DashboardSummary {
   id: number;
   companyId: number;
   moduleId: number;
-  userGroupId?: number | null;
   branchId?: number | null;
   branch?: { id: number; name: string } | null;
   name: string;
@@ -321,7 +345,6 @@ export interface DashboardSummary {
   isActive: boolean;
   isLocked?: boolean;
   module?: { id: number; name: string; code: string } | null;
-  userGroup?: { id: number; name: string } | null;
   _count?: { widgets: number };
 }
 
@@ -378,18 +401,19 @@ export interface PrivilegeNode {
   subMenus: PrivilegeSubMenu[];
 }
 
-export interface PrivilegeGadget {
+export interface PrivilegeDashboard {
   id: number;
-  code: string;
   name: string;
-  description?: string | null;
+  icon?: string | null;
+  branchId?: number | null;
+  branchName?: string | null;
   selected: boolean;
 }
 
 export interface PrivilegeModuleGroup {
   module: { id: number; code: string; name: string; icon?: string | null };
   tree: PrivilegeNode[];
-  gadgets: PrivilegeGadget[];
+  dashboards: PrivilegeDashboard[];
 }
 
 export interface PrivilegesResponse {

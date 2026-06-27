@@ -54,8 +54,8 @@ export class AuthService {
   /**
    * Builds the user profile, the list of companies they can access, and the
    * navigation tree + permission map for the *active* company. Everything in
-   * the cpanel (menus, objects, groups, gadgets, dashboards) is company-scoped,
-   * so switching companies recomputes this whole payload.
+   * the cpanel (menus, objects, groups, dashboards) is company-scoped, so
+   * switching companies recomputes this whole payload.
    *
    * Super admins get everything in the active company.
    */
@@ -175,7 +175,7 @@ export class AuthService {
     // module-loading latency on the login / company-switch hot path.
     // - companyModules: modules enabled for the active company, joined to catalog.
     // - coreModules: universal modules (super-admin only), fetched directly with
-    //   the same per-company menu/gadget data rather than via company_modules.
+    //   the same per-company menu data rather than via company_modules.
     const [companyModules, coreModules] = await Promise.all([
       this.prisma.companyModule.findMany({
         where: { companyId: activeCompanyId, isActive: true },
@@ -186,10 +186,6 @@ export class AuthService {
                 where: { companyId: activeCompanyId },
                 orderBy: { sortOrder: 'asc' },
                 include: { subMenus: { orderBy: { sortOrder: 'asc' } } },
-              },
-              gadgets: {
-                where: { companyId: activeCompanyId, isActive: true },
-                orderBy: { sortOrder: 'asc' },
               },
             },
           },
@@ -203,10 +199,6 @@ export class AuthService {
             where: { companyId: activeCompanyId },
             orderBy: { sortOrder: 'asc' },
             include: { subMenus: { orderBy: { sortOrder: 'asc' } } },
-          },
-          gadgets: {
-            where: { companyId: activeCompanyId, isActive: true },
-            orderBy: { sortOrder: 'asc' },
           },
         },
         orderBy: { sortOrder: 'asc' },
@@ -263,11 +255,13 @@ export class AuthService {
     // Permissions (super admin => full access to everything in the company).
     let mainMenuVisible: Set<number> | null = null;
     const subPriv = new Map<number, SubPriv>();
-    let allowedGadgetIds: Set<number> | null = null;
+    // null = super admin (every dashboard); otherwise the ids the user's groups
+    // selected via GroupDashboard.
+    let allowedDashboardIds: Set<number> | null = null;
 
     if (!user.isSuperAdmin) {
       mainMenuVisible = new Set<number>();
-      allowedGadgetIds = new Set<number>();
+      allowedDashboardIds = new Set<number>();
       if (groupIds.length) {
         const mainAccess = await this.prisma.groupMainMenuAccess.findMany({
           where: { userGroupId: { in: groupIds }, visible: true },
@@ -292,16 +286,19 @@ export class AuthService {
           });
         }
 
-        const gg = await this.prisma.groupGadget.findMany({
+        const gd = await this.prisma.groupDashboard.findMany({
           where: { userGroupId: { in: groupIds } },
+          select: { dashboardId: true },
         });
-        gg.forEach((g) => allowedGadgetIds!.add(g.gadgetId));
+        gd.forEach((d) => allowedDashboardIds!.add(d.dashboardId));
       }
     }
 
     const visibleModuleIds = visibleModules.map((m) => m.id);
 
-    // Dashboards the user may open in this company (their groups + shared).
+    // Dashboards the user may open in this company. A non-super-admin sees only
+    // the dashboards their groups selected (GroupDashboard); super admins see
+    // every dashboard.
     // Branch scoping:
     //  - Full branch access (or super admin): company-wide dashboards (branchId
     //    null, constant across branches) PLUS the active branch's dashboards.
@@ -313,9 +310,10 @@ export class AuthService {
         ? { OR: [{ branchId: null }, { branchId: activeBranchId }] }
         : { branchId: activeBranchId },
     ];
-    if (!user.isSuperAdmin) {
+    if (allowedDashboardIds) {
+      // Empty set => no dashboards selected for any of the user's groups.
       dashboardWhere.push({
-        OR: [{ userGroupId: null }, { userGroupId: { in: groupIds } }],
+        id: { in: allowedDashboardIds.size ? [...allowedDashboardIds] : [-1] },
       });
     }
     const dashboards = await this.prisma.dashboard.findMany({
@@ -393,15 +391,6 @@ export class AuthService {
         })
         .filter((mm) => user.isSuperAdmin || mm.items.length > 0);
 
-      const gadgets = m.gadgets
-        .filter((g) => user.isSuperAdmin || allowedGadgetIds!.has(g.id))
-        .map((g) => ({
-          id: g.id,
-          code: g.code,
-          name: g.name,
-          description: g.description,
-        }));
-
       const moduleDashboards = dashboards
         .filter((d) => d.moduleId === m.id)
         .map((d) => ({
@@ -421,7 +410,6 @@ export class AuthService {
         name: m.name,
         icon: m.icon,
         menus,
-        gadgets,
         dashboards: moduleDashboards,
       };
     });

@@ -49,14 +49,14 @@ export class DashboardController {
     );
   }
 
-  // Gadget catalog for a module (to pick widgets when editing a dashboard).
-  @Get('gadgets')
-  gadgets(
+  // Widget catalog for a module (to pick widgets when editing a dashboard).
+  @Get('widgets')
+  widgets(
     @CompanyId() companyId: number | undefined,
     @Query('moduleId') moduleId?: string,
   ) {
     if (!moduleId) throw new BadRequestException('moduleId is required');
-    return this.service.gadgetCatalog(requireCompany(companyId), Number(moduleId));
+    return this.service.widgetCatalog(requireCompany(companyId), Number(moduleId));
   }
 
   @Post()

@@ -71,8 +71,8 @@ export class CompanyService implements OnModuleInit {
               : undefined,
           },
         });
-        // Scaffold the Cpanel module (menus, gadgets, dashboards, admin group)
-        // so a freshly created company is immediately usable.
+        // Scaffold the Cpanel module (menus, admin group) so a freshly created
+        // company is immediately usable.
         await provisionCompanyCpanel(tx, company.id);
         return company;
       },

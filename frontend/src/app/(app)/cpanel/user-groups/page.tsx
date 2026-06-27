@@ -308,14 +308,14 @@ export default function UserGroupsPage() {
     }));
   };
 
-  const toggleGadget = (moduleId: number, gadgetId: number) => {
+  const toggleDashboard = (moduleId: number, dashboardId: number) => {
     setPrivModules((prev) =>
       prev.map((mg) =>
         mg.module.id === moduleId
           ? {
               ...mg,
-              gadgets: mg.gadgets.map((g) =>
-                g.id === gadgetId ? { ...g, selected: !g.selected } : g,
+              dashboards: mg.dashboards.map((d) =>
+                d.id === dashboardId ? { ...d, selected: !d.selected } : d,
               ),
             }
           : mg,
@@ -348,13 +348,13 @@ export default function UserGroupsPage() {
           })),
         ),
       );
-      const gadgetIds = privModules.flatMap((mg) =>
-        mg.gadgets.filter((g) => g.selected).map((g) => g.id),
+      const dashboardIds = privModules.flatMap((mg) =>
+        mg.dashboards.filter((d) => d.selected).map((d) => d.id),
       );
       await api.put(`/user-groups/${privGroup.id}/privileges`, {
         mainMenuAccess,
         subMenuPrivileges,
-        gadgetIds,
+        dashboardIds,
       });
       toast.success('Privileges saved.');
       setPrivOpen(false);
@@ -763,44 +763,43 @@ export default function UserGroupsPage() {
                     </div>
                   ))}
 
-                  {/* Dashboard gadgets for this module */}
+                  {/* Dashboards for this module */}
                   <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
                     <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
                       <LayoutDashboard className="h-4 w-4 text-brand-600" />
-                      Dashboard Gadgets
+                      Dashboards
                     </div>
                     <p className="mb-3 text-xs text-slate-400">
-                      Selected gadgets appear on the {grp.module.name} dashboard
-                      for users in this group.
+                      Selected dashboards appear in the {grp.module.name}{' '}
+                      dashboard menu for this group — choose two or more and all
+                      of them show. They switch with company, branch and module.
                     </p>
-                    {grp.gadgets.length === 0 ? (
+                    {grp.dashboards.length === 0 ? (
                       <p className="text-sm text-slate-400">
-                        No gadgets for this module.
+                        No dashboards for this module yet.
                       </p>
                     ) : (
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        {grp.gadgets.map((g) => (
+                        {grp.dashboards.map((d) => (
                           <label
-                            key={g.id}
+                            key={d.id}
                             className="flex cursor-pointer items-start gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40"
                           >
                             <input
                               type="checkbox"
                               className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
-                              checked={g.selected}
+                              checked={d.selected}
                               onChange={() =>
-                                toggleGadget(grp.module.id, g.id)
+                                toggleDashboard(grp.module.id, d.id)
                               }
                             />
                             <span>
                               <span className="font-medium text-slate-700 dark:text-slate-200">
-                                {g.name}
+                                {d.name}
                               </span>
-                              {g.description && (
-                                <span className="block text-xs text-slate-400">
-                                  {g.description}
-                                </span>
-                              )}
+                              <span className="block text-xs text-slate-400">
+                                {d.branchName ?? 'All branches'}
+                              </span>
                             </span>
                           </label>
                         ))}

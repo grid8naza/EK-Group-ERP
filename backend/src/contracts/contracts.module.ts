@@ -1,6 +1,9 @@
 import { Global, Module } from '@nestjs/common';
 import { USER_LOOKUP } from './user-lookup.port';
 import { UserLookupAdapter } from '../modules/user/user-lookup.adapter';
+import { METRIC_PROVIDER } from './metric-provider.port';
+import { ProductionMetricsAdapter } from '../modules/production/production-metrics.adapter';
+import { InventoryMetricsAdapter } from '../modules/item/inventory-metrics.adapter';
 
 /**
  * Composition root for cross-module contracts (ports & adapters).
@@ -18,10 +21,27 @@ import { UserLookupAdapter } from '../modules/user/user-lookup.adapter';
  *   1. Define the port + token in contracts/<name>.port.ts
  *   2. Implement it as an adapter inside the OWNING module's folder
  *   3. Bind the token to the adapter here and add the token to `exports`
+ *
+ * METRIC_PROVIDER resolves to the ARRAY of every module's metric adapter, built
+ * by a factory (NestJS has no Angular-style multi-providers). MetricRegistryService
+ * injects that array. Add a module's metrics by registering its adapter below
+ * and adding it to the factory's inject list + returned array.
  */
 @Global()
 @Module({
-  providers: [{ provide: USER_LOOKUP, useClass: UserLookupAdapter }],
-  exports: [USER_LOOKUP],
+  providers: [
+    { provide: USER_LOOKUP, useClass: UserLookupAdapter },
+    ProductionMetricsAdapter,
+    InventoryMetricsAdapter,
+    {
+      provide: METRIC_PROVIDER,
+      useFactory: (
+        production: ProductionMetricsAdapter,
+        inventory: InventoryMetricsAdapter,
+      ) => [production, inventory],
+      inject: [ProductionMetricsAdapter, InventoryMetricsAdapter],
+    },
+  ],
+  exports: [USER_LOOKUP, METRIC_PROVIDER],
 })
 export class ContractsModule {}

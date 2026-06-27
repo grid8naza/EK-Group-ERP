@@ -40,29 +40,27 @@ import { IconPicker } from '@/components/ui/IconPicker';
 import { Badge } from '@/components/ui/Badge';
 import { cn } from '@/lib/utils';
 import { resolveIcon } from '@/lib/icons';
-import { isStatGadget } from '@/components/dashboard/WidgetView';
+import { isStatWidget } from '@/components/dashboard/WidgetView';
 import type {
   Module,
-  UserGroup,
   DashboardSummary,
   DashboardDetail,
-  GadgetType,
+  WidgetType,
 } from '@/lib/types';
 
 const ROUTE = '/cpanel/dashboards';
 
-interface Gadget {
+interface Widget {
   id: number;
   code: string;
   name: string;
   description?: string | null;
-  type?: GadgetType;
+  type?: WidgetType;
 }
 
 const emptyForm = {
   name: '',
   icon: 'layout-dashboard',
-  userGroupId: '',
   branchId: '',
   isDefault: false,
   isActive: true,
@@ -76,7 +74,6 @@ export default function DashboardsPage() {
   const [modules, setModules] = useState<Module[]>([]);
   const [moduleId, setModuleId] = useState('');
   const [branchFilter, setBranchFilter] = useState(''); // '' = all branches
-  const [groups, setGroups] = useState<UserGroup[]>([]);
   const [dashboards, setDashboards] = useState<DashboardSummary[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -104,8 +101,8 @@ export default function DashboardsPage() {
   // widget editor drawer
   const [wOpen, setWOpen] = useState(false);
   const [wDashboard, setWDashboard] = useState<DashboardSummary | null>(null);
-  const [catalog, setCatalog] = useState<Gadget[]>([]);
-  const [selected, setSelected] = useState<number[]>([]); // gadget ids, ordered
+  const [catalog, setCatalog] = useState<Widget[]>([]);
+  const [selected, setSelected] = useState<number[]>([]); // widget ids, ordered
   const [wSaving, setWSaving] = useState(false);
 
   useEffect(() => {
@@ -116,13 +113,6 @@ export default function DashboardsPage() {
         setModuleId((cur) => (m && m.length ? String(m[0].id) : ''));
       })
       .catch(() => {});
-  }, [activeCompanyId]);
-
-  useEffect(() => {
-    api
-      .get<UserGroup[]>('/user-groups')
-      .then((g) => setGroups(g ?? []))
-      .catch(() => setGroups([]));
   }, [activeCompanyId]);
 
   const load = useCallback(async () => {
@@ -159,7 +149,6 @@ export default function DashboardsPage() {
     });
 
   const moduleOptions = modules.map((m) => ({ value: m.id, label: m.name }));
-  const groupOptions = groups.map((g) => ({ value: g.id, label: g.name }));
   const branchOptions = branches.map((b) => ({ value: b.id, label: b.name }));
   const hasBranches = branches.length > 0;
 
@@ -178,7 +167,6 @@ export default function DashboardsPage() {
   const formFrom = (d: DashboardSummary) => ({
     name: d.name,
     icon: d.icon ?? 'layout-dashboard',
-    userGroupId: d.userGroupId ? String(d.userGroupId) : '',
     branchId: d.branchId ? String(d.branchId) : '',
     isDefault: d.isDefault,
     isActive: d.isActive,
@@ -207,7 +195,6 @@ export default function DashboardsPage() {
         moduleId: Number(moduleId),
         name: form.name,
         icon: form.icon || null,
-        userGroupId: form.userGroupId ? Number(form.userGroupId) : null,
         branchId: form.branchId ? Number(form.branchId) : null,
         isDefault: form.isDefault,
         isActive: form.isActive,
@@ -252,18 +239,18 @@ export default function DashboardsPage() {
     setSelected([]);
     try {
       const [cat, detail] = await Promise.all([
-        api.get<Gadget[]>(`/dashboards/gadgets?moduleId=${d.moduleId}`),
+        api.get<Widget[]>(`/dashboards/widgets?moduleId=${d.moduleId}`),
         api.get<DashboardDetail>(`/dashboards/${d.id}`),
       ]);
       setCatalog(cat ?? []);
-      setSelected((detail.widgets ?? []).map((w) => w.gadgetId));
+      setSelected((detail.widgets ?? []).map((w) => w.widgetId));
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to load widgets.');
     }
   };
-  const toggleWidget = (gadgetId: number, checked: boolean) => {
+  const toggleWidget = (widgetId: number, checked: boolean) => {
     setSelected((cur) =>
-      checked ? [...cur, gadgetId] : cur.filter((id) => id !== gadgetId),
+      checked ? [...cur, widgetId] : cur.filter((id) => id !== widgetId),
     );
   };
   const onReorderWidgets = (e: DragEndEvent) => {
@@ -281,11 +268,11 @@ export default function DashboardsPage() {
     setWSaving(true);
     try {
       const byId = new Map(catalog.map((g) => [g.id, g]));
-      const widgets = selected.map((gadgetId) => {
-        const g = byId.get(gadgetId);
+      const widgets = selected.map((widgetId) => {
+        const g = byId.get(widgetId);
         return {
-          gadgetId,
-          width: g && isStatGadget(g.code, g.type) ? 1 : 2,
+          widgetId,
+          width: g && isStatWidget(g.type) ? 1 : 2,
         };
       });
       await api.put(`/dashboards/${wDashboard.id}/widgets`, { widgets });
@@ -306,7 +293,7 @@ export default function DashboardsPage() {
     <div className="mx-auto max-w-7xl">
       <PageHeader
         title="Dashboards"
-        description="Create dashboards per module & user group; users pick them from the left panel"
+        description="Create dashboards per module; assign them to user groups, who pick them from the left panel"
         icon={<LayoutDashboard className="h-5 w-5" />}
         actions={
           <div className="flex items-center gap-2">
@@ -364,8 +351,7 @@ export default function DashboardsPage() {
                       )}
                     </p>
                     <p className="truncate text-xs text-slate-400">
-                      {d.userGroup?.name ?? 'All groups'} · {d._count?.widgets ?? 0}{' '}
-                      widgets
+                      {d._count?.widgets ?? 0} widgets
                     </p>
                     {hasBranches && (
                       <span className="mt-1 inline-flex items-center gap-1 text-xs">
@@ -436,13 +422,6 @@ export default function DashboardsPage() {
             onChange={(e) => setForm({ ...form, name: e.target.value })}
           />
           <Select label="Module" value={moduleId} disabled options={moduleOptions} />
-          <Select
-            label="User Group"
-            value={form.userGroupId}
-            onChange={(e) => setForm({ ...form, userGroupId: e.target.value })}
-            placeholder="All groups"
-            options={groupOptions}
-          />
           {hasBranches && (
             <Select
               label="Branch"
@@ -536,7 +515,6 @@ export default function DashboardsPage() {
                           key={id}
                           id={id}
                           label={g.name}
-                          code={g.code}
                           type={g.type}
                           onRemove={() => toggleWidget(id, false)}
                         />
@@ -569,7 +547,7 @@ export default function DashboardsPage() {
                       {g.name}
                     </span>
                     <span className="ml-auto text-xs text-slate-400">
-                      {isStatGadget(g.code, g.type) ? 'stat' : 'wide'}
+                      {isStatWidget(g.type) ? 'stat' : 'wide'}
                     </span>
                   </label>
                 ))}
@@ -585,14 +563,12 @@ export default function DashboardsPage() {
 function WidgetRow({
   id,
   label,
-  code,
   type,
   onRemove,
 }: {
   id: number;
   label: string;
-  code: string;
-  type?: GadgetType;
+  type?: WidgetType;
   onRemove: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -623,7 +599,7 @@ function WidgetRow({
         {label}
       </span>
       <span className="ml-auto text-xs text-slate-400">
-        {isStatGadget(code, type) ? 'stat' : 'wide'}
+        {isStatWidget(type) ? 'stat' : 'wide'}
       </span>
       <button
         onClick={onRemove}

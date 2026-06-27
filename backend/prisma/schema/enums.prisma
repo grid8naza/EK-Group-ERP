@@ -14,12 +14,11 @@ enum SecurityType {
   MACOTP // Layer 2: MAC or one-time password
 }
 
-// How a dashboard gadget renders. BUILTIN = rendered by its `code` in the
-// frontend (the original seeded widgets). The rest are data-driven so admins
-// can create working gadgets without any code change.
-enum GadgetType {
-  BUILTIN // rendered by code (USERS_COUNT, QUICK_LINKS, ...)
+// How a dashboard widget renders. Every type is data-driven so admins can
+// create working widgets without any code change.
+enum WidgetType {
   STAT // a single count, config.source selects what to count
+  METRIC // a value from a module's named metric registry, config.metric selects which
   LINKS // quick links to the module's screens
   NOTE // free text / rich note, config.text
   EMBED // an external page, config.url (+ config.height)

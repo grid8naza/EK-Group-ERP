@@ -70,9 +70,9 @@ export class UpdatePrivilegesDto {
   @Type(() => SubMenuPrivilegeDto)
   subMenuPrivileges: SubMenuPrivilegeDto[];
 
-  // Dashboard gadget ids selected for this group.
+  // Dashboard ids selected for this group.
   @IsOptional()
   @IsArray()
   @IsInt({ each: true })
-  gadgetIds?: number[];
+  dashboardIds?: number[];
 }

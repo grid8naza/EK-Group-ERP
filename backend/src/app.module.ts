@@ -17,7 +17,7 @@ import { MenuModule } from './modules/menu/menu.module';
 import { UserGroupModule } from './modules/user-group/user-group.module';
 import { UserModule } from './modules/user/user.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
-import { GadgetModule } from './modules/gadget/gadget.module';
+import { WidgetModule } from './modules/widget/widget.module';
 import { ProductionModule } from './modules/production/production.module';
 import { BackupModule } from './modules/backup/backup.module';
 import { UnitModule } from './modules/unit/unit.module';
@@ -44,7 +44,7 @@ import { ItemModule } from './modules/item/item.module';
     UserGroupModule,
     UserModule,
     DashboardModule,
-    GadgetModule,
+    WidgetModule,
     ProductionModule,
     BackupModule,
     UnitModule,

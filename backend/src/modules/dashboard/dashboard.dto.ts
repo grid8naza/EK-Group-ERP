@@ -19,7 +19,6 @@ export class CreateDashboardDto {
   @IsNotEmpty()
   name: string;
 
-  @IsOptional() @IsInt() userGroupId?: number;
   @IsOptional() @IsInt() branchId?: number | null; // null = company-wide
   @IsOptional() @IsInt() objectId?: number;
   @IsOptional() @IsString() icon?: string;
@@ -32,7 +31,7 @@ export class UpdateDashboardDto extends PartialType(CreateDashboardDto) {}
 
 export class WidgetDto {
   @IsInt()
-  gadgetId: number;
+  widgetId: number;
 
   @IsOptional() @IsInt() width?: number;
   @IsOptional() @IsBoolean() hidden?: boolean;

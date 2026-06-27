@@ -10,7 +10,7 @@ import {
 } from './dashboard.dto';
 
 interface LayoutEntry {
-  gadgetId: number;
+  widgetId: number;
   sortOrder: number;
   hidden?: boolean;
 }
@@ -30,7 +30,6 @@ export class DashboardService {
       },
       include: {
         module: { select: { id: true, name: true, code: true } },
-        userGroup: { select: { id: true, name: true } },
         branch: { select: { id: true, name: true } },
         _count: { select: { widgets: true } },
       },
@@ -104,9 +103,9 @@ export class DashboardService {
     return { success: true };
   }
 
-  /** Gadget catalog available to place on a dashboard (company + module). */
-  gadgetCatalog(companyId: number, moduleId: number) {
-    return this.prisma.gadget.findMany({
+  /** Widget catalog available to place on a dashboard (company + module). */
+  widgetCatalog(companyId: number, moduleId: number) {
+    return this.prisma.widget.findMany({
       where: { companyId, moduleId, isActive: true },
       orderBy: { sortOrder: 'asc' },
     });
@@ -121,7 +120,7 @@ export class DashboardService {
         this.prisma.dashboardWidget.create({
           data: {
             dashboardId: id,
-            gadgetId: w.gadgetId,
+            widgetId: w.widgetId,
             sortOrder: i + 1,
             width: w.width ?? 1,
           },
@@ -134,7 +133,7 @@ export class DashboardService {
   // ---- Runtime (the dashboard page) ----
 
   /**
-   * Returns the dashboard with its widgets resolved to gadget metadata, in the
+   * Returns the dashboard with its widgets resolved to widget metadata, in the
    * effective order for `userId` (their saved personal layout if any, else the
    * admin default).
    */
@@ -143,11 +142,10 @@ export class DashboardService {
       where: { id },
       include: {
         widgets: {
-          include: { gadget: true },
+          include: { widget: true },
           orderBy: { sortOrder: 'asc' },
         },
         module: { select: { id: true, name: true, code: true } },
-        userGroup: { select: { id: true, name: true } },
       },
     });
     if (!dashboard) throw new NotFoundException('Dashboard not found');
@@ -162,19 +160,19 @@ export class DashboardService {
       }
     }
     const order = new Map<number, LayoutEntry>(
-      (layout ?? []).map((l) => [l.gadgetId, l]),
+      (layout ?? []).map((l) => [l.widgetId, l]),
     );
 
     const widgets = dashboard.widgets
       .map((w) => {
-        const personal = order.get(w.gadgetId);
+        const personal = order.get(w.widgetId);
         return {
-          gadgetId: w.gadgetId,
-          code: w.gadget.code,
-          name: w.gadget.name,
-          description: w.gadget.description,
-          type: w.gadget.type,
-          config: w.gadget.config,
+          widgetId: w.widgetId,
+          code: w.widget.code,
+          name: w.widget.name,
+          description: w.widget.description,
+          type: w.widget.type,
+          config: w.widget.config,
           width: w.width,
           hidden: personal?.hidden ?? false,
           sortOrder: personal?.sortOrder ?? w.sortOrder,
@@ -188,7 +186,6 @@ export class DashboardService {
       icon: dashboard.icon,
       moduleId: dashboard.moduleId,
       module: dashboard.module,
-      userGroup: dashboard.userGroup,
       isCustomized: !!layout,
       widgets,
     };
@@ -198,7 +195,7 @@ export class DashboardService {
   async saveLayout(id: number, userId: number, dto: SaveLayoutDto) {
     await this.ensure(id);
     const layout = dto.widgets.map((w, i) => ({
-      gadgetId: w.gadgetId,
+      widgetId: w.widgetId,
       sortOrder: i + 1,
       hidden: w.hidden ?? false,
     }));

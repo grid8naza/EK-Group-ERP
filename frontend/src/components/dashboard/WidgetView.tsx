@@ -12,11 +12,16 @@ import {
   Inbox,
   ArrowUpRight,
   LayoutDashboard,
-  Ruler,
-  Tags,
 } from 'lucide-react';
-import { StatCard } from '@/components/ui/StatCard';
-import type { NavModule, ErpObject, GadgetType, GadgetConfig } from '@/lib/types';
+import { cn } from '@/lib/utils';
+import { resolveWidgetStyle } from '@/lib/widget-style';
+import type {
+  NavModule,
+  ErpObject,
+  WidgetType,
+  WidgetConfig,
+  MetricValue,
+} from '@/lib/types';
 
 export interface DashAggregates {
   forms: number;
@@ -41,24 +46,7 @@ export interface WidgetUser {
   isSuperAdmin?: boolean;
 }
 
-// Built-in stat gadget codes → card config.
-const STAT: Record<
-  string,
-  { label: string; pick: (d: DashAggregates) => number; icon: React.ReactNode; accent: any; hint: string }
-> = {
-  USERS_COUNT: { label: 'Users', pick: (d) => d.users, icon: <Users className="h-6 w-6" />, accent: 'slate', hint: 'System users' },
-  GROUPS_COUNT: { label: 'User Groups', pick: (d) => d.groups, icon: <ShieldCheck className="h-6 w-6" />, accent: 'rose', hint: 'Privilege groups' },
-  MODULES_COUNT: { label: 'Modules', pick: (d) => d.modules, icon: <Layers className="h-6 w-6" />, accent: 'emerald', hint: 'Enabled modules' },
-  COMPANIES_COUNT: { label: 'Companies', pick: (d) => d.companies, icon: <Building2 className="h-6 w-6" />, accent: 'blue', hint: 'Registered companies' },
-  FORMS_COUNT: { label: 'Forms', pick: (d) => d.forms, icon: <FileText className="h-6 w-6" />, accent: 'blue', hint: 'Form objects' },
-  REPORTS_COUNT: { label: 'Reports', pick: (d) => d.reports, icon: <BarChart3 className="h-6 w-6" />, accent: 'violet', hint: 'Report objects' },
-  TABLES_COUNT: { label: 'Tables', pick: (d) => d.tables, icon: <Table2 className="h-6 w-6" />, accent: 'amber', hint: 'Table objects' },
-  CRM_ENQUIRIES: { label: 'Enquiries', pick: (d) => d.moduleObjects, icon: <Inbox className="h-6 w-6" />, accent: 'blue', hint: 'Objects in this module' },
-  UNITS_COUNT: { label: 'Units', pick: (d) => d.units, icon: <Ruler className="h-6 w-6" />, accent: 'blue', hint: 'Units of measure' },
-  CATEGORIES_COUNT: { label: 'Categories', pick: (d) => d.categories, icon: <Tags className="h-6 w-6" />, accent: 'violet', hint: 'Item & product categories' },
-};
-
-// Sources an admin can pick for a STAT-type gadget.
+// Sources an admin can pick for a STAT-type widget.
 export const STAT_SOURCES: Record<
   string,
   { label: string; pick: (d: DashAggregates) => number; icon: React.ReactNode; accent: any }
@@ -74,65 +62,119 @@ export const STAT_SOURCES: Record<
   moduleObjects: { label: 'Module Objects', pick: (d) => d.moduleObjects, icon: <Inbox className="h-6 w-6" />, accent: 'blue' },
 };
 
-// True when a gadget should occupy a single (stat-sized) cell.
-export function isStatGadget(code: string, type?: GadgetType) {
-  if (type) return type === 'STAT' || (type === 'BUILTIN' && !!STAT[code]);
-  return !!STAT[code];
+// True when a widget should occupy a single (stat-sized) cell.
+export function isStatWidget(type?: WidgetType) {
+  return type === 'STAT' || type === 'METRIC';
 }
-// Back-compat alias.
-export const isStatWidget = (code: string) => !!STAT[code];
+
+// Format a metric value for display per its declared format.
+function formatMetric(m: MetricValue | undefined, loading: boolean): string {
+  if (loading || !m) return '—';
+  if (m.format === 'percent') return `${m.value.toLocaleString()}%`;
+  return m.value.toLocaleString();
+}
 
 export function WidgetView({
-  code,
   name,
   description,
   type,
   config,
   data,
+  metrics,
   loading,
-  user,
   activeModule,
 }: {
   code: string;
   name: string;
   description?: string | null;
-  type?: GadgetType;
-  config?: GadgetConfig | null;
+  type?: WidgetType;
+  config?: WidgetConfig | null;
   data: DashAggregates | null;
+  metrics?: Record<string, MetricValue> | null;
   loading: boolean;
   user: WidgetUser | null;
   activeModule: NavModule | null;
 }) {
+  const r = resolveWidgetStyle(config?.style);
   const v = (n?: number) => (loading || n == null ? '—' : n.toLocaleString());
 
-  // ---- Configurable (admin-created) gadget types ----
+  // The styled card shell every widget renders inside.
+  const Shell = ({ children }: { children: React.ReactNode }) => (
+    <div className={r.containerClass} style={r.containerStyle}>
+      {children}
+    </div>
+  );
+
+  // Single-value card body shared by STAT and METRIC.
+  const StatBody = ({ value, icon }: { value: React.ReactNode; icon: React.ReactNode }) => (
+    <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          {name}
+        </p>
+        <p
+          className={cn('mt-1 text-slate-900 dark:text-white', r.valueClass)}
+          style={r.valueStyle}
+        >
+          {value}
+        </p>
+        {(config?.hint || description) && (
+          <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
+            {config?.hint || description}
+          </p>
+        )}
+      </div>
+      <div
+        className={cn(
+          'flex h-12 w-12 flex-none items-center justify-center rounded-xl',
+          r.accentChip,
+        )}
+      >
+        {icon}
+      </div>
+    </div>
+  );
+
   if (type === 'STAT') {
     const src = STAT_SOURCES[config?.source ?? ''];
     return (
-      <StatCard
-        label={name}
-        value={data && src ? v(src.pick(data)) : '—'}
-        icon={src?.icon ?? <BarChart3 className="h-6 w-6" />}
-        accent={src?.accent ?? 'blue'}
-        hint={config?.hint || description || src?.label || ''}
-      />
+      <Shell>
+        <StatBody
+          value={data && src ? v(src.pick(data)) : '—'}
+          icon={src?.icon ?? <BarChart3 className="h-6 w-6" />}
+        />
+      </Shell>
+    );
+  }
+
+  if (type === 'METRIC') {
+    const m = config?.metric ? metrics?.[config.metric] ?? undefined : undefined;
+    return (
+      <Shell>
+        <StatBody
+          value={formatMetric(m, loading)}
+          icon={<BarChart3 className="h-6 w-6" />}
+        />
+      </Shell>
     );
   }
 
   if (type === 'NOTE') {
     return (
-      <Card title={name} subtitle={description}>
+      <Shell>
+        <Heading title={name} subtitle={description} />
         <p className="mt-3 whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300">
           {config?.text || 'Empty note.'}
         </p>
-      </Card>
+      </Shell>
     );
   }
 
   if (type === 'EMBED') {
     const url = config?.url;
     return (
-      <Card title={name} subtitle={description}>
+      <Shell>
+        <Heading title={name} subtitle={description} />
         {url ? (
           <iframe
             src={url}
@@ -145,76 +187,27 @@ export function WidgetView({
         ) : (
           <p className="mt-3 text-sm text-slate-400">No URL configured.</p>
         )}
-      </Card>
+      </Shell>
     );
   }
 
   if (type === 'LINKS') {
-    return <QuickLinks name={name} description={description} activeModule={activeModule} />;
-  }
-
-  // ---- Built-in gadgets (rendered by code) ----
-  const stat = STAT[code];
-  if (stat) {
     return (
-      <StatCard
-        label={stat.label}
-        value={data ? v(stat.pick(data)) : '—'}
-        icon={stat.icon}
-        accent={stat.accent}
-        hint={stat.hint}
-      />
-    );
-  }
-
-  if (code === 'QUICK_LINKS' || code === 'CRM_QUICK_LINKS') {
-    return <QuickLinks name={name} description={description} activeModule={activeModule} />;
-  }
-
-  if (code === 'ACCOUNT_INFO') {
-    return (
-      <Card title="Account">
-        <dl className="mt-4 space-y-3 text-sm">
-          <Row label="Name" value={user?.name} />
-          <Row label="Username" value={user?.username} />
-          <Row label="User Code" value={user?.userCode} />
-          <Row label="Email" value={user?.email} />
-          <Row label="Role" value={user?.isSuperAdmin ? 'Super Administrator' : 'User'} />
-        </dl>
-      </Card>
-    );
-  }
-
-  if (code === 'RECENT_OBJECTS') {
-    const recent = data?.recent ?? [];
-    return (
-      <Card title={name} subtitle={description}>
-        {recent.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-400">No objects yet.</p>
-        ) : (
-          <ul className="mt-3 divide-y divide-slate-100 dark:divide-slate-800">
-            {recent.map((o) => (
-              <li key={o.id} className="flex items-center justify-between py-2 text-sm">
-                <span className="font-medium text-slate-700 dark:text-slate-200">
-                  {o.objectName}
-                </span>
-                <span className="text-xs text-slate-400">{o.objectType}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+      <Shell>
+        <QuickLinks name={name} description={description} activeModule={activeModule} />
+      </Shell>
     );
   }
 
   return (
-    <Card title={name} subtitle={description}>
+    <Shell>
+      <Heading title={name} subtitle={description} />
       <p className="mt-3 flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
         <LayoutDashboard className="h-4 w-4" />
         The <span className="font-medium">{name}</span> widget for{' '}
         {activeModule?.name}.
       </p>
-    </Card>
+    </Shell>
   );
 }
 
@@ -232,9 +225,10 @@ function QuickLinks({
     .filter((it) => it.route)
     .slice(0, 8);
   return (
-    <Card title={name} subtitle={description}>
+    <>
+      <Heading title={name} subtitle={description} />
       {links.length === 0 ? (
-        <p className="text-sm text-slate-400">No screens available.</p>
+        <p className="mt-3 text-sm text-slate-400">No screens available.</p>
       ) : (
         <div className="mt-4 grid grid-cols-2 gap-3">
           {links.map((it) => (
@@ -249,21 +243,13 @@ function QuickLinks({
           ))}
         </div>
       )}
-    </Card>
+    </>
   );
 }
 
-function Card({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string;
-  subtitle?: string | null;
-  children: React.ReactNode;
-}) {
+function Heading({ title, subtitle }: { title: string; subtitle?: string | null }) {
   return (
-    <div className="p-1">
+    <>
       <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
         {title}
       </h2>
@@ -272,18 +258,6 @@ function Card({
           {subtitle}
         </p>
       )}
-      {children}
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value?: string }) {
-  return (
-    <div className="flex items-center justify-between border-b border-slate-100 pb-2 last:border-0 dark:border-slate-800">
-      <dt className="text-slate-500 dark:text-slate-400">{label}</dt>
-      <dd className="font-medium text-slate-800 dark:text-slate-100">
-        {value || '-'}
-      </dd>
-    </div>
+    </>
   );
 }

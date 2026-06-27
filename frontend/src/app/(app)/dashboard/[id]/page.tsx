@@ -24,7 +24,7 @@ import { useToast } from '@/providers/ToastProvider';
 import { resolveIcon } from '@/lib/icons';
 import {
   WidgetView,
-  isStatGadget,
+  isStatWidget,
   type DashAggregates,
 } from '@/components/dashboard/WidgetView';
 import type {
@@ -34,6 +34,7 @@ import type {
   Module,
   UserGroup,
   AppUser,
+  MetricValue,
 } from '@/lib/types';
 
 export default function DashboardViewPage() {
@@ -47,6 +48,7 @@ export default function DashboardViewPage() {
   const [loading, setLoading] = useState(true);
   const [agg, setAgg] = useState<DashAggregates | null>(null);
   const [aggLoading, setAggLoading] = useState(true);
+  const [metricValues, setMetricValues] = useState<Record<string, MetricValue> | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -132,12 +134,34 @@ export default function DashboardViewPage() {
     };
   }, [detail?.moduleId]);
 
+  // Live values for METRIC widgets — computed server-side for the active
+  // company/branch from each module's metric registry.
+  useEffect(() => {
+    const keys = (detail?.widgets ?? [])
+      .filter((w) => w.type === 'METRIC' && w.config?.metric)
+      .map((w) => w.config!.metric as string);
+    if (keys.length === 0) {
+      setMetricValues(null);
+      return;
+    }
+    let cancelled = false;
+    api
+      .post<Record<string, MetricValue>>('/widgets/metric-values', { keys })
+      .then((res) => {
+        if (!cancelled) setMetricValues(res ?? {});
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [detail]);
+
   const onDragEnd = (e: DragEndEvent) => {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
     setWidgets((items) => {
-      const oldIndex = items.findIndex((w) => w.gadgetId === active.id);
-      const newIndex = items.findIndex((w) => w.gadgetId === over.id);
+      const oldIndex = items.findIndex((w) => w.widgetId === active.id);
+      const newIndex = items.findIndex((w) => w.widgetId === over.id);
       if (oldIndex < 0 || newIndex < 0) return items;
       return arrayMove(items, oldIndex, newIndex);
     });
@@ -148,7 +172,7 @@ export default function DashboardViewPage() {
     setSaving(true);
     try {
       const res = await api.put<DashboardDetail>(`/dashboards/${id}/my-layout`, {
-        widgets: widgets.map((w) => ({ gadgetId: w.gadgetId })),
+        widgets: widgets.map((w) => ({ widgetId: w.widgetId })),
       });
       setDetail(res);
       setDirty(false);
@@ -201,7 +225,6 @@ export default function DashboardViewPage() {
               <p className="flex items-center gap-2 text-sm font-medium text-brand-100">
                 <DashIcon className="h-4 w-4" />
                 {detail?.module?.name ?? activeModule?.name ?? 'Dashboard'}
-                {detail?.userGroup ? ` · ${detail.userGroup.name}` : ''}
               </p>
               <h1 className="mt-1 text-2xl font-bold sm:text-3xl">
                 {detail?.name ?? 'Dashboard'}
@@ -253,15 +276,16 @@ export default function DashboardViewPage() {
           onDragEnd={onDragEnd}
         >
           <SortableContext
-            items={widgets.map((w) => w.gadgetId)}
+            items={widgets.map((w) => w.widgetId)}
             strategy={rectSortingStrategy}
           >
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {widgets.map((w) => (
                 <SortableWidget
-                  key={w.gadgetId}
+                  key={w.widgetId}
                   widget={w}
                   data={agg}
+                  metrics={metricValues}
                   loading={aggLoading}
                   user={user}
                   activeModule={activeModule}
@@ -278,20 +302,22 @@ export default function DashboardViewPage() {
 function SortableWidget({
   widget,
   data,
+  metrics,
   loading,
   user,
   activeModule,
 }: {
   widget: DashboardWidget;
   data: DashAggregates | null;
+  metrics: Record<string, MetricValue> | null;
   loading: boolean;
   user: ReturnType<typeof useAuth>['user'];
   activeModule: ReturnType<typeof useAuth>['activeModule'];
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: widget.gadgetId });
+    useSortable({ id: widget.widgetId });
 
-  const wide = widget.width >= 2 && !isStatGadget(widget.code, widget.type);
+  const wide = widget.width >= 2 && !isStatWidget(widget.type);
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -304,7 +330,7 @@ function SortableWidget({
       ref={setNodeRef}
       style={style}
       className={[
-        'group relative rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900',
+        'group relative rounded-2xl',
         wide ? 'sm:col-span-2 xl:col-span-2' : '',
         isDragging ? 'opacity-80 ring-2 ring-brand-400' : '',
       ].join(' ')}
@@ -325,6 +351,7 @@ function SortableWidget({
         type={widget.type}
         config={widget.config}
         data={data}
+        metrics={metrics}
         loading={loading}
         user={user}
         activeModule={activeModule}

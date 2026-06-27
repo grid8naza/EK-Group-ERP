@@ -141,30 +141,34 @@ export class UserGroupService {
         })
       : [];
 
-    const gadgetList = moduleIds.length
-      ? await this.prisma.gadget.findMany({
+    // Dashboards the group can be granted (per company + module, branch-aware).
+    // Selecting two or more in a module makes all of them appear in that
+    // module's dashboard menu for users in this group.
+    const dashboardList = moduleIds.length
+      ? await this.prisma.dashboard.findMany({
           where: {
             companyId: group.companyId,
             moduleId: { in: moduleIds },
             isActive: true,
           },
-          orderBy: { sortOrder: 'asc' },
+          include: { branch: { select: { id: true, name: true } } },
+          orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
         })
       : [];
 
-    const [mainAccess, subPrivs, groupGadgets] = await Promise.all([
+    const [mainAccess, subPrivs, groupDashboards] = await Promise.all([
       this.prisma.groupMainMenuAccess.findMany({
         where: { userGroupId: id },
       }),
       this.prisma.groupSubMenuPrivilege.findMany({
         where: { userGroupId: id },
       }),
-      this.prisma.groupGadget.findMany({ where: { userGroupId: id } }),
+      this.prisma.groupDashboard.findMany({ where: { userGroupId: id } }),
     ]);
 
     const mainMap = new Map(mainAccess.map((a) => [a.mainMenuId, a]));
     const subMap = new Map(subPrivs.map((p) => [p.subMenuId, p]));
-    const selectedGadgets = new Set(groupGadgets.map((g) => g.gadgetId));
+    const selectedDashboards = new Set(groupDashboards.map((d) => d.dashboardId));
 
     const buildNode = (mainMenu: (typeof mainMenus)[number]) => ({
       mainMenu: {
@@ -198,14 +202,15 @@ export class UserGroupService {
       .map((mod) => ({
         module: { id: mod.id, code: mod.code, name: mod.name, icon: mod.icon },
         tree: mainMenus.filter((mm) => mm.moduleId === mod.id).map(buildNode),
-        gadgets: gadgetList
-          .filter((g) => g.moduleId === mod.id)
-          .map((g) => ({
-            id: g.id,
-            code: g.code,
-            name: g.name,
-            description: g.description,
-            selected: selectedGadgets.has(g.id),
+        dashboards: dashboardList
+          .filter((d) => d.moduleId === mod.id)
+          .map((d) => ({
+            id: d.id,
+            name: d.name,
+            icon: d.icon,
+            branchId: d.branchId,
+            branchName: d.branch?.name ?? null,
+            selected: selectedDashboards.has(d.id),
           })),
       }));
 
@@ -266,17 +271,17 @@ export class UserGroupService {
       ),
     ];
 
-    // Replace the group's gadget selection when provided.
-    if (dto.gadgetIds !== undefined) {
+    // Replace the group's dashboard selection when provided.
+    if (dto.dashboardIds !== undefined) {
       ops.push(
-        this.prisma.groupGadget.deleteMany({ where: { userGroupId: id } }),
+        this.prisma.groupDashboard.deleteMany({ where: { userGroupId: id } }),
       );
-      if (dto.gadgetIds.length) {
+      if (dto.dashboardIds.length) {
         ops.push(
-          this.prisma.groupGadget.createMany({
-            data: dto.gadgetIds.map((gadgetId) => ({
+          this.prisma.groupDashboard.createMany({
+            data: dto.dashboardIds.map((dashboardId) => ({
               userGroupId: id,
-              gadgetId,
+              dashboardId,
             })),
           }),
         );

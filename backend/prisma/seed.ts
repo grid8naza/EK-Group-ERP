@@ -54,22 +54,6 @@ async function main() {
       },
     });
   }
-  // DASHBOARD object that each company's Admin Overview dashboard links to.
-  // Cpanel provisioning looks this up by name when wiring up dashboards.
-  await prisma.objectMaster.create({
-    data: {
-      moduleId: modules['CPANEL'],
-      author: OBJECT_AUTHOR,
-      objectType: ObjectType.DASHBOARD,
-      objectName: 'Admin Overview',
-      nameInMenu: 'Admin Overview',
-      showInMenu: true,
-      route: '/dashboard',
-      icon: 'layout-dashboard',
-      isSystem: true,
-      isLocked: true,
-    },
-  });
 
   // -------------------------------------------------------------------------
   // Security settings (global singleton) — the "high security password" gate
@@ -145,7 +129,7 @@ async function main() {
       });
     }
 
-    // ---- Cpanel scaffold (menus, gadgets, Administrators group, dashboards) ----
+    // ---- Cpanel scaffold (menus, Administrators group) ----
     // Shared with the runtime "create company" endpoint so the two never drift.
     const provisioned = await provisionCompanyCpanel(prisma, cid);
     if (!provisioned) throw new Error(`Company ${cid} was already provisioned`);

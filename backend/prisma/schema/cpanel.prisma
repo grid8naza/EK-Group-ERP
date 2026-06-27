@@ -1,7 +1,7 @@
 // Cpanel domain — the Control Panel module's tables.
 //
 // Multi-company: each Company is an isolated tenant. The cpanel config tables
-// (objects, menus, user groups, gadgets, dashboards) carry a companyId so every
+// (objects, menus, user groups, widgets, dashboards) carry a companyId so every
 // company is configured independently ("separate cpanel per company"). The
 // Module catalog and Lookups stay global; which modules are enabled is decided
 // per company via CompanyModule.
@@ -32,7 +32,7 @@ model Module {
   mainMenus           MainMenu[]
   userGroups          UserGroupModule[]
   userAccess          UserModule[]
-  gadgets             Gadget[]
+  widgets             Widget[]
   dashboards          Dashboard[]
   companyModules      CompanyModule[]
   defaultForUsers     User[]            @relation("UserDefaultModule")
@@ -121,7 +121,7 @@ model Company {
   userModules UserModule[]
   mainMenus   MainMenu[]
   userGroups  UserGroup[]
-  gadgets     Gadget[]
+  widgets     Widget[]
   dashboards  Dashboard[]
   branches    Branch[]
   costCenters CostCenter[]
@@ -369,8 +369,7 @@ model UserGroup {
   mainMenuAccess  GroupMainMenuAccess[]
   subMenuPrivs    GroupSubMenuPrivilege[]
   userAssignments UserGroupAssignment[]
-  gadgetAccess    GroupGadget[]
-  dashboards      Dashboard[]
+  dashboardAccess GroupDashboard[]
 
   @@unique([companyId, name])
   @@map("user_groups")
@@ -422,17 +421,17 @@ model GroupSubMenuPrivilege {
 }
 
 // ---------------------------------------------------------------------------
-// Dashboard gadgets — per-company-and-module catalog of widgets.
+// Widgets — per-company-and-module catalog of dashboard widgets.
 // ---------------------------------------------------------------------------
 
-model Gadget {
+model Widget {
   id          Int        @id @default(autoincrement())
   companyId   Int
   moduleId    Int
-  code        String // unique per company+module; BUILTIN gadgets render by it
+  code        String // unique per company+module
   name        String
   description String?
-  type        GadgetType @default(BUILTIN)
+  type        WidgetType @default(STAT)
   config      Json? // type-specific settings (source / text / url / height)
   sortOrder   Int        @default(0)
   isActive    Boolean    @default(true)
@@ -440,30 +439,19 @@ model Gadget {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
-  company     Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  module      Module            @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  groupAccess GroupGadget[]
-  placements  DashboardWidget[]
+  company    Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  module     Module            @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  placements DashboardWidget[]
 
   @@unique([companyId, moduleId, code])
-  @@map("gadgets")
-}
-
-model GroupGadget {
-  id          Int @id @default(autoincrement())
-  userGroupId Int
-  gadgetId    Int
-
-  userGroup UserGroup @relation(fields: [userGroupId], references: [id], onDelete: Cascade)
-  gadget    Gadget    @relation(fields: [gadgetId], references: [id], onDelete: Cascade)
-
-  @@unique([userGroupId, gadgetId])
-  @@map("group_gadgets")
+  @@map("widgets")
 }
 
 // ---------------------------------------------------------------------------
-// Dashboards — multiple named dashboards per (company, module, user group).
-// Selectable from the sidebar. Widgets have a default order; each user can
+// Dashboards — multiple named dashboards per (company, module), optionally
+// scoped to a branch. User groups choose which dashboards they see via
+// GroupDashboard, so two or more selected dashboards in a module all appear in
+// that module's dashboard menu. Widgets have a default order; each user can
 // override the arrangement (saved in UserDashboardLayout).
 // ---------------------------------------------------------------------------
 
@@ -471,7 +459,6 @@ model Dashboard {
   id          Int      @id @default(autoincrement())
   companyId   Int
   moduleId    Int
-  userGroupId Int? // null = visible to everyone in the module
   branchId    Int? // null = company-wide; otherwise scoped to one branch
   objectId    Int? // optional link to its ObjectMaster DASHBOARD object
   name        String
@@ -485,27 +472,42 @@ model Dashboard {
 
   company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
   module      Module                @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  userGroup   UserGroup?            @relation(fields: [userGroupId], references: [id], onDelete: SetNull)
   branch      Branch?               @relation(fields: [branchId], references: [id], onDelete: Cascade)
   object      ObjectMaster?         @relation(fields: [objectId], references: [id], onDelete: SetNull)
   widgets     DashboardWidget[]
+  groupAccess GroupDashboard[]
   userLayouts UserDashboardLayout[]
 
   @@map("dashboards")
+}
+
+// Which dashboards a user group sees. Selecting two or more dashboards in a
+// module makes all of them appear in that module's dashboard menu for the
+// group. Mirrors the per-group menu/privilege joins.
+model GroupDashboard {
+  id          Int @id @default(autoincrement())
+  userGroupId Int
+  dashboardId Int
+
+  userGroup UserGroup @relation(fields: [userGroupId], references: [id], onDelete: Cascade)
+  dashboard Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+
+  @@unique([userGroupId, dashboardId])
+  @@map("group_dashboards")
 }
 
 // Default widget placement on a dashboard.
 model DashboardWidget {
   id          Int @id @default(autoincrement())
   dashboardId Int
-  gadgetId    Int
+  widgetId    Int
   sortOrder   Int @default(0)
   width       Int @default(1) // grid span hint (1 = stat, 2 = wide)
 
   dashboard Dashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
-  gadget    Gadget    @relation(fields: [gadgetId], references: [id], onDelete: Cascade)
+  widget    Widget    @relation(fields: [widgetId], references: [id], onDelete: Cascade)
 
-  @@unique([dashboardId, gadgetId])
+  @@unique([dashboardId, widgetId])
   @@map("dashboard_widgets")
 }
 
@@ -514,7 +516,7 @@ model UserDashboardLayout {
   id          Int      @id @default(autoincrement())
   userId      Int
   dashboardId Int
-  layout      Json // [{ gadgetId, sortOrder, hidden }]
+  layout      Json // [{ widgetId, sortOrder, hidden }]
   updatedAt   DateTime @updatedAt
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
