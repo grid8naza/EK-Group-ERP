@@ -318,7 +318,9 @@ export class AuthService {
     }
     const dashboards = await this.prisma.dashboard.findMany({
       where: {
-        companyId: activeCompanyId,
+        // Company-scoped dashboards for the active company, plus global
+        // dashboards (companyId null) of core modules like Cpanel.
+        OR: [{ companyId: activeCompanyId }, { companyId: null }],
         moduleId: { in: visibleModuleIds.length ? visibleModuleIds : [-1] },
         isActive: true,
         AND: dashboardWhere,

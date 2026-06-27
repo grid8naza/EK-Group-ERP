@@ -426,9 +426,9 @@ model GroupSubMenuPrivilege {
 
 model Widget {
   id          Int        @id @default(autoincrement())
-  companyId   Int
+  companyId   Int? // null = global (core modules like Cpanel); else company-scoped
   moduleId    Int
-  code        String // unique per company+module
+  code        String // unique per company+module (per-module for global widgets)
   name        String
   description String?
   type        WidgetType @default(METRIC)
@@ -439,7 +439,7 @@ model Widget {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
-  company    Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company    Company?          @relation(fields: [companyId], references: [id], onDelete: Cascade)
   module     Module            @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   placements DashboardWidget[]
 
@@ -457,7 +457,7 @@ model Widget {
 
 model Dashboard {
   id          Int      @id @default(autoincrement())
-  companyId   Int
+  companyId   Int? // null = global (core modules like Cpanel); else company-scoped
   moduleId    Int
   branchId    Int? // null = company-wide; otherwise scoped to one branch
   objectId    Int? // optional link to its ObjectMaster DASHBOARD object
@@ -471,7 +471,7 @@ model Dashboard {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  company     Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company     Company?              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   module      Module                @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   branch      Branch?               @relation(fields: [branchId], references: [id], onDelete: Cascade)
   object      ObjectMaster?         @relation(fields: [objectId], references: [id], onDelete: SetNull)

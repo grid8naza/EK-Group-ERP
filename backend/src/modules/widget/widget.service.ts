@@ -8,9 +8,25 @@ import { CreateWidgetDto, UpdateWidgetDto } from './widget.dto';
 export class WidgetService {
   constructor(private prisma: PrismaService) {}
 
-  findAll(companyId: number, moduleId?: number) {
+  /**
+   * Core modules (e.g. Cpanel) are global, like ObjectMaster: their widgets
+   * aren't company-scoped (companyId = null). User modules stay company-scoped.
+   * Returns the companyId to store/query, or null for global.
+   */
+  private async scopedCompany(moduleId: number, companyId: number) {
+    const m = await this.prisma.module.findUnique({
+      where: { id: moduleId },
+      select: { isCore: true },
+    });
+    return m?.isCore ? null : companyId;
+  }
+
+  async findAll(companyId: number, moduleId?: number) {
+    const scoped = moduleId
+      ? await this.scopedCompany(moduleId, companyId)
+      : companyId;
     return this.prisma.widget.findMany({
-      where: { companyId, ...(moduleId ? { moduleId } : {}) },
+      where: { companyId: scoped, ...(moduleId ? { moduleId } : {}) },
       include: {
         module: { select: { id: true, name: true, code: true } },
         _count: { select: { placements: true } },
@@ -21,15 +37,12 @@ export class WidgetService {
 
   async create(dto: CreateWidgetDto, companyId: number) {
     const { code, ...rest } = dto;
-    const finalCode = await this.uniqueCode(
-      companyId,
-      dto.moduleId,
-      code || dto.name,
-    );
+    const scoped = await this.scopedCompany(dto.moduleId, companyId);
+    const finalCode = await this.uniqueCode(scoped, dto.moduleId, code || dto.name);
     return this.prisma.widget.create({
       data: {
         ...rest,
-        companyId,
+        companyId: scoped,
         code: finalCode,
         config: (dto.config ?? {}) as Prisma.InputJsonValue,
       },
@@ -73,7 +86,13 @@ export class WidgetService {
   }
 
   // Build a unique code per (company, module) from a name/base string.
-  private async uniqueCode(companyId: number, moduleId: number, base: string) {
+  // companyId is null for global (core-module) widgets — uniqueness is then
+  // enforced per module across the global set.
+  private async uniqueCode(
+    companyId: number | null,
+    moduleId: number,
+    base: string,
+  ) {
     const slug =
       base
         .toUpperCase()

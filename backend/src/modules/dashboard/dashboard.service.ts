@@ -22,10 +22,27 @@ export class DashboardService {
 
   // ---- Admin listing / CRUD (cpanel) ----
 
-  findAll(companyId: number, moduleId?: number, branchId?: number) {
+  /**
+   * Core modules (e.g. Cpanel) are global, like ObjectMaster: their dashboards
+   * aren't company-scoped (companyId = null), so the active company is ignored.
+   * User modules stay company-scoped. Returns the companyId to store/query, or
+   * null for global.
+   */
+  private async scopedCompany(moduleId: number, companyId: number) {
+    const m = await this.prisma.module.findUnique({
+      where: { id: moduleId },
+      select: { isCore: true },
+    });
+    return m?.isCore ? null : companyId;
+  }
+
+  async findAll(companyId: number, moduleId?: number, branchId?: number) {
+    const scoped = moduleId
+      ? await this.scopedCompany(moduleId, companyId)
+      : companyId;
     return this.prisma.dashboard.findMany({
       where: {
-        companyId,
+        companyId: scoped,
         ...(moduleId ? { moduleId } : {}),
         ...(branchId ? { branchId } : {}),
       },
@@ -38,12 +55,17 @@ export class DashboardService {
     });
   }
 
-  create(dto: CreateDashboardDto, companyId: number) {
+  async create(dto: CreateDashboardDto, companyId: number) {
+    const scoped = await this.scopedCompany(dto.moduleId, companyId);
+    const global = scoped === null;
     return this.prisma.$transaction(async (tx) => {
       const created = await tx.dashboard.create({
         data: {
           ...dto,
-          companyId,
+          companyId: scoped,
+          // Branches are company-scoped, so a global dashboard can't belong
+          // to one — force company-wide.
+          branchId: global ? null : (dto.branchId ?? null),
           header: dto.header
             ? (dto.header as Prisma.InputJsonValue)
             : undefined,
@@ -59,11 +81,13 @@ export class DashboardService {
   async update(id: number, dto: UpdateDashboardDto) {
     const existing = await this.ensure(id);
     assertUnlocked(existing, 'dashboard', 'editing');
+    const global = existing.companyId === null;
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.dashboard.update({
         where: { id },
         data: {
           ...dto,
+          ...(global ? { branchId: null } : {}),
           header:
             dto.header === undefined
               ? undefined
@@ -110,7 +134,7 @@ export class DashboardService {
     tx: Prisma.TransactionClient,
     dashboard: {
       id: number;
-      companyId: number;
+      companyId: number | null;
       moduleId: number;
       branchId: number | null;
     },
@@ -134,10 +158,11 @@ export class DashboardService {
     return { success: true };
   }
 
-  /** Widget catalog available to place on a dashboard (company + module). */
-  widgetCatalog(companyId: number, moduleId: number) {
+  /** Widget catalog available to place on a dashboard (company/global + module). */
+  async widgetCatalog(companyId: number, moduleId: number) {
+    const scoped = await this.scopedCompany(moduleId, companyId);
     return this.prisma.widget.findMany({
-      where: { companyId, moduleId, isActive: true },
+      where: { companyId: scoped, moduleId, isActive: true },
       orderBy: { sortOrder: 'asc' },
     });
   }

@@ -178,7 +178,10 @@ export default function DashboardsPage() {
 
   const moduleOptions = modules.map((m) => ({ value: m.id, label: m.name }));
   const branchOptions = branches.map((b) => ({ value: b.id, label: b.name }));
-  const hasBranches = branches.length > 0;
+  // Core modules (e.g. Cpanel) are global: their dashboards aren't company- or
+  // branch-scoped, so the branch controls don't apply.
+  const isCoreModule = !!modules.find((m) => String(m.id) === moduleId)?.isCore;
+  const hasBranches = branches.length > 0 && !isCoreModule;
 
   // ---- Dashboard CRUD ----
   const openAdd = () => {
@@ -484,6 +487,12 @@ export default function DashboardsPage() {
             onChange={(e) => setForm({ ...form, name: e.target.value })}
           />
           <Select label="Module" value={moduleId} disabled options={moduleOptions} />
+          {isCoreModule && (
+            <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700 dark:bg-brand-950 dark:text-brand-300 sm:col-span-2">
+              This is a core module — its dashboards are global and shared across
+              all companies.
+            </p>
+          )}
           {hasBranches && (
             <Select
               label="Branch"
