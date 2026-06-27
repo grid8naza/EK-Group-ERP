@@ -21,6 +21,7 @@ import { LockDto } from '../../common/lock.dto';
 import {
   CreateDashboardDto,
   SaveLayoutDto,
+  SetHeaderDto,
   SetWidgetsDto,
   UpdateDashboardDto,
 } from './dashboard.dto';
@@ -93,6 +94,15 @@ export class DashboardController {
     @Body() dto: LockDto,
   ) {
     return this.service.setLock(id, dto.locked);
+  }
+
+  // Admin: design the header banner (theme / colors / subtitle / layout).
+  @Patch(':id/header')
+  setHeader(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SetHeaderDto,
+  ) {
+    return this.service.setHeader(id, dto);
   }
 
   // Admin: set the default widget set + order for a dashboard.

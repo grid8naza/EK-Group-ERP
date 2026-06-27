@@ -463,6 +463,7 @@ model Dashboard {
   objectId    Int? // optional link to its ObjectMaster DASHBOARD object
   name        String
   icon        String?
+  header      Json? // header banner appearance (theme / colors / subtitle / layout)
   sortOrder   Int      @default(0)
   isDefault   Boolean  @default(false)
   isActive    Boolean  @default(true)

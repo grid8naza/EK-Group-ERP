@@ -309,6 +309,29 @@ export interface WidgetCatalogItem {
 }
 
 // ---- Dashboards ----
+
+// Header banner appearance. All optional; unset fields fall back to the
+// default brand-blue gradient and the standard subtitle.
+export type DashboardHeaderTheme =
+  | 'blue'
+  | 'emerald'
+  | 'violet'
+  | 'amber'
+  | 'rose'
+  | 'slate'
+  | 'custom';
+
+export interface DashboardHeaderStyle {
+  theme?: DashboardHeaderTheme;
+  gradientFrom?: string; // hex, used when theme = 'custom'
+  gradientTo?: string; // hex, used when theme = 'custom'
+  solid?: boolean; // solid fill (gradientFrom) instead of a gradient
+  subtitle?: string; // override the default subtitle text
+  pattern?: boolean; // decorative circle, default true
+  align?: 'left' | 'center';
+  size?: 'sm' | 'md' | 'lg'; // banner padding / height
+}
+
 export interface DashboardWidget {
   widgetId: number;
   code: string;
@@ -325,6 +348,7 @@ export interface DashboardDetail {
   id: number;
   name: string;
   icon?: string | null;
+  header?: DashboardHeaderStyle | null;
   moduleId: number;
   module?: { id: number; name: string; code: string } | null;
   isCustomized: boolean;
@@ -339,6 +363,7 @@ export interface DashboardSummary {
   branch?: { id: number; name: string } | null;
   name: string;
   icon?: string | null;
+  header?: DashboardHeaderStyle | null;
   sortOrder: number;
   isDefault: boolean;
   isActive: boolean;

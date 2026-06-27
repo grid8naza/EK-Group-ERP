@@ -24,6 +24,8 @@ import {
   Star,
   LayoutGrid,
   GitBranch,
+  Paintbrush,
+  RotateCcw,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/providers/ToastProvider';
@@ -35,16 +37,23 @@ import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { RowActions } from '@/components/ui/RowActions';
-import { Input, Select, Checkbox } from '@/components/ui/Field';
+import { Input, Select, Checkbox, Textarea } from '@/components/ui/Field';
 import { IconPicker } from '@/components/ui/IconPicker';
 import { Badge } from '@/components/ui/Badge';
 import { cn } from '@/lib/utils';
 import { resolveIcon } from '@/lib/icons';
 import { isStatWidget } from '@/components/dashboard/WidgetView';
+import {
+  resolveDashboardHeader,
+  HEADER_THEME_OPTIONS,
+  HEADER_SIZES,
+  HEADER_ALIGNMENTS,
+} from '@/lib/dashboard-header';
 import type {
   Module,
   DashboardSummary,
   DashboardDetail,
+  DashboardHeaderStyle,
   WidgetType,
 } from '@/lib/types';
 
@@ -64,6 +73,17 @@ const emptyForm = {
   branchId: '',
   isDefault: false,
   isActive: true,
+};
+
+const emptyHeader: DashboardHeaderStyle = {
+  theme: 'blue',
+  gradientFrom: '#2563eb',
+  gradientTo: '#3b82f6',
+  solid: false,
+  subtitle: '',
+  pattern: true,
+  align: 'left',
+  size: 'md',
 };
 
 export default function DashboardsPage() {
@@ -104,6 +124,12 @@ export default function DashboardsPage() {
   const [catalog, setCatalog] = useState<Widget[]>([]);
   const [selected, setSelected] = useState<number[]>([]); // widget ids, ordered
   const [wSaving, setWSaving] = useState(false);
+
+  // header design drawer
+  const [hOpen, setHOpen] = useState(false);
+  const [hDashboard, setHDashboard] = useState<DashboardSummary | null>(null);
+  const [hForm, setHForm] = useState<DashboardHeaderStyle>({ ...emptyHeader });
+  const [hSaving, setHSaving] = useState(false);
 
   useEffect(() => {
     api
@@ -286,6 +312,31 @@ export default function DashboardsPage() {
     }
   };
 
+  // ---- Header design ----
+  const openHeader = (d: DashboardSummary) => {
+    setHDashboard(d);
+    setHForm({ ...emptyHeader, ...(d.header ?? {}) });
+    setHOpen(true);
+  };
+  const saveHeader = async () => {
+    if (!hDashboard) return;
+    setHSaving(true);
+    try {
+      await api.patch(`/dashboards/${hDashboard.id}/header`, { header: hForm });
+      toast.success('Header saved.');
+      setHOpen(false);
+      load();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Failed to save header.');
+    } finally {
+      setHSaving(false);
+    }
+  };
+  const resetHeader = () => setHForm({ ...emptyHeader });
+
+  const headerPreview = resolveDashboardHeader(hForm);
+  const isCustomTheme = hForm.theme === 'custom';
+
   const catalogById = new Map(catalog.map((g) => [g.id, g]));
   const unselected = catalog.filter((g) => !selected.includes(g.id));
 
@@ -369,12 +420,21 @@ export default function DashboardsPage() {
                 <div className="mt-4 flex items-center gap-2">
                   <RowActions
                     before={
-                      <button
-                        onClick={() => openWidgets(d)}
-                        className="btn-secondary flex-1 !py-1.5"
-                      >
-                        <LayoutGrid className="h-4 w-4" /> Widgets
-                      </button>
+                      <>
+                        <button
+                          onClick={() => openWidgets(d)}
+                          className="btn-secondary flex-1 !py-1.5"
+                        >
+                          <LayoutGrid className="h-4 w-4" /> Widgets
+                        </button>
+                        <button
+                          onClick={() => guardEdit(d, () => openHeader(d))}
+                          className="btn-secondary flex-1 !py-1.5"
+                          title="Design the header banner"
+                        >
+                          <Paintbrush className="h-4 w-4" /> Header
+                        </button>
+                      </>
                     }
                     onView={() => openView(d)}
                     onEdit={() => guardEdit(d, () => openEdit(d))}
@@ -553,6 +613,174 @@ export default function DashboardsPage() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      </Drawer>
+
+      {/* Header design drawer */}
+      <Drawer
+        open={hOpen}
+        onClose={() => setHOpen(false)}
+        title="Design Header"
+        subtitle={hDashboard?.name}
+        icon={<Paintbrush className="h-5 w-5" />}
+        footer={
+          <DrawerFooter
+            onCancel={() => setHOpen(false)}
+            onSave={saveHeader}
+            saving={hSaving}
+            saveLabel="Save Header"
+          />
+        }
+      >
+        <div className="space-y-5">
+          {/* Live preview */}
+          <div>
+            <h3 className="mb-2 flex items-center justify-between text-sm font-semibold text-slate-700 dark:text-slate-200">
+              Preview
+              <button
+                type="button"
+                onClick={resetHeader}
+                className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                title="Reset to the default brand header"
+              >
+                <RotateCcw className="h-3.5 w-3.5" /> Reset
+              </button>
+            </h3>
+            <div className="overflow-hidden rounded-xl">
+              <div
+                className={cn(headerPreview.containerClass, 'p-5')}
+                style={headerPreview.containerStyle}
+              >
+                {headerPreview.pattern && (
+                  <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-white/10" />
+                )}
+                <div
+                  className={cn(
+                    'relative',
+                    headerPreview.align === 'center' && 'text-center',
+                  )}
+                >
+                  <p
+                    className={cn(
+                      'text-xs font-medium',
+                      headerPreview.labelClass,
+                    )}
+                  >
+                    {hDashboard?.module?.name ?? 'Module'}
+                  </p>
+                  <h2 className="mt-0.5 text-lg font-bold text-white">
+                    {hDashboard?.name ?? 'Dashboard'}
+                  </h2>
+                  <p
+                    className={cn(
+                      'mt-1 text-xs',
+                      headerPreview.align === 'center' && 'mx-auto',
+                      headerPreview.subtitleClass,
+                    )}
+                  >
+                    {headerPreview.subtitle}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Select
+              label="Theme"
+              value={hForm.theme}
+              onChange={(e) =>
+                setHForm({
+                  ...hForm,
+                  theme: e.target.value as DashboardHeaderStyle['theme'],
+                })
+              }
+              options={HEADER_THEME_OPTIONS}
+            />
+            {isCustomTheme ? (
+              <Checkbox
+                label="Solid fill (no gradient)"
+                className="mt-7"
+                checked={!!hForm.solid}
+                onChange={(e) =>
+                  setHForm({ ...hForm, solid: e.target.checked })
+                }
+              />
+            ) : (
+              <div />
+            )}
+            {isCustomTheme && (
+              <>
+                <Input
+                  label="From colour"
+                  type="color"
+                  className="h-10 p-1"
+                  value={hForm.gradientFrom ?? '#2563eb'}
+                  onChange={(e) =>
+                    setHForm({ ...hForm, gradientFrom: e.target.value })
+                  }
+                />
+                <Input
+                  label={hForm.solid ? 'Colour (unused)' : 'To colour'}
+                  type="color"
+                  className="h-10 p-1"
+                  disabled={hForm.solid}
+                  value={hForm.gradientTo ?? '#3b82f6'}
+                  onChange={(e) =>
+                    setHForm({ ...hForm, gradientTo: e.target.value })
+                  }
+                />
+              </>
+            )}
+            <Select
+              label="Size"
+              value={hForm.size}
+              onChange={(e) =>
+                setHForm({
+                  ...hForm,
+                  size: e.target.value as DashboardHeaderStyle['size'],
+                })
+              }
+              options={HEADER_SIZES.map((s) => ({ value: s.key, label: s.label }))}
+            />
+            <Select
+              label="Alignment"
+              value={hForm.align}
+              onChange={(e) =>
+                setHForm({
+                  ...hForm,
+                  align: e.target.value as DashboardHeaderStyle['align'],
+                })
+              }
+              options={HEADER_ALIGNMENTS.map((a) => ({
+                value: a.key,
+                label: a.label,
+              }))}
+            />
+            <Textarea
+              label="Subtitle"
+              wrapClassName="sm:col-span-2"
+              placeholder="Drag widgets by their handle to arrange your personal layout."
+              value={hForm.subtitle ?? ''}
+              onChange={(e) =>
+                setHForm({ ...hForm, subtitle: e.target.value })
+              }
+            />
+            <div className="sm:col-span-2">
+              <Checkbox
+                label="Decorative pattern"
+                checked={hForm.pattern !== false}
+                onChange={(e) =>
+                  setHForm({ ...hForm, pattern: e.target.checked })
+                }
+              />
+              <p className="mt-1.5 text-xs text-slate-400">
+                Leave the subtitle empty to use the default text. Custom colours
+                apply only when the theme is set to “Custom”.
+              </p>
+            </div>
           </div>
         </div>
       </Drawer>

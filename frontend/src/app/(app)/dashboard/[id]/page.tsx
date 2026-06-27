@@ -22,6 +22,8 @@ import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { resolveIcon } from '@/lib/icons';
+import { cn } from '@/lib/utils';
+import { resolveDashboardHeader } from '@/lib/dashboard-header';
 import { WidgetView, isStatWidget } from '@/components/dashboard/WidgetView';
 import type {
   DashboardDetail,
@@ -143,6 +145,12 @@ export default function DashboardViewPage() {
     [detail?.icon],
   );
 
+  const header = useMemo(
+    () => resolveDashboardHeader(detail?.header),
+    [detail?.header],
+  );
+  const centered = header.align === 'center';
+
   if (!loading && !detail) {
     return (
       <div className="mx-auto max-w-7xl">
@@ -157,22 +165,51 @@ export default function DashboardViewPage() {
   return (
     <div className="mx-auto max-w-7xl">
       <div className="card mb-6 overflow-hidden">
-        <div className="relative bg-gradient-to-r from-brand-600 to-brand-500 p-6 text-white sm:p-8">
-          <div className="pointer-events-none absolute -right-10 -top-10 h-44 w-44 rounded-full bg-white/10" />
-          <div className="relative flex items-start justify-between gap-4">
-            <div>
-              <p className="flex items-center gap-2 text-sm font-medium text-brand-100">
+        <div
+          className={cn(header.containerClass, header.padClass)}
+          style={header.containerStyle}
+        >
+          {header.pattern && (
+            <div className="pointer-events-none absolute -right-10 -top-10 h-44 w-44 rounded-full bg-white/10" />
+          )}
+          <div
+            className={cn(
+              'relative flex gap-4',
+              centered
+                ? 'flex-col items-center text-center'
+                : 'items-start justify-between',
+            )}
+          >
+            <div className={centered ? 'max-w-2xl' : undefined}>
+              <p
+                className={cn(
+                  'flex items-center gap-2 text-sm font-medium',
+                  centered && 'justify-center',
+                  header.labelClass,
+                )}
+              >
                 <DashIcon className="h-4 w-4" />
                 {detail?.module?.name ?? activeModule?.name ?? 'Dashboard'}
               </p>
               <h1 className="mt-1 text-2xl font-bold sm:text-3xl">
                 {detail?.name ?? 'Dashboard'}
               </h1>
-              <p className="mt-2 max-w-lg text-sm text-brand-50">
-                Drag widgets by their handle to arrange your personal layout.
+              <p
+                className={cn(
+                  'mt-2 max-w-lg text-sm',
+                  centered && 'mx-auto',
+                  header.subtitleClass,
+                )}
+              >
+                {header.subtitle}
               </p>
             </div>
-            <div className="flex flex-none flex-wrap items-center justify-end gap-2">
+            <div
+              className={cn(
+                'flex flex-none flex-wrap items-center gap-2',
+                centered ? 'justify-center' : 'justify-end',
+              )}
+            >
               {dirty && (
                 <button
                   onClick={saveLayout}

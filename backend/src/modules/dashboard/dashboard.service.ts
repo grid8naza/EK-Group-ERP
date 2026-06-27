@@ -5,6 +5,7 @@ import { assertUnlocked } from '../../common/assert-unlocked';
 import {
   CreateDashboardDto,
   SaveLayoutDto,
+  SetHeaderDto,
   SetWidgetsDto,
   UpdateDashboardDto,
 } from './dashboard.dto';
@@ -40,7 +41,13 @@ export class DashboardService {
   create(dto: CreateDashboardDto, companyId: number) {
     return this.prisma.$transaction(async (tx) => {
       const created = await tx.dashboard.create({
-        data: { ...dto, companyId },
+        data: {
+          ...dto,
+          companyId,
+          header: dto.header
+            ? (dto.header as Prisma.InputJsonValue)
+            : undefined,
+        },
       });
       if (created.isDefault) {
         await this.clearOtherDefaults(tx, created);
@@ -53,12 +60,36 @@ export class DashboardService {
     const existing = await this.ensure(id);
     assertUnlocked(existing, 'dashboard', 'editing');
     return this.prisma.$transaction(async (tx) => {
-      const updated = await tx.dashboard.update({ where: { id }, data: dto });
+      const updated = await tx.dashboard.update({
+        where: { id },
+        data: {
+          ...dto,
+          header:
+            dto.header === undefined
+              ? undefined
+              : (dto.header as Prisma.InputJsonValue),
+        },
+      });
       if (updated.isDefault) {
         await this.clearOtherDefaults(tx, updated);
       }
       return updated;
     });
+  }
+
+  /** Update just the header banner appearance (admin). Respects the lock. */
+  async setHeader(id: number, dto: SetHeaderDto) {
+    const existing = await this.ensure(id);
+    assertUnlocked(existing, 'dashboard', 'editing');
+    await this.prisma.dashboard.update({
+      where: { id },
+      data: {
+        header: dto.header
+          ? (dto.header as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+      },
+    });
+    return this.getOne(id, undefined);
   }
 
   async setLock(id: number, locked: boolean) {
@@ -184,6 +215,7 @@ export class DashboardService {
       id: dashboard.id,
       name: dashboard.name,
       icon: dashboard.icon,
+      header: dashboard.header,
       moduleId: dashboard.moduleId,
       module: dashboard.module,
       isCustomized: !!layout,
