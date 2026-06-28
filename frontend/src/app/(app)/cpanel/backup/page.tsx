@@ -232,7 +232,7 @@ export default function BackupPage() {
     pending?.kind === 'backup' ? 'Create Backup' : 'Confirm Restore';
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="Backup & Restore"
         description="Create database backups and restore from them. Protected by the high security password."

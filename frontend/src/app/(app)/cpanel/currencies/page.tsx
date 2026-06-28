@@ -165,7 +165,7 @@ export default function CurrenciesPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="Currency Master"
         description="Manage currencies, symbols and fractional units"

@@ -406,7 +406,7 @@ export default function UserGroupsPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="User Groups & Privileges"
         description="Manage groups and their menu / action privileges"

@@ -273,7 +273,7 @@ export default function LookupsPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="Lookups"
         description="Manage lookup master lists and their values"

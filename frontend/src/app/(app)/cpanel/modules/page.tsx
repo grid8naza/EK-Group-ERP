@@ -220,7 +220,7 @@ export default function ModulesPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="Module Master"
         description="Manage the ERP modules available in the system"

@@ -102,7 +102,10 @@ export function DataTable<T>({
   pageSize = 10,
   serverPagination,
   emptyMessage = 'No records found',
-  fillHeight = false,
+  // Frozen header is the standard for listing screens. The page should give the
+  // table a bounded height (an `h-full` flex column); without one it degrades to
+  // a normally-scrolling table. Pass `fillHeight={false}` to opt out.
+  fillHeight = true,
 }: DataTableProps<T>) {
   const [internalSearch, setInternalSearch] = useState('');
   const [page, setPage] = useState(1);

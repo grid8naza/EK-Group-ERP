@@ -135,11 +135,11 @@ export function Topbar({
               title="Switch company"
             >
               <Building2 className="h-[18px] w-[18px] flex-none text-brand-600" />
-              <span className="hidden min-w-0 flex-col sm:flex">
-                <span className="text-[10px] font-semibold uppercase leading-none tracking-wide text-[#a79b8c]">
+              <span className="hidden min-w-0 flex-col justify-center sm:flex">
+                <span className="text-[9px] font-semibold uppercase leading-none tracking-wider text-[#a79b8c]">
                   Company
                 </span>
-                <span className="mt-1 max-w-[9rem] truncate text-[13px] font-semibold leading-none text-[#2f2a26] dark:text-slate-200">
+                <span className="mt-0.5 max-w-[12rem] truncate text-[13px] font-semibold leading-tight text-[#2f2a26] dark:text-slate-200">
                   {activeCompany?.name || 'Select company'}
                 </span>
               </span>
@@ -194,11 +194,11 @@ export function Topbar({
               title="Switch branch"
             >
               <GitBranch className="h-[18px] w-[18px] flex-none text-brand-600" />
-              <span className="hidden min-w-0 flex-col sm:flex">
-                <span className="text-[10px] font-semibold uppercase leading-none tracking-wide text-[#a79b8c]">
+              <span className="hidden min-w-0 flex-col justify-center sm:flex">
+                <span className="text-[9px] font-semibold uppercase leading-none tracking-wider text-[#a79b8c]">
                   Branch
                 </span>
-                <span className="mt-1 max-w-[9rem] truncate text-[13px] font-semibold leading-none text-[#2f2a26] dark:text-slate-200">
+                <span className="mt-0.5 max-w-[12rem] truncate text-[13px] font-semibold leading-tight text-[#2f2a26] dark:text-slate-200">
                   {activeBranch?.name || 'Select branch'}
                 </span>
               </span>
@@ -253,11 +253,11 @@ export function Topbar({
               title="Switch module"
             >
               <LayoutGrid className="h-[18px] w-[18px] flex-none text-brand-600" />
-              <span className="hidden min-w-0 flex-col sm:flex">
-                <span className="text-[10px] font-semibold uppercase leading-none tracking-wide text-[#a79b8c]">
+              <span className="hidden min-w-0 flex-col justify-center sm:flex">
+                <span className="text-[9px] font-semibold uppercase leading-none tracking-wider text-[#a79b8c]">
                   Module
                 </span>
-                <span className="mt-1 max-w-[9rem] truncate text-[13px] font-semibold leading-none text-[#2f2a26] dark:text-slate-200">
+                <span className="mt-0.5 max-w-[12rem] truncate text-[13px] font-semibold leading-tight text-[#2f2a26] dark:text-slate-200">
                   {activeModule?.name || 'Modules'}
                 </span>
               </span>

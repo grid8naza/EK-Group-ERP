@@ -655,7 +655,7 @@ export default function UsersPage() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="Users & Data Security"
         description="Manage system users, security and group assignments"
