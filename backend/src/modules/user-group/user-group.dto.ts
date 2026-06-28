@@ -54,6 +54,9 @@ export class SubMenuPrivilegeDto {
   @IsBoolean()
   canDelete: boolean;
 
+  @IsOptional() @IsBoolean() canLock?: boolean;
+  @IsOptional() @IsBoolean() canUnlock?: boolean;
+
   @IsOptional() @IsBoolean() canPrint?: boolean;
   @IsOptional() @IsBoolean() canDownloadPdf?: boolean;
   @IsOptional() @IsBoolean() canDownloadExcel?: boolean;

@@ -197,6 +197,8 @@ export async function backfillInventoryScaffold(
           canAdd: true,
           canEdit: true,
           canDelete: true,
+          canLock: true,
+          canUnlock: true,
         })),
         skipDuplicates: true,
       });

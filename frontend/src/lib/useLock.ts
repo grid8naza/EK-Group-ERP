@@ -12,12 +12,16 @@ interface Lockable {
 
 /**
  * Shared lock/unlock behavior for cpanel master screens. Mirrors the Object
- * Master pattern: only super admins can toggle the lock, and a locked record
- * can't be edited or deleted until unlocked.
+ * Master pattern: a locked record can't be edited or deleted until unlocked.
+ * Locking requires the screen's `lock` privilege and unlocking the `unlock`
+ * privilege (super admins always have both). Pass the screen `route` so the
+ * privileges resolve against the right permission entry.
  */
 export function useLock<T extends Lockable>(opts: {
   /** API base for the entity, e.g. '/companies'. Lock hits `${endpoint}/:id/lock`. */
   endpoint: string;
+  /** Screen route used to resolve lock/unlock privileges, e.g. '/cpanel/companies'. */
+  route: string;
   /** Singular noun for messages, e.g. 'company'. */
   noun: string;
   /** Display name of a row, used in the lock confirmation. */
@@ -27,8 +31,12 @@ export function useLock<T extends Lockable>(opts: {
 }) {
   const toast = useToast();
   const confirm = useConfirm();
-  const { user } = useAuth();
-  const canToggle = !!user?.isSuperAdmin;
+  const { can } = useAuth();
+  const canLock = can(opts.route, 'lock');
+  const canUnlock = can(opts.route, 'unlock');
+  // Whether the user can perform any lock action (used e.g. to decide if a
+  // row's action column is worth showing at all).
+  const canToggle = canLock || canUnlock;
 
   const toggleLock = async (row: T) => {
     const locking = !row.isLocked;
@@ -65,7 +73,7 @@ export function useLock<T extends Lockable>(opts: {
     fn();
   };
 
-  return { canToggle, toggleLock, guardEdit, guardDelete };
+  return { canLock, canUnlock, canToggle, toggleLock, guardEdit, guardDelete };
 }
 
 function cap(s: string) {

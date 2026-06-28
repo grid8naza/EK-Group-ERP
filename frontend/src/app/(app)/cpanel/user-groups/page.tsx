@@ -44,6 +44,8 @@ type PrivKey =
   | 'canAdd'
   | 'canEdit'
   | 'canDelete'
+  | 'canLock'
+  | 'canUnlock'
   | 'canPrint'
   | 'canDownloadPdf'
   | 'canDownloadExcel';
@@ -55,6 +57,8 @@ const ALL_ACTIONS: Record<PrivKey, boolean> = {
   canAdd: false,
   canEdit: false,
   canDelete: false,
+  canLock: false,
+  canUnlock: false,
   canPrint: false,
   canDownloadPdf: false,
   canDownloadExcel: false,
@@ -72,6 +76,8 @@ const ACTION_COLS: {
   { key: 'canAdd', header: 'Add', forForm: true, forReport: false },
   { key: 'canEdit', header: 'Edit', forForm: true, forReport: false },
   { key: 'canDelete', header: 'Delete', forForm: true, forReport: false },
+  { key: 'canLock', header: 'Lock', forForm: true, forReport: false },
+  { key: 'canUnlock', header: 'Unlock', forForm: true, forReport: false },
   { key: 'canPrint', header: 'Print', forForm: false, forReport: true },
   { key: 'canDownloadPdf', header: 'PDF', forForm: false, forReport: true },
   { key: 'canDownloadExcel', header: 'Excel', forForm: false, forReport: true },
@@ -87,8 +93,9 @@ export default function UserGroupsPage() {
 
   const { data: groups, loading, refetch } =
     useFetch<UserGroup[]>('/user-groups');
-  const { canToggle, toggleLock, guardEdit, guardDelete } = useLock<UserGroup>({
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete } = useLock<UserGroup>({
     endpoint: '/user-groups',
+    route: ROUTE,
     noun: 'user group',
     nameOf: (g) => g.name,
     reload: refetch,
@@ -300,6 +307,8 @@ export default function UserGroupsPage() {
           canAdd: rep ? false : value,
           canEdit: rep ? false : value,
           canDelete: rep ? false : value,
+          canLock: rep ? false : value,
+          canUnlock: rep ? false : value,
           canPrint: rep ? value : false,
           canDownloadPdf: rep ? value : false,
           canDownloadExcel: rep ? value : false,
@@ -342,6 +351,8 @@ export default function UserGroupsPage() {
             canAdd: s.canAdd,
             canEdit: s.canEdit,
             canDelete: s.canDelete,
+            canLock: s.canLock,
+            canUnlock: s.canUnlock,
             canPrint: s.canPrint,
             canDownloadPdf: s.canDownloadPdf,
             canDownloadExcel: s.canDownloadExcel,
@@ -435,7 +446,8 @@ export default function UserGroupsPage() {
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}
-            canToggle={canToggle}
+            canLock={canLock}
+            canUnlock={canUnlock}
             onToggle={() => toggleLock(r)}
           />
         )}

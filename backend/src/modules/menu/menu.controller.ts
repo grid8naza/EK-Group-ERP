@@ -14,7 +14,7 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { MenuService } from './menu.service';
 import { CompanyId } from '../../auth/company.decorator';
-import { SuperAdminGuard } from '../../auth/super-admin.guard';
+import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
 import { LockDto } from '../../common/lock.dto';
 import {
   CreateMainMenuDto,
@@ -73,7 +73,7 @@ export class MainMenuController {
   }
 
   // Lock / unlock a main menu (must be unlocked before edit or delete).
-  @UseGuards(SuperAdminGuard)
+  @UseGuards(LockPrivilegeGuard('/cpanel/menus'))
   @Patch(':id/lock')
   setLock(
     @Param('id', ParseIntPipe) id: number,
@@ -122,7 +122,7 @@ export class SubMenuController {
   }
 
   // Lock / unlock a sub-menu (must be unlocked before edit or delete).
-  @UseGuards(SuperAdminGuard)
+  @UseGuards(LockPrivilegeGuard('/cpanel/menus'))
   @Patch(':id/lock')
   setLock(
     @Param('id', ParseIntPipe) id: number,

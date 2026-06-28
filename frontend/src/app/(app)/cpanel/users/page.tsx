@@ -117,8 +117,9 @@ export default function UsersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  const { canToggle, toggleLock, guardEdit, guardDelete } = useLock<AppUser>({
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete } = useLock<AppUser>({
     endpoint: '/users',
+    route: ROUTE,
     noun: 'user',
     nameOf: (u) => u.name,
     reload: load,
@@ -687,7 +688,8 @@ export default function UsersPage() {
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}
-            canToggle={canToggle}
+            canLock={canLock}
+            canUnlock={canUnlock}
             onToggle={() => toggleLock(r)}
           />
         )}

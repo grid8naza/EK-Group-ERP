@@ -37,8 +37,9 @@ export default function ModulesPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<Module[]>('/modules');
-  const { canToggle, toggleLock, guardEdit, guardDelete } = useLock<Module>({
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete } = useLock<Module>({
     endpoint: '/modules',
+    route: ROUTE,
     noun: 'module',
     nameOf: (m) => m.name,
     reload: refetch,
@@ -249,7 +250,8 @@ export default function ModulesPage() {
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}
-            canToggle={canToggle}
+            canLock={canLock}
+            canUnlock={canUnlock}
             onToggle={() => toggleLock(r)}
           />
         )}

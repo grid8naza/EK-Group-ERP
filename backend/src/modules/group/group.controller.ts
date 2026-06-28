@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CompanyId } from '../../auth/company.decorator';
-import { SuperAdminGuard } from '../../auth/super-admin.guard';
+import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
 import { LockDto } from '../../common/lock.dto';
 import { GroupService } from './group.service';
 import { CreateGroupDto, UpdateGroupDto } from './group.dto';
@@ -66,7 +66,7 @@ export class GroupController {
     return this.service.remove(companyId, id);
   }
 
-  @UseGuards(SuperAdminGuard)
+  @UseGuards(LockPrivilegeGuard('/inventory/groups'))
   @Patch(':id/lock')
   setLock(
     @CompanyId() companyId: number | undefined,

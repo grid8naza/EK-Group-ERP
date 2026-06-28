@@ -49,8 +49,9 @@ export default function ItemsPage() {
   const { data: units } = useFetch<Unit[]>('/units');
   const { data: hsnCodes } = useFetch<HsnCode[]>('/hsn-codes');
   const { data: companies } = useFetch<Company[]>('/companies');
-  const { canToggle, toggleLock, guardEdit, guardDelete } = useLock<Item>({
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete } = useLock<Item>({
     endpoint: '/items',
+    route: ROUTE,
     noun: 'item',
     nameOf: (i) => i.name,
     reload: refetch,
@@ -340,7 +341,8 @@ export default function ItemsPage() {
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}
-            canToggle={canToggle}
+            canLock={canLock}
+            canUnlock={canUnlock}
             onToggle={() => toggleLock(r)}
           />
         )}

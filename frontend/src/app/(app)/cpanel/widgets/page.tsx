@@ -142,9 +142,10 @@ export default function WidgetsPage() {
       .catch(() => setMetricOptions([]));
   }, [moduleId]);
 
-  const { canToggle, toggleLock, guardEdit, guardDelete } =
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete } =
     useLock<WidgetCatalogItem>({
       endpoint: '/widgets',
+      route: ROUTE,
       noun: 'widget',
       nameOf: (w) => w.name,
       reload: load,
@@ -362,7 +363,8 @@ export default function WidgetsPage() {
                     lock={
                       <LockButton
                         locked={w.isLocked}
-                        canToggle={canToggle}
+                        canLock={canLock}
+                        canUnlock={canUnlock}
                         onToggle={() => toggleLock(w)}
                       />
                     }

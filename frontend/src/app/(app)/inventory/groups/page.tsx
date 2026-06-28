@@ -38,8 +38,9 @@ export default function GroupsPage() {
   const { data, loading, refetch } = useFetch<Group[]>('/groups');
   const { data: categories } = useFetch<Category[]>('/categories');
   const { data: companies } = useFetch<Company[]>('/companies');
-  const { canToggle, toggleLock, guardEdit, guardDelete } = useLock<Group>({
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete } = useLock<Group>({
     endpoint: '/groups',
+    route: ROUTE,
     noun: 'group',
     nameOf: (g) => g.name,
     reload: refetch,
@@ -323,7 +324,8 @@ export default function GroupsPage() {
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}
-            canToggle={canToggle}
+            canLock={canLock}
+            canUnlock={canUnlock}
             onToggle={() => toggleLock(r)}
           />
         )}

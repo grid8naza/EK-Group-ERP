@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { HsnService } from './hsn.service';
-import { SuperAdminGuard } from '../../auth/super-admin.guard';
+import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
 import { LockDto } from '../../common/lock.dto';
 import { CreateHsnCodeDto, UpdateHsnCodeDto } from './hsn.dto';
 
@@ -52,7 +52,7 @@ export class HsnController {
     return this.service.remove(id);
   }
 
-  @UseGuards(SuperAdminGuard)
+  @UseGuards(LockPrivilegeGuard('/inventory/hsn-codes'))
   @Patch(':id/lock')
   setLock(@Param('id', ParseIntPipe) id: number, @Body() dto: LockDto) {
     return this.service.setLock(id, dto.locked);

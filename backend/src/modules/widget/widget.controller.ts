@@ -16,7 +16,7 @@ import { WidgetService } from './widget.service';
 import { MetricRegistryService } from './metric-registry.service';
 import { CompanyId } from '../../auth/company.decorator';
 import { BranchId } from '../../auth/branch.decorator';
-import { SuperAdminGuard } from '../../auth/super-admin.guard';
+import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
 import { LockDto } from '../../common/lock.dto';
 import { CreateWidgetDto, MetricValuesDto, UpdateWidgetDto } from './widget.dto';
 
@@ -84,7 +84,7 @@ export class WidgetController {
   }
 
   // Lock / unlock a widget (must be unlocked before edit or delete).
-  @UseGuards(SuperAdminGuard)
+  @UseGuards(LockPrivilegeGuard('/cpanel/widgets'))
   @Patch(':id/lock')
   setLock(
     @Param('id', ParseIntPipe) id: number,

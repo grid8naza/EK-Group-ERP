@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CompanyId } from '../../auth/company.decorator';
-import { SuperAdminGuard } from '../../auth/super-admin.guard';
+import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
 import { LockDto } from '../../common/lock.dto';
 import { CategoryService } from './category.service';
 import { CreateCategoryDto, UpdateCategoryDto } from './category.dto';
@@ -67,7 +67,7 @@ export class CategoryController {
   }
 
   // Lock / unlock (super-admin only), like every other master.
-  @UseGuards(SuperAdminGuard)
+  @UseGuards(LockPrivilegeGuard('/inventory/categories'))
   @Patch(':id/lock')
   setLock(
     @CompanyId() companyId: number | undefined,

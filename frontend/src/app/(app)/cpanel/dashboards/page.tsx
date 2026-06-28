@@ -168,9 +168,10 @@ export default function DashboardsPage() {
     load();
   }, [load]);
 
-  const { canToggle, toggleLock, guardEdit, guardDelete } =
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete } =
     useLock<DashboardSummary>({
       endpoint: '/dashboards',
+      route: ROUTE,
       noun: 'dashboard',
       nameOf: (d) => d.name,
       reload: load,
@@ -450,7 +451,8 @@ export default function DashboardsPage() {
                     lock={
                       <LockButton
                         locked={d.isLocked}
-                        canToggle={canToggle}
+                        canLock={canLock}
+                        canUnlock={canUnlock}
                         onToggle={() => toggleLock(d)}
                       />
                     }

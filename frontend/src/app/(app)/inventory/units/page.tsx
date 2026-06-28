@@ -35,8 +35,9 @@ export default function UnitsPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<Unit[]>('/units');
-  const { canToggle, toggleLock, guardEdit, guardDelete } = useLock<Unit>({
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete } = useLock<Unit>({
     endpoint: '/units',
+    route: ROUTE,
     noun: 'unit',
     nameOf: (u) => u.name,
     reload: refetch,
@@ -260,7 +261,8 @@ export default function UnitsPage() {
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}
-            canToggle={canToggle}
+            canLock={canLock}
+            canUnlock={canUnlock}
             onToggle={() => toggleLock(r)}
           />
         )}

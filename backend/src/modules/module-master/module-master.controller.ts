@@ -12,7 +12,7 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { ModuleMasterService } from './module-master.service';
 import { CreateModuleDto, UpdateModuleDto } from './module-master.dto';
-import { SuperAdminGuard } from '../../auth/super-admin.guard';
+import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
 import { LockDto } from '../../common/lock.dto';
 
 @ApiTags('modules')
@@ -47,7 +47,7 @@ export class ModuleMasterController {
   }
 
   // Lock / unlock a module (must be unlocked before edit or delete).
-  @UseGuards(SuperAdminGuard)
+  @UseGuards(LockPrivilegeGuard('/cpanel/modules'))
   @Patch(':id/lock')
   setLock(
     @Param('id', ParseIntPipe) id: number,

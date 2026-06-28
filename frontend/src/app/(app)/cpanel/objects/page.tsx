@@ -130,9 +130,10 @@ export default function ObjectsPage() {
     load();
   }, [load]);
 
-  // Shared lock/unlock behavior (super-admin only), same as the other masters.
-  const { canToggle, toggleLock, guardEdit, guardDelete } = useLock<ErpObject>({
+  // Shared lock/unlock behavior, gated by the screen's lock/unlock privileges.
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete } = useLock<ErpObject>({
     endpoint: '/objects',
+    route: ROUTE,
     noun: 'object',
     nameOf: (o) => o.objectName,
     reload: load,
@@ -513,7 +514,8 @@ export default function ObjectsPage() {
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}
-            canToggle={canToggle}
+            canLock={canLock}
+            canUnlock={canUnlock}
             onToggle={() => toggleLock(r)}
           />
         )}

@@ -75,12 +75,14 @@ export default function LookupsPage() {
 
   const lookupLock = useLock<Lookup>({
     endpoint: '/lookups',
+    route: ROUTE,
     noun: 'lookup',
     nameOf: (l) => l.name,
     reload: refetch,
   });
   const valueLock = useLock<LookupValue>({
     endpoint: '/lookup-values',
+    route: ROUTE,
     noun: 'lookup value',
     nameOf: (v) => v.label,
     reload: () => {
@@ -370,7 +372,8 @@ export default function LookupsPage() {
               )}
               <LockButton
                 locked={selected.isLocked}
-                canToggle={lookupLock.canToggle}
+                canLock={lookupLock.canLock}
+                canUnlock={lookupLock.canUnlock}
                 onToggle={() => lookupLock.toggleLock(selected)}
               />
             </div>
@@ -408,7 +411,8 @@ export default function LookupsPage() {
                 renderLock={(r) => (
                   <LockButton
                     locked={r.isLocked}
-                    canToggle={valueLock.canToggle}
+                    canLock={valueLock.canLock}
+                    canUnlock={valueLock.canUnlock}
                     onToggle={() => valueLock.toggleLock(r)}
                   />
                 )}

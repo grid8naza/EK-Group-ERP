@@ -75,8 +75,9 @@ export default function CompaniesPage() {
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<Company[]>('/companies');
   const { data: currencies } = useFetch<Currency[]>('/currencies');
-  const { canToggle, toggleLock, guardEdit, guardDelete } = useLock<Company>({
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete } = useLock<Company>({
     endpoint: '/companies',
+    route: ROUTE,
     noun: 'company',
     nameOf: (c) => c.name,
     reload: refetch,
@@ -84,12 +85,14 @@ export default function CompaniesPage() {
 
   // Lock/unlock for branches (inside the Branches drawer).
   const {
-    canToggle: canToggleBranch,
+    canLock: canLockBranch,
+    canUnlock: canUnlockBranch,
     toggleLock: toggleBranchLock,
     guardEdit: guardBranchEdit,
     guardDelete: guardBranchDelete,
   } = useLock<Branch>({
     endpoint: '/branches',
+    route: ROUTE,
     noun: 'branch',
     nameOf: (b) => b.name,
     reload: () => {
@@ -99,12 +102,14 @@ export default function CompaniesPage() {
 
   // Lock/unlock for cost centers (inside the Cost Centers drawer).
   const {
-    canToggle: canToggleCc,
+    canLock: canLockCc,
+    canUnlock: canUnlockCc,
     toggleLock: toggleCcLock,
     guardEdit: guardCcEdit,
     guardDelete: guardCcDelete,
   } = useLock<CostCenter>({
     endpoint: '/cost-centers',
+    route: ROUTE,
     noun: 'cost center',
     nameOf: (c) => c.name,
     reload: () => {
@@ -114,12 +119,14 @@ export default function CompaniesPage() {
 
   // Lock/unlock for cost objects (inside the Cost Objects drawer).
   const {
-    canToggle: canToggleCo,
+    canLock: canLockCo,
+    canUnlock: canUnlockCo,
     toggleLock: toggleCoLock,
     guardEdit: guardCoEdit,
     guardDelete: guardCoDelete,
   } = useLock<CostObject>({
     endpoint: '/cost-objects',
+    route: ROUTE,
     noun: 'cost object',
     nameOf: (c) => c.name,
     reload: () => {
@@ -729,7 +736,8 @@ export default function CompaniesPage() {
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}
-            canToggle={canToggle}
+            canLock={canLock}
+            canUnlock={canUnlock}
             onToggle={() => toggleLock(r)}
           />
         )}
@@ -1185,7 +1193,8 @@ export default function CompaniesPage() {
                   </button>
                   <LockButton
                     locked={b.isLocked}
-                    canToggle={canToggleBranch}
+                    canLock={canLockBranch}
+                    canUnlock={canUnlockBranch}
                     onToggle={() => toggleBranchLock(b)}
                   />
                 </div>
@@ -1321,7 +1330,8 @@ export default function CompaniesPage() {
                   </button>
                   <LockButton
                     locked={c.isLocked}
-                    canToggle={canToggleCc}
+                    canLock={canLockCc}
+                    canUnlock={canUnlockCc}
                     onToggle={() => toggleCcLock(c)}
                   />
                 </div>
@@ -1480,7 +1490,8 @@ export default function CompaniesPage() {
                       </button>
                       <LockButton
                         locked={c.isLocked}
-                        canToggle={canToggleCo}
+                        canLock={canLockCo}
+                        canUnlock={canUnlockCo}
                         onToggle={() => toggleCoLock(c)}
                       />
                     </div>

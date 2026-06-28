@@ -409,6 +409,8 @@ model GroupSubMenuPrivilege {
   canAdd           Boolean @default(false)
   canEdit          Boolean @default(false)
   canDelete        Boolean @default(false)
+  canLock          Boolean @default(false)
+  canUnlock        Boolean @default(false)
   canPrint         Boolean @default(false)
   canDownloadPdf   Boolean @default(false)
   canDownloadExcel Boolean @default(false)

@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { BranchService } from './branch.service';
-import { SuperAdminGuard } from '../../auth/super-admin.guard';
+import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
 import { LockDto } from '../../common/lock.dto';
 import { CreateBranchDto, UpdateBranchDto } from './branch.dto';
 
@@ -48,7 +48,7 @@ export class BranchController {
   }
 
   // Lock / unlock (super-admin only), like every other master.
-  @UseGuards(SuperAdminGuard)
+  @UseGuards(LockPrivilegeGuard('/cpanel/companies'))
   @Patch(':id/lock')
   setLock(@Param('id', ParseIntPipe) id: number, @Body() dto: LockDto) {
     return this.service.setLock(id, dto.locked);

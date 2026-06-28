@@ -4,23 +4,29 @@ import { Lock, Unlock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /**
- * Lock/unlock toggle for cpanel master records. Only super admins can toggle;
- * everyone else sees a static lock indicator when the record is locked.
+ * Lock/unlock toggle for cpanel master records. The action depends on the row's
+ * state: locking an unlocked record needs the `lock` privilege, unlocking a
+ * locked one needs `unlock`. Users without the relevant privilege see a static
+ * lock indicator when the record is locked (so they know it's locked) and
+ * nothing when it's unlocked.
  */
 export function LockButton({
   locked,
-  canToggle,
+  canLock,
+  canUnlock,
   onToggle,
 }: {
   locked?: boolean;
-  canToggle: boolean;
+  canLock: boolean;
+  canUnlock: boolean;
   onToggle: () => void;
 }) {
+  const canToggle = locked ? canUnlock : canLock;
   if (!canToggle) {
     return locked ? (
       <span
         className="rounded-lg p-1.5 text-amber-500"
-        title="Locked — only a super admin can unlock"
+        title="Locked — you don't have permission to unlock"
       >
         <Lock className="h-4 w-4" />
       </span>

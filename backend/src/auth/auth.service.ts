@@ -11,6 +11,8 @@ interface SubPriv {
   canAdd: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  canLock: boolean;
+  canUnlock: boolean;
   canPrint: boolean;
   canDownloadPdf: boolean;
   canDownloadExcel: boolean;
@@ -279,6 +281,8 @@ export class AuthService {
             canAdd: (cur?.canAdd ?? false) || s.canAdd,
             canEdit: (cur?.canEdit ?? false) || s.canEdit,
             canDelete: (cur?.canDelete ?? false) || s.canDelete,
+            canLock: (cur?.canLock ?? false) || s.canLock,
+            canUnlock: (cur?.canUnlock ?? false) || s.canUnlock,
             canPrint: (cur?.canPrint ?? false) || s.canPrint,
             canDownloadPdf: (cur?.canDownloadPdf ?? false) || s.canDownloadPdf,
             canDownloadExcel:
@@ -335,6 +339,8 @@ export class AuthService {
         add: boolean;
         edit: boolean;
         delete: boolean;
+        lock: boolean;
+        unlock: boolean;
         print: boolean;
         downloadPdf: boolean;
         downloadExcel: boolean;
@@ -359,6 +365,8 @@ export class AuthService {
                     canAdd: true,
                     canEdit: true,
                     canDelete: true,
+                    canLock: true,
+                    canUnlock: true,
                     canPrint: true,
                     canDownloadPdf: true,
                     canDownloadExcel: true,
@@ -370,6 +378,8 @@ export class AuthService {
                   add: !!p.canAdd,
                   edit: !!p.canEdit,
                   delete: !!p.canDelete,
+                  lock: !!p.canLock,
+                  unlock: !!p.canUnlock,
                   print: !!p.canPrint,
                   downloadPdf: !!p.canDownloadPdf,
                   downloadExcel: !!p.canDownloadExcel,

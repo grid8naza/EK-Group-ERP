@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { LookupService } from './lookup.service';
-import { SuperAdminGuard } from '../../auth/super-admin.guard';
+import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
 import { LockDto } from '../../common/lock.dto';
 import {
   CreateLookupDto,
@@ -52,7 +52,7 @@ export class LookupController {
   }
 
   // Lock / unlock a lookup (must be unlocked before edit or delete).
-  @UseGuards(SuperAdminGuard)
+  @UseGuards(LockPrivilegeGuard('/cpanel/lookups'))
   @Patch(':id/lock')
   setLock(
     @Param('id', ParseIntPipe) id: number,
@@ -105,7 +105,7 @@ export class LookupValueController {
   }
 
   // Lock / unlock a lookup value (must be unlocked before edit or delete).
-  @UseGuards(SuperAdminGuard)
+  @UseGuards(LockPrivilegeGuard('/cpanel/lookups'))
   @Patch(':id/lock')
   setLock(
     @Param('id', ParseIntPipe) id: number,

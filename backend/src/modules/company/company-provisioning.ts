@@ -108,6 +108,8 @@ export async function provisionCompanyCpanel(
       canAdd: true,
       canEdit: true,
       canDelete: true,
+      canLock: true,
+      canUnlock: true,
     })),
   });
 
@@ -206,6 +208,8 @@ export async function backfillCpanelScaffold(
         canAdd: true,
         canEdit: true,
         canDelete: true,
+        canLock: true,
+        canUnlock: true,
       })),
       skipDuplicates: true,
     });

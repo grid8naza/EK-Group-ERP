@@ -35,8 +35,9 @@ export default function HsnCodesPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<HsnCode[]>('/hsn-codes');
-  const { canToggle, toggleLock, guardEdit, guardDelete } = useLock<HsnCode>({
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete } = useLock<HsnCode>({
     endpoint: '/hsn-codes',
+    route: ROUTE,
     noun: 'HSN code',
     nameOf: (h) => h.code,
     reload: refetch,
@@ -238,7 +239,8 @@ export default function HsnCodesPage() {
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}
-            canToggle={canToggle}
+            canLock={canLock}
+            canUnlock={canUnlock}
             onToggle={() => toggleLock(r)}
           />
         )}

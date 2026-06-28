@@ -244,12 +244,14 @@ export default function MenusPage() {
   };
   const mainLock = useLock<MainMenu>({
     endpoint: '/main-menus',
+    route: ROUTE,
     noun: 'menu',
     nameOf: (m) => m.menuName,
     reload: loadMainMenus,
   });
   const subLock = useLock<SubMenu>({
     endpoint: '/sub-menus',
+    route: ROUTE,
     noun: 'sub-menu',
     nameOf: (s) => s.subMenuName,
     reload: () => {
@@ -548,7 +550,8 @@ export default function MenusPage() {
                                 lock={
                                   <LockButton
                                     locked={m.isLocked}
-                                    canToggle={mainLock.canToggle}
+                                    canLock={mainLock.canLock}
+                                    canUnlock={mainLock.canUnlock}
                                     onToggle={() => mainLock.toggleLock(m)}
                                   />
                                 }
@@ -638,7 +641,8 @@ export default function MenusPage() {
                                   lock={
                                     <LockButton
                                       locked={s.isLocked}
-                                      canToggle={subLock.canToggle}
+                                      canLock={subLock.canLock}
+                                      canUnlock={subLock.canUnlock}
                                       onToggle={() => subLock.toggleLock(s)}
                                     />
                                   }

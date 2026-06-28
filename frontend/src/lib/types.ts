@@ -101,6 +101,8 @@ export interface Permission {
   add: boolean;
   edit: boolean;
   delete: boolean;
+  lock: boolean;
+  unlock: boolean;
   print: boolean;
   downloadPdf: boolean;
   downloadExcel: boolean;
@@ -415,6 +417,8 @@ export interface PrivilegeSubMenu {
   canAdd: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  canLock: boolean;
+  canUnlock: boolean;
   canPrint: boolean;
   canDownloadPdf: boolean;
   canDownloadExcel: boolean;
