@@ -37,6 +37,8 @@ services:
       BACKUP_DIR: /app/backups
     volumes:
       - erpgrip_backups:/app/backups
+      # Persist uploaded files (login logo / background media) across rebuilds.
+      - erpgrip_uploads:/app/uploads
     ports:
       - "${BACKEND_PORT:-4000}:4000"
 
@@ -54,3 +56,4 @@ services:
 volumes:
   erpgrip_db:
   erpgrip_backups:
+  erpgrip_uploads:
