@@ -10,15 +10,14 @@ interface StatCardProps {
   hint?: string;
 }
 
+// Bakery-inspired tints (warm gold default, plus soft accents).
 const ACCENTS: Record<NonNullable<StatCardProps['accent']>, string> = {
-  blue: 'bg-brand-50 text-brand-600 dark:bg-brand-950 dark:text-brand-400',
-  emerald:
-    'bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400',
-  amber: 'bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400',
-  violet:
-    'bg-violet-50 text-violet-600 dark:bg-violet-950 dark:text-violet-400',
+  blue: 'bg-[#fdf5e8] text-[#c98a25] dark:bg-brand-950 dark:text-brand-400',
+  emerald: 'bg-[#ecfbf5] text-[#10b981] dark:bg-emerald-950 dark:text-emerald-400',
+  amber: 'bg-[#fff6e8] text-[#d97706] dark:bg-amber-950 dark:text-amber-400',
+  violet: 'bg-[#f7f1ff] text-[#7c5cff] dark:bg-violet-950 dark:text-violet-400',
   rose: 'bg-rose-50 text-rose-600 dark:bg-rose-950 dark:text-rose-400',
-  slate: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+  slate: 'bg-[#f6eee3] text-[#8b5e34] dark:bg-slate-800 dark:text-slate-300',
 };
 
 export function StatCard({

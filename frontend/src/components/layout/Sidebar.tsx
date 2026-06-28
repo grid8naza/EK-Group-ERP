@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronDown, Layers, LayoutDashboard } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
+import { api } from '@/lib/api';
+import { mediaUrl } from '@/lib/login-screen';
 import { resolveIcon } from '@/lib/icons';
 import { cn } from '@/lib/utils';
 
@@ -31,6 +33,19 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
 
   const [openMenus, setOpenMenus] = useState<Set<string>>(initialOpen);
 
+  // Reuse the login-screen logo as the sidebar brand mark.
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    api
+      .get<{ config: { logoUrl?: string | null } | null }>('/login-screen')
+      .then((res) => active && setLogoUrl(res.config?.logoUrl ?? null))
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const toggle = (key: string) => {
     setOpenMenus((prev) => {
       const next = new Set(prev);
@@ -43,13 +58,22 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
   const content = (
     <div className="flex h-full flex-col">
       {/* Brand */}
-      <div className="flex h-16 flex-none items-center gap-2.5 border-b border-slate-200 px-4 dark:border-slate-800">
-        <div className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-brand-600 text-white shadow-sm">
-          <Layers className="h-5 w-5" />
-        </div>
+      <div className="flex h-16 flex-none items-center gap-2.5 border-b border-[#efe7db] px-4 dark:border-slate-800">
+        {logoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={mediaUrl(logoUrl)}
+            alt="Logo"
+            className="h-9 w-9 flex-none rounded-lg object-contain"
+          />
+        ) : (
+          <div className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-brand-600 text-white shadow-sm">
+            <Layers className="h-5 w-5" />
+          </div>
+        )}
         {!collapsed && (
-          <span className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">
-            Erp Grid8
+          <span className="text-base font-bold leading-tight tracking-tight text-slate-900 dark:text-white">
+            Regency Bake House
           </span>
         )}
       </div>
@@ -147,10 +171,10 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
                       onClick={() => toggle(key)}
                       title={collapsed ? menu.name : undefined}
                       className={cn(
-                        'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition',
+                        'flex w-full items-center gap-3 rounded-lg border-l-4 border-transparent px-3 py-2 text-sm font-medium transition',
                         hasActive
-                          ? 'text-brand-700 dark:text-brand-300'
-                          : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
+                          ? 'text-[#8b5e34] dark:text-brand-300'
+                          : 'text-[#5d5a56] hover:bg-[#f6eee3] hover:text-[#8b5e34] dark:text-slate-300 dark:hover:bg-slate-800',
                         collapsed && 'justify-center',
                       )}
                     >
@@ -175,7 +199,7 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
                         )}
                       >
                         <div className="overflow-hidden">
-                          <div className="mt-0.5 space-y-0.5 border-l border-slate-200 pl-3 dark:border-slate-800">
+                          <div className="mt-0.5 space-y-0.5 border-l border-[#efe7db] pl-3 dark:border-slate-800">
                             {menu.items.map((item) => {
                               const ItemIcon = resolveIcon(item.icon);
                               const active = item.route === pathname;
@@ -213,7 +237,7 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-30 hidden flex-none border-r border-slate-200 bg-white transition-[width] duration-200 dark:border-slate-800 dark:bg-slate-900 lg:block',
+          'fixed inset-y-0 left-0 z-30 hidden flex-none border-r border-[#efe7db] bg-[#fcfbf8] transition-[width] duration-200 dark:border-slate-800 dark:bg-slate-900 lg:block',
           collapsed ? 'w-[76px]' : 'w-64',
         )}
       >
@@ -236,7 +260,7 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
         />
         <aside
           className={cn(
-            'absolute inset-y-0 left-0 w-64 border-r border-slate-200 bg-white transition-transform duration-200 dark:border-slate-800 dark:bg-slate-900',
+            'absolute inset-y-0 left-0 w-64 border-r border-[#efe7db] bg-[#fcfbf8] transition-transform duration-200 dark:border-slate-800 dark:bg-slate-900',
             mobileOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
@@ -270,12 +294,12 @@ function NavLink({
       onClick={onClick}
       title={collapsed ? label : undefined}
       className={cn(
-        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition',
+        'flex items-center gap-3 rounded-lg border-l-4 border-transparent px-3 py-2 text-sm transition',
         active
-          ? 'bg-brand-600 font-medium text-white shadow-sm'
-          : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
+          ? 'border-[#a06a2c] bg-[#f7ebd7] font-medium text-[#8b5e34] dark:border-brand-500 dark:bg-brand-950 dark:text-brand-200'
+          : 'text-[#5d5a56] hover:bg-[#f6eee3] hover:text-[#8b5e34] dark:text-slate-300 dark:hover:bg-slate-800',
         collapsed && 'justify-center',
-        sub && !active && 'text-slate-500 dark:text-slate-400',
+        sub && !active && 'text-[#7b746c] dark:text-slate-400',
       )}
     >
       <span className="flex-none">{icon}</span>

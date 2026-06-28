@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Layers, Lock, User, Eye, EyeOff, ExternalLink } from 'lucide-react';
+import { Layers, Lock, User, Eye, EyeOff, ExternalLink, Loader2 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { LoginCarousel } from '@/components/LoginCarousel';
 import { ApiError, API_URL } from '@/lib/api';
@@ -206,7 +206,8 @@ export default function LoginPage() {
         style={cfg.buttonColor ? { backgroundColor: cfg.buttonColor } : undefined}
         disabled={loading}
       >
-        {loading ? 'Signing in...' : cfg.submitLabel || 'Sign In'}
+        {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+        {cfg.submitLabel || 'Sign In'}
       </button>
 
       {cfg.secondaryButton?.show && (

@@ -194,14 +194,14 @@ export function DataTable<T>({
       >
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
+            <tr className="border-b border-[#efe7db] bg-[#fcfbf8] text-xs font-semibold uppercase tracking-wide text-[#6d6258] dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
               {columns.map((c) => (
                 <th
                   key={c.key}
                   className={cn(
                     'px-4 py-3',
                     fillHeight &&
-                      'sticky top-0 z-10 bg-slate-50 dark:bg-slate-900',
+                      'sticky top-0 z-10 bg-[#fcfbf8] dark:bg-slate-900',
                     c.headerClassName,
                   )}
                 >
@@ -213,7 +213,7 @@ export function DataTable<T>({
                   className={cn(
                     'px-4 py-3 text-right',
                     fillHeight &&
-                      'sticky top-0 z-10 bg-slate-50 dark:bg-slate-900',
+                      'sticky top-0 z-10 bg-[#fcfbf8] dark:bg-slate-900',
                   )}
                 >
                   Actions

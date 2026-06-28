@@ -9,13 +9,14 @@ import type { WidgetAccent, WidgetStyle } from './types';
  * the standard card look.
  */
 
+// Bakery-inspired tints — warm gold default, plus soft accent options.
 export const WIDGET_ACCENTS: { key: WidgetAccent; label: string; chip: string }[] = [
-  { key: 'blue', label: 'Blue', chip: 'bg-brand-50 text-brand-600 dark:bg-brand-950 dark:text-brand-400' },
-  { key: 'emerald', label: 'Emerald', chip: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400' },
-  { key: 'violet', label: 'Violet', chip: 'bg-violet-50 text-violet-600 dark:bg-violet-950 dark:text-violet-400' },
-  { key: 'amber', label: 'Amber', chip: 'bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400' },
+  { key: 'blue', label: 'Gold', chip: 'bg-[#fdf5e8] text-[#c98a25] dark:bg-brand-950 dark:text-brand-400' },
+  { key: 'emerald', label: 'Emerald', chip: 'bg-[#ecfbf5] text-[#10b981] dark:bg-emerald-950 dark:text-emerald-400' },
+  { key: 'violet', label: 'Violet', chip: 'bg-[#f7f1ff] text-[#7c5cff] dark:bg-violet-950 dark:text-violet-400' },
+  { key: 'amber', label: 'Amber', chip: 'bg-[#fff6e8] text-[#d97706] dark:bg-amber-950 dark:text-amber-400' },
   { key: 'rose', label: 'Rose', chip: 'bg-rose-50 text-rose-600 dark:bg-rose-950 dark:text-rose-400' },
-  { key: 'slate', label: 'Slate', chip: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300' },
+  { key: 'slate', label: 'Slate', chip: 'bg-[#f6eee3] text-[#8b5e34] dark:bg-slate-800 dark:text-slate-300' },
 ];
 
 export const FONT_FAMILIES = [
