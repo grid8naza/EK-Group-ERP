@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronDown, Layers, LayoutDashboard } from 'lucide-react';
+import { ChevronDown, LayoutDashboard } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { api } from '@/lib/api';
 import { mediaUrl } from '@/lib/login-screen';
@@ -33,8 +33,11 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
 
   const [openMenus, setOpenMenus] = useState<Set<string>>(initialOpen);
 
-  // Reuse the login-screen logo as the sidebar brand mark.
+  // Reuse the login-screen logo as the sidebar brand mark. Falls back to the
+  // committed /brand-logo.png so it always shows (even on a fresh git pull,
+  // where the uploaded file under the gitignored uploads/ dir isn't present).
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoBroken, setLogoBroken] = useState(false);
   useEffect(() => {
     let active = true;
     api
@@ -59,18 +62,13 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
     <div className="flex h-full flex-col">
       {/* Brand */}
       <div className="flex h-16 flex-none items-center gap-2.5 border-b border-[#efe7db] px-4 dark:border-slate-800">
-        {logoUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={mediaUrl(logoUrl)}
-            alt="Logo"
-            className="h-9 w-9 flex-none rounded-lg object-contain"
-          />
-        ) : (
-          <div className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-brand-600 text-white shadow-sm">
-            <Layers className="h-5 w-5" />
-          </div>
-        )}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={!logoBroken && logoUrl ? mediaUrl(logoUrl) : '/brand-logo.png'}
+          alt="Logo"
+          onError={() => setLogoBroken(true)}
+          className="h-9 w-9 flex-none rounded-lg object-contain"
+        />
         {!collapsed && (
           <span className="text-base font-bold leading-tight tracking-tight text-slate-900 dark:text-white">
             Regency Bake House

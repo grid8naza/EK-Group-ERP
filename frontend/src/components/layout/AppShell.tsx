@@ -7,7 +7,6 @@ import { useAuth } from '@/providers/AuthProvider';
 import { API_URL } from '@/lib/api';
 import { mediaUrl } from '@/lib/login-screen';
 import { cn } from '@/lib/utils';
-import { Layers } from 'lucide-react';
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -16,6 +15,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   // Brand logo for the splash (public endpoint — works pre-auth).
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoBroken, setLogoBroken] = useState(false);
   useEffect(() => {
     let active = true;
     fetch(`${API_URL}/login-screen/public`)
@@ -36,18 +36,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {/* Premium ring spinner around the brand logo. */}
           <div className="relative flex h-20 w-20 items-center justify-center">
             <span className="absolute inset-0 animate-spin rounded-full border-[3px] border-brand-100 border-t-brand-600 dark:border-slate-800 dark:border-t-brand-500" />
-            {logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={mediaUrl(logoUrl)}
-                alt="Logo"
-                className="h-12 w-12 rounded-lg object-contain"
-              />
-            ) : (
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-brand-600 text-white">
-                <Layers className="h-6 w-6" />
-              </div>
-            )}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={!logoBroken && logoUrl ? mediaUrl(logoUrl) : '/brand-logo.png'}
+              alt="Logo"
+              onError={() => setLogoBroken(true)}
+              className="h-12 w-12 rounded-lg object-contain"
+            />
           </div>
           <p className="text-sm font-medium tracking-wide text-[#7b746c] dark:text-slate-400">
             Loading…

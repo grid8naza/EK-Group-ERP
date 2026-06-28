@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Layers, Lock, User, Eye, EyeOff, ExternalLink, Loader2 } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, ExternalLink, Loader2 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { LoginCarousel } from '@/components/LoginCarousel';
 import { ApiError, API_URL } from '@/lib/api';
@@ -63,6 +63,7 @@ export default function LoginPage() {
 
   const [cfg, setCfg] = useState<LoginScreenConfig>(() => withDefaults(null));
   const [media, setMedia] = useState<LoginMedia[]>([]);
+  const [logoBroken, setLogoBroken] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -111,23 +112,18 @@ export default function LoginPage() {
   const split = cfg.layout === 'split';
 
   const logoSize = cfg.logoSize || 48;
-  const renderLogo = () =>
-    cfg.logoUrl ? (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={mediaUrl(cfg.logoUrl)}
-        alt="Logo"
-        style={{ height: logoSize }}
-        className="w-auto object-contain"
-      />
-    ) : (
-      <div
-        className="flex items-center justify-center rounded-2xl bg-brand-600 text-white shadow-lg"
-        style={{ height: logoSize, width: logoSize }}
-      >
-        <Layers style={{ height: logoSize * 0.55, width: logoSize * 0.55 }} />
-      </div>
-    );
+  // Falls back to the committed /brand-logo.png so a logo always shows, even on
+  // a fresh git pull where the uploaded file isn't present.
+  const renderLogo = () => (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={!logoBroken && cfg.logoUrl ? mediaUrl(cfg.logoUrl) : '/brand-logo.png'}
+      alt="Logo"
+      onError={() => setLogoBroken(true)}
+      style={{ height: logoSize }}
+      className="w-auto object-contain"
+    />
+  );
 
   // The form fields/buttons/links — shared by both layouts.
   const formInner = (
