@@ -453,7 +453,7 @@ export default function ObjectsPage() {
   ];
 
   return (
-    <div className="mx-auto max-w-7xl">
+    <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="Object Master"
         description="Manage forms, reports and tables across modules"
@@ -496,6 +496,7 @@ export default function ObjectsPage() {
       </div>
 
       <DataTable
+        fillHeight
         columns={columns}
         rows={resp?.data ?? []}
         rowKey={(r) => r.id}
