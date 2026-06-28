@@ -22,3 +22,10 @@ enum WidgetType {
   NOTE // free text / rich note, config.text
   EMBED // an external page, config.url (+ config.height)
 }
+
+// Kind of media uploaded for the login screen background library.
+enum LoginMediaKind {
+  IMAGE
+  GIF
+  VIDEO
+}

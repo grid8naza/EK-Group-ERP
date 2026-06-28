@@ -623,3 +623,32 @@ model SecuritySetting {
 
   @@map("security_settings")
 }
+
+// ---------------------------------------------------------------------------
+// Login screen customization — a single global row (id = 1). The login page is
+// shown before any company is selected, so this branding is app-wide, not
+// company-scoped. `config` is a JSON blob (logo, styled heading/description/
+// copyright, form & page colors, selected background media id). Mirrors the
+// dashboard header banner pattern (Dashboard.header).
+// ---------------------------------------------------------------------------
+model LoginScreenConfig {
+  id        Int      @id @default(1)
+  config    Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("login_screen_config")
+}
+
+// Uploaded media for the login background library. One of these may be chosen
+// as the page backdrop (referenced by LoginScreenConfig.config.backgroundMediaId).
+model LoginMedia {
+  id           Int            @id @default(autoincrement())
+  kind         LoginMediaKind
+  url          String
+  originalName String
+  sizeBytes    Int
+  createdAt    DateTime       @default(now())
+
+  @@map("login_media")
+}

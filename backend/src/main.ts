@@ -1,14 +1,19 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { PrismaExceptionFilter } from './common/prisma-exception.filter';
+import { UPLOAD_ROOT } from './modules/login-screen/login-screen.constants';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   app.setGlobalPrefix('api');
   app.enableCors({ origin: true, credentials: true });
+  // Serve uploaded assets (login logo / background media) at /uploads/*,
+  // independent of the /api global prefix.
+  app.useStaticAssets(UPLOAD_ROOT, { prefix: '/uploads' });
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,

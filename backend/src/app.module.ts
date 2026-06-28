@@ -25,6 +25,8 @@ import { CategoryModule } from './modules/category/category.module';
 import { GroupModule } from './modules/group/group.module';
 import { HsnModule } from './modules/hsn/hsn.module';
 import { ItemModule } from './modules/item/item.module';
+import { LoginScreenModule } from './modules/login-screen/login-screen.module';
+import { ScaffoldModule } from './scaffold/scaffold.module';
 
 @Module({
   imports: [
@@ -52,6 +54,8 @@ import { ItemModule } from './modules/item/item.module';
     GroupModule,
     HsnModule,
     ItemModule,
+    LoginScreenModule,
+    ScaffoldModule,
   ],
   providers: [
     // JWT required everywhere except routes marked @Public()

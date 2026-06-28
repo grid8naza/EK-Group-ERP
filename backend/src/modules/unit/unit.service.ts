@@ -2,35 +2,16 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
-  Logger,
   NotFoundException,
-  OnModuleInit,
 } from '@nestjs/common';
 import { Prisma, UnitType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
-import { backfillInventoryScaffold } from './inventory-provisioning';
 import { CreateUnitDto, UpdateUnitDto } from './unit.dto';
 
 @Injectable()
-export class UnitService implements OnModuleInit {
-  private readonly logger = new Logger(UnitService.name);
-
+export class UnitService {
   constructor(private prisma: PrismaService) {}
-
-  // Enable Inventory + provision its menu (and default units) for every
-  // company on boot. Idempotent — a no-op once everything is in place.
-  async onModuleInit() {
-    try {
-      await backfillInventoryScaffold(this.prisma);
-    } catch (e) {
-      this.logger.error(
-        `Inventory scaffold back-fill failed: ${
-          e instanceof Error ? e.message : e
-        }`,
-      );
-    }
-  }
 
   findAll(search?: string) {
     return this.prisma.unit.findMany({

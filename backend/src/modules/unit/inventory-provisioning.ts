@@ -56,6 +56,7 @@ const DEFAULT_UNITS: DefaultUnit[] = [
  * the first time. Safe to run on every boot. New companies created at runtime
  * are picked up on the next restart.
  */
+/** @deprecated Superseded by the unified scaffold sync (src/scaffold/scaffold.sync.ts). No longer wired. */
 export async function backfillInventoryScaffold(
   prisma: Prisma.TransactionClient,
 ): Promise<void> {
@@ -206,7 +207,7 @@ export async function backfillInventoryScaffold(
   }
 }
 
-async function seedDefaultUnits(
+export async function seedDefaultUnits(
   prisma: Prisma.TransactionClient,
 ): Promise<void> {
   if ((await prisma.unit.count()) > 0) return;

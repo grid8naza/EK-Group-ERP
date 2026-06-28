@@ -19,6 +19,7 @@ export const CPANEL_SUBS = [
   { name: 'Lookups', route: '/cpanel/lookups', icon: 'list', order: 9 },
   { name: 'Users & Data Security', route: '/cpanel/users', icon: 'users', order: 10 },
   { name: 'Backup & Restore', route: '/cpanel/backup', icon: 'database-backup', order: 11 },
+  { name: 'Login Screen Setup', route: '/cpanel/login-screen', icon: 'image', order: 12 },
 ];
 
 export interface ProvisionResult {
@@ -128,6 +129,7 @@ export async function provisionCompanyCpanel(
  *
  * Safe to run on every boot: existing rows are left untouched.
  */
+/** @deprecated Superseded by the unified scaffold sync (src/scaffold/scaffold.sync.ts). No longer wired. */
 export async function backfillCpanelScaffold(
   prisma: Prisma.TransactionClient,
 ): Promise<void> {

@@ -1,9 +1,7 @@
 import {
   ConflictException,
   Injectable,
-  Logger,
   NotFoundException,
-  OnModuleInit,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
@@ -11,31 +9,12 @@ import {
   SetCompanyModulesDto,
   UpdateCompanyDto,
 } from './company.dto';
-import {
-  backfillCpanelScaffold,
-  provisionCompanyCpanel,
-} from './company-provisioning';
+import { provisionCompanyCpanel } from './company-provisioning';
 import { assertUnlocked } from '../../common/assert-unlocked';
 
 @Injectable()
-export class CompanyService implements OnModuleInit {
-  private readonly logger = new Logger(CompanyService.name);
-
+export class CompanyService {
   constructor(private prisma: PrismaService) {}
-
-  // Bring already-provisioned companies up to date with any Cpanel screens added
-  // to CPANEL_SUBS since they were created (idempotent — no-op when current).
-  async onModuleInit() {
-    try {
-      await backfillCpanelScaffold(this.prisma);
-    } catch (e) {
-      this.logger.error(
-        `Cpanel scaffold back-fill failed: ${
-          e instanceof Error ? e.message : e
-        }`,
-      );
-    }
-  }
 
   findAll(search?: string) {
     return this.prisma.company.findMany({
