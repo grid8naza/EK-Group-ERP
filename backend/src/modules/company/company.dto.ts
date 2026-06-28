@@ -22,6 +22,7 @@ export class CreateCompanyDto {
   @IsNotEmpty()
   name: string;
 
+  @IsOptional() @IsString() shortName?: string;
   @IsOptional() @IsString() legalName?: string;
   @IsOptional() @IsEmail() email?: string;
   @IsOptional() @IsString() phone?: string;

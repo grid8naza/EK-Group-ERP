@@ -47,6 +47,8 @@ export interface CompanyLite {
   id: number;
   code: string;
   name: string;
+  shortName?: string | null;
+  logo?: string | null;
   isDefault?: boolean;
 }
 
@@ -181,6 +183,8 @@ export interface Company {
   id: number;
   code: string;
   name: string;
+  shortName?: string | null;
+  logo?: string | null;
   legalName?: string | null;
   email?: string | null;
   phone?: string | null;

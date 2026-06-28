@@ -3,6 +3,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { extname, join } from 'path';
+import { rename as renameFile } from 'fs/promises';
+import { randomBytes } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   CreateCompanyDto,
@@ -11,10 +14,33 @@ import {
 } from './company.dto';
 import { provisionCompanyCpanel } from './company-provisioning';
 import { assertUnlocked } from '../../common/assert-unlocked';
+import { COMPANY_UPLOAD_DIR, COMPANY_URL_PREFIX } from './company.constants';
+
+/** Minimal multer file shape (avoids needing @types/multer). */
+interface UploadedFile {
+  path: string;
+  originalname: string;
+  mimetype: string;
+}
 
 @Injectable()
 export class CompanyService {
   constructor(private prisma: PrismaService) {}
+
+  /** Store an uploaded logo and return its served URL (used by create/update). */
+  async uploadLogo(file: UploadedFile): Promise<{ url: string }> {
+    const extMap: Record<string, string> = {
+      'image/png': '.png',
+      'image/jpeg': '.jpg',
+      'image/webp': '.webp',
+      'image/gif': '.gif',
+      'image/svg+xml': '.svg',
+    };
+    const ext = extname(file.originalname) || extMap[file.mimetype] || '';
+    const name = `${Date.now()}-${randomBytes(6).toString('hex')}${ext}`;
+    await renameFile(file.path, join(COMPANY_UPLOAD_DIR, name));
+    return { url: `${COMPANY_URL_PREFIX}/${name}` };
+  }
 
   findAll(search?: string) {
     return this.prisma.company.findMany({

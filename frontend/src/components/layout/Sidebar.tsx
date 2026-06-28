@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronDown, LayoutDashboard } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
-import { api } from '@/lib/api';
 import { mediaUrl } from '@/lib/login-screen';
 import { resolveIcon } from '@/lib/icons';
 import { cn } from '@/lib/utils';
@@ -17,7 +16,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) {
-  const { activeModule } = useAuth();
+  const { activeModule, activeCompany } = useAuth();
   const pathname = usePathname();
 
   // Track which menu groups are expanded. Default: expand the one containing the active route.
@@ -33,21 +32,16 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
 
   const [openMenus, setOpenMenus] = useState<Set<string>>(initialOpen);
 
-  // Reuse the login-screen logo as the sidebar brand mark. Falls back to the
-  // committed /brand-logo.png so it always shows (even on a fresh git pull,
-  // where the uploaded file under the gitignored uploads/ dir isn't present).
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  // Brand mark = the ACTIVE company's logo + short name, so it updates when you
+  // switch companies. Falls back to the committed /brand-logo.png if the company
+  // has no logo (or the uploaded file is missing).
+  const companyLogo = activeCompany?.logo ?? null;
+  const brandName =
+    activeCompany?.shortName || activeCompany?.name || 'ERP';
   const [logoBroken, setLogoBroken] = useState(false);
   useEffect(() => {
-    let active = true;
-    api
-      .get<{ config: { logoUrl?: string | null } | null }>('/login-screen')
-      .then((res) => active && setLogoUrl(res.config?.logoUrl ?? null))
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, []);
+    setLogoBroken(false); // retry the image when the active company changes
+  }, [companyLogo]);
 
   const toggle = (key: string) => {
     setOpenMenus((prev) => {
@@ -64,14 +58,14 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
       <div className="flex h-16 flex-none items-center gap-2.5 border-b border-[#efe7db] px-4 dark:border-slate-800">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={!logoBroken && logoUrl ? mediaUrl(logoUrl) : '/brand-logo.png'}
+          src={!logoBroken && companyLogo ? mediaUrl(companyLogo) : '/brand-logo.png'}
           alt="Logo"
           onError={() => setLogoBroken(true)}
           className="h-9 w-9 flex-none rounded-lg object-contain"
         />
         {!collapsed && (
-          <span className="text-base font-bold leading-tight tracking-tight text-slate-900 dark:text-white">
-            Regency Bake House
+          <span className="truncate text-base font-bold leading-tight tracking-tight text-slate-900 dark:text-white">
+            {brandName}
           </span>
         )}
       </div>

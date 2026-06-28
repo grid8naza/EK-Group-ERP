@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   Plus,
   Building2,
@@ -25,7 +25,9 @@ import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Textarea, Checkbox, Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
+import { mediaUrl } from '@/lib/login-screen';
 import { resolveIcon } from '@/lib/icons';
+import { Upload, Image as ImageIcon } from 'lucide-react';
 import type {
   Company,
   CompanyModule,
@@ -45,6 +47,8 @@ const MONTHS = [
 const empty = {
   code: '',
   name: '',
+  shortName: '',
+  logo: '',
   legalName: '',
   email: '',
   phone: '',
@@ -139,6 +143,23 @@ export default function CompaniesPage() {
   const [view, setView] = useState(false); // read-only view (e.g. for locked records)
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
+  const logoInput = useRef<HTMLInputElement>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+
+  const uploadCompanyLogo = async (file: File) => {
+    setLogoUploading(true);
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const res = await api.post<{ url: string }>('/companies/logo', fd);
+      setForm((f) => ({ ...f, logo: res.url }));
+      toast.success('Logo uploaded.');
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Logo upload failed.');
+    } finally {
+      setLogoUploading(false);
+    }
+  };
 
   // ---- Per-company module enablement ----
   const [modOpen, setModOpen] = useState(false);
@@ -205,6 +226,8 @@ export default function CompaniesPage() {
   const formFrom = (c: Company) => ({
     code: c.code,
     name: c.name,
+    shortName: c.shortName ?? '',
+    logo: c.logo ?? '',
     legalName: c.legalName ?? '',
     email: c.email ?? '',
     phone: c.phone ?? '',
@@ -280,6 +303,9 @@ export default function CompaniesPage() {
         toast.success('Company created.');
       }
       await refetch();
+      // Refresh the auth profile so the sidebar (active company logo / name)
+      // reflects any change to the active company.
+      void refreshProfile?.();
       if (again) {
         setEditing(null);
         setForm({ ...empty });
@@ -779,6 +805,12 @@ export default function CompaniesPage() {
             onChange={(e) => setForm({ ...form, name: e.target.value })}
           />
           <Input
+            label="Short Name"
+            value={form.shortName}
+            onChange={(e) => setForm({ ...form, shortName: e.target.value })}
+            placeholder="Shown in the sidebar (e.g. Regency)"
+          />
+          <Input
             label="Legal Name"
             wrapClassName="sm:col-span-2"
             value={form.legalName}
@@ -816,6 +848,53 @@ export default function CompaniesPage() {
             value={form.country}
             onChange={(e) => setForm({ ...form, country: e.target.value })}
           />
+          <div className="sm:col-span-2">
+            <label className="label">Logo</label>
+            <div className="flex items-center gap-4">
+              <div className="flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-xl border border-[#e7ddd0] bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
+                {form.logo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={mediaUrl(form.logo)} alt="Logo" className="h-full w-full object-contain" />
+                ) : (
+                  <ImageIcon className="h-6 w-6 text-slate-300" />
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="btn-secondary inline-flex items-center gap-2"
+                  onClick={() => logoInput.current?.click()}
+                  disabled={logoUploading}
+                >
+                  <Upload className="h-4 w-4" />
+                  {logoUploading ? 'Uploading…' : 'Upload'}
+                </button>
+                {form.logo && (
+                  <button
+                    type="button"
+                    className="btn-secondary inline-flex items-center gap-2 text-rose-600"
+                    onClick={() => setForm({ ...form, logo: '' })}
+                  >
+                    <Trash2 className="h-4 w-4" /> Remove
+                  </button>
+                )}
+                <input
+                  ref={logoInput}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void uploadCompanyLogo(f);
+                    e.target.value = '';
+                  }}
+                />
+              </div>
+            </div>
+            <p className="mt-1 text-xs text-slate-400">
+              PNG, JPG, WEBP, GIF or SVG — up to 5 MB. Shown in the sidebar for this company.
+            </p>
+          </div>
           <div className="mt-1 border-t border-slate-200 pt-3 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300 sm:col-span-2">
             Financial &amp; statutory
           </div>

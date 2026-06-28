@@ -10,18 +10,41 @@ import {
   Post,
   Put,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CompanyService } from './company.service';
 import { CompanyId } from '../../auth/company.decorator';
 import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
 import { LockDto } from '../../common/lock.dto';
+import { COMPANY_UPLOAD_DIR } from './company.constants';
 import {
   CreateCompanyDto,
   SetCompanyModulesDto,
   UpdateCompanyDto,
 } from './company.dto';
+
+interface MulterFile {
+  path: string;
+  originalname: string;
+  mimetype: string;
+}
+
+const IMAGE_MIME = [
+  'image/png',
+  'image/jpeg',
+  'image/webp',
+  'image/gif',
+  'image/svg+xml',
+];
+const imageFilter = (
+  _req: unknown,
+  file: { mimetype: string },
+  cb: (error: Error | null, acceptFile: boolean) => void,
+) => cb(null, IMAGE_MIME.includes(file.mimetype));
 
 @ApiTags('companies')
 @ApiBearerAuth()
@@ -44,6 +67,25 @@ export class CompanyController {
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id);
+  }
+
+  // Upload a company logo; returns { url } to store in the company's `logo`.
+  // Decoupled from a company id so it works before the company is created.
+  @Post('logo')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      dest: COMPANY_UPLOAD_DIR,
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+      fileFilter: imageFilter,
+    }),
+  )
+  uploadLogo(@UploadedFile() file: MulterFile) {
+    if (!file) {
+      throw new BadRequestException(
+        'No image uploaded (PNG / JPG / WEBP / GIF / SVG, max 5 MB).',
+      );
+    }
+    return this.service.uploadLogo(file);
   }
 
   @Post()

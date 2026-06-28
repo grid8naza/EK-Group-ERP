@@ -86,6 +86,7 @@ model Company {
   id        Int      @id @default(autoincrement())
   code      String   @unique
   name      String
+  shortName String?  // brand short name shown in the sidebar
   legalName String?
   email     String?
   phone     String?
