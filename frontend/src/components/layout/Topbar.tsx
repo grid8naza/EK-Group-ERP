@@ -131,16 +131,21 @@ export function Topbar({
           <div className="relative" ref={coRef}>
             <button
               onClick={() => setCoOpen((v) => !v)}
-              className="flex items-center gap-2 rounded-lg border border-slate-200 px-2.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="flex h-11 items-center gap-2.5 rounded-xl border border-[#e7ddd0] bg-white px-3 text-left transition hover:bg-[#f6eee3] dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
               title="Switch company"
             >
-              <Building2 className="h-[18px] w-[18px] text-brand-600" />
-              <span className="hidden max-w-[10rem] truncate sm:block">
-                {activeCompany?.name || 'Select company'}
+              <Building2 className="h-[18px] w-[18px] flex-none text-brand-600" />
+              <span className="hidden min-w-0 flex-col sm:flex">
+                <span className="text-[10px] font-semibold uppercase leading-none tracking-wide text-[#a79b8c]">
+                  Company
+                </span>
+                <span className="mt-1 max-w-[9rem] truncate text-[13px] font-semibold leading-none text-[#2f2a26] dark:text-slate-200">
+                  {activeCompany?.name || 'Select company'}
+                </span>
               </span>
               <ChevronDown
                 className={cn(
-                  'h-4 w-4 text-slate-400 transition-transform',
+                  'h-4 w-4 flex-none text-slate-400 transition-transform',
                   coOpen && 'rotate-180',
                 )}
               />
@@ -185,16 +190,21 @@ export function Topbar({
           <div className="relative" ref={brRef}>
             <button
               onClick={() => setBrOpen((v) => !v)}
-              className="flex items-center gap-2 rounded-lg border border-slate-200 px-2.5 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="flex h-11 items-center gap-2.5 rounded-xl border border-[#e7ddd0] bg-white px-3 text-left transition hover:bg-[#f6eee3] dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
               title="Switch branch"
             >
-              <GitBranch className="h-[18px] w-[18px] text-brand-600" />
-              <span className="hidden max-w-[10rem] truncate sm:block">
-                {activeBranch?.name || 'Select branch'}
+              <GitBranch className="h-[18px] w-[18px] flex-none text-brand-600" />
+              <span className="hidden min-w-0 flex-col sm:flex">
+                <span className="text-[10px] font-semibold uppercase leading-none tracking-wide text-[#a79b8c]">
+                  Branch
+                </span>
+                <span className="mt-1 max-w-[9rem] truncate text-[13px] font-semibold leading-none text-[#2f2a26] dark:text-slate-200">
+                  {activeBranch?.name || 'Select branch'}
+                </span>
               </span>
               <ChevronDown
                 className={cn(
-                  'h-4 w-4 text-slate-400 transition-transform',
+                  'h-4 w-4 flex-none text-slate-400 transition-transform',
                   brOpen && 'rotate-180',
                 )}
               />
@@ -239,16 +249,21 @@ export function Topbar({
           <div className="relative" ref={modRef}>
             <button
               onClick={() => setModOpen((v) => !v)}
-              className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+              className="flex h-11 items-center gap-2.5 rounded-xl border border-[#e7ddd0] bg-white px-3 text-left transition hover:bg-[#f6eee3] dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
               title="Switch module"
             >
-              <LayoutGrid className="h-[18px] w-[18px]" />
-              <span className="hidden max-w-[10rem] truncate sm:block">
-                {activeModule?.name || 'Modules'}
+              <LayoutGrid className="h-[18px] w-[18px] flex-none text-brand-600" />
+              <span className="hidden min-w-0 flex-col sm:flex">
+                <span className="text-[10px] font-semibold uppercase leading-none tracking-wide text-[#a79b8c]">
+                  Module
+                </span>
+                <span className="mt-1 max-w-[9rem] truncate text-[13px] font-semibold leading-none text-[#2f2a26] dark:text-slate-200">
+                  {activeModule?.name || 'Modules'}
+                </span>
               </span>
               <ChevronDown
                 className={cn(
-                  'h-4 w-4 text-slate-400 transition-transform',
+                  'h-4 w-4 flex-none text-slate-400 transition-transform',
                   modOpen && 'rotate-180',
                 )}
               />
