@@ -49,6 +49,14 @@ const fmt = (v: Cell) => (typeof v === 'number' ? v.toLocaleString() : String(v)
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+// For a direct "Print", the popup prints itself on load, then closes once the
+// print dialog is dismissed (printed OR cancelled) via `afterprint` — so no
+// preview window is left open.
+const autoPrintScript = `<script>
+  window.onafterprint = function () { window.close(); };
+  setTimeout(function () { window.print(); }, 200);
+</script>`;
+
 /**
  * Open a report window. Used for both "Print Preview" (preview only) and "Print"
  * (auto-prints). `allowPrint` controls whether the in-popup Print button shows
@@ -117,13 +125,13 @@ export function printReport(
     <p class="sub">${esc(spec.subtitle)}</p>
     <p class="date">${new Date().toLocaleString()}</p>
     ${body || '<p>No records match the current filters.</p>'}
+    ${autoPrint ? autoPrintScript : ''}
     </body></html>`;
   const w = window.open('', '_blank', 'width=1100,height=800');
   if (!w) return false;
   w.document.write(html);
   w.document.close();
   w.focus();
-  if (autoPrint) setTimeout(() => w.print(), 300);
   return true;
 }
 
