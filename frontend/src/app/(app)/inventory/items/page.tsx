@@ -270,17 +270,17 @@ export default function ItemsPage() {
 
   const columns: Column<Item>[] = [
     { key: 'code', header: 'Code', accessor: (r) => r.code },
+    { key: 'category', header: 'Category', accessor: (r) => r.category?.name ?? '-' },
+    { key: 'group', header: 'Group', accessor: (r) => r.group?.name ?? '-' },
     {
       key: 'name',
-      header: 'Name',
+      header: 'Item',
       render: (r) => (
         <span className="font-medium text-slate-800 dark:text-slate-100">
           {r.name}
         </span>
       ),
     },
-    { key: 'category', header: 'Category', accessor: (r) => r.category?.name ?? '-' },
-    { key: 'group', header: 'Group', accessor: (r) => r.group?.name ?? '-' },
     { key: 'unit', header: 'Unit', accessor: (r) => r.unit?.code ?? '-' },
     {
       key: 'unitPrice',
