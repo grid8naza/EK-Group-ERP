@@ -44,6 +44,15 @@ export default function GroupReportPage() {
     activeCompany?.name,
   );
 
+  // Category dropdown cascades from the selected "Applies To": Item-wise lists
+  // only item categories, Product-wise only product categories.
+  const filterCategories = useMemo(() => {
+    let cats = categories ?? [];
+    if (applies === 'item') cats = cats.filter((c) => c.forItem);
+    else if (applies === 'product') cats = cats.filter((c) => c.forProduct);
+    return cats;
+  }, [categories, applies]);
+
   // Groups grouped by category (sorted by name), groups sorted by name.
   const blocks = useMemo<ReportBlock[]>(() => {
     let rows = data ?? [];
@@ -123,24 +132,27 @@ export default function GroupReportPage() {
       <div className="card flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-4 dark:border-slate-800">
           <Select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            wrapClassName="w-48"
-            placeholder="All categories"
-            options={(categories ?? []).map((c) => ({
-              value: String(c.id),
-              label: c.name,
-            }))}
-          />
-          <Select
             value={applies}
-            onChange={(e) => setApplies(e.target.value)}
+            onChange={(e) => {
+              setApplies(e.target.value);
+              setCategoryFilter(''); // reset category when applicability changes
+            }}
             wrapClassName="w-48"
             placeholder="Applies to: All"
             options={[
               { value: 'item', label: 'Item-wise' },
               { value: 'product', label: 'Product-wise' },
             ]}
+          />
+          <Select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            wrapClassName="w-48"
+            placeholder="All categories"
+            options={filterCategories.map((c) => ({
+              value: String(c.id),
+              label: c.name,
+            }))}
           />
           <span className="ml-auto text-sm text-slate-500 dark:text-slate-400">
             {total} group{total === 1 ? '' : 's'}
