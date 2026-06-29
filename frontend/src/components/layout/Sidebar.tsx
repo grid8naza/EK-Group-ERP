@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronDown, LayoutDashboard } from 'lucide-react';
@@ -19,18 +19,25 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
   const { activeModule, activeCompany } = useAuth();
   const pathname = usePathname();
 
-  // Track which menu groups are expanded. Default: expand the one containing the active route.
-  const initialOpen = useMemo(() => {
+  // Every main menu starts EXPANDED so its sub-menus are visible — including a
+  // menu with a single sub-menu. Recompute when the module's set of menus
+  // changes (switching modules, or a newly added menu) so new menus appear
+  // expanded; manual collapses persist while navigating within the same set.
+  const computeAllOpen = () => {
     const set = new Set<string>();
-    activeModule?.menus.forEach((menu) => {
-      if (menu.items.some((it) => it.route === pathname)) {
-        set.add(`${activeModule.id}-${menu.id}`);
-      }
-    });
+    activeModule?.menus.forEach((menu) =>
+      set.add(`${activeModule.id}-${menu.id}`),
+    );
     return set;
-  }, [activeModule, pathname]);
-
-  const [openMenus, setOpenMenus] = useState<Set<string>>(initialOpen);
+  };
+  const [openMenus, setOpenMenus] = useState<Set<string>>(computeAllOpen);
+  const menuSig = activeModule
+    ? `${activeModule.id}:${activeModule.menus.map((m) => m.id).join(',')}`
+    : '';
+  useEffect(() => {
+    setOpenMenus(computeAllOpen());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuSig]);
 
   // Brand mark = the ACTIVE company's logo + short name, so it updates when you
   // switch companies. Falls back to the committed /brand-logo.png if the company
