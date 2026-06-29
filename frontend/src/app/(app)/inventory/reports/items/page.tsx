@@ -28,6 +28,14 @@ const COLUMNS = [
   'Status',
 ] as const;
 
+// Relative column widths (must stay in sync with COLUMNS order). Shared by the
+// on-screen, print and PDF tables so every group's table lines up — Item gets
+// the most room, the rest are fixed and equal across all groups.
+const COL_WEIGHTS = [9, 26, 7, 11, 9, 10, 11, 11, 10];
+const COL_TOTAL = COL_WEIGHTS.reduce((a, b) => a + b, 0);
+const colPct = (i: number) =>
+  `${((COL_WEIGHTS[i] / COL_TOTAL) * 100).toFixed(3)}%`;
+
 const UNCATEGORISED = '— Uncategorised —';
 const UNGROUPED = '— Ungrouped —';
 
@@ -147,6 +155,7 @@ export default function ItemsReportPage() {
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
     const cx = pageW / 2;
+    const tableWidth = pageW - 30; // left margin 16 + right 14
     // Company name — bold, centered, on top.
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(15);
@@ -184,11 +193,18 @@ export default function ItemsReportPage() {
           startY: y,
           head: [COLUMNS as unknown as string[]],
           body: g.items.map(itemCells),
-          styles: { fontSize: 8, cellPadding: 1.5 },
+          styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak' },
           headStyles: { fillColor: [120, 98, 72], halign: 'center' },
+          // Fixed per-column widths so every group's table lines up.
+          columnStyles: Object.fromEntries(
+            COLUMNS.map((_, i) => [
+              i,
+              { cellWidth: (COL_WEIGHTS[i] / COL_TOTAL) * tableWidth },
+            ]),
+          ),
           margin: { left: 16, right: 14 },
           theme: 'grid',
-          tableWidth: pageW - 30,
+          tableWidth,
         });
         y = (doc as unknown as { lastAutoTable: { finalY: number } })
           .lastAutoTable.finalY + 6;
@@ -201,8 +217,12 @@ export default function ItemsReportPage() {
   const exportPrint = () => {
     const esc = (s: string) =>
       s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const colgroup = `<colgroup>${COLUMNS.map(
+      (_, i) => `<col style="width:${colPct(i)}">`,
+    ).join('')}</colgroup>`;
     const tableFor = (g: GroupBlock) => `
       <table>
+        ${colgroup}
         <thead><tr>${COLUMNS.map((c) => `<th>${c}</th>`).join('')}</tr></thead>
         <tbody>${g.items
           .map(
@@ -234,8 +254,8 @@ export default function ItemsReportPage() {
         h2{font-size:14px;margin:18px 0 4px;border-bottom:2px solid #c9b896;padding-bottom:2px;text-align:center}
         h3{font-size:12px;margin:10px 0 4px;color:#475569}
         .muted{color:#94a3b8;font-weight:normal}
-        table{width:100%;border-collapse:collapse;margin-bottom:8px;font-size:11px}
-        th,td{border:1px solid #d8d2c6;padding:4px 6px;text-align:left}
+        table{width:100%;table-layout:fixed;border-collapse:collapse;margin-bottom:8px;font-size:11px}
+        th,td{border:1px solid #d8d2c6;padding:4px 6px;text-align:left;overflow-wrap:anywhere}
         th{background:#f3ece0;text-align:center}
         @media print{body{margin:10px} button{display:none}}
       </style></head><body>
@@ -349,7 +369,12 @@ export default function ItemsReportPage() {
                       <span className="text-slate-400">({g.items.length})</span>
                     </h3>
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left text-sm">
+                      <table className="w-full table-fixed text-left text-sm">
+                        <colgroup>
+                          {COLUMNS.map((col, i) => (
+                            <col key={col} style={{ width: colPct(i) }} />
+                          ))}
+                        </colgroup>
                         <thead>
                           <tr className="border-b border-[#efe7db] bg-[#fcfbf8] text-xs font-semibold uppercase tracking-wide text-[#6d6258] dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
                             {COLUMNS.map((col) => (
