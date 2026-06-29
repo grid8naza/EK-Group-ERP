@@ -23,6 +23,7 @@ const COLUMNS = [
   'Unit Price',
   'HSN',
   'Reorder',
+  'Lead Time',
   'Shelf Life',
   'Status',
 ] as const;
@@ -41,6 +42,7 @@ const itemCells = (i: Item): (string | number)[] => [
   num(i.unitPrice),
   i.hsnCode?.code ?? '-',
   num(i.reorderLevel),
+  num(i.leadTime),
   num(i.shelfLife),
   i.isActive ? 'Active' : 'Inactive',
 ];
@@ -128,6 +130,7 @@ export default function ItemsReportPage() {
           'Unit Price': it.unitPrice ?? 0,
           HSN: it.hsnCode?.code ?? '',
           Reorder: it.reorderLevel ?? 0,
+          'Lead Time': it.leadTime ?? 0,
           'Shelf Life': it.shelfLife ?? 0,
           Status: it.isActive ? 'Active' : 'Inactive',
         })),
@@ -182,7 +185,7 @@ export default function ItemsReportPage() {
           head: [COLUMNS as unknown as string[]],
           body: g.items.map(itemCells),
           styles: { fontSize: 8, cellPadding: 1.5 },
-          headStyles: { fillColor: [120, 98, 72] },
+          headStyles: { fillColor: [120, 98, 72], halign: 'center' },
           margin: { left: 16, right: 14 },
           theme: 'grid',
           tableWidth: pageW - 30,
@@ -233,7 +236,7 @@ export default function ItemsReportPage() {
         .muted{color:#94a3b8;font-weight:normal}
         table{width:100%;border-collapse:collapse;margin-bottom:8px;font-size:11px}
         th,td{border:1px solid #d8d2c6;padding:4px 6px;text-align:left}
-        th{background:#f3ece0}
+        th{background:#f3ece0;text-align:center}
         @media print{body{margin:10px} button{display:none}}
       </style></head><body>
       <h1>${esc(companyName)}</h1>
@@ -350,7 +353,7 @@ export default function ItemsReportPage() {
                         <thead>
                           <tr className="border-b border-[#efe7db] bg-[#fcfbf8] text-xs font-semibold uppercase tracking-wide text-[#6d6258] dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
                             {COLUMNS.map((col) => (
-                              <th key={col} className="px-3 py-2">
+                              <th key={col} className="px-3 py-2 text-center">
                                 {col}
                               </th>
                             ))}
@@ -379,6 +382,9 @@ export default function ItemsReportPage() {
                               </td>
                               <td className="px-3 py-2 text-slate-700 dark:text-slate-300">
                                 {num(it.reorderLevel)}
+                              </td>
+                              <td className="px-3 py-2 text-slate-700 dark:text-slate-300">
+                                {num(it.leadTime)}
                               </td>
                               <td className="px-3 py-2 text-slate-700 dark:text-slate-300">
                                 {num(it.shelfLife)}
