@@ -49,8 +49,18 @@ const fmt = (v: Cell) => (typeof v === 'number' ? v.toLocaleString() : String(v)
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-/** Open a print window with the report. Returns false if the pop-up was blocked. */
-export function printReport(spec: ReportSpec): boolean {
+/**
+ * Open a report window. Used for both "Print Preview" (preview only) and "Print"
+ * (auto-prints). `allowPrint` controls whether the in-popup Print button shows
+ * (gated by the user's Print privilege); `autoPrint` fires the print dialog on
+ * open. Returns false if the pop-up was blocked.
+ */
+export function printReport(
+  spec: ReportSpec,
+  opts?: { allowPrint?: boolean; autoPrint?: boolean },
+): boolean {
+  const allowPrint = opts?.allowPrint ?? true;
+  const autoPrint = opts?.autoPrint ?? false;
   const { columns, weights } = spec;
   const colgroup = `<colgroup>${columns
     .map((_, i) => `<col style="width:${colPercent(weights, i)}">`)
@@ -100,7 +110,7 @@ export function printReport(spec: ReportSpec): boolean {
       @media print{.toolbar{display:none} body{margin:0}}
     </style></head><body>
     <div class="toolbar">
-      <button class="primary" onclick="window.print()">Print</button>
+      ${allowPrint ? '<button class="primary" onclick="window.print()">Print</button>' : ''}
       <button onclick="window.close()">Close</button>
     </div>
     <h1>${esc(spec.companyName)}</h1>
@@ -113,6 +123,7 @@ export function printReport(spec: ReportSpec): boolean {
   w.document.write(html);
   w.document.close();
   w.focus();
+  if (autoPrint) setTimeout(() => w.print(), 300);
   return true;
 }
 

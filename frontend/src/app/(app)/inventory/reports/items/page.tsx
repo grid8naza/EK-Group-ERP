@@ -127,9 +127,14 @@ export default function ItemsReportPage() {
   };
 
   const has = total > 0;
+  const canPrint = can(ROUTE, 'print');
+  const popupBlocked = () =>
+    toast.error('Pop-up blocked — allow pop-ups to print.');
+  const onPreview = () => {
+    if (!printReport(spec, { allowPrint: canPrint })) popupBlocked();
+  };
   const onPrint = () => {
-    if (!printReport(spec))
-      toast.error('Pop-up blocked — allow pop-ups to print.');
+    if (!printReport(spec, { autoPrint: true })) popupBlocked();
   };
 
   return (
@@ -140,9 +145,10 @@ export default function ItemsReportPage() {
         icon={<BarChart3 className="h-5 w-5" />}
         actions={
           <ReportExportButtons
-            canPrint={can(ROUTE, 'print')}
+            canPrint={canPrint}
             canPdf={can(ROUTE, 'downloadPdf')}
             canExcel={can(ROUTE, 'downloadExcel')}
+            onPreview={onPreview}
             onPrint={onPrint}
             onPdf={() => pdfReport(spec)}
             onExcel={() =>

@@ -1,6 +1,6 @@
 'use client';
 
-import { FileText, Printer, Sheet } from 'lucide-react';
+import { Eye, FileText, Printer, Sheet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from './Badge';
 import { colPercent, type Cell, type ReportBlock } from '@/lib/reportDoc';
@@ -124,17 +124,23 @@ interface ReportExportButtonsProps {
   canPrint: boolean;
   canPdf: boolean;
   canExcel: boolean;
+  onPreview: () => void;
   onPrint: () => void;
   onPdf: () => void;
   onExcel: () => void;
   disabled?: boolean;
 }
 
-/** Standard Print / PDF / Excel buttons for a report's PageHeader actions. */
+/**
+ * Standard report actions. Print Preview is always available (anyone viewing the
+ * report can preview it); the separate Print button (and PDF / Excel) are gated
+ * by their own user-group privileges.
+ */
 export function ReportExportButtons({
   canPrint,
   canPdf,
   canExcel,
+  onPreview,
   onPrint,
   onPdf,
   onExcel,
@@ -142,9 +148,12 @@ export function ReportExportButtons({
 }: ReportExportButtonsProps) {
   return (
     <>
+      <button className="btn-secondary" onClick={onPreview} disabled={disabled}>
+        <Eye className="h-4 w-4" /> Print Preview
+      </button>
       {canPrint && (
         <button className="btn-secondary" onClick={onPrint} disabled={disabled}>
-          <Printer className="h-4 w-4" /> Print Preview
+          <Printer className="h-4 w-4" /> Print
         </button>
       )}
       {canPdf && (
