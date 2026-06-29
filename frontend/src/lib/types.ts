@@ -506,7 +506,16 @@ export interface AppUser {
 }
 
 // ---- Inventory: Unit Master (global) ----
-export type UnitType = 'SIMPLE' | 'COMPOUND';
+export type UnitType = 'SIMPLE' | 'COMPOUND' | 'CHAINING';
+
+/** One rung of a CHAINING unit's ladder (top → bottom): 1 (level above) = quantity × linkUnit. */
+export interface UnitChainLink {
+  id?: number;
+  sequence: number;
+  quantity: number;
+  linkUnitId: number;
+  linkUnit?: { id: number; code: string; name: string } | null;
+}
 
 export interface Unit {
   id: number;
@@ -514,10 +523,16 @@ export interface Unit {
   name: string;
   symbol?: string | null;
   type: UnitType;
-  /** COMPOUND only: the simple base unit and how many base units = 1 of this. */
+  /**
+   * COMPOUND: the simple base unit and how many base units = 1 of this.
+   * CHAINING: the RESOLVED base (the ladder's bottom simple unit) and factor
+   * (product of all rung quantities).
+   */
   baseUnitId?: number | null;
   baseUnit?: { id: number; code: string; name: string } | null;
   conversionFactor?: number | null;
+  /** CHAINING only: the ordered ladder of rungs. */
+  chainLinks?: UnitChainLink[];
   decimalPlaces: number;
   isActive: boolean;
   isLocked?: boolean;

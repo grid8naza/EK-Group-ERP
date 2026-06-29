@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plus, Ruler } from 'lucide-react';
+import { Plus, Ruler, Trash2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
@@ -19,6 +19,8 @@ import type { Unit, UnitType } from '@/lib/types';
 
 const ROUTE = '/inventory/units';
 
+type ChainRung = { unitId: string; quantity: string };
+
 const empty = {
   code: '',
   name: '',
@@ -26,6 +28,7 @@ const empty = {
   type: 'SIMPLE' as UnitType,
   baseUnitId: '',
   conversionFactor: '',
+  chainLinks: [] as ChainRung[],
   decimalPlaces: '0',
   isActive: true,
 };
@@ -58,6 +61,10 @@ export default function UnitsPage() {
   const simpleUnits = (data ?? []).filter(
     (u) => u.type === 'SIMPLE' && u.id !== editing?.id,
   );
+  // A chaining rung may reference any existing non-chaining unit except itself.
+  const linkUnits = (data ?? []).filter(
+    (u) => u.type !== 'CHAINING' && u.id !== editing?.id,
+  );
 
   const closeDrawer = () => {
     setOpen(false);
@@ -71,9 +78,36 @@ export default function UnitsPage() {
     type: u.type,
     baseUnitId: u.baseUnitId != null ? String(u.baseUnitId) : '',
     conversionFactor: u.conversionFactor != null ? String(u.conversionFactor) : '',
+    chainLinks: (u.chainLinks ?? [])
+      .slice()
+      .sort((a, b) => a.sequence - b.sequence)
+      .map((l) => ({ unitId: String(l.linkUnitId), quantity: String(l.quantity) })),
     decimalPlaces: String(u.decimalPlaces ?? 0),
     isActive: u.isActive,
   });
+
+  // --- chaining rung editors (mutate form.chainLinks) ---
+  const addRung = () =>
+    setForm((f) => ({ ...f, chainLinks: [...f.chainLinks, { unitId: '', quantity: '' }] }));
+  const removeRung = (i: number) =>
+    setForm((f) => ({ ...f, chainLinks: f.chainLinks.filter((_, idx) => idx !== i) }));
+  const setRung = (i: number, patch: Partial<ChainRung>) =>
+    setForm((f) => ({
+      ...f,
+      chainLinks: f.chainLinks.map((r, idx) => (idx === i ? { ...r, ...patch } : r)),
+    }));
+
+  // Resolved factor (product of rung quantities) and the bottom unit, for the
+  // live preview — mirrors how the server resolves a chaining unit.
+  const chainFactor = form.chainLinks.reduce(
+    (acc, r) => acc * (Number(r.quantity) || 0),
+    1,
+  );
+  const chainBase = form.chainLinks.length
+    ? linkUnits.find(
+        (u) => String(u.id) === form.chainLinks[form.chainLinks.length - 1].unitId,
+      )
+    : undefined;
 
   const openAdd = () => {
     setEditing(null);
@@ -124,6 +158,20 @@ export default function UnitsPage() {
         return;
       }
     }
+    if (form.type === 'CHAINING') {
+      if (form.chainLinks.length === 0) {
+        toast.error('A chaining unit needs at least one rung.');
+        return;
+      }
+      if (form.chainLinks.some((r) => !r.unitId || !(Number(r.quantity) > 0))) {
+        toast.error('Each rung needs a unit and a positive quantity.');
+        return;
+      }
+      if (chainBase?.type !== 'SIMPLE') {
+        toast.error('The last rung must reference a simple unit.');
+        return;
+      }
+    }
 
     const payload = {
       code: form.code.trim().toUpperCase(),
@@ -132,12 +180,22 @@ export default function UnitsPage() {
       type: form.type,
       decimalPlaces: Number(form.decimalPlaces) || 0,
       isActive: form.isActive,
+      // Base/factor are explicit for COMPOUND; the server resolves them for
+      // CHAINING from the rungs, so we only send chainLinks there.
       ...(form.type === 'COMPOUND'
         ? {
             baseUnitId: Number(form.baseUnitId),
             conversionFactor: Number(form.conversionFactor),
           }
         : { baseUnitId: null, conversionFactor: null }),
+      ...(form.type === 'CHAINING'
+        ? {
+            chainLinks: form.chainLinks.map((r) => ({
+              unitId: Number(r.unitId),
+              quantity: Number(r.quantity),
+            })),
+          }
+        : {}),
     };
 
     setSaving(true);
@@ -196,8 +254,20 @@ export default function UnitsPage() {
       key: 'type',
       header: 'Type',
       render: (r) => (
-        <Badge color={r.type === 'COMPOUND' ? 'blue' : 'slate'}>
-          {r.type === 'COMPOUND' ? 'Compound' : 'Simple'}
+        <Badge
+          color={
+            r.type === 'COMPOUND'
+              ? 'blue'
+              : r.type === 'CHAINING'
+                ? 'violet'
+                : 'slate'
+          }
+        >
+          {r.type === 'COMPOUND'
+            ? 'Compound'
+            : r.type === 'CHAINING'
+              ? 'Chaining'
+              : 'Simple'}
         </Badge>
       ),
     },
@@ -205,7 +275,7 @@ export default function UnitsPage() {
       key: 'conversion',
       header: 'Conversion',
       render: (r) =>
-        r.type === 'COMPOUND' && r.baseUnit ? (
+        (r.type === 'COMPOUND' || r.type === 'CHAINING') && r.baseUnit ? (
           <span className="text-slate-600 dark:text-slate-300">
             1 {r.code} = {r.conversionFactor} {r.baseUnit.code}
           </span>
@@ -230,7 +300,7 @@ export default function UnitsPage() {
     <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="Unit Master"
-        description="Units of measure (global) — simple units and compound units derived from them"
+        description="Units of measure (global) — simple, compound, and chaining (nested packaging) units"
         icon={<Ruler className="h-5 w-5" />}
         actions={
           canAdd && (
@@ -324,6 +394,7 @@ export default function UnitsPage() {
               options={[
                 { value: 'SIMPLE', label: 'Simple' },
                 { value: 'COMPOUND', label: 'Compound (derived from a base unit)' },
+                { value: 'CHAINING', label: 'Chaining (nested packaging ladder)' },
               ]}
             />
             <Input
@@ -371,6 +442,94 @@ export default function UnitsPage() {
                     ?.code || 'base unit'}
                 </p>
               </>
+            )}
+
+            {form.type === 'CHAINING' && (
+              <div className="sm:col-span-2">
+                <div className="mb-1 flex items-center justify-between">
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                    Packaging Ladder
+                  </span>
+                  {!view && (
+                    <button
+                      type="button"
+                      className="btn-secondary text-xs"
+                      onClick={addRung}
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Add rung
+                    </button>
+                  )}
+                </div>
+                <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+                  Each rung: how many of the chosen unit make up one of the level
+                  above it. The last rung must be a simple unit.
+                </p>
+
+                {form.chainLinks.length === 0 ? (
+                  <p className="rounded-md border border-dashed border-slate-300 px-3 py-4 text-center text-xs text-slate-400 dark:border-slate-600">
+                    No rungs yet — add one to start the ladder.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {form.chainLinks.map((rung, i) => {
+                      const above =
+                        i === 0
+                          ? form.code || 'unit'
+                          : linkUnits.find(
+                              (u) =>
+                                String(u.id) === form.chainLinks[i - 1].unitId,
+                            )?.code || 'level above';
+                      return (
+                        <div key={i} className="flex items-end gap-2">
+                          <span className="pb-2 text-xs text-slate-500 dark:text-slate-400">
+                            1 {above} =
+                          </span>
+                          <Input
+                            type="number"
+                            min={0}
+                            step="any"
+                            value={rung.quantity}
+                            onChange={(e) =>
+                              setRung(i, { quantity: e.target.value })
+                            }
+                            placeholder="qty"
+                            wrapClassName="w-24"
+                          />
+                          <Select
+                            value={rung.unitId}
+                            onChange={(e) =>
+                              setRung(i, { unitId: e.target.value })
+                            }
+                            placeholder="Select unit"
+                            options={linkUnits.map((u) => ({
+                              value: u.id,
+                              label: `${u.code} — ${u.name}`,
+                            }))}
+                            wrapClassName="flex-1"
+                          />
+                          {!view && (
+                            <button
+                              type="button"
+                              className="mb-1 rounded-md p-2 text-slate-400 hover:bg-slate-100 hover:text-red-600 dark:hover:bg-slate-800"
+                              onClick={() => removeRung(i)}
+                              aria-label="Remove rung"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {form.chainLinks.length > 0 && (
+                  <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                    1 {form.code || 'unit'} = {chainFactor || '…'}{' '}
+                    {chainBase?.code || 'base unit'}
+                  </p>
+                )}
+              </div>
             )}
 
             <div className="sm:col-span-2">

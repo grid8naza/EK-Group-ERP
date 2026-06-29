@@ -1,4 +1,5 @@
 import {
+  IsArray,
   IsBoolean,
   IsEnum,
   IsInt,
@@ -10,8 +11,21 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { UnitType } from '@prisma/client';
+
+/// One rung of a CHAINING unit's ladder, top → bottom: `1 (level above) =
+/// quantity × the unit identified by unitId`.
+export class ChainLinkInput {
+  @IsInt()
+  unitId!: number;
+
+  @IsNumber()
+  @IsPositive()
+  quantity!: number;
+}
 
 export class CreateUnitDto {
   @IsString()
@@ -41,6 +55,14 @@ export class CreateUnitDto {
   @IsNumber()
   @IsPositive()
   conversionFactor?: number | null;
+
+  // CHAINING only — the ordered ladder of rungs (top → bottom). The resolved
+  // baseUnitId/conversionFactor are computed from this on the server.
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ChainLinkInput)
+  chainLinks?: ChainLinkInput[];
 
   @IsOptional()
   @IsInt()
@@ -83,6 +105,12 @@ export class UpdateUnitDto {
   @IsNumber()
   @IsPositive()
   conversionFactor?: number | null;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ChainLinkInput)
+  chainLinks?: ChainLinkInput[];
 
   @IsOptional()
   @IsInt()

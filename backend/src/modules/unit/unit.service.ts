@@ -7,7 +7,17 @@ import {
 import { Prisma, UnitType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
-import { CreateUnitDto, UpdateUnitDto } from './unit.dto';
+import { CreateUnitDto, ChainLinkInput, UpdateUnitDto } from './unit.dto';
+
+// Shared shape: the base unit summary plus the resolved chaining ladder (rungs
+// ordered top → bottom, each with its referenced unit's summary).
+const UNIT_INCLUDE = {
+  baseUnit: { select: { id: true, code: true, name: true } },
+  chainLinks: {
+    orderBy: { sequence: 'asc' },
+    include: { linkUnit: { select: { id: true, code: true, name: true } } },
+  },
+} satisfies Prisma.UnitInclude;
 
 @Injectable()
 export class UnitService {
@@ -23,7 +33,7 @@ export class UnitService {
             ],
           }
         : undefined,
-      include: { baseUnit: { select: { id: true, code: true, name: true } } },
+      include: UNIT_INCLUDE,
       orderBy: [{ type: 'asc' }, { code: 'asc' }],
     });
   }
@@ -31,7 +41,7 @@ export class UnitService {
   async findOne(id: number) {
     const unit = await this.prisma.unit.findUnique({
       where: { id },
-      include: { baseUnit: { select: { id: true, code: true, name: true } } },
+      include: UNIT_INCLUDE,
     });
     if (!unit) throw new NotFoundException('Unit not found');
     return unit;
@@ -39,7 +49,9 @@ export class UnitService {
 
   async create(dto: CreateUnitDto) {
     await this.validateCompound(dto.type, dto.baseUnitId, dto.conversionFactor);
-    const isCompound = dto.type === UnitType.COMPOUND;
+    const chain = await this.validateChaining(dto.type, dto.chainLinks);
+    // Resolve base/factor: explicit for COMPOUND, computed for CHAINING, null else.
+    const resolved = chain ?? this.compoundResolved(dto);
     try {
       return await this.prisma.unit.create({
         data: {
@@ -47,11 +59,13 @@ export class UnitService {
           name: dto.name.trim(),
           symbol: dto.symbol?.trim() || null,
           type: dto.type,
-          baseUnitId: isCompound ? dto.baseUnitId! : null,
-          conversionFactor: isCompound ? dto.conversionFactor! : null,
+          baseUnitId: resolved.baseUnitId,
+          conversionFactor: resolved.conversionFactor,
           decimalPlaces: dto.decimalPlaces ?? 0,
           isActive: dto.isActive ?? true,
+          chainLinks: chain ? { create: chain.links } : undefined,
         },
+        include: UNIT_INCLUDE,
       });
     } catch (e) {
       throw this.asDuplicate(e, dto.code);
@@ -73,7 +87,18 @@ export class UnitService {
         : existing.conversionFactor;
     await this.validateCompound(type, baseUnitId, conversionFactor, id);
 
-    const isCompound = type === UnitType.COMPOUND;
+    // For CHAINING, take the rungs from the patch if present, else keep the
+    // existing ladder; resolve base/factor from it.
+    const chainLinks: ChainLinkInput[] | undefined =
+      type === UnitType.CHAINING
+        ? (dto.chainLinks ??
+          existing.chainLinks.map((l) => ({
+            unitId: l.linkUnitId,
+            quantity: l.quantity,
+          })))
+        : undefined;
+    const chain = await this.validateChaining(type, chainLinks, id);
+
     const data: Prisma.UnitUncheckedUpdateInput = { type };
     if (dto.code !== undefined) data.code = dto.code.trim().toUpperCase();
     if (dto.name !== undefined) data.name = dto.name.trim();
@@ -81,11 +106,32 @@ export class UnitService {
     if (dto.decimalPlaces !== undefined) data.decimalPlaces = dto.decimalPlaces;
     if (dto.isActive !== undefined) data.isActive = dto.isActive;
     // Keep base/factor consistent with the effective type.
-    data.baseUnitId = isCompound ? baseUnitId! : null;
-    data.conversionFactor = isCompound ? conversionFactor! : null;
+    if (chain) {
+      data.baseUnitId = chain.baseUnitId;
+      data.conversionFactor = chain.conversionFactor;
+    } else if (type === UnitType.COMPOUND) {
+      data.baseUnitId = baseUnitId!;
+      data.conversionFactor = conversionFactor!;
+    } else {
+      data.baseUnitId = null;
+      data.conversionFactor = null;
+    }
 
     try {
-      return await this.prisma.unit.update({ where: { id }, data });
+      // Replace the ladder when switching to / editing a chaining unit, and
+      // clear it whenever the effective type is not CHAINING. Wrapped in a
+      // transaction so the rungs and the resolved base/factor stay consistent.
+      return await this.prisma.$transaction(async (tx) => {
+        if (chain) {
+          await tx.unitChainLink.deleteMany({ where: { unitId: id } });
+          await tx.unitChainLink.createMany({
+            data: chain.links.map((l) => ({ ...l, unitId: id })),
+          });
+        } else if (existing.chainLinks.length > 0) {
+          await tx.unitChainLink.deleteMany({ where: { unitId: id } });
+        }
+        return tx.unit.update({ where: { id }, data, include: UNIT_INCLUDE });
+      });
     } catch (e) {
       throw this.asDuplicate(e, dto.code);
     }
@@ -102,12 +148,17 @@ export class UnitService {
   async remove(id: number) {
     const existing = await this.findOne(id);
     assertUnlocked(existing, 'unit', 'deleting');
-    const derived = await this.prisma.unit.count({
-      where: { baseUnitId: id },
-    });
-    if (derived > 0) {
+    // Block deletion while this unit is a compound's base OR a rung of some
+    // chaining ladder. (Deleting cascades only the ladder this unit OWNS, not
+    // the rungs that reference it.)
+    const [derived, usedInChain] = await Promise.all([
+      this.prisma.unit.count({ where: { baseUnitId: id } }),
+      this.prisma.unitChainLink.count({ where: { linkUnitId: id } }),
+    ]);
+    const refs = derived + usedInChain;
+    if (refs > 0) {
       throw new ConflictException(
-        `This unit is the base of ${derived} compound unit(s). Remove or reassign them first.`,
+        `This unit is referenced by ${refs} compound/chaining definition(s). Remove or reassign them first.`,
       );
     }
     await this.prisma.unit.delete({ where: { id } });
@@ -115,6 +166,73 @@ export class UnitService {
   }
 
   // --- helpers ---
+
+  /** Base/factor for a non-chaining unit: explicit for COMPOUND, null otherwise. */
+  private compoundResolved(dto: { type: UnitType; baseUnitId?: number | null; conversionFactor?: number | null }) {
+    const isCompound = dto.type === UnitType.COMPOUND;
+    return {
+      baseUnitId: isCompound ? dto.baseUnitId! : null,
+      conversionFactor: isCompound ? dto.conversionFactor! : null,
+    };
+  }
+
+  /**
+   * Enforce the chaining rules and resolve the ladder. A CHAINING unit owns an
+   * ordered list of rungs (top → bottom); each rung references an existing,
+   * non-chaining unit with a positive quantity, the last rung's unit must be
+   * SIMPLE (the base the ladder bottoms out at), and no rung may reference the
+   * unit itself. Returns the resolved base (last rung's unit), the conversion
+   * factor (product of all quantities), and the rung rows to persist — or null
+   * when the unit is not CHAINING.
+   */
+  private async validateChaining(
+    type: UnitType,
+    chainLinks?: ChainLinkInput[],
+    selfId?: number,
+  ) {
+    if (type !== UnitType.CHAINING) return null;
+    if (!chainLinks || chainLinks.length === 0) {
+      throw new BadRequestException('A chaining unit needs at least one rung.');
+    }
+    for (const l of chainLinks) {
+      if (!l.unitId) {
+        throw new BadRequestException('Each rung needs a unit.');
+      }
+      if (!l.quantity || l.quantity <= 0) {
+        throw new BadRequestException('Each rung needs a positive quantity.');
+      }
+      if (selfId && l.unitId === selfId) {
+        throw new BadRequestException('A unit cannot reference itself in its chain.');
+      }
+    }
+
+    const units = await this.prisma.unit.findMany({
+      where: { id: { in: chainLinks.map((l) => l.unitId) } },
+      select: { id: true, type: true },
+    });
+    const byId = new Map(units.map((u) => [u.id, u]));
+    for (const l of chainLinks) {
+      const u = byId.get(l.unitId);
+      if (!u) throw new BadRequestException('A rung references a unit that does not exist.');
+      if (u.type === UnitType.CHAINING) {
+        throw new BadRequestException('A rung cannot reference another chaining unit.');
+      }
+    }
+    const last = chainLinks[chainLinks.length - 1];
+    if (byId.get(last.unitId)!.type !== UnitType.SIMPLE) {
+      throw new BadRequestException('The last rung must reference a simple unit.');
+    }
+
+    return {
+      baseUnitId: last.unitId,
+      conversionFactor: chainLinks.reduce((acc, l) => acc * l.quantity, 1),
+      links: chainLinks.map((l, i) => ({
+        sequence: i,
+        linkUnitId: l.unitId,
+        quantity: l.quantity,
+      })),
+    };
+  }
 
   /**
    * Enforce the simple/compound rules: a compound unit must point at an existing
