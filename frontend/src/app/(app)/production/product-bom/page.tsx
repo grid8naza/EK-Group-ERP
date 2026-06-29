@@ -6,8 +6,10 @@ import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useAuth } from '@/providers/AuthProvider';
+import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
+import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select } from '@/components/ui/Field';
@@ -37,6 +39,15 @@ export default function ProductBomPage() {
 
   const canEdit = can(ROUTE, 'edit');
   const canView = can(ROUTE, 'view');
+  // The BOM lock is the product's lock (governed by the Product Master screen),
+  // so locking here also blocks editing the product under Inventory.
+  const { canLock, canUnlock, toggleLock, guardEdit } = useLock<Product>({
+    endpoint: '/products',
+    route: '/inventory/products',
+    noun: 'BOM',
+    nameOf: (p) => p.name,
+    reload: refetch,
+  });
 
   const [open, setOpen] = useState(false);
   const [view, setView] = useState(false);
@@ -162,9 +173,17 @@ export default function ProductBomPage() {
         onRefresh={refetch}
         searchPlaceholder="Search products..."
         onView={canView ? (r) => openFor(r, true) : undefined}
-        onEdit={canEdit ? (r) => openFor(r, false) : undefined}
+        onEdit={canEdit ? (r) => guardEdit(r, () => openFor(r, false)) : undefined}
         canView={canView}
         canEdit={canEdit}
+        renderLock={(r) => (
+          <LockButton
+            locked={r.isLocked}
+            canLock={canLock}
+            canUnlock={canUnlock}
+            onToggle={() => toggleLock(r)}
+          />
+        )}
         emptyMessage="No products found — create products under Inventory → Product Master"
       />
 
