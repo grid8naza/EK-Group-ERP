@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ListTree, Plus, Trash2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
@@ -14,7 +14,7 @@ import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import type { Product, Item, Unit } from '@/lib/types';
+import type { Product, Item, Unit, Category, Group } from '@/lib/types';
 
 const ROUTE = '/production/product-bom';
 
@@ -33,9 +33,33 @@ export default function ProductBomPage() {
   const { data, loading, refetch } = useFetch<Product[]>('/products');
   const { data: items } = useFetch<Item[]>('/items');
   const { data: units } = useFetch<Unit[]>('/units');
+  const { data: categories } = useFetch<Category[]>('/categories');
+  const { data: groups } = useFetch<Group[]>('/groups');
 
   const itemList = items ?? [];
   const unitList = units ?? [];
+
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [groupFilter, setGroupFilter] = useState('');
+  const [recipeFilter, setRecipeFilter] = useState(''); // '' | 'with' | 'without'
+
+  const filterCategories = (categories ?? []).filter((c) => c.forProduct);
+  const filterGroups = (groups ?? []).filter(
+    (g) =>
+      g.forProduct && (!categoryFilter || String(g.categoryId) === categoryFilter),
+  );
+
+  const visibleRows = useMemo(() => {
+    let rows = data ?? [];
+    if (categoryFilter)
+      rows = rows.filter((p) => String(p.categoryId) === categoryFilter);
+    if (groupFilter)
+      rows = rows.filter((p) => String(p.groupId) === groupFilter);
+    if (recipeFilter === 'with') rows = rows.filter((p) => p.recipe.length > 0);
+    else if (recipeFilter === 'without')
+      rows = rows.filter((p) => p.recipe.length === 0);
+    return rows;
+  }, [data, categoryFilter, groupFilter, recipeFilter]);
 
   const canEdit = can(ROUTE, 'edit');
   const canView = can(ROUTE, 'view');
@@ -137,7 +161,12 @@ export default function ProductBomPage() {
     {
       key: 'recipe',
       header: 'Recipe',
-      render: (r) => <Badge color={r.recipe.length ? 'blue' : 'slate'}>{r.recipe.length}</Badge>,
+      render: (r) =>
+        r.recipe.length ? (
+          <Badge color="blue">{r.recipe.length}</Badge>
+        ) : (
+          <Badge color="amber">No recipe</Badge>
+        ),
     },
     {
       key: 'packing',
@@ -166,12 +195,50 @@ export default function ProductBomPage() {
 
       <DataTable
         columns={columns}
-        rows={data ?? []}
+        rows={visibleRows}
+        key={`${categoryFilter}|${groupFilter}|${recipeFilter}`}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
         onRefresh={refetch}
         searchPlaceholder="Search products..."
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={categoryFilter}
+              onChange={(e) => {
+                setCategoryFilter(e.target.value);
+                setGroupFilter('');
+              }}
+              wrapClassName="w-44"
+              placeholder="All categories"
+              options={filterCategories.map((c) => ({
+                value: String(c.id),
+                label: c.name,
+              }))}
+            />
+            <Select
+              value={groupFilter}
+              onChange={(e) => setGroupFilter(e.target.value)}
+              wrapClassName="w-44"
+              placeholder="All groups"
+              options={filterGroups.map((g) => ({
+                value: String(g.id),
+                label: g.name,
+              }))}
+            />
+            <Select
+              value={recipeFilter}
+              onChange={(e) => setRecipeFilter(e.target.value)}
+              wrapClassName="w-44"
+              placeholder="Recipe: All"
+              options={[
+                { value: 'with', label: 'With recipe' },
+                { value: 'without', label: 'Without recipe' },
+              ]}
+            />
+          </div>
+        }
         onView={canView ? (r) => openFor(r, true) : undefined}
         onEdit={canEdit ? (r) => guardEdit(r, () => openFor(r, false)) : undefined}
         canView={canView}
