@@ -1,11 +1,12 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Tag } from 'lucide-react';
 import { useFetch } from '@/lib/hooks';
 import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { Select } from '@/components/ui/Field';
 import { ReportView, ReportExportButtons } from '@/components/ui/ReportView';
 import {
   printReport,
@@ -32,25 +33,28 @@ export default function CategoryReportPage() {
   const { data, loading } = useFetch<Category[]>('/categories');
   const { data: companies } = useFetch<Company[]>('/companies');
 
+  const [applies, setApplies] = useState(''); // '' | 'item' | 'product'
+
   const companyName = resolveCompanyName(
     companies,
     activeCompanyId,
     activeCompany?.name,
   );
 
-  const rows = useMemo<Cell[][]>(
-    () =>
-      [...(data ?? [])]
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map((c) => [
-          c.code,
-          c.name,
-          c.description ?? '-',
-          appliesTo(c.forItem, c.forProduct),
-          c.isActive ? 'Active' : 'Inactive',
-        ]),
-    [data],
-  );
+  const rows = useMemo<Cell[][]>(() => {
+    let cats = data ?? [];
+    if (applies === 'item') cats = cats.filter((c) => c.forItem);
+    else if (applies === 'product') cats = cats.filter((c) => c.forProduct);
+    return [...cats]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((c) => [
+        c.code,
+        c.name,
+        c.description ?? '-',
+        appliesTo(c.forItem, c.forProduct),
+        c.isActive ? 'Active' : 'Inactive',
+      ]);
+  }, [data, applies]);
 
   const total = rows.length;
   const spec: ReportSpec = {
@@ -88,8 +92,18 @@ export default function CategoryReportPage() {
       />
 
       <div className="card flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="flex items-center justify-end border-b border-slate-200 p-4 dark:border-slate-800">
-          <span className="text-sm text-slate-500 dark:text-slate-400">
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-4 dark:border-slate-800">
+          <Select
+            value={applies}
+            onChange={(e) => setApplies(e.target.value)}
+            wrapClassName="w-48"
+            placeholder="Applies to: All"
+            options={[
+              { value: 'item', label: 'Item-wise' },
+              { value: 'product', label: 'Product-wise' },
+            ]}
+          />
+          <span className="ml-auto text-sm text-slate-500 dark:text-slate-400">
             {total} categor{total === 1 ? 'y' : 'ies'}
           </span>
         </div>

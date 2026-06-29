@@ -92,8 +92,17 @@ export function printReport(spec: ReportSpec): boolean {
       table{width:100%;table-layout:fixed;border-collapse:collapse;margin-bottom:8px;font-size:11px}
       th,td{border:1px solid #d8d2c6;padding:4px 6px;text-align:left;overflow-wrap:anywhere}
       th{background:#f3ece0;text-align:center}
-      @media print{body{margin:10px}}
+      .toolbar{display:flex;gap:8px;margin-bottom:14px}
+      .toolbar button{padding:6px 16px;font-size:13px;font-family:inherit;border:1px solid #cbd5e1;border-radius:6px;background:#f1f5f9;color:#334155;cursor:pointer}
+      .toolbar button.primary{background:#8b5e34;border-color:#8b5e34;color:#fff}
+      /* Page setup: print only the report (hide the toolbar), landscape. */
+      @page{size:landscape;margin:10mm}
+      @media print{.toolbar{display:none} body{margin:0}}
     </style></head><body>
+    <div class="toolbar">
+      <button class="primary" onclick="window.print()">Print</button>
+      <button onclick="window.close()">Close</button>
+    </div>
     <h1>${esc(spec.companyName)}</h1>
     <p class="sub">${esc(spec.subtitle)}</p>
     <p class="date">${new Date().toLocaleString()}</p>
@@ -104,7 +113,6 @@ export function printReport(spec: ReportSpec): boolean {
   w.document.write(html);
   w.document.close();
   w.focus();
-  setTimeout(() => w.print(), 300);
   return true;
 }
 

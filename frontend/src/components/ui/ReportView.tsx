@@ -144,7 +144,7 @@ export function ReportExportButtons({
     <>
       {canPrint && (
         <button className="btn-secondary" onClick={onPrint} disabled={disabled}>
-          <Printer className="h-4 w-4" /> Print
+          <Printer className="h-4 w-4" /> Print Preview
         </button>
       )}
       {canPdf && (

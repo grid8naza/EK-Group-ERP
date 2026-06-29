@@ -36,6 +36,7 @@ export default function GroupReportPage() {
   const { data: companies } = useFetch<Company[]>('/companies');
 
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [applies, setApplies] = useState(''); // '' | 'item' | 'product'
 
   const companyName = resolveCompanyName(
     companies,
@@ -48,6 +49,8 @@ export default function GroupReportPage() {
     let rows = data ?? [];
     if (categoryFilter)
       rows = rows.filter((g) => String(g.categoryId) === categoryFilter);
+    if (applies === 'item') rows = rows.filter((g) => g.forItem);
+    else if (applies === 'product') rows = rows.filter((g) => g.forProduct);
 
     const byCat = new Map<string, Group[]>();
     for (const g of rows) {
@@ -74,7 +77,7 @@ export default function GroupReportPage() {
           },
         ],
       }));
-  }, [data, categoryFilter]);
+  }, [data, categoryFilter, applies]);
 
   const total = blocks.reduce((n, b) => n + (b.count ?? 0), 0);
   const spec: ReportSpec = {
@@ -122,6 +125,16 @@ export default function GroupReportPage() {
               value: String(c.id),
               label: c.name,
             }))}
+          />
+          <Select
+            value={applies}
+            onChange={(e) => setApplies(e.target.value)}
+            wrapClassName="w-48"
+            placeholder="Applies to: All"
+            options={[
+              { value: 'item', label: 'Item-wise' },
+              { value: 'product', label: 'Product-wise' },
+            ]}
           />
           <span className="ml-auto text-sm text-slate-500 dark:text-slate-400">
             {total} group{total === 1 ? '' : 's'}
