@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client';
 import { CPANEL_SUBS } from '../modules/company/company-provisioning';
 import {
   INVENTORY_SUBS,
-  seedDefaultUnits,
+  seedInventoryDefaults,
 } from '../modules/unit/inventory-provisioning';
 
 /**
@@ -83,7 +83,7 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     autoEnable: true, // preserves Inventory's current "on for every company" behaviour
     menu: { name: 'Inventory', icon: 'package' },
     subs: INVENTORY_SUBS,
-    seedData: seedDefaultUnits,
+    seedData: seedInventoryDefaults,
   },
   {
     code: 'HR',

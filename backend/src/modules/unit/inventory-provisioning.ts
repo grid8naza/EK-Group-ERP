@@ -207,6 +207,81 @@ export async function backfillInventoryScaffold(
   }
 }
 
+// Common HSN codes for a bakery's ingredients & finished products, seeded once
+// (only when the HSN table is empty) so the master isn't blank on first use.
+// `gst` is the total GST %; it is split into CGST + SGST (half each) for
+// intra-state and mirrored as IGST for inter-state, matching how the HSN form
+// derives the three rates. Rates reflect India's GST 2.0 structure effective
+// 22 Sep 2025 (most food items at NIL or 5%); verify against the latest
+// notification / your CA, as a few preparations vary by exact sub-classification.
+interface DefaultHsn {
+  code: string;
+  description: string;
+  gst: number; // total %, 0 = exempt/NIL
+}
+const DEFAULT_HSN_CODES: DefaultHsn[] = [
+  // --- Finished bakery products ---
+  { code: '1905', description: 'Bread (branded & unbranded)', gst: 0 },
+  { code: '190520', description: 'Rusk, toasted bread & similar toasted products', gst: 5 },
+  { code: '190590', description: 'Pastry, cakes, biscuits & other bakers’ wares', gst: 5 },
+  { code: '1704', description: 'Sugar confectionery (candy, toffee) without cocoa', gst: 5 },
+  { code: '1806', description: 'Chocolate & other cocoa preparations', gst: 5 },
+  { code: '2105', description: 'Ice cream & other edible ice', gst: 5 },
+  // --- Flours, sugars & starches ---
+  { code: '1101', description: 'Wheat flour, Maida & Atta', gst: 0 },
+  { code: '1108', description: 'Starches (corn / maize starch)', gst: 5 },
+  { code: '1701', description: 'Sugar (refined / granulated)', gst: 5 },
+  { code: '1702', description: 'Glucose, invert sugar & sugar syrups', gst: 5 },
+  { code: '1901', description: 'Malt extract & flour-based food preparations', gst: 5 },
+  { code: '2106', description: 'Food preparations n.e.s. (baking premixes, custard powder, improvers)', gst: 5 },
+  { code: '2102', description: 'Yeast & prepared baking powders', gst: 5 },
+  // --- Dairy & fats ---
+  { code: '0401', description: 'Fresh & UHT milk', gst: 0 },
+  { code: '0402', description: 'Milk powder & condensed milk', gst: 5 },
+  { code: '0405', description: 'Butter & ghee (dairy fats)', gst: 5 },
+  { code: '0406', description: 'Cheese & paneer', gst: 5 },
+  { code: '0407', description: 'Eggs (in shell)', gst: 0 },
+  { code: '1512', description: 'Edible vegetable oil (sunflower / refined)', gst: 5 },
+  { code: '1517', description: 'Margarine, bakery shortening & edible fat mixtures', gst: 5 },
+  // --- Cocoa, fillings, nuts & flavourings ---
+  { code: '1805', description: 'Cocoa powder', gst: 5 },
+  { code: '2007', description: 'Jam, fruit jelly & marmalade', gst: 5 },
+  { code: '0801', description: 'Cashew nuts', gst: 5 },
+  { code: '0802', description: 'Almonds, walnuts, pistachios & other nuts', gst: 5 },
+  { code: '0806', description: 'Raisins (dried grapes)', gst: 5 },
+  { code: '0813', description: 'Mixed dried fruits', gst: 5 },
+  { code: '0409', description: 'Natural honey', gst: 5 },
+  { code: '0908', description: 'Cardamom, nutmeg & similar spices', gst: 5 },
+  { code: '0905', description: 'Vanilla', gst: 5 },
+  // --- Other staples ---
+  { code: '2501', description: 'Salt', gst: 0 },
+];
+
+/** Seed common bakery HSN codes the first time (when the HSN table is empty). */
+export async function seedDefaultHsnCodes(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  if ((await prisma.hsnCode.count()) > 0) return;
+  await prisma.hsnCode.createMany({
+    data: DEFAULT_HSN_CODES.map((h) => ({
+      code: h.code,
+      description: h.description,
+      cgst: h.gst / 2,
+      sgst: h.gst / 2,
+      igst: h.gst,
+    })),
+    skipDuplicates: true,
+  });
+}
+
+/** Run every Inventory data seed (each guards internally; safe on every boot). */
+export async function seedInventoryDefaults(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  await seedDefaultUnits(prisma);
+  await seedDefaultHsnCodes(prisma);
+}
+
 export async function seedDefaultUnits(
   prisma: Prisma.TransactionClient,
 ): Promise<void> {
