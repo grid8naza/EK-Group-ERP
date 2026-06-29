@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client';
 import { CPANEL_SUBS } from '../modules/company/company-provisioning';
 import {
   INVENTORY_SUBS,
+  INVENTORY_REPORT_MENUS,
   seedInventoryDefaults,
 } from '../modules/unit/inventory-provisioning';
 
@@ -42,6 +43,12 @@ export interface ModuleScaffold {
   menu?: { name: string; icon: string };
   /** The module's screens. */
   subs?: ScaffoldSub[];
+  /**
+   * Additional named main menus for this module, beyond the primary `menu`
+   * (e.g. a separate "Inventory Report" menu alongside "Inventory"). Each is its
+   * own MainMenu row, matched by name so it coexists with the primary.
+   */
+  extraMenus?: { name: string; icon: string; subs: ScaffoldSub[] }[];
   /** Cpanel screens are system + locked Object Master entries. */
   objectSystem?: boolean;
   /** One-time data seed for the module (guards internally; safe every boot). */
@@ -83,6 +90,7 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     autoEnable: true, // preserves Inventory's current "on for every company" behaviour
     menu: { name: 'Inventory', icon: 'package' },
     subs: INVENTORY_SUBS,
+    extraMenus: INVENTORY_REPORT_MENUS,
     seedData: seedInventoryDefaults,
   },
   {

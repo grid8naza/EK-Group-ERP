@@ -17,6 +17,23 @@ export const INVENTORY_SUBS = [
   { name: 'Item Master', route: '/inventory/items', icon: 'box', order: 5 },
 ];
 
+// A second main menu under the Inventory module for reports (kept separate from
+// the master-data "Inventory" menu).
+export const INVENTORY_REPORT_MENUS = [
+  {
+    name: 'Inventory Report',
+    icon: 'bar-chart-3',
+    subs: [
+      {
+        name: 'Items List',
+        route: '/inventory/reports/items',
+        icon: 'file-text',
+        order: 1,
+      },
+    ],
+  },
+];
+
 // Default units seeded once (only when the Unit table is empty), so the master
 // isn't blank on first use. Compounds reference a simple base by code.
 interface DefaultUnit {

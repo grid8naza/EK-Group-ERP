@@ -50,9 +50,21 @@ export async function syncScaffold(
   for (const m of MODULE_SCAFFOLDS) {
     if (m.seedData) await m.seedData(prisma);
     const mod = byCode.get(m.code);
-    if (!mod || !m.menu || !m.subs?.length) continue;
+    if (!mod) continue;
+    const hasMenu = (!!m.menu && !!m.subs?.length) || !!m.extraMenus?.length;
+    if (!hasMenu) continue;
     await syncModuleMenus(prisma, m, mod.id, mod.sortOrder ?? m.sortOrder);
   }
+}
+
+/** A main menu and the screens it hosts, normalized from the scaffold. */
+interface MenuGroup {
+  name: string;
+  icon: string;
+  subs: { name: string; route: string; icon: string; order: number }[];
+  /** The module's primary menu is matched by module (so a rename is reused);
+   *  extra menus are matched by name, so they coexist with the primary. */
+  primary: boolean;
 }
 
 async function syncModuleMenus(
@@ -61,6 +73,21 @@ async function syncModuleMenus(
   moduleId: number,
   sortOrder: number,
 ): Promise<void> {
+  // Normalize the module's main menus: the primary (menu + subs) plus any
+  // extra named menus. Each is a separate MainMenu row.
+  const menuGroups: MenuGroup[] = [
+    ...(m.menu && m.subs?.length
+      ? [{ name: m.menu.name, icon: m.menu.icon, subs: m.subs, primary: true }]
+      : []),
+    ...(m.extraMenus ?? []).map((e) => ({
+      name: e.name,
+      icon: e.icon,
+      subs: e.subs,
+      primary: false,
+    })),
+  ];
+  const allSubs = menuGroups.flatMap((g) => g.subs);
+
   // ---- Global Object Master entries (one per screen, company-independent) ----
   const existingRoutes = new Set(
     (
@@ -70,7 +97,7 @@ async function syncModuleMenus(
       })
     ).map((o) => o.route),
   );
-  for (const s of m.subs!) {
+  for (const s of allSubs) {
     if (existingRoutes.has(s.route)) continue;
     await prisma.objectMaster.create({
       data: {
@@ -116,27 +143,6 @@ async function syncModuleMenus(
       where: { companyId, name: 'Administrators' },
       select: { id: true },
     });
-
-    // Reuse the company's existing main menu for this module (matched by module,
-    // so a renamed menu is reused instead of duplicated); create one if none.
-    let main = await prisma.mainMenu.findFirst({
-      where: { companyId, moduleId },
-      orderBy: { id: 'asc' },
-    });
-    if (!main) {
-      main = await prisma.mainMenu.create({
-        data: {
-          companyId,
-          moduleId,
-          menuName: m.menu!.name,
-          sortOrder: 1,
-          objectType: ObjectType.FORM,
-          isUserMenu: true,
-          icon: m.menu!.icon,
-        },
-      });
-    }
-
     if (admin) {
       await prisma.userGroupModule.upsert({
         where: { userGroupId_moduleId: { userGroupId: admin.id, moduleId } },
@@ -145,56 +151,111 @@ async function syncModuleMenus(
       });
     }
 
-    // Missing sub-menus (matched by route).
-    const have = new Set(
-      (
-        await prisma.subMenu.findMany({
-          where: { mainMenuId: main.id },
-          select: { route: true },
-        })
-      ).map((s) => s.route),
-    );
-    const missing = m.subs!.filter((s) => !have.has(s.route));
-    if (missing.length) {
-      await prisma.subMenu.createMany({
-        data: missing.map((s) => ({
-          mainMenuId: main!.id,
-          subMenuName: s.name,
-          route: s.route,
-          icon: s.icon,
-          sortOrder: s.order,
-          objectType: ObjectType.FORM,
-        })),
+    let order = 0;
+    for (const group of menuGroups) {
+      order += 1;
+      await syncOneMenu(prisma, {
+        companyId,
+        moduleId,
+        group,
+        sortOrder: order,
+        adminGroupId: admin?.id,
       });
     }
+  }
+}
 
-    // Grant the Administrators group full privileges on the menu + all subs.
-    if (admin) {
-      await prisma.groupMainMenuAccess.upsert({
-        where: {
-          userGroupId_mainMenuId: { userGroupId: admin.id, mainMenuId: main.id },
-        },
-        update: { visible: true },
-        create: { userGroupId: admin.id, mainMenuId: main.id, visible: true },
-      });
-      const subs = await prisma.subMenu.findMany({
+/** Find/create one main menu, back-fill its sub-menus, and grant the admin group. */
+async function syncOneMenu(
+  prisma: Prisma.TransactionClient,
+  opts: {
+    companyId: number;
+    moduleId: number;
+    group: MenuGroup;
+    sortOrder: number;
+    adminGroupId?: number;
+  },
+): Promise<void> {
+  const { companyId, moduleId, group, sortOrder, adminGroupId } = opts;
+
+  // Primary menu: reuse the module's existing main menu (matched by module, so a
+  // renamed menu is reused). Extra menus: matched by name so they don't collide
+  // with the primary and are found/created independently.
+  let main = await prisma.mainMenu.findFirst({
+    where: group.primary
+      ? { companyId, moduleId }
+      : { companyId, moduleId, menuName: group.name },
+    orderBy: { id: 'asc' },
+  });
+  if (!main) {
+    main = await prisma.mainMenu.create({
+      data: {
+        companyId,
+        moduleId,
+        menuName: group.name,
+        sortOrder,
+        objectType: ObjectType.FORM,
+        isUserMenu: true,
+        icon: group.icon,
+      },
+    });
+  }
+
+  // Missing sub-menus (matched by route).
+  const have = new Set(
+    (
+      await prisma.subMenu.findMany({
         where: { mainMenuId: main.id },
-        select: { id: true },
-      });
-      await prisma.groupSubMenuPrivilege.createMany({
-        data: subs.map((sub) => ({
-          userGroupId: admin.id,
-          subMenuId: sub.id,
-          canMenu: true,
-          canView: true,
-          canAdd: true,
-          canEdit: true,
-          canDelete: true,
-          canLock: true,
-          canUnlock: true,
-        })),
-        skipDuplicates: true,
-      });
-    }
+        select: { route: true },
+      })
+    ).map((s) => s.route),
+  );
+  const missing = group.subs.filter((s) => !have.has(s.route));
+  if (missing.length) {
+    await prisma.subMenu.createMany({
+      data: missing.map((s) => ({
+        mainMenuId: main!.id,
+        subMenuName: s.name,
+        route: s.route,
+        icon: s.icon,
+        sortOrder: s.order,
+        objectType: ObjectType.FORM,
+      })),
+    });
+  }
+
+  // Grant the Administrators group full privileges on the menu + all its subs.
+  if (adminGroupId) {
+    await prisma.groupMainMenuAccess.upsert({
+      where: {
+        userGroupId_mainMenuId: {
+          userGroupId: adminGroupId,
+          mainMenuId: main.id,
+        },
+      },
+      update: { visible: true },
+      create: { userGroupId: adminGroupId, mainMenuId: main.id, visible: true },
+    });
+    const subs = await prisma.subMenu.findMany({
+      where: { mainMenuId: main.id },
+      select: { id: true },
+    });
+    await prisma.groupSubMenuPrivilege.createMany({
+      data: subs.map((sub) => ({
+        userGroupId: adminGroupId,
+        subMenuId: sub.id,
+        canMenu: true,
+        canView: true,
+        canAdd: true,
+        canEdit: true,
+        canDelete: true,
+        canLock: true,
+        canUnlock: true,
+        canPrint: true,
+        canDownloadPdf: true,
+        canDownloadExcel: true,
+      })),
+      skipDuplicates: true,
+    });
   }
 }
