@@ -78,6 +78,11 @@ export class CreateItemDto {
   leadTime?: number;
 
   @IsOptional()
+  @IsInt()
+  @Min(0)
+  shelfLife?: number; // days (0 = not tracked)
+
+  @IsOptional()
   @IsBoolean()
   allCompanies?: boolean;
 
@@ -159,6 +164,11 @@ export class UpdateItemDto {
   @IsInt()
   @Min(0)
   leadTime?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  shelfLife?: number; // days (0 = not tracked)
 
   @IsOptional()
   @IsBoolean()

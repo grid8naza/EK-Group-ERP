@@ -80,6 +80,7 @@ export class ItemService {
           maximumStock: dto.maximumStock ?? 0,
           reorderLevel: dto.reorderLevel ?? 0,
           leadTime: dto.leadTime ?? 0,
+          shelfLife: dto.shelfLife ?? 0,
           allCompanies,
           isActive: dto.isActive ?? true,
           companies: { create: companyIds.map((companyId) => ({ companyId })) },
@@ -125,6 +126,7 @@ export class ItemService {
           maximumStock: dto.maximumStock,
           reorderLevel: dto.reorderLevel,
           leadTime: dto.leadTime,
+          shelfLife: dto.shelfLife,
           allCompanies,
           isActive: dto.isActive,
           ...(companyIds

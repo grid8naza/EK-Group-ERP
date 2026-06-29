@@ -34,6 +34,7 @@ const empty = {
   maximumStock: '0',
   reorderLevel: '0',
   leadTime: '0',
+  shelfLife: '0',
   allCompanies: true,
   companyIds: [] as number[],
   isActive: true,
@@ -98,6 +99,7 @@ export default function ItemsPage() {
     maximumStock: String(i.maximumStock ?? 0),
     reorderLevel: String(i.reorderLevel ?? 0),
     leadTime: String(i.leadTime ?? 0),
+    shelfLife: String(i.shelfLife ?? 0),
     allCompanies: i.allCompanies,
     companyIds: i.companyIds ?? [],
     isActive: i.isActive,
@@ -174,6 +176,7 @@ export default function ItemsPage() {
       maximumStock: num(form.maximumStock),
       reorderLevel: num(form.reorderLevel),
       leadTime: num(form.leadTime),
+      shelfLife: num(form.shelfLife),
       allCompanies: form.allCompanies,
       companyIds: form.allCompanies ? [] : form.companyIds,
       isActive: form.isActive,
@@ -514,6 +517,13 @@ export default function ItemsPage() {
               min={0}
               value={form.leadTime}
               onChange={(e) => setForm({ ...form, leadTime: e.target.value })}
+            />
+            <Input
+              label="Shelf Life (days)"
+              type="number"
+              min={0}
+              value={form.shelfLife}
+              onChange={(e) => setForm({ ...form, shelfLife: e.target.value })}
             />
 
             {/* Availability */}

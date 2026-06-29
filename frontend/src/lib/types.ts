@@ -610,6 +610,7 @@ export interface Item {
   maximumStock: number;
   reorderLevel: number;
   leadTime: number;
+  shelfLife: number;
   allCompanies: boolean;
   companyIds: number[];
   isActive: boolean;

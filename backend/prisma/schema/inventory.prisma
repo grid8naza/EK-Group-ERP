@@ -191,6 +191,7 @@ model Item {
   maximumStock Float    @default(0)
   reorderLevel Float    @default(0)
   leadTime     Int      @default(0) // days
+  shelfLife    Int      @default(0) // days (0 = not tracked / non-perishable)
   allCompanies Boolean  @default(false) // true = available to every company
   isActive     Boolean  @default(true)
   isLocked     Boolean  @default(false) // when locked, must be unlocked before edit/delete
