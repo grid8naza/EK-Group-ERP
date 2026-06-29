@@ -26,7 +26,9 @@ const empty = {
   categoryId: '',
   groupId: '',
   unitId: '',
-  sellingPrice: '0',
+  wholesalePrice: '0',
+  intercompanyPrice: '0',
+  retailPrice: '0',
   boxQty: '0',
   boxUnitId: '',
   hsnCodeId: '',
@@ -94,7 +96,9 @@ export default function ProductsPage() {
     categoryId: p.categoryId != null ? String(p.categoryId) : '',
     groupId: p.groupId != null ? String(p.groupId) : '',
     unitId: String(p.unitId),
-    sellingPrice: String(p.sellingPrice ?? 0),
+    wholesalePrice: String(p.wholesalePrice ?? 0),
+    intercompanyPrice: String(p.intercompanyPrice ?? 0),
+    retailPrice: String(p.retailPrice ?? 0),
     boxQty: String(p.boxQty ?? 0),
     boxUnitId: p.boxUnitId != null ? String(p.boxUnitId) : '',
     hsnCodeId: p.hsnCodeId != null ? String(p.hsnCodeId) : '',
@@ -168,7 +172,9 @@ export default function ProductsPage() {
       categoryId: idOrNull(form.categoryId),
       groupId: idOrNull(form.groupId),
       unitId: Number(form.unitId),
-      sellingPrice: num(form.sellingPrice),
+      wholesalePrice: num(form.wholesalePrice),
+      intercompanyPrice: num(form.intercompanyPrice),
+      retailPrice: num(form.retailPrice),
       boxQty: num(form.boxQty),
       boxUnitId: idOrNull(form.boxUnitId),
       hsnCodeId: idOrNull(form.hsnCodeId),
@@ -243,9 +249,19 @@ export default function ProductsPage() {
     },
     { key: 'unit', header: 'Unit', accessor: (r) => r.unit?.code ?? '-' },
     {
-      key: 'sellingPrice',
-      header: 'Selling Price',
-      accessor: (r) => (r.sellingPrice ?? 0).toLocaleString(),
+      key: 'wholesalePrice',
+      header: 'Wholesale',
+      accessor: (r) => (r.wholesalePrice ?? 0).toLocaleString(),
+    },
+    {
+      key: 'intercompanyPrice',
+      header: 'Inter-Co',
+      accessor: (r) => (r.intercompanyPrice ?? 0).toLocaleString(),
+    },
+    {
+      key: 'retailPrice',
+      header: 'Retail',
+      accessor: (r) => (r.retailPrice ?? 0).toLocaleString(),
     },
     { key: 'hsn', header: 'HSN', accessor: (r) => r.hsnCode?.code ?? '-' },
     {
@@ -416,13 +432,33 @@ export default function ProductsPage() {
               }))}
             />
             <Input
-              label="Selling Price"
+              label="Wholesale Price"
               type="number"
               min={0}
               step="any"
-              value={form.sellingPrice}
+              value={form.wholesalePrice}
               onChange={(e) =>
-                setForm({ ...form, sellingPrice: e.target.value })
+                setForm({ ...form, wholesalePrice: e.target.value })
+              }
+            />
+            <Input
+              label="Intercompany Price"
+              type="number"
+              min={0}
+              step="any"
+              value={form.intercompanyPrice}
+              onChange={(e) =>
+                setForm({ ...form, intercompanyPrice: e.target.value })
+              }
+            />
+            <Input
+              label="Retail Price"
+              type="number"
+              min={0}
+              step="any"
+              value={form.retailPrice}
+              onChange={(e) =>
+                setForm({ ...form, retailPrice: e.target.value })
               }
             />
 

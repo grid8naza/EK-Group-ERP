@@ -639,7 +639,9 @@ export interface Product {
   group?: MasterRef | null;
   unitId: number;
   unit?: MasterRef | null;
-  sellingPrice: number;
+  wholesalePrice: number;
+  intercompanyPrice: number;
+  retailPrice: number;
   boxQty: number;
   boxUnitId?: number | null;
   boxUnit?: MasterRef | null;

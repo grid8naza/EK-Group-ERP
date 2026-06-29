@@ -58,7 +58,17 @@ export class CreateProductDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
-  sellingPrice?: number;
+  wholesalePrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  intercompanyPrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  retailPrice?: number;
 
   @IsOptional()
   @IsNumber()
@@ -144,7 +154,17 @@ export class UpdateProductDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
-  sellingPrice?: number;
+  wholesalePrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  intercompanyPrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  retailPrice?: number;
 
   @IsOptional()
   @IsNumber()

@@ -254,7 +254,10 @@ model Product {
   categoryId   Int?
   groupId      Int?
   unitId       Int // selling / output unit
-  sellingPrice Float    @default(0)
+  // Three selling prices.
+  wholesalePrice    Float @default(0)
+  intercompanyPrice Float @default(0)
+  retailPrice       Float @default(0)
   boxQty       Float    @default(0) // pack content quantity (in boxUnit)
   boxUnitId    Int? // unit the box/pack quantity is measured in (e.g. g, Kg)
   hsnCodeId    Int?
