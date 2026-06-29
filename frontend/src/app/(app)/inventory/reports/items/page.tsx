@@ -136,18 +136,21 @@ export default function ItemsReportPage() {
     const doc = new jsPDF({ orientation: 'landscape' });
     const pageW = doc.internal.pageSize.getWidth();
     const pageH = doc.internal.pageSize.getHeight();
+    const cx = pageW / 2;
+    // Company name — bold, centered, on top.
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.text('Items List Report', 14, 14);
+    doc.setFontSize(15);
+    doc.text(activeCompany?.name ?? '', cx, 14, { align: 'center' });
+    // Subheading — Items List · N items, centered.
     doc.setFont('helvetica', 'normal');
+    doc.setFontSize(11);
+    doc.text(`Items List - ${report.total} items`, cx, 21, { align: 'center' });
     doc.setFontSize(9);
-    doc.text(
-      `${activeCompany?.name ?? ''}    ${new Date().toLocaleString()}    Total items: ${report.total}`,
-      14,
-      20,
-    );
+    doc.setTextColor(120);
+    doc.text(new Date().toLocaleString(), cx, 27, { align: 'center' });
+    doc.setTextColor(20);
 
-    let y = 27;
+    let y = 34;
     const ensure = (needed: number) => {
       if (y + needed > pageH - 12) {
         doc.addPage();
@@ -165,7 +168,9 @@ export default function ItemsReportPage() {
         ensure(10);
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(9);
-        doc.text(`${g.groupName}  (${g.items.length})`, 16, y);
+        doc.text(`${g.groupName}  (${g.items.length})`, cx, y, {
+          align: 'center',
+        });
         y += 2;
         autoTable(doc, {
           startY: y,
@@ -215,17 +220,20 @@ export default function ItemsReportPage() {
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Items List Report</title>
       <style>
         *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;color:#1e293b;margin:24px}
-        h1{font-size:18px;margin:0 0 2px} .sub{color:#64748b;font-size:12px;margin:0 0 16px}
+        h1{font-size:20px;font-weight:bold;margin:0 0 2px;text-align:center}
+        .sub{font-size:14px;margin:0;text-align:center}
+        .date{color:#64748b;font-size:12px;margin:2px 0 16px;text-align:center}
         h2{font-size:14px;margin:18px 0 4px;border-bottom:2px solid #c9b896;padding-bottom:2px}
-        h3{font-size:12px;margin:10px 0 4px;color:#475569}
+        h3{font-size:12px;margin:10px 0 4px;color:#475569;text-align:center}
         .muted{color:#94a3b8;font-weight:normal}
         table{width:100%;border-collapse:collapse;margin-bottom:8px;font-size:11px}
         th,td{border:1px solid #d8d2c6;padding:4px 6px;text-align:left}
         th{background:#f3ece0}
         @media print{body{margin:10px} button{display:none}}
       </style></head><body>
-      <h1>Items List Report</h1>
-      <p class="sub">${esc(activeCompany?.name ?? '')} &nbsp;·&nbsp; ${new Date().toLocaleString()} &nbsp;·&nbsp; Total items: ${report.total}</p>
+      <h1>${esc(activeCompany?.name ?? '')}</h1>
+      <p class="sub">Items List - ${report.total} items</p>
+      <p class="date">${new Date().toLocaleString()}</p>
       ${body || '<p>No items match the current filters.</p>'}
       </body></html>`;
     const w = window.open('', '_blank', 'width=1100,height=800');
