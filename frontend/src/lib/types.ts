@@ -649,6 +649,8 @@ export interface Product {
   hsnCode?: { id: number; code: string; description: string } | null;
   shelfLife: number;
   yieldQty: number;
+  yieldUnitId?: number | null;
+  yieldUnit?: MasterRef | null;
   allCompanies: boolean;
   companyIds: number[];
   isActive: boolean;

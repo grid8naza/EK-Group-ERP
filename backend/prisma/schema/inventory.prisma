@@ -54,9 +54,10 @@ model Unit {
   itemsAsUnit    Item[] @relation("ItemUnit")
   itemsAsBoxUnit Item[] @relation("ItemBoxUnit")
 
-  productsAsUnit    Product[]        @relation("ProductUnit")
-  productsAsBoxUnit Product[]        @relation("ProductBoxUnit")
-  bomLineUnits      ProductBomLine[] @relation("BomLineUnit")
+  productsAsUnit      Product[]        @relation("ProductUnit")
+  productsAsBoxUnit   Product[]        @relation("ProductBoxUnit")
+  productsAsYieldUnit Product[]        @relation("ProductYieldUnit")
+  bomLineUnits        ProductBomLine[] @relation("BomLineUnit")
 
   @@map("units")
 }
@@ -263,6 +264,7 @@ model Product {
   hsnCodeId    Int?
   shelfLife    Int      @default(0) // days
   yieldQty     Float    @default(1) // product units one recipe batch yields
+  yieldUnitId  Int? // unit the yield quantity is measured in
   allCompanies Boolean  @default(false)
   isActive     Boolean  @default(true)
   isLocked     Boolean  @default(false) // when locked, must be unlocked before edit/delete
@@ -271,8 +273,9 @@ model Product {
 
   category Category? @relation("CategoryProducts", fields: [categoryId], references: [id], onDelete: Restrict)
   group    Group?    @relation("GroupProducts", fields: [groupId], references: [id], onDelete: Restrict)
-  unit     Unit      @relation("ProductUnit", fields: [unitId], references: [id], onDelete: Restrict)
-  boxUnit  Unit?     @relation("ProductBoxUnit", fields: [boxUnitId], references: [id], onDelete: Restrict)
+  unit      Unit      @relation("ProductUnit", fields: [unitId], references: [id], onDelete: Restrict)
+  boxUnit   Unit?     @relation("ProductBoxUnit", fields: [boxUnitId], references: [id], onDelete: Restrict)
+  yieldUnit Unit?     @relation("ProductYieldUnit", fields: [yieldUnitId], references: [id], onDelete: Restrict)
   hsnCode  HsnCode?  @relation("HsnProducts", fields: [hsnCodeId], references: [id], onDelete: Restrict)
 
   companies ProductCompany[]

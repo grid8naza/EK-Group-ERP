@@ -42,6 +42,7 @@ export default function ProductBomPage() {
   const [view, setView] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [yieldQty, setYieldQty] = useState('1');
+  const [yieldUnitId, setYieldUnitId] = useState('');
   const [recipe, setRecipe] = useState<Line[]>([]);
   const [packing, setPacking] = useState<Line[]>([]);
   const [saving, setSaving] = useState(false);
@@ -54,6 +55,8 @@ export default function ProductBomPage() {
     setEditing(p);
     setView(viewOnly);
     setYieldQty(String(p.yieldQty ?? 1));
+    // Default the yield unit to the product's output unit when not yet set.
+    setYieldUnitId(String(p.yieldUnitId ?? p.unitId ?? ''));
     setRecipe(toLines(p.recipe ?? []));
     setPacking(toLines(p.packing ?? []));
     setOpen(true);
@@ -71,8 +74,13 @@ export default function ProductBomPage() {
       toast.error('Each BOM line needs a positive quantity and a unit.');
       return;
     }
+    if (!yieldUnitId) {
+      toast.error('Yield unit is required.');
+      return;
+    }
     const payload = {
       yieldQty: Number(yieldQty) || 1,
+      yieldUnitId: Number(yieldUnitId),
       recipe: validLines(recipe).map((l) => ({
         itemId: Number(l.itemId),
         quantity: Number(l.quantity),
@@ -110,7 +118,12 @@ export default function ProductBomPage() {
     },
     { key: 'category', header: 'Category', accessor: (r) => r.category?.name ?? '-' },
     { key: 'unit', header: 'Unit', accessor: (r) => r.unit?.code ?? '-' },
-    { key: 'yield', header: 'Yield', accessor: (r) => (r.yieldQty ?? 1).toLocaleString() },
+    {
+      key: 'yield',
+      header: 'Yield',
+      accessor: (r) =>
+        `${(r.yieldQty ?? 1).toLocaleString()} ${r.yieldUnit?.code ?? ''}`.trim(),
+    },
     {
       key: 'recipe',
       header: 'Recipe',
@@ -171,15 +184,29 @@ export default function ProductBomPage() {
       >
         <ReadOnlyFieldset readOnly={view}>
           <div className="space-y-6">
-            <Input
-              label="Yield Qty (product units one recipe batch makes)"
-              type="number"
-              min={0}
-              step="any"
-              value={yieldQty}
-              onChange={(e) => setYieldQty(e.target.value)}
-              wrapClassName="w-64"
-            />
+            <div className="flex flex-wrap items-end gap-3">
+              <Input
+                label="Yield Qty (one recipe batch makes)"
+                type="number"
+                min={0}
+                step="any"
+                value={yieldQty}
+                onChange={(e) => setYieldQty(e.target.value)}
+                wrapClassName="w-56"
+              />
+              <Select
+                label="Yield Unit"
+                required
+                value={yieldUnitId}
+                onChange={(e) => setYieldUnitId(e.target.value)}
+                placeholder="Select unit"
+                options={unitList.map((u) => ({
+                  value: u.id,
+                  label: `${u.code} — ${u.name}`,
+                }))}
+                wrapClassName="w-52"
+              />
+            </div>
 
             <BomLineEditor
               label="Recipe BOM"

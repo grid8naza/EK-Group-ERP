@@ -16,6 +16,7 @@ const withRelations = {
   group: { select: { id: true, code: true, name: true } },
   unit: { select: { id: true, code: true, name: true } },
   boxUnit: { select: { id: true, code: true, name: true } },
+  yieldUnit: { select: { id: true, code: true, name: true } },
   hsnCode: { select: { id: true, code: true, description: true } },
   companies: { select: { companyId: true } },
   bomLines: {
@@ -90,6 +91,7 @@ export class ProductService {
           hsnCodeId: dto.hsnCodeId ?? null,
           shelfLife: dto.shelfLife ?? 0,
           yieldQty: dto.yieldQty ?? 1,
+          yieldUnitId: dto.yieldUnitId ?? null,
           allCompanies,
           isActive: dto.isActive ?? true,
           companies: { create: companyIds.map((companyId) => ({ companyId })) },
@@ -142,6 +144,7 @@ export class ProductService {
           hsnCodeId: dto.hsnCodeId,
           shelfLife: dto.shelfLife,
           yieldQty: dto.yieldQty,
+          yieldUnitId: dto.yieldUnitId,
           allCompanies,
           isActive: dto.isActive,
           ...(companyIds
@@ -266,6 +269,9 @@ export class ProductService {
     }
     if (dto.boxUnitId != null && !(await exists('unit', dto.boxUnitId))) {
       throw new BadRequestException('Selected box unit does not exist.');
+    }
+    if (dto.yieldUnitId != null && !(await exists('unit', dto.yieldUnitId))) {
+      throw new BadRequestException('Selected yield unit does not exist.');
     }
     if (dto.categoryId != null && !(await exists('category', dto.categoryId))) {
       throw new BadRequestException('Selected category does not exist.');

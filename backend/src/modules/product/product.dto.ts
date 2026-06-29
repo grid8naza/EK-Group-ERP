@@ -94,6 +94,10 @@ export class CreateProductDto {
   yieldQty?: number; // product units one recipe batch yields
 
   @IsOptional()
+  @IsInt()
+  yieldUnitId?: number | null;
+
+  @IsOptional()
   @IsBoolean()
   allCompanies?: boolean;
 
@@ -188,6 +192,10 @@ export class UpdateProductDto {
   @IsNumber()
   @IsPositive()
   yieldQty?: number;
+
+  @IsOptional()
+  @IsInt()
+  yieldUnitId?: number | null;
 
   @IsOptional()
   @IsBoolean()
