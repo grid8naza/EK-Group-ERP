@@ -139,24 +139,6 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
                   (it) => it.route === pathname,
                 );
 
-                // If the menu has a single item, render it as a direct link.
-                if (menu.items.length === 1) {
-                  const item = menu.items[0];
-                  const ItemIcon = resolveIcon(item.icon || menu.icon);
-                  const active = item.route === pathname;
-                  return (
-                    <NavLink
-                      key={key}
-                      href={item.route}
-                      label={menu.name}
-                      icon={<ItemIcon className="h-[18px] w-[18px]" />}
-                      active={active}
-                      collapsed={collapsed}
-                      onClick={onMobileClose}
-                    />
-                  );
-                }
-
                 return (
                   <div key={key}>
                     <button
