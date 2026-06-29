@@ -50,6 +50,7 @@ export default function CategoriesPage() {
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
   const [sort, setSort] = useState<'code' | 'name'>('code');
+  const [applies, setApplies] = useState(''); // '' | 'item' | 'product'
 
   const canAdd = can(ROUTE, 'add');
   const canEdit = can(ROUTE, 'edit');
@@ -183,14 +184,16 @@ export default function CategoriesPage() {
   };
 
   const sortedRows = useMemo(() => {
-    const rows = [...(data ?? [])];
+    let rows = [...(data ?? [])];
+    if (applies === 'item') rows = rows.filter((c) => c.forItem);
+    else if (applies === 'product') rows = rows.filter((c) => c.forProduct);
     rows.sort((a, b) =>
       sort === 'name'
         ? a.name.localeCompare(b.name)
         : a.code.localeCompare(b.code),
     );
     return rows;
-  }, [data, sort]);
+  }, [data, sort, applies]);
 
   const availabilityText = (c: Category) =>
     c.companyIds.map((id) => nameById.get(id) ?? `#${id}`).join(', ');
@@ -275,20 +278,31 @@ export default function CategoriesPage() {
       <DataTable
         columns={columns}
         rows={sortedRows}
+        key={applies}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
         onRefresh={refetch}
         searchPlaceholder="Search categories..."
         toolbar={
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-slate-500 dark:text-slate-400">
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={applies}
+              onChange={(e) => setApplies(e.target.value)}
+              wrapClassName="w-44"
+              placeholder="Applies to: All"
+              options={[
+                { value: 'item', label: 'Item-wise' },
+                { value: 'product', label: 'Product-wise' },
+              ]}
+            />
+            <span className="ml-1 text-sm text-slate-500 dark:text-slate-400">
               Sort by
             </span>
             <Select
               value={sort}
               onChange={(e) => setSort(e.target.value as typeof sort)}
-              wrapClassName="w-36"
+              wrapClassName="w-32"
               options={[
                 { value: 'code', label: 'Code' },
                 { value: 'name', label: 'Name' },

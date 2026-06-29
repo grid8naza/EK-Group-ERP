@@ -52,6 +52,8 @@ export default function GroupsPage() {
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
   const [sort, setSort] = useState<'code' | 'name' | 'category'>('code');
+  const [applies, setApplies] = useState(''); // '' | 'item' | 'product'
+  const [categoryFilter, setCategoryFilter] = useState('');
   const codeRef = useRef<HTMLInputElement>(null);
 
   const canAdd = can(ROUTE, 'add');
@@ -195,8 +197,25 @@ export default function GroupsPage() {
     }
   };
 
+  // Category dropdown cascades from the selected "Applies To".
+  const filterCategories = useMemo(
+    () =>
+      (categories ?? []).filter((c) =>
+        applies === 'item'
+          ? c.forItem
+          : applies === 'product'
+            ? c.forProduct
+            : true,
+      ),
+    [categories, applies],
+  );
+
   const sortedRows = useMemo(() => {
-    const rows = [...(data ?? [])];
+    let rows = [...(data ?? [])];
+    if (applies === 'item') rows = rows.filter((g) => g.forItem);
+    else if (applies === 'product') rows = rows.filter((g) => g.forProduct);
+    if (categoryFilter)
+      rows = rows.filter((g) => String(g.categoryId) === categoryFilter);
     rows.sort((a, b) => {
       if (sort === 'name') return a.name.localeCompare(b.name);
       if (sort === 'category')
@@ -207,7 +226,7 @@ export default function GroupsPage() {
       return a.code.localeCompare(b.code);
     });
     return rows;
-  }, [data, sort]);
+  }, [data, sort, applies, categoryFilter]);
 
   const availabilityText = (g: Group) =>
     g.companyIds.map((id) => companyNameById.get(id) ?? `#${id}`).join(', ');
@@ -293,20 +312,44 @@ export default function GroupsPage() {
       <DataTable
         columns={columns}
         rows={sortedRows}
+        key={`${applies}|${categoryFilter}`}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
         onRefresh={refetch}
         searchPlaceholder="Search groups..."
         toolbar={
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-slate-500 dark:text-slate-400">
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={applies}
+              onChange={(e) => {
+                setApplies(e.target.value);
+                setCategoryFilter(''); // reset category when applicability changes
+              }}
+              wrapClassName="w-44"
+              placeholder="Applies to: All"
+              options={[
+                { value: 'item', label: 'Item-wise' },
+                { value: 'product', label: 'Product-wise' },
+              ]}
+            />
+            <Select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              wrapClassName="w-44"
+              placeholder="All categories"
+              options={filterCategories.map((c) => ({
+                value: String(c.id),
+                label: c.name,
+              }))}
+            />
+            <span className="ml-1 text-sm text-slate-500 dark:text-slate-400">
               Sort by
             </span>
             <Select
               value={sort}
               onChange={(e) => setSort(e.target.value as typeof sort)}
-              wrapClassName="w-36"
+              wrapClassName="w-32"
               options={[
                 { value: 'code', label: 'Code' },
                 { value: 'name', label: 'Name' },
