@@ -61,6 +61,15 @@ export class CreateProductDto {
   sellingPrice?: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  boxQty?: number;
+
+  @IsOptional()
+  @IsInt()
+  boxUnitId?: number | null;
+
+  @IsOptional()
   @IsInt()
   hsnCodeId?: number | null;
 
@@ -136,6 +145,15 @@ export class UpdateProductDto {
   @IsNumber()
   @Min(0)
   sellingPrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  boxQty?: number;
+
+  @IsOptional()
+  @IsInt()
+  boxUnitId?: number | null;
 
   @IsOptional()
   @IsInt()

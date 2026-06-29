@@ -27,6 +27,8 @@ const empty = {
   groupId: '',
   unitId: '',
   sellingPrice: '0',
+  boxQty: '0',
+  boxUnitId: '',
   hsnCodeId: '',
   shelfLife: '0',
   allCompanies: true,
@@ -93,6 +95,8 @@ export default function ProductsPage() {
     groupId: p.groupId != null ? String(p.groupId) : '',
     unitId: String(p.unitId),
     sellingPrice: String(p.sellingPrice ?? 0),
+    boxQty: String(p.boxQty ?? 0),
+    boxUnitId: p.boxUnitId != null ? String(p.boxUnitId) : '',
     hsnCodeId: p.hsnCodeId != null ? String(p.hsnCodeId) : '',
     shelfLife: String(p.shelfLife ?? 0),
     allCompanies: p.allCompanies,
@@ -165,6 +169,8 @@ export default function ProductsPage() {
       groupId: idOrNull(form.groupId),
       unitId: Number(form.unitId),
       sellingPrice: num(form.sellingPrice),
+      boxQty: num(form.boxQty),
+      boxUnitId: idOrNull(form.boxUnitId),
       hsnCodeId: idOrNull(form.hsnCodeId),
       shelfLife: num(form.shelfLife),
       allCompanies: form.allCompanies,
@@ -418,6 +424,26 @@ export default function ProductsPage() {
               onChange={(e) =>
                 setForm({ ...form, sellingPrice: e.target.value })
               }
+            />
+
+            {/* Pack content */}
+            <Input
+              label="Box Quantity"
+              type="number"
+              min={0}
+              step="any"
+              value={form.boxQty}
+              onChange={(e) => setForm({ ...form, boxQty: e.target.value })}
+            />
+            <Select
+              label="Box Unit"
+              value={form.boxUnitId}
+              onChange={(e) => setForm({ ...form, boxUnitId: e.target.value })}
+              placeholder="— None —"
+              options={unitList.map((u) => ({
+                value: u.id,
+                label: `${u.code} — ${u.name}`,
+              }))}
             />
 
             <Select

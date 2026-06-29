@@ -640,6 +640,9 @@ export interface Product {
   unitId: number;
   unit?: MasterRef | null;
   sellingPrice: number;
+  boxQty: number;
+  boxUnitId?: number | null;
+  boxUnit?: MasterRef | null;
   hsnCodeId?: number | null;
   hsnCode?: { id: number; code: string; description: string } | null;
   shelfLife: number;
