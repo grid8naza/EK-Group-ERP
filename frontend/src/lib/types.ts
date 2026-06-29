@@ -617,6 +617,42 @@ export interface Item {
   isLocked?: boolean;
 }
 
+// ---- Inventory: Product Master + double BOM ----
+export interface ProductBomLine {
+  id?: number;
+  itemId: number;
+  quantity: number;
+  unitId: number;
+  sequence?: number;
+  item?: MasterRef | null;
+  unit?: MasterRef | null;
+}
+
+export interface Product {
+  id: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  categoryId?: number | null;
+  category?: MasterRef | null;
+  groupId?: number | null;
+  group?: MasterRef | null;
+  unitId: number;
+  unit?: MasterRef | null;
+  sellingPrice: number;
+  hsnCodeId?: number | null;
+  hsnCode?: { id: number; code: string; description: string } | null;
+  shelfLife: number;
+  yieldQty: number;
+  allCompanies: boolean;
+  companyIds: number[];
+  isActive: boolean;
+  isLocked?: boolean;
+  /** Recipe BOM (ingredients) and packing BOM — edited under Production. */
+  recipe: ProductBomLine[];
+  packing: ProductBomLine[];
+}
+
 // ---- Backup & Restore ----
 export interface Backup {
   fileName: string;

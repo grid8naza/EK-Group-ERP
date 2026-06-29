@@ -11,6 +11,12 @@ enum UnitType {
   CHAINING
 }
 
+/// Which bill-of-materials a Product BOM line belongs to.
+enum BomKind {
+  RECIPE
+  PACKING
+}
+
 /// Unit of Measure master (global). A SIMPLE unit stands alone (e.g. Piece,
 /// Kilogram). A COMPOUND unit is defined as `conversionFactor` × a simple base
 /// unit (e.g. 1 Box = 12 Pieces), so quantities in a compound unit can be
@@ -47,6 +53,9 @@ model Unit {
 
   itemsAsUnit    Item[] @relation("ItemUnit")
   itemsAsBoxUnit Item[] @relation("ItemBoxUnit")
+
+  productsAsUnit Product[]        @relation("ProductUnit")
+  bomLineUnits   ProductBomLine[] @relation("BomLineUnit")
 
   @@map("units")
 }
@@ -92,6 +101,7 @@ model Category {
   companies CategoryCompany[]
   groups    Group[]
   items     Item[]
+  products  Product[] @relation("CategoryProducts")
 
   @@map("categories")
 }
@@ -132,6 +142,7 @@ model Group {
   category  Category       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   companies GroupCompany[]
   items     Item[]
+  products  Product[] @relation("GroupProducts")
 
   @@index([categoryId])
   @@map("groups")
@@ -165,7 +176,8 @@ model HsnCode {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  items Item[]
+  items    Item[]
+  products Product[] @relation("HsnProducts")
 
   @@map("hsn_codes")
 }
@@ -205,6 +217,8 @@ model Item {
   hsnCode   HsnCode?      @relation(fields: [hsnCodeId], references: [id], onDelete: Restrict)
   companies ItemCompany[]
 
+  bomUsages ProductBomLine[] @relation("ItemBomUsage") // BOM lines that consume this item
+
   @@index([categoryId])
   @@index([groupId])
   @@index([unitId])
@@ -222,4 +236,75 @@ model ItemCompany {
   @@unique([itemId, companyId])
   @@index([companyId])
   @@map("item_companies")
+}
+
+/// Finished-product master. Like an Item but a sellable output assembled from
+/// items via two bills of materials: a RECIPE BOM (ingredients) and a PACKING
+/// BOM (packing materials), both in `bomLines`. `yieldQty` is how many product
+/// units one recipe batch produces. Lives in the inventory domain so its
+/// Category/Group/Unit/Hsn/Item links are real relations; companyId stays a
+/// plain cross-domain id (via ProductCompany). The BOM is edited under
+/// Production; the rest of the master under Inventory.
+model Product {
+  id           Int      @id @default(autoincrement())
+  code         String   @unique
+  name         String
+  description  String?
+  categoryId   Int?
+  groupId      Int?
+  unitId       Int // selling / output unit
+  sellingPrice Float    @default(0)
+  hsnCodeId    Int?
+  shelfLife    Int      @default(0) // days
+  yieldQty     Float    @default(1) // product units one recipe batch yields
+  allCompanies Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  isLocked     Boolean  @default(false) // when locked, must be unlocked before edit/delete
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  category Category? @relation("CategoryProducts", fields: [categoryId], references: [id], onDelete: Restrict)
+  group    Group?    @relation("GroupProducts", fields: [groupId], references: [id], onDelete: Restrict)
+  unit     Unit      @relation("ProductUnit", fields: [unitId], references: [id], onDelete: Restrict)
+  hsnCode  HsnCode?  @relation("HsnProducts", fields: [hsnCodeId], references: [id], onDelete: Restrict)
+
+  companies ProductCompany[]
+  bomLines  ProductBomLine[]
+
+  @@index([categoryId])
+  @@index([groupId])
+  @@map("products")
+}
+
+/// One line of a Product's RECIPE or PACKING bill of materials: `quantity` of
+/// `item` (measured in `unit`). Ordered by `sequence` within each kind.
+model ProductBomLine {
+  id        Int     @id @default(autoincrement())
+  productId Int
+  kind      BomKind
+  sequence  Int     @default(0)
+  itemId    Int
+  quantity  Float
+  unitId    Int
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  item    Item    @relation("ItemBomUsage", fields: [itemId], references: [id], onDelete: Restrict)
+  unit    Unit    @relation("BomLineUnit", fields: [unitId], references: [id], onDelete: Restrict)
+
+  @@index([productId])
+  @@index([itemId])
+  @@map("product_bom_lines")
+}
+
+/// Links a product to a company it is available in (when not `allCompanies`).
+model ProductCompany {
+  id        Int @id @default(autoincrement())
+  productId Int
+  companyId Int // -> Cpanel Company, by id (no cross-domain FK)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, companyId])
+  @@index([companyId])
+  @@map("product_companies")
 }

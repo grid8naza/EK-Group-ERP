@@ -3,6 +3,7 @@ import { CPANEL_SUBS } from '../modules/company/company-provisioning';
 import {
   INVENTORY_SUBS,
   INVENTORY_REPORT_MENUS,
+  PRODUCTION_SUBS,
   seedInventoryDefaults,
 } from '../modules/unit/inventory-provisioning';
 
@@ -106,5 +107,8 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     icon: 'factory',
     sortOrder: 6,
     description: 'Manufacturing & production orders.',
+    autoEnable: true, // on for every company so the Product BOM screen appears
+    menu: { name: 'Production', icon: 'factory' },
+    subs: PRODUCTION_SUBS,
   },
 ];

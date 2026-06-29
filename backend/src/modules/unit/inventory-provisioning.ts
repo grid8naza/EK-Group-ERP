@@ -15,6 +15,13 @@ export const INVENTORY_SUBS = [
   { name: 'Group Master', route: '/inventory/groups', icon: 'layers', order: 3 },
   { name: 'HSN Code Master', route: '/inventory/hsn-codes', icon: 'percent', order: 4 },
   { name: 'Item Master', route: '/inventory/items', icon: 'box', order: 5 },
+  { name: 'Product Master', route: '/inventory/products', icon: 'package-2', order: 6 },
+];
+
+// Production module screens. The BOM (recipe + packing) for each product is
+// edited here, while the product's master data lives under Inventory.
+export const PRODUCTION_SUBS = [
+  { name: 'Product BOM', route: '/production/product-bom', icon: 'list-tree', order: 1 },
 ];
 
 // A second main menu under the Inventory module for reports (kept separate from
