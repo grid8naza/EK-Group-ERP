@@ -30,6 +30,18 @@ export const INVENTORY_REPORT_MENUS = [
         icon: 'file-text',
         order: 1,
       },
+      {
+        name: 'Category List',
+        route: '/inventory/reports/categories',
+        icon: 'tag',
+        order: 2,
+      },
+      {
+        name: 'Group List',
+        route: '/inventory/reports/groups',
+        icon: 'layers',
+        order: 3,
+      },
     ],
   },
 ];
