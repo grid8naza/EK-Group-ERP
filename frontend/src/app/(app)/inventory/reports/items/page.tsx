@@ -11,7 +11,7 @@ import { useToast } from '@/providers/ToastProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import type { Item, Category, Group } from '@/lib/types';
+import type { Item, Category, Group, Company } from '@/lib/types';
 
 const ROUTE = '/inventory/reports/items';
 
@@ -47,11 +47,18 @@ const itemCells = (i: Item): (string | number)[] => [
 const stamp = () => new Date().toISOString().slice(0, 10);
 
 export default function ItemsReportPage() {
-  const { can, activeCompany } = useAuth();
+  const { can, activeCompany, activeCompanyId } = useAuth();
   const toast = useToast();
   const { data, loading } = useFetch<Item[]>('/items');
   const { data: categories } = useFetch<Category[]>('/categories');
   const { data: groups } = useFetch<Group[]>('/groups');
+  const { data: companies } = useFetch<Company[]>('/companies');
+
+  // Reports show the full (legal) company name; fall back to the display name.
+  const companyName = useMemo(() => {
+    const c = (companies ?? []).find((x) => x.id === activeCompanyId);
+    return c?.legalName || c?.name || activeCompany?.name || '';
+  }, [companies, activeCompanyId, activeCompany]);
 
   const [categoryFilter, setCategoryFilter] = useState('');
   const [groupFilter, setGroupFilter] = useState('');
@@ -140,7 +147,7 @@ export default function ItemsReportPage() {
     // Company name — bold, centered, on top.
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(15);
-    doc.text(activeCompany?.name ?? '', cx, 14, { align: 'center' });
+    doc.text(companyName, cx, 14, { align: 'center' });
     // Subheading — Items List · N items, centered.
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(11);
@@ -229,7 +236,7 @@ export default function ItemsReportPage() {
         th{background:#f3ece0}
         @media print{body{margin:10px} button{display:none}}
       </style></head><body>
-      <h1>${esc(activeCompany?.name ?? '')}</h1>
+      <h1>${esc(companyName)}</h1>
       <p class="sub">Items List - ${report.total} items</p>
       <p class="date">${new Date().toLocaleString()}</p>
       ${body || '<p>No items match the current filters.</p>'}
