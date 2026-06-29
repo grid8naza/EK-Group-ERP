@@ -162,15 +162,13 @@ export default function ItemsReportPage() {
       ensure(12);
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(11);
-      doc.text(`${c.categoryName}  (${c.count})`, 14, y);
+      doc.text(`${c.categoryName}  (${c.count})`, cx, y, { align: 'center' });
       y += 5;
       for (const g of c.groups) {
         ensure(10);
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(9);
-        doc.text(`${g.groupName}  (${g.items.length})`, cx, y, {
-          align: 'center',
-        });
+        doc.text(`${g.groupName}  (${g.items.length})`, 16, y);
         y += 2;
         autoTable(doc, {
           startY: y,
@@ -223,8 +221,8 @@ export default function ItemsReportPage() {
         h1{font-size:20px;font-weight:bold;margin:0 0 2px;text-align:center}
         .sub{font-size:14px;margin:0;text-align:center}
         .date{color:#64748b;font-size:12px;margin:2px 0 16px;text-align:center}
-        h2{font-size:14px;margin:18px 0 4px;border-bottom:2px solid #c9b896;padding-bottom:2px}
-        h3{font-size:12px;margin:10px 0 4px;color:#475569;text-align:center}
+        h2{font-size:14px;margin:18px 0 4px;border-bottom:2px solid #c9b896;padding-bottom:2px;text-align:center}
+        h3{font-size:12px;margin:10px 0 4px;color:#475569}
         .muted{color:#94a3b8;font-weight:normal}
         table{width:100%;border-collapse:collapse;margin-bottom:8px;font-size:11px}
         th,td{border:1px solid #d8d2c6;padding:4px 6px;text-align:left}
@@ -330,7 +328,7 @@ export default function ItemsReportPage() {
           ) : (
             report.cats.map((c) => (
               <div key={c.categoryName} className="mb-6">
-                <h2 className="mb-2 flex items-center gap-2 border-b-2 border-[#c9b896] pb-1 text-base font-bold text-slate-800 dark:border-slate-700 dark:text-slate-100">
+                <h2 className="mb-2 flex items-center justify-center gap-2 border-b-2 border-[#c9b896] pb-1 text-base font-bold text-slate-800 dark:border-slate-700 dark:text-slate-100">
                   {c.categoryName}
                   <Badge color="slate">{c.count}</Badge>
                 </h2>
