@@ -63,7 +63,13 @@ export default function ItemsPage() {
   const [view, setView] = useState(false);
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
-  const [sort, setSort] = useState<'code' | 'name' | 'category'>('code');
+  const [sort, setSort] = useState<'code' | 'name' | 'category' | 'group'>(
+    'code',
+  );
+  // List filters (empty string = no filter). Group choices cascade from the
+  // selected category.
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [groupFilter, setGroupFilter] = useState('');
   const codeRef = useRef<HTMLInputElement>(null);
 
   const canAdd = can(ROUTE, 'add');
@@ -226,8 +232,22 @@ export default function ItemsPage() {
     }
   };
 
-  const sortedRows = useMemo(() => {
-    const rows = [...(data ?? [])];
+  // Group dropdown options follow the selected category (or all groups when no
+  // category is chosen).
+  const filterGroups = useMemo(
+    () =>
+      (groups ?? []).filter(
+        (g) => !categoryFilter || String(g.categoryId) === categoryFilter,
+      ),
+    [groups, categoryFilter],
+  );
+
+  const visibleRows = useMemo(() => {
+    let rows = [...(data ?? [])];
+    if (categoryFilter)
+      rows = rows.filter((r) => String(r.categoryId) === categoryFilter);
+    if (groupFilter)
+      rows = rows.filter((r) => String(r.groupId) === groupFilter);
     rows.sort((a, b) => {
       if (sort === 'name') return a.name.localeCompare(b.name);
       if (sort === 'category')
@@ -235,10 +255,15 @@ export default function ItemsPage() {
           (a.category?.name ?? '').localeCompare(b.category?.name ?? '') ||
           a.name.localeCompare(b.name)
         );
+      if (sort === 'group')
+        return (
+          (a.group?.name ?? '').localeCompare(b.group?.name ?? '') ||
+          a.name.localeCompare(b.name)
+        );
       return a.code.localeCompare(b.code);
     });
     return rows;
-  }, [data, sort]);
+  }, [data, categoryFilter, groupFilter, sort]);
 
   const availabilityText = (i: Item) =>
     i.companyIds.map((id) => companyNameById.get(id) ?? `#${id}`).join(', ');
@@ -255,6 +280,7 @@ export default function ItemsPage() {
       ),
     },
     { key: 'category', header: 'Category', accessor: (r) => r.category?.name ?? '-' },
+    { key: 'group', header: 'Group', accessor: (r) => r.group?.name ?? '-' },
     { key: 'unit', header: 'Unit', accessor: (r) => r.unit?.code ?? '-' },
     {
       key: 'unitPrice',
@@ -312,25 +338,51 @@ export default function ItemsPage() {
 
       <DataTable
         columns={columns}
-        rows={sortedRows}
+        rows={visibleRows}
+        // Remount when the filters change so pagination jumps back to page 1.
+        key={`${categoryFilter}|${groupFilter}`}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
         onRefresh={refetch}
         searchPlaceholder="Search items..."
         toolbar={
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-slate-500 dark:text-slate-400">
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={categoryFilter}
+              onChange={(e) => {
+                setCategoryFilter(e.target.value);
+                setGroupFilter(''); // reset group when category changes
+              }}
+              wrapClassName="w-44"
+              placeholder="All categories"
+              options={(categories ?? []).map((c) => ({
+                value: String(c.id),
+                label: c.name,
+              }))}
+            />
+            <Select
+              value={groupFilter}
+              onChange={(e) => setGroupFilter(e.target.value)}
+              wrapClassName="w-44"
+              placeholder="All groups"
+              options={filterGroups.map((g) => ({
+                value: String(g.id),
+                label: g.name,
+              }))}
+            />
+            <span className="ml-1 text-sm text-slate-500 dark:text-slate-400">
               Sort by
             </span>
             <Select
               value={sort}
               onChange={(e) => setSort(e.target.value as typeof sort)}
-              wrapClassName="w-36"
+              wrapClassName="w-32"
               options={[
                 { value: 'code', label: 'Code' },
-                { value: 'name', label: 'Name' },
+                { value: 'name', label: 'Item' },
                 { value: 'category', label: 'Category' },
+                { value: 'group', label: 'Group' },
               ]}
             />
           </div>
