@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import {
   Search,
   ChevronLeft,
@@ -13,6 +14,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { RowActions } from './RowActions';
+import { ColumnToggle } from './ColumnToggle';
 
 export interface Column<T> {
   key: string;
@@ -87,6 +89,14 @@ interface DataTableProps<T> {
   /** Initial sort for sortable columns (client-side sort only). */
   defaultSort?: SortState;
 
+  /** Show the show/hide-columns control (on by default). */
+  columnToggle?: boolean;
+  /**
+   * Storage key for remembering hidden columns. Defaults to the current route,
+   * so each listing keeps its own column preferences.
+   */
+  tableId?: string;
+
   /**
    * Fill the parent's height and scroll only the table body, keeping the
    * toolbar, column headers and pagination frozen. The page must give the table
@@ -121,6 +131,8 @@ export function DataTable<T>({
   serverPagination,
   emptyMessage = 'No records found',
   defaultSort,
+  columnToggle = true,
+  tableId,
   // Frozen header is the standard for listing screens. The page should give the
   // table a bounded height (an `h-full` flex column); without one it degrades to
   // a normally-scrolling table. Pass `fillHeight={false}` to opt out.
@@ -140,6 +152,41 @@ export function DataTable<T>({
     );
     if (!serverPagination) setPage(1);
   };
+
+  // Hidden columns, remembered per listing (keyed by tableId or the route).
+  const pathname = usePathname();
+  const storageKey = `datatable.hiddenColumns.${tableId ?? pathname ?? ''}`;
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(storageKey);
+      setHiddenCols(raw ? new Set(JSON.parse(raw) as string[]) : new Set());
+    } catch {
+      setHiddenCols(new Set());
+    }
+  }, [storageKey]);
+  const toggleColumn = (key: string) =>
+    setHiddenCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        // Keep at least one column visible.
+        if (columns.length - next.size <= 1) return prev;
+        next.add(key);
+      }
+      try {
+        localStorage.setItem(storageKey, JSON.stringify([...next]));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  const visibleColumns = useMemo(
+    () => columns.filter((c) => !hiddenCols.has(c.key)),
+    [columns, hiddenCols],
+  );
+  const showColumnToggle = columnToggle && columns.length > 1;
 
   const searchValue = onSearchChange ? (search ?? '') : internalSearch;
   const setSearchValue = (v: string) => {
@@ -235,6 +282,13 @@ export function DataTable<T>({
             />
           </div>
           {toolbarRight}
+          {showColumnToggle && (
+            <ColumnToggle
+              columns={columns.map((c) => ({ key: c.key, label: c.header }))}
+              hidden={hiddenCols}
+              onToggle={toggleColumn}
+            />
+          )}
           {onRefresh && (
             <button
               onClick={onRefresh}
@@ -257,7 +311,7 @@ export function DataTable<T>({
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-[#efe7db] bg-[#fcfbf8] text-xs font-semibold uppercase tracking-wide text-[#6d6258] dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
-              {columns.map((c) => {
+              {visibleColumns.map((c) => {
                 const sortable =
                   (c.sortable ?? (!!c.accessor || !!c.sortAccessor)) &&
                   !serverPagination;
@@ -316,7 +370,7 @@ export function DataTable<T>({
             {loading ? (
               <tr>
                 <td
-                  colSpan={columns.length + (hasActions ? 1 : 0)}
+                  colSpan={visibleColumns.length + (hasActions ? 1 : 0)}
                   className="px-4 py-12 text-center text-slate-400"
                 >
                   <RefreshCw className="mx-auto mb-2 h-6 w-6 animate-spin" />
@@ -326,7 +380,7 @@ export function DataTable<T>({
             ) : pageRows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={columns.length + (hasActions ? 1 : 0)}
+                  colSpan={visibleColumns.length + (hasActions ? 1 : 0)}
                   className="px-4 py-14 text-center text-slate-400"
                 >
                   <Inbox className="mx-auto mb-2 h-8 w-8 opacity-60" />
@@ -344,7 +398,7 @@ export function DataTable<T>({
                     rowClassName?.(row),
                   )}
                 >
-                  {columns.map((c) => (
+                  {visibleColumns.map((c) => (
                     <td
                       key={c.key}
                       className={cn(

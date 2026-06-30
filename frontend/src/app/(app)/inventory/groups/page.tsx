@@ -12,7 +12,6 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { StatusToggle } from '@/components/ui/StatusToggle';
-import { ColumnToggle } from '@/components/ui/ColumnToggle';
 import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
@@ -60,30 +59,6 @@ export default function GroupsPage() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [primaryFilter, setPrimaryFilter] = useState('');
   const [parentFilter, setParentFilter] = useState('');
-  // Hidden columns (persisted so the choice sticks between visits).
-  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem('groupMaster.hiddenColumns');
-      if (raw) setHiddenCols(new Set(JSON.parse(raw) as string[]));
-    } catch {
-      /* ignore */
-    }
-  }, []);
-  const toggleCol = (key: string) =>
-    setHiddenCols((prev) => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      try {
-        localStorage.setItem(
-          'groupMaster.hiddenColumns',
-          JSON.stringify([...next]),
-        );
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
   const nameRef = useRef<HTMLInputElement>(null);
 
   const canAdd = can(ROUTE, 'add');
@@ -411,7 +386,6 @@ export default function GroupsPage() {
   ];
 
   const title = view ? 'View Group' : editing ? 'Edit Group' : 'New Group';
-  const visibleColumns = columns.filter((c) => !hiddenCols.has(c.key));
   // Code of the primary group chosen in the filter (used to scope the parent
   // filter to that primary's subtree).
   const primaryGroupCode = primaryFilter
@@ -437,7 +411,7 @@ export default function GroupsPage() {
       />
 
       <DataTable
-        columns={visibleColumns}
+        columns={columns}
         rows={filteredRows}
         defaultSort={{ key: 'code', dir: 'asc' }}
         key={`${applies}|${status}|${categoryFilter}|${primaryFilter}|${parentFilter}`}
@@ -450,13 +424,6 @@ export default function GroupsPage() {
           r.level === 1
             ? 'bg-brand-100/70 hover:!bg-brand-200/60 dark:bg-brand-950/40 dark:hover:!bg-brand-900/40'
             : undefined
-        }
-        toolbarRight={
-          <ColumnToggle
-            columns={columns.map((c) => ({ key: c.key, label: c.header }))}
-            hidden={hiddenCols}
-            onToggle={toggleCol}
-          />
         }
         toolbar={
           <div className="flex flex-wrap items-center gap-2">
