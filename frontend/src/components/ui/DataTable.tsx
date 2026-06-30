@@ -5,6 +5,9 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
+  ChevronsUpDown,
   Inbox,
   RefreshCw,
 } from 'lucide-react';
@@ -18,9 +21,15 @@ export interface Column<T> {
   render?: (row: T) => React.ReactNode;
   /** accessor for default rendering / client-side search */
   accessor?: (row: T) => string | number | null | undefined;
+  /** Make the header clickable to sort. */
+  sortable?: boolean;
+  /** Value used when sorting this column (falls back to accessor / key). */
+  sortAccessor?: (row: T) => string | number | null | undefined;
   className?: string;
   headerClassName?: string;
 }
+
+type SortState = { key: string; dir: 'asc' | 'desc' };
 
 interface DataTableProps<T> {
   columns: Column<T>[];
@@ -70,6 +79,9 @@ interface DataTableProps<T> {
 
   emptyMessage?: string;
 
+  /** Initial sort for sortable columns (client-side sort only). */
+  defaultSort?: SortState;
+
   /**
    * Fill the parent's height and scroll only the table body, keeping the
    * toolbar, column headers and pagination frozen. The page must give the table
@@ -102,6 +114,7 @@ export function DataTable<T>({
   pageSize = 10,
   serverPagination,
   emptyMessage = 'No records found',
+  defaultSort,
   // Frozen header is the standard for listing screens. The page should give the
   // table a bounded height (an `h-full` flex column); without one it degrades to
   // a normally-scrolling table. Pass `fillHeight={false}` to opt out.
@@ -109,6 +122,18 @@ export function DataTable<T>({
 }: DataTableProps<T>) {
   const [internalSearch, setInternalSearch] = useState('');
   const [page, setPage] = useState(1);
+  const [sortState, setSortState] = useState<SortState | null>(
+    defaultSort ?? null,
+  );
+
+  const toggleSort = (key: string) => {
+    setSortState((prev) =>
+      prev?.key === key
+        ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: 'asc' },
+    );
+    if (!serverPagination) setPage(1);
+  };
 
   const searchValue = onSearchChange ? (search ?? '') : internalSearch;
   const setSearchValue = (v: string) => {
@@ -134,17 +159,45 @@ export function DataTable<T>({
     );
   }, [rows, columns, searchValue, serverSearch]);
 
+  // Client-side sort (skipped in server-pagination mode, where the page only
+  // holds a slice of the data).
+  const sorted = useMemo(() => {
+    if (serverPagination || !sortState) return filtered;
+    const col = columns.find((c) => c.key === sortState.key);
+    if (!col) return filtered;
+    const valueOf = (row: T) =>
+      col.sortAccessor
+        ? col.sortAccessor(row)
+        : col.accessor
+          ? col.accessor(row)
+          : (row as any)[col.key];
+    const dir = sortState.dir === 'asc' ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      const va = valueOf(a);
+      const vb = valueOf(b);
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1; // nulls/blanks last regardless of direction
+      if (vb == null) return -1;
+      if (typeof va === 'number' && typeof vb === 'number') {
+        return (va - vb) * dir;
+      }
+      return (
+        String(va).localeCompare(String(vb), undefined, { numeric: true }) * dir
+      );
+    });
+  }, [filtered, sortState, columns, serverPagination]);
+
   // Pagination
-  const total = serverPagination ? serverPagination.total : filtered.length;
+  const total = serverPagination ? serverPagination.total : sorted.length;
   const effPageSize = serverPagination ? serverPagination.pageSize : pageSize;
   const currentPage = serverPagination ? serverPagination.page : page;
   const totalPages = Math.max(1, Math.ceil(total / effPageSize));
 
   const pageRows = useMemo(() => {
-    if (serverPagination) return filtered;
+    if (serverPagination) return sorted;
     const start = (currentPage - 1) * effPageSize;
-    return filtered.slice(start, start + effPageSize);
-  }, [filtered, currentPage, effPageSize, serverPagination]);
+    return sorted.slice(start, start + effPageSize);
+  }, [sorted, currentPage, effPageSize, serverPagination]);
 
   const goTo = (p: number) => {
     const clamped = Math.min(Math.max(1, p), totalPages);
@@ -198,19 +251,46 @@ export function DataTable<T>({
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-[#efe7db] bg-[#fcfbf8] text-xs font-semibold uppercase tracking-wide text-[#6d6258] dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
-              {columns.map((c) => (
-                <th
-                  key={c.key}
-                  className={cn(
-                    'px-4 py-3',
-                    fillHeight &&
-                      'sticky top-0 z-10 bg-[#fcfbf8] dark:bg-slate-900',
-                    c.headerClassName,
-                  )}
-                >
-                  {c.header}
-                </th>
-              ))}
+              {columns.map((c) => {
+                const sortable = c.sortable && !serverPagination;
+                const active = sortState?.key === c.key;
+                return (
+                  <th
+                    key={c.key}
+                    className={cn(
+                      'px-4 py-3',
+                      fillHeight &&
+                        'sticky top-0 z-10 bg-[#fcfbf8] dark:bg-slate-900',
+                      c.headerClassName,
+                    )}
+                  >
+                    {sortable ? (
+                      <button
+                        type="button"
+                        onClick={() => toggleSort(c.key)}
+                        className={cn(
+                          'inline-flex items-center gap-1 transition hover:text-slate-700 dark:hover:text-slate-200',
+                          active && 'text-slate-700 dark:text-slate-200',
+                        )}
+                        title={`Sort by ${c.header}`}
+                      >
+                        {c.header}
+                        {active ? (
+                          sortState!.dir === 'asc' ? (
+                            <ChevronUp className="h-3.5 w-3.5" />
+                          ) : (
+                            <ChevronDown className="h-3.5 w-3.5" />
+                          )
+                        ) : (
+                          <ChevronsUpDown className="h-3.5 w-3.5 opacity-40" />
+                        )}
+                      </button>
+                    ) : (
+                      c.header
+                    )}
+                  </th>
+                );
+              })}
               {hasActions && (
                 <th
                   className={cn(

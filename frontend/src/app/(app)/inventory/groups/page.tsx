@@ -12,6 +12,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { StatusToggle } from '@/components/ui/StatusToggle';
+import { ColumnToggle } from '@/components/ui/ColumnToggle';
 import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
@@ -54,11 +55,35 @@ export default function GroupsPage() {
   const [view, setView] = useState(false);
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
-  const [sort, setSort] = useState<'code' | 'name' | 'category'>('code');
   const [applies, setApplies] = useState(''); // '' | 'item' | 'product'
   const [status, setStatus] = useState(''); // '' | 'active' | 'inactive'
+  const [categoryFilter, setCategoryFilter] = useState('');
   const [primaryFilter, setPrimaryFilter] = useState('');
   const [parentFilter, setParentFilter] = useState('');
+  // Hidden columns (persisted so the choice sticks between visits).
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('groupMaster.hiddenColumns');
+      if (raw) setHiddenCols(new Set(JSON.parse(raw) as string[]));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const toggleCol = (key: string) =>
+    setHiddenCols((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      try {
+        localStorage.setItem(
+          'groupMaster.hiddenColumns',
+          JSON.stringify([...next]),
+        );
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
   const nameRef = useRef<HTMLInputElement>(null);
 
   const canAdd = can(ROUTE, 'add');
@@ -85,14 +110,19 @@ export default function GroupsPage() {
   const selectedParent = form.parentGroupId
     ? groupList.find((g) => String(g.id) === form.parentGroupId)
     : undefined;
-  // A sub-group inherits its parent's category; a primary group uses the picked one.
-  const effectiveCategoryId = selectedParent
-    ? selectedParent.categoryId
-    : form.categoryId
-      ? Number(form.categoryId)
-      : undefined;
+  // Category is always picked first; a sub-group simply nests under a parent in
+  // that same category.
+  const effectiveCategoryId = form.categoryId
+    ? Number(form.categoryId)
+    : undefined;
   const effectiveLevel = selectedParent ? selectedParent.level + 1 : 1;
   const canBeContainer = effectiveLevel < MAX_LEVEL;
+  // Parent options for the form: active containers (level < 5) within the
+  // chosen category.
+  const formParentOptions = parentCandidates.filter(
+    (g) =>
+      g.isActive && (!form.categoryId || String(g.categoryId) === form.categoryId),
+  );
 
   const closeDrawer = () => {
     setOpen(false);
@@ -155,8 +185,8 @@ export default function GroupsPage() {
     }));
 
   const save = async (again = false) => {
-    if (!selectedParent && !form.categoryId) {
-      toast.error('Pick a category (primary group) or a parent group (sub-group).');
+    if (!form.categoryId) {
+      toast.error('Select a category.');
       return;
     }
     if (!form.name.trim()) {
@@ -253,12 +283,16 @@ export default function GroupsPage() {
       }
     });
 
-  const sortedRows = useMemo(() => {
+  // Rows after the filters; column ordering is handled by the table's sortable
+  // headers (default: Code ascending = hierarchical tree order).
+  const filteredRows = useMemo(() => {
     let rows = [...groupList];
     if (applies === 'item') rows = rows.filter((g) => g.forItem);
     else if (applies === 'product') rows = rows.filter((g) => g.forProduct);
     if (status === 'active') rows = rows.filter((g) => g.isActive);
     else if (status === 'inactive') rows = rows.filter((g) => !g.isActive);
+    if (categoryFilter)
+      rows = rows.filter((g) => String(g.categoryId) === categoryFilter);
     // Primary group filter → the primary and its whole subtree (shared CC+L1
     // code prefix). Parent group filter → direct children only.
     if (primaryFilter) {
@@ -271,17 +305,8 @@ export default function GroupsPage() {
     if (parentFilter) {
       rows = rows.filter((g) => String(g.parentGroupId ?? '') === parentFilter);
     }
-    rows.sort((a, b) => {
-      if (sort === 'name') return a.name.localeCompare(b.name);
-      if (sort === 'category')
-        return (
-          (a.category?.name ?? '').localeCompare(b.category?.name ?? '') ||
-          a.code.localeCompare(b.code)
-        );
-      return a.code.localeCompare(b.code); // hierarchical order
-    });
     return rows;
-  }, [groupList, sort, applies, status, primaryFilter, parentFilter]);
+  }, [groupList, applies, status, categoryFilter, primaryFilter, parentFilter]);
 
   const availabilityText = (g: Group) =>
     g.companyIds.map((id) => companyNameById.get(id) ?? `#${id}`).join(', ');
@@ -294,10 +319,12 @@ export default function GroupsPage() {
   };
 
   const columns: Column<Group>[] = [
-    { key: 'code', header: 'Code', accessor: (r) => r.code },
+    { key: 'code', header: 'Code', accessor: (r) => r.code, sortable: true },
     {
       key: 'name',
       header: 'Name',
+      sortable: true,
+      sortAccessor: (r) => r.name,
       render: (r) => (
         <span
           className="font-medium text-slate-800 dark:text-slate-100"
@@ -311,6 +338,8 @@ export default function GroupsPage() {
     {
       key: 'level',
       header: 'Level',
+      sortable: true,
+      sortAccessor: (r) => r.level,
       render: (r) => (
         <Badge color={r.level === 1 ? 'blue' : 'slate'}>L{r.level}</Badge>
       ),
@@ -318,6 +347,8 @@ export default function GroupsPage() {
     {
       key: 'kind',
       header: 'Type',
+      sortable: true,
+      sortAccessor: (r) => (r.subGroupApplicable ? 'Sub-groups' : 'Leaf'),
       render: (r) =>
         r.subGroupApplicable ? (
           <Badge color="violet">Sub-groups</Badge>
@@ -329,15 +360,20 @@ export default function GroupsPage() {
       key: 'category',
       header: 'Category',
       accessor: (r) => r.category?.name ?? '-',
+      sortable: true,
     },
     {
       key: 'parent',
       header: 'Parent',
       accessor: (r) => r.parent?.name ?? '—',
+      sortable: true,
+      sortAccessor: (r) => r.parent?.name ?? '',
     },
     {
       key: 'availability',
       header: 'Availability',
+      sortable: true,
+      sortAccessor: (r) => (r.allCompanies ? Infinity : r.companyIds.length),
       render: (r) =>
         r.allCompanies ? (
           <Badge color="violet">All companies</Badge>
@@ -353,6 +389,8 @@ export default function GroupsPage() {
     {
       key: 'appliesTo',
       header: 'Applies To',
+      sortable: true,
+      sortAccessor: (r) => appliesTo(r),
       render: (r) => (
         <Badge color={r.forItem && r.forProduct ? 'green' : 'slate'}>
           {appliesTo(r)}
@@ -362,6 +400,8 @@ export default function GroupsPage() {
     {
       key: 'isActive',
       header: 'Status',
+      sortable: true,
+      sortAccessor: (r) => (r.isActive ? 'Active' : 'Inactive'),
       render: (r) => (
         <Badge color={r.isActive ? 'green' : 'slate'}>
           {r.isActive ? 'Active' : 'Inactive'}
@@ -371,9 +411,7 @@ export default function GroupsPage() {
   ];
 
   const title = view ? 'View Group' : editing ? 'Edit Group' : 'New Group';
-  const effectiveCategoryName = categoryList.find(
-    (c) => c.id === effectiveCategoryId,
-  )?.name;
+  const visibleColumns = columns.filter((c) => !hiddenCols.has(c.key));
 
   return (
     <div className="mx-auto flex h-full max-w-7xl flex-col">
@@ -394,20 +432,70 @@ export default function GroupsPage() {
       />
 
       <DataTable
-        columns={columns}
-        rows={sortedRows}
-        key={`${applies}|${status}|${primaryFilter}|${parentFilter}`}
+        columns={visibleColumns}
+        rows={filteredRows}
+        defaultSort={{ key: 'code', dir: 'asc' }}
+        key={`${applies}|${status}|${categoryFilter}|${primaryFilter}|${parentFilter}`}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
         onRefresh={refetch}
         searchPlaceholder="Search groups..."
+        toolbarRight={
+          <ColumnToggle
+            columns={columns.map((c) => ({ key: c.key, label: c.header }))}
+            hidden={hiddenCols}
+            onToggle={toggleCol}
+          />
+        }
         toolbar={
           <div className="flex flex-wrap items-center gap-2">
             <Select
+              value={categoryFilter}
+              onChange={(e) => {
+                // Changing category resets the primary/parent narrowing.
+                setCategoryFilter(e.target.value);
+                setPrimaryFilter('');
+                setParentFilter('');
+              }}
+              wrapClassName="w-40"
+              placeholder="All categories"
+              options={categoryList.map((c) => ({
+                value: String(c.id),
+                label: c.name,
+              }))}
+            />
+            <Select
+              value={primaryFilter}
+              onChange={(e) => setPrimaryFilter(e.target.value)}
+              wrapClassName="w-40"
+              placeholder="All primary groups"
+              options={primaryGroups
+                .filter(
+                  (g) =>
+                    !categoryFilter || String(g.categoryId) === categoryFilter,
+                )
+                .map((g) => ({ value: String(g.id), label: g.name }))}
+            />
+            <Select
+              value={parentFilter}
+              onChange={(e) => setParentFilter(e.target.value)}
+              wrapClassName="w-40"
+              placeholder="Any parent group"
+              options={parentCandidates
+                .filter(
+                  (g) =>
+                    !categoryFilter || String(g.categoryId) === categoryFilter,
+                )
+                .map((g) => ({
+                  value: String(g.id),
+                  label: `${'· '.repeat(g.level - 1)}${g.name}`,
+                }))}
+            />
+            <Select
               value={applies}
               onChange={(e) => setApplies(e.target.value)}
-              wrapClassName="w-40"
+              wrapClassName="w-36"
               placeholder="Applies to: All"
               options={[
                 { value: 'item', label: 'Item-wise' },
@@ -415,46 +503,13 @@ export default function GroupsPage() {
               ]}
             />
             <Select
-              value={primaryFilter}
-              onChange={(e) => setPrimaryFilter(e.target.value)}
-              wrapClassName="w-48"
-              placeholder="All primary groups"
-              options={primaryGroups.map((g) => ({
-                value: String(g.id),
-                label: g.name,
-              }))}
-            />
-            <Select
-              value={parentFilter}
-              onChange={(e) => setParentFilter(e.target.value)}
-              wrapClassName="w-48"
-              placeholder="Any parent group"
-              options={parentCandidates.map((g) => ({
-                value: String(g.id),
-                label: `${'· '.repeat(g.level - 1)}${g.name}`,
-              }))}
-            />
-            <Select
               value={status}
               onChange={(e) => setStatus(e.target.value)}
-              wrapClassName="w-36"
+              wrapClassName="w-32"
               placeholder="All statuses"
               options={[
                 { value: 'active', label: 'Active' },
                 { value: 'inactive', label: 'Inactive' },
-              ]}
-            />
-            <span className="ml-1 text-sm text-slate-500 dark:text-slate-400">
-              Sort by
-            </span>
-            <Select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as typeof sort)}
-              wrapClassName="w-32"
-              options={[
-                { value: 'code', label: 'Code (tree)' },
-                { value: 'name', label: 'Name' },
-                { value: 'category', label: 'Category' },
               ]}
             />
           </div>
@@ -510,64 +565,57 @@ export default function GroupsPage() {
             {editing ? (
               <>
                 <Input
-                  label="Parent group"
-                  value={editing.parent?.name ?? '— None (primary group) —'}
+                  label="Category"
+                  value={editing.category?.name ?? ''}
                   disabled
                   wrapClassName="sm:col-span-2"
                 />
                 <Input
-                  label="Category"
-                  value={editing.category?.name ?? ''}
+                  label="Parent group"
+                  value={editing.parent?.name ?? '— None (primary group) —'}
                   disabled
                   wrapClassName="sm:col-span-2"
                 />
               </>
             ) : (
               <>
+                {/* Category first, then a parent group within that category. */}
+                <Select
+                  label="Category"
+                  required
+                  value={form.categoryId}
+                  onChange={(e) =>
+                    // Changing the category invalidates a parent from another one.
+                    setForm({
+                      ...form,
+                      categoryId: e.target.value,
+                      parentGroupId: '',
+                    })
+                  }
+                  placeholder="Select a category"
+                  wrapClassName="sm:col-span-2"
+                  options={categoryList
+                    .filter((c) => c.isActive)
+                    .map((c) => ({ value: c.id, label: c.name }))}
+                />
                 <Select
                   label="Parent group"
                   value={form.parentGroupId}
+                  disabled={!form.categoryId}
                   onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      parentGroupId: e.target.value,
-                      // When a parent is chosen the category comes from it.
-                      categoryId: e.target.value ? '' : f.categoryId,
-                    }))
+                    setForm((f) => ({ ...f, parentGroupId: e.target.value }))
                   }
-                  placeholder="— None (primary group) —"
+                  placeholder={
+                    form.categoryId
+                      ? '— None (primary group) —'
+                      : 'Pick a category first'
+                  }
                   wrapClassName="sm:col-span-2"
-                  options={parentCandidates
-                    .filter((g) => g.isActive)
-                    .map((g) => ({
-                      value: String(g.id),
-                      label: `${'· '.repeat(g.level - 1)}${g.name}  (${
-                        g.category?.name ?? ''
-                      })`,
-                    }))}
+                  options={formParentOptions.map((g) => ({
+                    value: String(g.id),
+                    label: `${'· '.repeat(g.level - 1)}${g.name}`,
+                  }))}
                 />
-                {selectedParent ? (
-                  <Input
-                    label="Category"
-                    value={effectiveCategoryName ?? ''}
-                    disabled
-                    wrapClassName="sm:col-span-2"
-                  />
-                ) : (
-                  <Select
-                    label="Category"
-                    required
-                    value={form.categoryId}
-                    onChange={(e) =>
-                      setForm({ ...form, categoryId: e.target.value })
-                    }
-                    placeholder="Select a category"
-                    wrapClassName="sm:col-span-2"
-                    options={categoryList
-                      .filter((c) => c.isActive)
-                      .map((c) => ({ value: c.id, label: c.name }))}
-                  />
-                )}
               </>
             )}
 
