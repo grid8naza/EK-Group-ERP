@@ -21,7 +21,10 @@ export interface Column<T> {
   render?: (row: T) => React.ReactNode;
   /** accessor for default rendering / client-side search */
   accessor?: (row: T) => string | number | null | undefined;
-  /** Make the header clickable to sort. */
+  /**
+   * Make the header clickable to sort. Defaults to on for any column that has
+   * an `accessor` or `sortAccessor`; pass `false` to opt a column out.
+   */
   sortable?: boolean;
   /** Value used when sorting this column (falls back to accessor / key). */
   sortAccessor?: (row: T) => string | number | null | undefined;
@@ -255,7 +258,9 @@ export function DataTable<T>({
           <thead>
             <tr className="border-b border-[#efe7db] bg-[#fcfbf8] text-xs font-semibold uppercase tracking-wide text-[#6d6258] dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
               {columns.map((c) => {
-                const sortable = c.sortable && !serverPagination;
+                const sortable =
+                  (c.sortable ?? (!!c.accessor || !!c.sortAccessor)) &&
+                  !serverPagination;
                 const active = sortState?.key === c.key;
                 return (
                   <th

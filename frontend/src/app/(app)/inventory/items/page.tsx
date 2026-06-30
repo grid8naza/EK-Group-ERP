@@ -64,9 +64,6 @@ export default function ItemsPage() {
   const [view, setView] = useState(false);
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
-  const [sort, setSort] = useState<'code' | 'name' | 'category' | 'group'>(
-    'code',
-  );
   // List filters (empty string = no filter). Group choices cascade from the
   // selected category.
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -264,6 +261,8 @@ export default function ItemsPage() {
     [groups, categoryFilter],
   );
 
+  // Rows after filters; column ordering is handled by the table's sortable
+  // headers (default: Code ascending).
   const visibleRows = useMemo(() => {
     let rows = [...(data ?? [])];
     if (categoryFilter)
@@ -272,22 +271,8 @@ export default function ItemsPage() {
       rows = rows.filter((r) => String(r.groupId) === groupFilter);
     if (status === 'active') rows = rows.filter((r) => r.isActive);
     else if (status === 'inactive') rows = rows.filter((r) => !r.isActive);
-    rows.sort((a, b) => {
-      if (sort === 'name') return a.name.localeCompare(b.name);
-      if (sort === 'category')
-        return (
-          (a.category?.name ?? '').localeCompare(b.category?.name ?? '') ||
-          a.name.localeCompare(b.name)
-        );
-      if (sort === 'group')
-        return (
-          (a.group?.name ?? '').localeCompare(b.group?.name ?? '') ||
-          a.name.localeCompare(b.name)
-        );
-      return a.code.localeCompare(b.code);
-    });
     return rows;
-  }, [data, categoryFilter, groupFilter, status, sort]);
+  }, [data, categoryFilter, groupFilter, status]);
 
   const availabilityText = (i: Item) =>
     i.companyIds.map((id) => companyNameById.get(id) ?? `#${id}`).join(', ');
@@ -299,6 +284,7 @@ export default function ItemsPage() {
     {
       key: 'name',
       header: 'Item',
+      sortAccessor: (r) => r.name,
       render: (r) => (
         <span className="font-medium text-slate-800 dark:text-slate-100">
           {r.name}
@@ -310,16 +296,19 @@ export default function ItemsPage() {
       key: 'unitPrice',
       header: 'Unit Price',
       accessor: (r) => (r.unitPrice ?? 0).toLocaleString(),
+      sortAccessor: (r) => r.unitPrice ?? 0,
     },
     { key: 'hsn', header: 'HSN', accessor: (r) => r.hsnCode?.code ?? '-' },
     {
       key: 'reorderLevel',
       header: 'Reorder',
       accessor: (r) => (r.reorderLevel ?? 0).toLocaleString(),
+      sortAccessor: (r) => r.reorderLevel ?? 0,
     },
     {
       key: 'availability',
       header: 'Availability',
+      sortAccessor: (r) => (r.allCompanies ? Infinity : r.companyIds.length),
       render: (r) =>
         r.allCompanies ? (
           <Badge color="violet">All</Badge>
@@ -332,6 +321,7 @@ export default function ItemsPage() {
     {
       key: 'isActive',
       header: 'Status',
+      sortAccessor: (r) => (r.isActive ? 'Active' : 'Inactive'),
       render: (r) => (
         <Badge color={r.isActive ? 'green' : 'slate'}>
           {r.isActive ? 'Active' : 'Inactive'}
@@ -363,6 +353,7 @@ export default function ItemsPage() {
       <DataTable
         columns={columns}
         rows={visibleRows}
+        defaultSort={{ key: 'code', dir: 'asc' }}
         // Remount when the filters change so pagination jumps back to page 1.
         key={`${categoryFilter}|${groupFilter}|${status}`}
         rowKey={(r) => r.id}
@@ -403,20 +394,6 @@ export default function ItemsPage() {
               options={[
                 { value: 'active', label: 'Active' },
                 { value: 'inactive', label: 'Inactive' },
-              ]}
-            />
-            <span className="ml-1 text-sm text-slate-500 dark:text-slate-400">
-              Sort by
-            </span>
-            <Select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as typeof sort)}
-              wrapClassName="w-32"
-              options={[
-                { value: 'code', label: 'Code' },
-                { value: 'name', label: 'Item' },
-                { value: 'category', label: 'Category' },
-                { value: 'group', label: 'Group' },
               ]}
             />
           </div>

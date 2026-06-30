@@ -50,7 +50,6 @@ export default function CategoriesPage() {
   const [view, setView] = useState(false);
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
-  const [sort, setSort] = useState<'code' | 'name'>('code');
   const [applies, setApplies] = useState(''); // '' | 'item' | 'product'
   const [status, setStatus] = useState(''); // '' | 'active' | 'inactive'
 
@@ -205,13 +204,8 @@ export default function CategoriesPage() {
     else if (applies === 'product') rows = rows.filter((c) => c.forProduct);
     if (status === 'active') rows = rows.filter((c) => c.isActive);
     else if (status === 'inactive') rows = rows.filter((c) => !c.isActive);
-    rows.sort((a, b) =>
-      sort === 'name'
-        ? a.name.localeCompare(b.name)
-        : a.code.localeCompare(b.code),
-    );
     return rows;
-  }, [data, sort, applies, status]);
+  }, [data, applies, status]);
 
   const availabilityText = (c: Category) =>
     c.companyIds.map((id) => nameById.get(id) ?? `#${id}`).join(', ');
@@ -228,6 +222,7 @@ export default function CategoriesPage() {
     {
       key: 'name',
       header: 'Name',
+      sortAccessor: (r) => r.name,
       render: (r) => (
         <span className="font-medium text-slate-800 dark:text-slate-100">
           {r.name}
@@ -237,6 +232,7 @@ export default function CategoriesPage() {
     {
       key: 'availability',
       header: 'Availability',
+      sortAccessor: (r) => (r.allCompanies ? Infinity : r.companyIds.length),
       render: (r) =>
         r.allCompanies ? (
           <Badge color="violet">All companies</Badge>
@@ -252,6 +248,7 @@ export default function CategoriesPage() {
     {
       key: 'appliesTo',
       header: 'Applies To',
+      sortAccessor: (r) => appliesTo(r),
       render: (r) => (
         <Badge color={r.forItem && r.forProduct ? 'green' : 'slate'}>
           {appliesTo(r)}
@@ -261,6 +258,7 @@ export default function CategoriesPage() {
     {
       key: 'isActive',
       header: 'Status',
+      sortAccessor: (r) => (r.isActive ? 'Active' : 'Inactive'),
       render: (r) => (
         <Badge color={r.isActive ? 'green' : 'slate'}>
           {r.isActive ? 'Active' : 'Inactive'}
@@ -296,6 +294,7 @@ export default function CategoriesPage() {
       <DataTable
         columns={columns}
         rows={sortedRows}
+        defaultSort={{ key: 'code', dir: 'asc' }}
         key={`${applies}|${status}`}
         rowKey={(r) => r.id}
         loading={loading}
@@ -322,18 +321,6 @@ export default function CategoriesPage() {
               options={[
                 { value: 'active', label: 'Active' },
                 { value: 'inactive', label: 'Inactive' },
-              ]}
-            />
-            <span className="ml-1 text-sm text-slate-500 dark:text-slate-400">
-              Sort by
-            </span>
-            <Select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as typeof sort)}
-              wrapClassName="w-32"
-              options={[
-                { value: 'code', label: 'Code' },
-                { value: 'name', label: 'Name' },
               ]}
             />
           </div>

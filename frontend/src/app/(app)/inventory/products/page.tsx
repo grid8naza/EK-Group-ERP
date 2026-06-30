@@ -266,6 +266,7 @@ export default function ProductsPage() {
     {
       key: 'name',
       header: 'Product',
+      sortAccessor: (r) => r.name,
       render: (r) => (
         <span className="font-medium text-slate-800 dark:text-slate-100">
           {r.name}
@@ -277,21 +278,25 @@ export default function ProductsPage() {
       key: 'wholesalePrice',
       header: 'Wholesale',
       accessor: (r) => (r.wholesalePrice ?? 0).toLocaleString(),
+      sortAccessor: (r) => r.wholesalePrice ?? 0,
     },
     {
       key: 'intercompanyPrice',
       header: 'Inter-Co',
       accessor: (r) => (r.intercompanyPrice ?? 0).toLocaleString(),
+      sortAccessor: (r) => r.intercompanyPrice ?? 0,
     },
     {
       key: 'retailPrice',
       header: 'Retail',
       accessor: (r) => (r.retailPrice ?? 0).toLocaleString(),
+      sortAccessor: (r) => r.retailPrice ?? 0,
     },
     { key: 'hsn', header: 'HSN', accessor: (r) => r.hsnCode?.code ?? '-' },
     {
       key: 'isActive',
       header: 'Status',
+      sortAccessor: (r) => (r.isActive ? 'Active' : 'Inactive'),
       render: (r) => (
         <Badge color={r.isActive ? 'green' : 'slate'}>
           {r.isActive ? 'Active' : 'Inactive'}
@@ -323,6 +328,7 @@ export default function ProductsPage() {
       <DataTable
         columns={columns}
         rows={visibleRows}
+        defaultSort={{ key: 'code', dir: 'asc' }}
         key={`${categoryFilter}|${groupFilter}|${status}`}
         rowKey={(r) => r.id}
         loading={loading}
