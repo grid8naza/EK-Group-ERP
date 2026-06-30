@@ -60,6 +60,8 @@ interface DataTableProps<T> {
    */
   renderLock?: (row: T) => React.ReactNode;
   onRowClick?: (row: T) => void;
+  /** Extra classes per row (e.g. to highlight a category of rows). */
+  rowClassName?: (row: T) => string | undefined;
 
   // toolbar
   toolbar?: React.ReactNode;
@@ -108,6 +110,7 @@ export function DataTable<T>({
   rowActions,
   renderLock,
   onRowClick,
+  rowClassName,
   toolbar,
   toolbarRight,
   onRefresh,
@@ -333,6 +336,7 @@ export function DataTable<T>({
                   className={cn(
                     'border-b border-slate-100 transition last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40',
                     onRowClick && 'cursor-pointer',
+                    rowClassName?.(row),
                   )}
                 >
                   {columns.map((c) => (

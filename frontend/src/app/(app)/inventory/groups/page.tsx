@@ -412,6 +412,11 @@ export default function GroupsPage() {
 
   const title = view ? 'View Group' : editing ? 'Edit Group' : 'New Group';
   const visibleColumns = columns.filter((c) => !hiddenCols.has(c.key));
+  // Code of the primary group chosen in the filter (used to scope the parent
+  // filter to that primary's subtree).
+  const primaryGroupCode = primaryFilter
+    ? groupList.find((g) => String(g.id) === primaryFilter)?.code
+    : undefined;
 
   return (
     <div className="mx-auto flex h-full max-w-7xl flex-col">
@@ -441,6 +446,11 @@ export default function GroupsPage() {
         fillHeight
         onRefresh={refetch}
         searchPlaceholder="Search groups..."
+        rowClassName={(r) =>
+          r.level === 1
+            ? 'bg-brand-100/70 hover:!bg-brand-200/60 dark:bg-brand-950/40 dark:hover:!bg-brand-900/40'
+            : undefined
+        }
         toolbarRight={
           <ColumnToggle
             columns={columns.map((c) => ({ key: c.key, label: c.header }))}
@@ -467,7 +477,11 @@ export default function GroupsPage() {
             />
             <Select
               value={primaryFilter}
-              onChange={(e) => setPrimaryFilter(e.target.value)}
+              onChange={(e) => {
+                // Switching the primary group invalidates a parent from another.
+                setPrimaryFilter(e.target.value);
+                setParentFilter('');
+              }}
               wrapClassName="w-40"
               placeholder="All primary groups"
               options={primaryGroups
@@ -485,7 +499,12 @@ export default function GroupsPage() {
               options={parentCandidates
                 .filter(
                   (g) =>
-                    !categoryFilter || String(g.categoryId) === categoryFilter,
+                    (!categoryFilter ||
+                      String(g.categoryId) === categoryFilter) &&
+                    // When a primary group is chosen, only parents within its
+                    // subtree (sharing the primary's CC+L1 code prefix).
+                    (!primaryGroupCode ||
+                      g.code.startsWith(primaryGroupCode.slice(0, 4))),
                 )
                 .map((g) => ({
                   value: String(g.id),
