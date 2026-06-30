@@ -1,0 +1,96 @@
+/**
+ * Auto-generated 17-digit hierarchy codes for Category → Group (up to 5 levels)
+ * → Item / Product. Layout (each box a fixed-width numeric segment):
+ *
+ *   ┌──┬──┬──┬──┬──┬──┬─────┐
+ *   │CC│L1│L2│L3│L4│L5│IIIII│   = 2 + 2·5 + 5 = 17 digits
+ *   └──┴──┴──┴──┴──┴──┴─────┘
+ *    cat  group levels    item/product sequence (shared per leaf group)
+ *
+ * A category's code fills CC and zeros the rest; a group fills CC + its level
+ * segments and zeros the deeper levels + item slot; an item/product takes its
+ * leaf group's code and fills the IIIII slot. Because the code is fixed-width
+ * and positional, plain ascending sort of the code yields the correct tree
+ * order (parent, then its children, then the next sibling).
+ */
+
+export const CATEGORY_DIGITS = 2;
+export const LEVEL_DIGITS = 2;
+export const ITEM_DIGITS = 5;
+
+export const MAX_LEVEL = 5;
+export const MAX_CATEGORY = 99; // CC segment
+export const MAX_GROUP = 99; // each level segment
+export const MAX_ITEM_SEQ = 99999; // IIIII segment
+
+export const CODE_LENGTH =
+  CATEGORY_DIGITS + MAX_LEVEL * LEVEL_DIGITS + ITEM_DIGITS; // 17
+
+const ZEROS = '0'.repeat(CODE_LENGTH);
+const ITEM_OFFSET = CATEGORY_DIGITS + MAX_LEVEL * LEVEL_DIGITS; // 12
+
+/** 0-based string offset of a group level's 2-digit segment (level 1 → 2). */
+function levelOffset(level: number): number {
+  return CATEGORY_DIGITS + (level - 1) * LEVEL_DIGITS;
+}
+
+function setSegment(
+  code: string,
+  offset: number,
+  width: number,
+  value: number,
+): string {
+  const seg = String(value).padStart(width, '0');
+  return code.slice(0, offset) + seg + code.slice(offset + width);
+}
+
+function readSegment(code: string, offset: number, width: number): number {
+  return parseInt(code.slice(offset, offset + width), 10) || 0;
+}
+
+// ---- Builders -------------------------------------------------------------
+
+export function categoryCode(n: number): string {
+  return setSegment(ZEROS, 0, CATEGORY_DIGITS, n);
+}
+
+/**
+ * Build a group's code from its parent's code (the category code for a level-1
+ * "primary" group, or the parent group's code for a sub-group) by filling in
+ * this group's own level segment.
+ */
+export function groupCode(parentCode: string, level: number, n: number): string {
+  return setSegment(parentCode, levelOffset(level), LEVEL_DIGITS, n);
+}
+
+export function itemCode(leafGroupCode: string, seq: number): string {
+  return setSegment(leafGroupCode, ITEM_OFFSET, ITEM_DIGITS, seq);
+}
+
+// ---- Readers --------------------------------------------------------------
+
+export function categoryNumberOf(code: string): number {
+  return readSegment(code, 0, CATEGORY_DIGITS);
+}
+
+export function groupNumberAt(code: string, level: number): number {
+  return readSegment(code, levelOffset(level), LEVEL_DIGITS);
+}
+
+export function itemSeqOf(code: string): number {
+  return readSegment(code, ITEM_OFFSET, ITEM_DIGITS);
+}
+
+/** The code prefix (CC + L1) shared by a primary group and all its descendants. */
+export function primaryPrefix(code: string): string {
+  return code.slice(0, CATEGORY_DIGITS + LEVEL_DIGITS);
+}
+
+// ---- Allocation -----------------------------------------------------------
+
+/** Lowest integer in [1..max] not already taken, or null if the range is full. */
+export function lowestFree(used: Iterable<number>, max: number): number | null {
+  const taken = new Set(used);
+  for (let i = 1; i <= max; i++) if (!taken.has(i)) return i;
+  return null;
+}

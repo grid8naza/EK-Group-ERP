@@ -11,6 +11,7 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
+import { StatusToggle } from '@/components/ui/StatusToggle';
 import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
@@ -70,6 +71,7 @@ export default function ItemsPage() {
   // selected category.
   const [categoryFilter, setCategoryFilter] = useState('');
   const [groupFilter, setGroupFilter] = useState('');
+  const [status, setStatus] = useState(''); // '' | 'active' | 'inactive'
   const codeRef = useRef<HTMLInputElement>(null);
 
   const canAdd = can(ROUTE, 'add');
@@ -80,9 +82,14 @@ export default function ItemsPage() {
   const companyList = companies ?? [];
   const unitList = units ?? [];
   const companyNameById = new Map(companyList.map((c) => [c.id, c.name]));
-  // Groups are restricted to the chosen category (a group lives under one).
+  // Items attach to LEAF groups only (no sub-groups) that apply to items,
+  // within the chosen category.
   const groupOptions = (groups ?? []).filter(
-    (g) => !form.categoryId || String(g.categoryId) === form.categoryId,
+    (g) =>
+      !g.subGroupApplicable &&
+      g.forItem &&
+      g.isActive &&
+      (!form.categoryId || String(g.categoryId) === form.categoryId),
   );
 
   const closeDrawer = () => {
@@ -152,8 +159,12 @@ export default function ItemsPage() {
     }));
 
   const save = async (again = false) => {
-    if (!form.code.trim() || !form.name.trim()) {
-      toast.error('Code and Name are required.');
+    if (!form.name.trim()) {
+      toast.error('Name is required.');
+      return;
+    }
+    if (!form.groupId) {
+      toast.error('Select a group — every item belongs to a leaf group.');
       return;
     }
     if (!form.unitId) {
@@ -168,11 +179,10 @@ export default function ItemsPage() {
     const num = (s: string) => Number(s) || 0;
     const idOrNull = (s: string) => (s ? Number(s) : null);
     const payload = {
-      code: form.code.trim().toUpperCase(),
+      // code + category are derived server-side from the group.
       name: form.name.trim(),
       description: form.description.trim() || undefined,
-      categoryId: idOrNull(form.categoryId),
-      groupId: idOrNull(form.groupId),
+      groupId: Number(form.groupId),
       unitId: Number(form.unitId),
       unitPrice: num(form.unitPrice),
       boxQty: num(form.boxQty),
@@ -201,9 +211,9 @@ export default function ItemsPage() {
       if (again) {
         // Fast entry: keep the context (category, group, unit, HSN, pricing,
         // stock levels, availability), clear only the identity fields and
-        // refocus Code.
+        // refocus Name.
         setEditing(null);
-        setForm((f) => ({ ...f, code: '', name: '', description: '' }));
+        setForm((f) => ({ ...f, name: '', description: '' }));
         setTimeout(() => codeRef.current?.focus(), 0);
       } else {
         setOpen(false);
@@ -232,6 +242,18 @@ export default function ItemsPage() {
     }
   };
 
+  // Retire/restore without deleting — keeps the code, leaves no gap.
+  const toggleActive = (i: Item) =>
+    guardEdit(i, async () => {
+      try {
+        await api.patch(`/items/${i.id}`, { isActive: !i.isActive });
+        toast.success(i.isActive ? 'Item set inactive.' : 'Item set active.');
+        refetch();
+      } catch (e) {
+        toast.error(e instanceof ApiError ? e.message : 'Failed to update.');
+      }
+    });
+
   // Group dropdown options follow the selected category (or all groups when no
   // category is chosen).
   const filterGroups = useMemo(
@@ -248,6 +270,8 @@ export default function ItemsPage() {
       rows = rows.filter((r) => String(r.categoryId) === categoryFilter);
     if (groupFilter)
       rows = rows.filter((r) => String(r.groupId) === groupFilter);
+    if (status === 'active') rows = rows.filter((r) => r.isActive);
+    else if (status === 'inactive') rows = rows.filter((r) => !r.isActive);
     rows.sort((a, b) => {
       if (sort === 'name') return a.name.localeCompare(b.name);
       if (sort === 'category')
@@ -263,7 +287,7 @@ export default function ItemsPage() {
       return a.code.localeCompare(b.code);
     });
     return rows;
-  }, [data, categoryFilter, groupFilter, sort]);
+  }, [data, categoryFilter, groupFilter, status, sort]);
 
   const availabilityText = (i: Item) =>
     i.companyIds.map((id) => companyNameById.get(id) ?? `#${id}`).join(', ');
@@ -340,7 +364,7 @@ export default function ItemsPage() {
         columns={columns}
         rows={visibleRows}
         // Remount when the filters change so pagination jumps back to page 1.
-        key={`${categoryFilter}|${groupFilter}`}
+        key={`${categoryFilter}|${groupFilter}|${status}`}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
@@ -371,6 +395,16 @@ export default function ItemsPage() {
                 label: g.name,
               }))}
             />
+            <Select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              wrapClassName="w-36"
+              placeholder="All statuses"
+              options={[
+                { value: 'active', label: 'Active' },
+                { value: 'inactive', label: 'Inactive' },
+              ]}
+            />
             <span className="ml-1 text-sm text-slate-500 dark:text-slate-400">
               Sort by
             </span>
@@ -393,6 +427,13 @@ export default function ItemsPage() {
         canView={canView}
         canEdit={canEdit}
         canDelete={canDelete}
+        rowActions={(r) => (
+          <StatusToggle
+            active={r.isActive}
+            canEdit={canEdit}
+            onToggle={() => toggleActive(r)}
+          />
+        )}
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}
@@ -427,17 +468,12 @@ export default function ItemsPage() {
         <ReadOnlyFieldset readOnly={view}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input
-              ref={codeRef}
-              label="Code"
-              required
-              maxLength={40}
-              value={form.code}
-              onChange={(e) =>
-                setForm({ ...form, code: e.target.value.toUpperCase() })
-              }
-              placeholder="e.g. ITM-0001"
+              label="Code (auto)"
+              value={editing ? editing.code : 'Generated from the group'}
+              disabled
             />
             <Input
+              ref={codeRef}
               label="Name"
               required
               value={form.name}
@@ -453,30 +489,53 @@ export default function ItemsPage() {
               wrapClassName="sm:col-span-2"
             />
 
-            {/* Classification */}
-            <Select
-              label="Category"
-              value={form.categoryId}
-              onChange={(e) =>
-                // changing category clears a now-invalid group
-                setForm({ ...form, categoryId: e.target.value, groupId: '' })
-              }
-              placeholder="— None —"
-              options={(categories ?? []).map((c) => ({
-                value: c.id,
-                label: `${c.code} — ${c.name}`,
-              }))}
-            />
-            <Select
-              label="Group"
-              value={form.groupId}
-              onChange={(e) => setForm({ ...form, groupId: e.target.value })}
-              placeholder="— None —"
-              options={groupOptions.map((g) => ({
-                value: g.id,
-                label: `${g.code} — ${g.name}`,
-              }))}
-            />
+            {/* Classification — immutable after creation (the code encodes it),
+                so it's read-only when editing. To move an item, inactivate it
+                and create a new one under the right group. */}
+            {editing ? (
+              <>
+                <Input
+                  label="Category"
+                  value={editing.category?.name ?? '-'}
+                  disabled
+                />
+                <Input
+                  label="Group"
+                  value={editing.group?.name ?? '-'}
+                  disabled
+                />
+              </>
+            ) : (
+              <>
+                <Select
+                  label="Category"
+                  value={form.categoryId}
+                  onChange={(e) =>
+                    // changing category clears a now-invalid group
+                    setForm({ ...form, categoryId: e.target.value, groupId: '' })
+                  }
+                  placeholder="— None —"
+                  options={(categories ?? [])
+                    .filter((c) => c.isActive)
+                    .map((c) => ({ value: c.id, label: c.name }))}
+                />
+                <Select
+                  label="Group"
+                  required
+                  value={form.groupId}
+                  onChange={(e) => setForm({ ...form, groupId: e.target.value })}
+                  placeholder={
+                    form.categoryId
+                      ? 'Select a leaf group'
+                      : 'Pick a category first'
+                  }
+                  options={groupOptions.map((g) => ({
+                    value: g.id,
+                    label: g.name,
+                  }))}
+                />
+              </>
+            )}
 
             {/* Unit & pricing */}
             <Select
@@ -487,7 +546,7 @@ export default function ItemsPage() {
               placeholder="Select a unit"
               options={unitList.map((u) => ({
                 value: u.id,
-                label: `${u.code} — ${u.name}`,
+                label: u.name,
               }))}
             />
             <Input
@@ -515,7 +574,7 @@ export default function ItemsPage() {
               placeholder="— None —"
               options={unitList.map((u) => ({
                 value: u.id,
-                label: `${u.code} — ${u.name}`,
+                label: u.name,
               }))}
             />
 

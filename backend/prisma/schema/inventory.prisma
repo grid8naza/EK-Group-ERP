@@ -130,7 +130,13 @@ model CategoryCompany {
 model Group {
   id           Int      @id @default(autoincrement())
   categoryId   Int
-  code         String   @unique
+  // Self-referencing hierarchy: a "primary" group has no parent (level 1); a
+  // sub-group's parent is another group in the SAME category whose
+  // `subGroupApplicable` is true. `level` is parent.level + 1, capped at 5.
+  parentGroupId      Int?
+  level              Int     @default(1) // 1 = primary group … up to 5
+  subGroupApplicable Boolean @default(false) // true = container: holds sub-groups, NOT items
+  code         String   @unique // system-generated 15-digit hierarchy code
   name         String
   description  String?
   allCompanies Boolean  @default(false) // true = available to every company
@@ -142,11 +148,14 @@ model Group {
   updatedAt    DateTime @updatedAt
 
   category  Category       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  parent    Group?         @relation("GroupHierarchy", fields: [parentGroupId], references: [id], onDelete: Restrict)
+  children  Group[]        @relation("GroupHierarchy")
   companies GroupCompany[]
   items     Item[]
   products  Product[] @relation("GroupProducts")
 
   @@index([categoryId])
+  @@index([parentGroupId])
   @@map("groups")
 }
 

@@ -10,15 +10,58 @@ import {
 import { spawn } from 'child_process';
 import { createReadStream } from 'fs';
 import * as fs from 'fs/promises';
+import * as os from 'os';
 import * as path from 'path';
+import { randomUUID } from 'crypto';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
 
-/** Server-generated backup file names look exactly like this. */
+/** Server-generated full-database backup file names look exactly like this. */
 const BACKUP_FILE_RE = /^erpgrip-\d{8}-\d{6}\.dump$/;
+
+/**
+ * Per-table dump file names: `table-<table>-<timestamp>.dump`. The table name
+ * is baked into the file name so a restore can refuse a dump that belongs to a
+ * different table (the "no wrong dump for a table" guard).
+ */
+const TABLE_DUMP_RE = /^table-([a-z0-9_]+)-\d{8}-\d{6}\.dump$/;
+
+/** Tables never offered for table-wise backup/restore (sensitive / internal). */
+const EXCLUDED_TABLES = new Set(['security_settings', '_prisma_migrations']);
+
+/** Friendlier display names; anything unlisted is prettified from its name. */
+const TABLE_LABELS: Record<string, string> = {
+  hsn_codes: 'HSN Codes',
+  product_bom_lines: 'Product BOM Lines',
+  category_companies: 'Category–Company Links',
+  group_companies: 'Group–Company Links',
+  item_companies: 'Item–Company Links',
+  product_companies: 'Product–Company Links',
+  unit_chain_links: 'Unit Chain Links',
+};
 
 export interface BackupEntry {
   fileName: string;
+  sizeBytes: number;
+  createdAt: string;
+  note: string | null;
+  createdBy: string | null;
+}
+
+export interface TableInfo {
+  /** Physical table name (the value the API expects back). */
+  name: string;
+  /** Human-friendly label for the UI. */
+  label: string;
+  /** Exact current row count. */
+  rowCount: number;
+}
+
+export interface TableDumpEntry {
+  fileName: string;
+  /** Which table this dump holds. */
+  table: string;
+  tableLabel: string;
   sizeBytes: number;
   createdAt: string;
   note: string | null;
@@ -310,6 +353,308 @@ export class BackupService implements OnModuleInit {
     return { success: true };
   }
 
+  // ---- Table-wise backup & restore ----------------------------------------
+
+  private prettyLabel(table: string): string {
+    return (
+      TABLE_LABELS[table] ??
+      table
+        .split('_')
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ')
+    );
+  }
+
+  /** The tables a user may back up / restore, with exact row counts. */
+  async listTables(): Promise<TableInfo[]> {
+    const rows = await this.prisma.$queryRawUnsafe<{ name: string }[]>(
+      `SELECT tablename AS name FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`,
+    );
+    const names = rows
+      .map((r) => r.name)
+      .filter((n) => !EXCLUDED_TABLES.has(n));
+    if (names.length === 0) return [];
+
+    // One round-trip for exact counts of every table. Names come straight from
+    // the catalog, so they're safe to interpolate as identifiers.
+    const countSql = names
+      .map((n) => `SELECT '${n}' AS name, count(*)::int AS count FROM "public"."${n}"`)
+      .join(' UNION ALL ');
+    const counts = await this.prisma.$queryRawUnsafe<
+      { name: string; count: number }[]
+    >(countSql);
+    const countByName = new Map(counts.map((c) => [c.name, Number(c.count)]));
+
+    return names.map((name) => ({
+      name,
+      label: this.prettyLabel(name),
+      rowCount: countByName.get(name) ?? 0,
+    }));
+  }
+
+  /** Reject a table name that isn't a real, backable public table. */
+  private async assertBackableTable(table: string): Promise<void> {
+    if (!/^[a-z_][a-z0-9_]*$/.test(table) || EXCLUDED_TABLES.has(table)) {
+      throw new BadRequestException(`Invalid table "${table}".`);
+    }
+    const found = await this.prisma.$queryRawUnsafe<{ ok: string | null }[]>(
+      `SELECT to_regclass('public.' || $1)::text AS ok`,
+      table,
+    );
+    if (!found[0]?.ok) {
+      throw new BadRequestException(`Unknown table "${table}".`);
+    }
+  }
+
+  /** List the per-table dump files on the server. */
+  async listTableDumps(): Promise<TableDumpEntry[]> {
+    const files = await fs.readdir(this.backupDir).catch(() => [] as string[]);
+    const dumps = files.filter((f) => TABLE_DUMP_RE.test(f));
+    const entries = await Promise.all(
+      dumps.map(async (fileName) => {
+        const stat = await fs.stat(path.join(this.backupDir, fileName));
+        const meta = await this.readMeta(fileName);
+        const table = TABLE_DUMP_RE.exec(fileName)![1];
+        return {
+          fileName,
+          table: meta?.table ?? table,
+          tableLabel: this.prettyLabel(meta?.table ?? table),
+          sizeBytes: stat.size,
+          createdAt: meta?.createdAt ?? stat.mtime.toISOString(),
+          note: meta?.note ?? null,
+          createdBy: meta?.createdBy ?? null,
+        } satisfies TableDumpEntry;
+      }),
+    );
+    return entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  /** Back up each selected table to its own dump file. */
+  async backupTables(
+    password: string,
+    tables: string[],
+    note: string | undefined,
+    createdBy: string | null,
+  ): Promise<TableDumpEntry[]> {
+    await this.verifyPassword(password);
+    if (!tables?.length) {
+      throw new BadRequestException('Select at least one table to back up.');
+    }
+    // De-dupe and validate every table up front.
+    const unique = [...new Set(tables)];
+    for (const t of unique) await this.assertBackableTable(t);
+
+    const conn = this.connection();
+    const createdAt = new Date().toISOString();
+    const stamp = this.timestamp();
+    const out: TableDumpEntry[] = [];
+
+    for (const table of unique) {
+      const fileName = `table-${table}-${stamp}.dump`;
+      const filePath = path.join(this.backupDir, fileName);
+      const result = await this.run(
+        'pg_dump',
+        [
+          '-h', conn.host,
+          '-p', conn.port,
+          '-U', conn.user,
+          '-d', conn.database,
+          '-Fc',
+          '-t', `public.${table}`,
+          '-f', filePath,
+        ],
+        conn.password,
+      );
+      if (result.code !== 0) {
+        await fs.rm(filePath, { force: true });
+        this.logger.error(`pg_dump (${table}) failed: ${result.stderr}`);
+        throw new InternalServerErrorException(
+          `Backup of "${table}" failed: ${this.tail(result.stderr)}`,
+        );
+      }
+      await this.writeMeta(fileName, {
+        note: note?.trim() || null,
+        createdBy,
+        createdAt,
+        table,
+      });
+      const stat = await fs.stat(filePath);
+      out.push({
+        fileName,
+        table,
+        tableLabel: this.prettyLabel(table),
+        sizeBytes: stat.size,
+        createdAt,
+        note: note?.trim() || null,
+        createdBy,
+      });
+    }
+    return out;
+  }
+
+  /** Restore a single table from a server-side per-table dump. */
+  async restoreTableFromFile(password: string, table: string, fileName: string) {
+    await this.verifyPassword(password);
+    await this.assertBackableTable(table);
+    const match = TABLE_DUMP_RE.exec(fileName);
+    if (!match) {
+      throw new BadRequestException('Invalid table dump file name.');
+    }
+    // Guard #1: the table baked into the file name must match the target.
+    if (match[1] !== table) {
+      throw new BadRequestException(
+        `That dump is for "${match[1]}", not "${table}". Pick the matching dump.`,
+      );
+    }
+    const filePath = path.join(this.backupDir, fileName);
+    try {
+      await fs.access(filePath);
+    } catch {
+      throw new NotFoundException('Dump file not found.');
+    }
+    // Guard #2: the sidecar metadata must agree.
+    const meta = await this.readMeta(fileName);
+    if (meta?.table && meta.table !== table) {
+      throw new BadRequestException(
+        `That dump's metadata says "${meta.table}", not "${table}".`,
+      );
+    }
+    await this.restoreTableDump(table, filePath);
+    return { success: true };
+  }
+
+  /** Restore a single table from an uploaded dump (temp path), then clean up. */
+  async restoreTableFromUpload(password: string, table: string, tempPath: string) {
+    await this.verifyPassword(password);
+    await this.assertBackableTable(table);
+    try {
+      await this.restoreTableDump(table, tempPath);
+    } finally {
+      await fs.rm(tempPath, { force: true });
+    }
+    return { success: true };
+  }
+
+  /**
+   * Inspect a custom-format dump's table of contents and return the set of
+   * tables it carries DATA for. Used to refuse a dump that doesn't match the
+   * table being restored — including an uploaded full-database dump.
+   */
+  private async dumpDataTables(filePath: string): Promise<string[]> {
+    const toc = await this.run('pg_restore', ['-l', filePath], '');
+    if (toc.code !== 0) {
+      throw new BadRequestException(
+        `Not a valid dump file: ${this.tail(toc.stderr)}`,
+      );
+    }
+    const tables = new Set<string>();
+    for (const line of toc.stdout.split('\n')) {
+      // e.g. ";  201; 1259 16490 TABLE DATA public items erpgrip"
+      const m = /\bTABLE DATA\s+(\S+)\s+(\S+)\s+\S+\s*$/.exec(line);
+      if (m && m[1] === 'public') tables.add(m[2]);
+    }
+    return [...tables];
+  }
+
+  /**
+   * Replace a single table's contents with the dump's. FK triggers are turned
+   * off for the load (session_replication_role = replica), so a parent table
+   * can be reloaded without tripping child references, and the old rows are
+   * cleared first so the result is exactly the dump.
+   */
+  private async restoreTableDump(table: string, filePath: string) {
+    // Hard guard: the dump must contain DATA for this table and nothing else.
+    const dataTables = await this.dumpDataTables(filePath);
+    if (dataTables.length === 0 || !dataTables.includes(table)) {
+      throw new BadRequestException(
+        `This dump does not contain data for "${table}". Wrong file selected.`,
+      );
+    }
+    if (dataTables.some((t) => t !== table)) {
+      throw new BadRequestException(
+        `This dump holds other tables (${dataTables.join(', ')}), not just ` +
+          `"${table}". Use a single-table dump.`,
+      );
+    }
+
+    const conn = this.connection();
+
+    // Extract just the table's data as SQL (COPY blocks + sequence resets).
+    const sqlPath = path.join(os.tmpdir(), `restore-${table}-${randomUUID()}.sql`);
+    const extract = await this.run(
+      'pg_restore',
+      ['--data-only', '-t', table, '-f', sqlPath, filePath],
+      conn.password,
+    );
+    if (extract.code !== 0) {
+      await fs.rm(sqlPath, { force: true });
+      throw new InternalServerErrorException(
+        `Restore failed while reading the dump: ${this.tail(extract.stderr)}`,
+      );
+    }
+
+    // Wrap the extracted data: clear the table, then reload — all with FK
+    // enforcement disabled, in one transaction.
+    const wrappedPath = path.join(os.tmpdir(), `restore-${table}-${randomUUID()}-wrapped.sql`);
+    const data = await fs.readFile(sqlPath, 'utf8');
+    const script =
+      `BEGIN;\nSET session_replication_role = replica;\n` +
+      `DELETE FROM "${table}";\n${data}\nCOMMIT;\n`;
+    await fs.writeFile(wrappedPath, script, 'utf8');
+
+    try {
+      const run = await this.run(
+        'psql',
+        [
+          '-h', conn.host,
+          '-p', conn.port,
+          '-U', conn.user,
+          '-d', conn.database,
+          '-v', 'ON_ERROR_STOP=1',
+          '-f', wrappedPath,
+        ],
+        conn.password,
+      );
+      if (run.code !== 0) {
+        this.logger.error(`table restore (${table}) failed: ${run.stderr}`);
+        throw new InternalServerErrorException(
+          `Restore of "${table}" failed: ${this.tail(run.stderr)}`,
+        );
+      }
+    } finally {
+      await fs.rm(sqlPath, { force: true });
+      await fs.rm(wrappedPath, { force: true });
+    }
+  }
+
+  async getTableFileForDownload(fileName: string) {
+    if (!TABLE_DUMP_RE.test(fileName)) {
+      throw new BadRequestException('Invalid table dump file name.');
+    }
+    const filePath = path.join(this.backupDir, fileName);
+    try {
+      await fs.access(filePath);
+    } catch {
+      throw new NotFoundException('Dump file not found.');
+    }
+    return { fileName, stream: createReadStream(filePath) };
+  }
+
+  async removeTableDump(fileName: string) {
+    if (!TABLE_DUMP_RE.test(fileName)) {
+      throw new BadRequestException('Invalid table dump file name.');
+    }
+    const filePath = path.join(this.backupDir, fileName);
+    try {
+      await fs.access(filePath);
+    } catch {
+      throw new NotFoundException('Dump file not found.');
+    }
+    await fs.rm(filePath, { force: true });
+    await fs.rm(this.metaPath(fileName), { force: true });
+    return { success: true };
+  }
+
   // ---- Helpers -------------------------------------------------------------
 
   /** Parse DATABASE_URL into the parts the postgres CLI tools need. */
@@ -373,7 +718,13 @@ export class BackupService implements OnModuleInit {
 
   private async writeMeta(
     fileName: string,
-    meta: { note: string | null; createdBy: string | null; createdAt: string },
+    meta: {
+      note: string | null;
+      createdBy: string | null;
+      createdAt: string;
+      /** Present only for per-table dumps. */
+      table?: string;
+    },
   ) {
     await fs.writeFile(this.metaPath(fileName), JSON.stringify(meta), 'utf8');
   }
@@ -384,6 +735,7 @@ export class BackupService implements OnModuleInit {
     note: string | null;
     createdBy: string | null;
     createdAt: string;
+    table?: string;
   } | null> {
     try {
       const raw = await fs.readFile(this.metaPath(fileName), 'utf8');

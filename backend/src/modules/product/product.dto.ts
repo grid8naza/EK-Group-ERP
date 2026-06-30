@@ -28,10 +28,11 @@ export class BomLineInput {
 }
 
 export class CreateProductDto {
+  // Code is system-generated; ignored if sent.
+  @IsOptional()
   @IsString()
-  @MinLength(1)
   @MaxLength(40)
-  code!: string;
+  code?: string;
 
   @IsString()
   @MinLength(1)
@@ -43,13 +44,14 @@ export class CreateProductDto {
   @MaxLength(300)
   description?: string;
 
+  // Category is derived from the group; ignored if sent.
   @IsOptional()
   @IsInt()
   categoryId?: number | null;
 
-  @IsOptional()
+  /** Leaf group this product belongs to (required). */
   @IsInt()
-  groupId?: number | null;
+  groupId!: number;
 
   /** Selling / output unit (required). */
   @IsInt()

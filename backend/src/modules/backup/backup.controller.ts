@@ -22,9 +22,11 @@ import { BackupService } from './backup.service';
 import { SuperAdminGuard } from '../../auth/super-admin.guard';
 import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
 import {
+  BackupTablesDto,
   ChangeSecurityPasswordDto,
   CreateBackupDto,
   RestoreBackupDto,
+  RestoreTableDto,
 } from './backup.dto';
 
 /** A multer-saved upload (minimal shape; avoids needing @types/multer). */
@@ -100,6 +102,73 @@ export class BackupController {
       throw new BadRequestException('High security password is required.');
     }
     return this.service.restoreFromUpload(password, file.path);
+  }
+
+  // ---- Table-wise backup & restore -----------------------------------------
+
+  @Get('tables')
+  tables() {
+    return this.service.listTables();
+  }
+
+  @Get('tables/dumps')
+  tableDumps() {
+    return this.service.listTableDumps();
+  }
+
+  @Post('tables')
+  backupTables(@Body() dto: BackupTablesDto, @CurrentUser() user: AuthUser) {
+    return this.service.backupTables(
+      dto.highSecurityPassword,
+      dto.tables,
+      dto.note,
+      user.name,
+    );
+  }
+
+  @Post('tables/restore')
+  restoreTable(@Body() dto: RestoreTableDto) {
+    return this.service.restoreTableFromFile(
+      dto.highSecurityPassword,
+      dto.table,
+      dto.fileName,
+    );
+  }
+
+  @Post('tables/restore/upload')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      dest: os.tmpdir(),
+      limits: { fileSize: 2 * 1024 * 1024 * 1024 }, // 2 GB
+    }),
+  )
+  async restoreTableUpload(
+    @UploadedFile() file: UploadedDump,
+    @Body('highSecurityPassword') password: string,
+    @Body('table') table: string,
+  ) {
+    if (!file) throw new BadRequestException('No dump file uploaded.');
+    if (!password) {
+      throw new BadRequestException('High security password is required.');
+    }
+    if (!table) throw new BadRequestException('Target table is required.');
+    return this.service.restoreTableFromUpload(password, table, file.path);
+  }
+
+  @Get('tables/:name/download')
+  @Header('Content-Type', 'application/octet-stream')
+  async downloadTable(
+    @Param('name') name: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const { fileName, stream } = await this.service.getTableFileForDownload(name);
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    return new StreamableFile(stream);
+  }
+
+  @Delete('tables/:name')
+  removeTableDump(@Param('name') name: string) {
+    return this.service.removeTableDump(name);
   }
 
   @Get(':name/download')

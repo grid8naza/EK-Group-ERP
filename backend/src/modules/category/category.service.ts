@@ -7,6 +7,12 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
+import {
+  categoryCode,
+  categoryNumberOf,
+  lowestFree,
+  MAX_CATEGORY,
+} from '../../common/hierarchy-code';
 import { CreateCategoryDto, UpdateCategoryDto } from './category.dto';
 
 // A category row with its company links, flattened to companyIds for the API.
@@ -70,10 +76,14 @@ export class CategoryService {
     const forProduct = dto.forProduct ?? false;
     this.assertAppliesToSomething(forItem, forProduct);
 
-    try {
+    // The code is system-generated (2-digit category segment); manual codes are
+    // not accepted. Retry on the rare race where two categories grab the same
+    // number at once (the unique code constraint catches it).
+    return this.withCodeRetry(async () => {
+      const code = categoryCode(await this.nextCategoryNumber());
       const created = await this.prisma.category.create({
         data: {
-          code: dto.code.trim().toUpperCase(),
+          code,
           name: dto.name.trim(),
           description: dto.description?.trim() || null,
           allCompanies,
@@ -85,8 +95,37 @@ export class CategoryService {
         include: withCompanies,
       });
       return this.flatten(created);
-    } catch (e) {
-      throw this.asDuplicate(e, dto.code);
+    });
+  }
+
+  /** Lowest free 2-digit category number (1..99). */
+  private async nextCategoryNumber(): Promise<number> {
+    const rows = await this.prisma.category.findMany({ select: { code: true } });
+    const used = rows.map((r) => categoryNumberOf(r.code));
+    const n = lowestFree(used, MAX_CATEGORY);
+    if (n == null) {
+      throw new BadRequestException(
+        `Maximum of ${MAX_CATEGORY} categories reached.`,
+      );
+    }
+    return n;
+  }
+
+  /** Re-run an allocate+insert if it loses the code-uniqueness race. */
+  private async withCodeRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
+    for (let i = 0; ; i++) {
+      try {
+        return await fn();
+      } catch (e) {
+        if (
+          i < attempts &&
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === 'P2002'
+        ) {
+          continue;
+        }
+        throw e;
+      }
     }
   }
 
@@ -113,7 +152,7 @@ export class CategoryService {
       const updated = await this.prisma.category.update({
         where: { id },
         data: {
-          code: dto.code !== undefined ? dto.code.trim().toUpperCase() : undefined,
+          // code is system-generated and immutable — never updated here.
           name: dto.name?.trim(),
           description:
             dto.description !== undefined

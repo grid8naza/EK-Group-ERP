@@ -11,6 +11,7 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
+import { StatusToggle } from '@/components/ui/StatusToggle';
 import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
@@ -63,6 +64,7 @@ export default function ProductsPage() {
   const [saving, setSaving] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [groupFilter, setGroupFilter] = useState('');
+  const [status, setStatus] = useState(''); // '' | 'active' | 'inactive'
   const codeRef = useRef<HTMLInputElement>(null);
 
   const canAdd = can(ROUTE, 'add');
@@ -75,9 +77,13 @@ export default function ProductsPage() {
   // Products use product categories/groups only.
   const productCategories = (categories ?? []).filter((c) => c.forProduct);
   const productGroups = (groups ?? []).filter((g) => g.forProduct);
-  // Form: groups restricted to the chosen category.
+  // Form: products attach to LEAF groups only (no sub-groups), restricted to
+  // the chosen category.
   const groupOptions = productGroups.filter(
-    (g) => !form.categoryId || String(g.categoryId) === form.categoryId,
+    (g) =>
+      !g.subGroupApplicable &&
+      g.isActive &&
+      (!form.categoryId || String(g.categoryId) === form.categoryId),
   );
   // List filter: groups cascade from the category filter.
   const filterGroups = productGroups.filter(
@@ -148,8 +154,12 @@ export default function ProductsPage() {
     }));
 
   const save = async (again = false) => {
-    if (!form.code.trim() || !form.name.trim()) {
-      toast.error('Code and Name are required.');
+    if (!form.name.trim()) {
+      toast.error('Name is required.');
+      return;
+    }
+    if (!form.groupId) {
+      toast.error('Select a group — every product belongs to a leaf group.');
       return;
     }
     if (!form.unitId) {
@@ -166,11 +176,10 @@ export default function ProductsPage() {
     // Note: recipe/packing are intentionally omitted — the BOM is edited under
     // Production, and omitting them leaves the saved BOM untouched.
     const payload = {
-      code: form.code.trim().toUpperCase(),
+      // code + category are derived server-side from the group.
       name: form.name.trim(),
       description: form.description.trim() || undefined,
-      categoryId: idOrNull(form.categoryId),
-      groupId: idOrNull(form.groupId),
+      groupId: Number(form.groupId),
       unitId: Number(form.unitId),
       wholesalePrice: num(form.wholesalePrice),
       intercompanyPrice: num(form.intercompanyPrice),
@@ -196,7 +205,7 @@ export default function ProductsPage() {
       await refetch();
       if (again) {
         setEditing(null);
-        setForm((f) => ({ ...f, code: '', name: '', description: '' }));
+        setForm((f) => ({ ...f, name: '', description: '' }));
         setTimeout(() => codeRef.current?.focus(), 0);
       } else {
         setOpen(false);
@@ -225,14 +234,30 @@ export default function ProductsPage() {
     }
   };
 
+  // Retire/restore without deleting — keeps the code, leaves no gap.
+  const toggleActive = (p: Product) =>
+    guardEdit(p, async () => {
+      try {
+        await api.patch(`/products/${p.id}`, { isActive: !p.isActive });
+        toast.success(
+          p.isActive ? 'Product set inactive.' : 'Product set active.',
+        );
+        refetch();
+      } catch (e) {
+        toast.error(e instanceof ApiError ? e.message : 'Failed to update.');
+      }
+    });
+
   const visibleRows = useMemo(() => {
     let rows = [...(data ?? [])];
     if (categoryFilter)
       rows = rows.filter((r) => String(r.categoryId) === categoryFilter);
     if (groupFilter)
       rows = rows.filter((r) => String(r.groupId) === groupFilter);
+    if (status === 'active') rows = rows.filter((r) => r.isActive);
+    else if (status === 'inactive') rows = rows.filter((r) => !r.isActive);
     return rows.sort((a, b) => a.code.localeCompare(b.code));
-  }, [data, categoryFilter, groupFilter]);
+  }, [data, categoryFilter, groupFilter, status]);
 
   const columns: Column<Product>[] = [
     { key: 'code', header: 'Code', accessor: (r) => r.code },
@@ -298,7 +323,7 @@ export default function ProductsPage() {
       <DataTable
         columns={columns}
         rows={visibleRows}
-        key={`${categoryFilter}|${groupFilter}`}
+        key={`${categoryFilter}|${groupFilter}|${status}`}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
@@ -329,6 +354,16 @@ export default function ProductsPage() {
                 label: g.name,
               }))}
             />
+            <Select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              wrapClassName="w-36"
+              placeholder="All statuses"
+              options={[
+                { value: 'active', label: 'Active' },
+                { value: 'inactive', label: 'Inactive' },
+              ]}
+            />
           </div>
         }
         onView={openView}
@@ -337,6 +372,13 @@ export default function ProductsPage() {
         canView={canView}
         canEdit={canEdit}
         canDelete={canDelete}
+        rowActions={(r) => (
+          <StatusToggle
+            active={r.isActive}
+            canEdit={canEdit}
+            onToggle={() => toggleActive(r)}
+          />
+        )}
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}
@@ -371,17 +413,12 @@ export default function ProductsPage() {
         <ReadOnlyFieldset readOnly={view}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input
-              ref={codeRef}
-              label="Code"
-              required
-              maxLength={40}
-              value={form.code}
-              onChange={(e) =>
-                setForm({ ...form, code: e.target.value.toUpperCase() })
-              }
-              placeholder="e.g. PRD-0001"
+              label="Code (auto)"
+              value={editing ? editing.code : 'Generated from the group'}
+              disabled
             />
             <Input
+              ref={codeRef}
               label="Name"
               required
               value={form.name}
@@ -397,28 +434,52 @@ export default function ProductsPage() {
               wrapClassName="sm:col-span-2"
             />
 
-            <Select
-              label="Category"
-              value={form.categoryId}
-              onChange={(e) =>
-                setForm({ ...form, categoryId: e.target.value, groupId: '' })
-              }
-              placeholder="— None —"
-              options={productCategories.map((c) => ({
-                value: c.id,
-                label: `${c.code} — ${c.name}`,
-              }))}
-            />
-            <Select
-              label="Group"
-              value={form.groupId}
-              onChange={(e) => setForm({ ...form, groupId: e.target.value })}
-              placeholder="— None —"
-              options={groupOptions.map((g) => ({
-                value: g.id,
-                label: `${g.code} — ${g.name}`,
-              }))}
-            />
+            {/* Classification — immutable after creation (the code encodes it),
+                so it's read-only when editing. To move a product, inactivate it
+                and create a new one under the right group. */}
+            {editing ? (
+              <>
+                <Input
+                  label="Category"
+                  value={editing.category?.name ?? '-'}
+                  disabled
+                />
+                <Input
+                  label="Group"
+                  value={editing.group?.name ?? '-'}
+                  disabled
+                />
+              </>
+            ) : (
+              <>
+                <Select
+                  label="Category"
+                  value={form.categoryId}
+                  onChange={(e) =>
+                    setForm({ ...form, categoryId: e.target.value, groupId: '' })
+                  }
+                  placeholder="— None —"
+                  options={productCategories
+                    .filter((c) => c.isActive)
+                    .map((c) => ({ value: c.id, label: c.name }))}
+                />
+                <Select
+                  label="Group"
+                  required
+                  value={form.groupId}
+                  onChange={(e) => setForm({ ...form, groupId: e.target.value })}
+                  placeholder={
+                    form.categoryId
+                      ? 'Select a leaf group'
+                      : 'Pick a category first'
+                  }
+                  options={groupOptions.map((g) => ({
+                    value: g.id,
+                    label: g.name,
+                  }))}
+                />
+              </>
+            )}
 
             <Select
               label="Unit"
@@ -428,7 +489,7 @@ export default function ProductsPage() {
               placeholder="Select a unit"
               options={unitList.map((u) => ({
                 value: u.id,
-                label: `${u.code} — ${u.name}`,
+                label: u.name,
               }))}
             />
             <Input
@@ -478,7 +539,7 @@ export default function ProductsPage() {
               placeholder="— None —"
               options={unitList.map((u) => ({
                 value: u.id,
-                label: `${u.code} — ${u.name}`,
+                label: u.name,
               }))}
             />
 

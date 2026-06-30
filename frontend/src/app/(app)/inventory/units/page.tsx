@@ -420,7 +420,7 @@ export default function UnitsPage() {
                   placeholder="Select a simple unit"
                   options={simpleUnits.map((u) => ({
                     value: u.id,
-                    label: `${u.code} — ${u.name}`,
+                    label: u.name,
                   }))}
                 />
                 <Input
@@ -503,7 +503,7 @@ export default function UnitsPage() {
                             placeholder="Select unit"
                             options={linkUnits.map((u) => ({
                               value: u.id,
-                              label: `${u.code} — ${u.name}`,
+                              label: u.name,
                             }))}
                             wrapClassName="flex-1"
                           />

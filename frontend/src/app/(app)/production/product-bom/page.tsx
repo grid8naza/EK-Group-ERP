@@ -382,7 +382,7 @@ function BomLineEditor({
                 placeholder="Select item"
                 options={items.map((it) => ({
                   value: it.id,
-                  label: `${it.code} — ${it.name}`,
+                  label: it.name,
                 }))}
                 wrapClassName="flex-1"
               />
@@ -399,7 +399,7 @@ function BomLineEditor({
                 value={line.unitId}
                 onChange={(e) => set(i, { unitId: e.target.value })}
                 placeholder="Unit"
-                options={units.map((u) => ({ value: u.id, label: u.code }))}
+                options={units.map((u) => ({ value: u.id, label: u.name }))}
                 wrapClassName="w-28"
               />
               {!view && (

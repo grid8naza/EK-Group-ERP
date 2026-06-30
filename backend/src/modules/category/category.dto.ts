@@ -10,10 +10,11 @@ import {
 } from 'class-validator';
 
 export class CreateCategoryDto {
+  // Code is system-generated; ignored if sent. Kept optional for compatibility.
+  @IsOptional()
   @IsString()
-  @MinLength(1)
   @MaxLength(30)
-  code!: string;
+  code?: string;
 
   @IsString()
   @MinLength(1)
@@ -51,9 +52,9 @@ export class CreateCategoryDto {
 }
 
 export class UpdateCategoryDto {
+  // Code is system-generated and immutable; ignored if sent.
   @IsOptional()
   @IsString()
-  @MinLength(1)
   @MaxLength(30)
   code?: string;
 

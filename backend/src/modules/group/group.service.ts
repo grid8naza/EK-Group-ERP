@@ -7,12 +7,23 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
+import {
+  categoryCode,
+  groupCode,
+  groupNumberAt,
+  lowestFree,
+  MAX_GROUP,
+  MAX_LEVEL,
+  primaryPrefix,
+} from '../../common/hierarchy-code';
 import { CreateGroupDto, UpdateGroupDto } from './group.dto';
 
-// Group rows are returned with their parent category + company links flattened.
+// Group rows are returned with their parent category, parent group, and company
+// links flattened.
 const withRelations = {
   companies: { select: { companyId: true } },
   category: { select: { id: true, code: true, name: true } },
+  parent: { select: { id: true, code: true, name: true } },
 } satisfies Prisma.GroupInclude;
 
 @Injectable()
@@ -20,23 +31,43 @@ export class GroupService {
   constructor(private prisma: PrismaService) {}
 
   /**
-   * Groups available in the active company: ones flagged for all companies plus
-   * any explicitly linked to this company. With no active company, only the
-   * all-companies ones are returned.
+   * Groups available in the active company, optionally narrowed to a primary
+   * group's whole subtree and/or to the direct children of a parent group.
+   * Ordered by code, which (being a positional hierarchy code) yields correct
+   * tree order: parent, then its children, then the next sibling.
    */
-  async findAll(companyId: number | undefined, search?: string) {
+  async findAll(
+    companyId: number | undefined,
+    opts: { search?: string; primaryGroupId?: number; parentGroupId?: number } = {},
+  ) {
     const scopeFilter: Prisma.GroupWhereInput = companyId
       ? { OR: [{ allCompanies: true }, { companies: { some: { companyId } } }] }
       : { allCompanies: true };
+
+    // "Primary group" filter → every group whose code shares that primary's
+    // CC+L1 prefix (the primary itself and all its descendants).
+    let primaryFilter: Prisma.GroupWhereInput = {};
+    if (opts.primaryGroupId) {
+      const primary = await this.prisma.group.findUnique({
+        where: { id: opts.primaryGroupId },
+        select: { code: true },
+      });
+      primaryFilter = primary
+        ? { code: { startsWith: primaryPrefix(primary.code) } }
+        : { id: -1 }; // unknown id → match nothing
+    }
+
     const rows = await this.prisma.group.findMany({
       where: {
         AND: [
           scopeFilter,
-          search
+          primaryFilter,
+          opts.parentGroupId ? { parentGroupId: opts.parentGroupId } : {},
+          opts.search
             ? {
                 OR: [
-                  { code: { contains: search, mode: 'insensitive' } },
-                  { name: { contains: search, mode: 'insensitive' } },
+                  { code: { contains: opts.search, mode: 'insensitive' } },
+                  { name: { contains: opts.search, mode: 'insensitive' } },
                 ],
               }
             : {},
@@ -60,18 +91,68 @@ export class GroupService {
   }
 
   async create(dto: CreateGroupDto) {
-    await this.assertCategoryExists(dto.categoryId);
-    const allCompanies = dto.allCompanies ?? false;
-    const companyIds = this.resolveCompanies(allCompanies, dto.companyIds);
     const forItem = dto.forItem ?? true;
     const forProduct = dto.forProduct ?? false;
     this.assertAppliesToSomething(forItem, forProduct);
+    const subGroupApplicable = dto.subGroupApplicable ?? false;
 
-    try {
+    // Resolve where this group sits in the tree.
+    let categoryId = dto.categoryId;
+    let parentCode: string;
+    let level = 1;
+    const parentGroupId = dto.parentGroupId ?? null;
+
+    if (parentGroupId != null) {
+      const parent = await this.prisma.group.findUnique({
+        where: { id: parentGroupId },
+        select: { categoryId: true, level: true, code: true, subGroupApplicable: true },
+      });
+      if (!parent) {
+        throw new BadRequestException('Selected parent group does not exist.');
+      }
+      if (!parent.subGroupApplicable) {
+        throw new BadRequestException(
+          'The chosen parent group does not allow sub-groups. Set “Sub-group applicable” on it first.',
+        );
+      }
+      if (parent.level >= MAX_LEVEL) {
+        throw new BadRequestException(
+          `Groups can be nested at most ${MAX_LEVEL} levels deep.`,
+        );
+      }
+      categoryId = parent.categoryId; // a sub-group inherits its parent's category
+      level = parent.level + 1;
+      parentCode = parent.code;
+    } else {
+      const category = await this.prisma.category.findUnique({
+        where: { id: categoryId },
+        select: { code: true },
+      });
+      if (!category) {
+        throw new BadRequestException('Selected category does not exist.');
+      }
+      parentCode = category.code;
+    }
+
+    // The deepest level cannot itself contain sub-groups.
+    if (subGroupApplicable && level >= MAX_LEVEL) {
+      throw new BadRequestException(
+        `A level-${MAX_LEVEL} group cannot have sub-groups.`,
+      );
+    }
+
+    const allCompanies = dto.allCompanies ?? false;
+    const companyIds = this.resolveCompanies(allCompanies, dto.companyIds);
+
+    return this.withCodeRetry(async () => {
+      const n = await this.nextGroupNumber(categoryId, parentGroupId, level);
       const created = await this.prisma.group.create({
         data: {
-          categoryId: dto.categoryId,
-          code: dto.code.trim().toUpperCase(),
+          categoryId,
+          parentGroupId,
+          level,
+          subGroupApplicable,
+          code: groupCode(parentCode, level, n),
           name: dto.name.trim(),
           description: dto.description?.trim() || null,
           allCompanies,
@@ -83,59 +164,87 @@ export class GroupService {
         include: withRelations,
       });
       return this.flatten(created);
-    } catch (e) {
-      throw this.asDuplicate(e, dto.code);
-    }
+    });
   }
 
   async update(companyId: number | undefined, id: number, dto: UpdateGroupDto) {
-    const existing = await this.findOne(companyId, id);
-    assertUnlocked(existing, 'group', 'editing');
-    if (dto.categoryId !== undefined && dto.categoryId !== existing.categoryId) {
-      await this.assertCategoryExists(dto.categoryId);
+    const existing = await this.prisma.group.findUnique({
+      where: { id },
+      include: {
+        ...withRelations,
+        _count: { select: { children: true, items: true, products: true } },
+      },
+    });
+    if (!existing || !this.isVisible(existing, companyId)) {
+      throw new NotFoundException('Group not found');
     }
+    assertUnlocked(existing, 'group', 'editing');
 
-    const allCompanies = dto.allCompanies ?? existing.allCompanies;
-    const wantsLinkChange =
-      dto.allCompanies !== undefined || dto.companyIds !== undefined;
-    const companyIds = wantsLinkChange
-      ? this.resolveCompanies(allCompanies, dto.companyIds ?? existing.companyIds)
-      : null;
+    // Category / parent / level / code are part of the immutable hierarchy code
+    // and cannot be changed after creation.
 
     const forItem = dto.forItem ?? existing.forItem;
     const forProduct = dto.forProduct ?? existing.forProduct;
     this.assertAppliesToSomething(forItem, forProduct);
 
-    try {
-      const updated = await this.prisma.group.update({
-        where: { id },
-        data: {
-          categoryId: dto.categoryId,
-          code: dto.code !== undefined ? dto.code.trim().toUpperCase() : undefined,
-          name: dto.name?.trim(),
-          description:
-            dto.description !== undefined
-              ? dto.description?.trim() || null
-              : undefined,
-          allCompanies,
-          forItem,
-          forProduct,
-          isActive: dto.isActive,
-          ...(companyIds
-            ? {
-                companies: {
-                  deleteMany: {},
-                  create: companyIds.map((cid) => ({ companyId: cid })),
-                },
-              }
-            : {}),
-        },
-        include: withRelations,
-      });
-      return this.flatten(updated);
-    } catch (e) {
-      throw this.asDuplicate(e, dto.code);
+    // Validate any change to whether this group holds sub-groups.
+    let subGroupApplicable = existing.subGroupApplicable;
+    if (
+      dto.subGroupApplicable !== undefined &&
+      dto.subGroupApplicable !== existing.subGroupApplicable
+    ) {
+      subGroupApplicable = dto.subGroupApplicable;
+      if (subGroupApplicable) {
+        if (existing.level >= MAX_LEVEL) {
+          throw new BadRequestException(
+            `A level-${MAX_LEVEL} group cannot have sub-groups.`,
+          );
+        }
+        if (existing._count.items > 0 || existing._count.products > 0) {
+          throw new BadRequestException(
+            'This group already has items/products, so it cannot be turned into a sub-group container.',
+          );
+        }
+      } else if (existing._count.children > 0) {
+        throw new BadRequestException(
+          'This group still has sub-groups, so “Sub-group applicable” cannot be turned off.',
+        );
+      }
     }
+
+    const allCompanies = dto.allCompanies ?? existing.allCompanies;
+    const wantsLinkChange =
+      dto.allCompanies !== undefined || dto.companyIds !== undefined;
+    const existingCompanyIds = existing.companies.map((c) => c.companyId);
+    const companyIds = wantsLinkChange
+      ? this.resolveCompanies(allCompanies, dto.companyIds ?? existingCompanyIds)
+      : null;
+
+    const updated = await this.prisma.group.update({
+      where: { id },
+      data: {
+        name: dto.name?.trim(),
+        description:
+          dto.description !== undefined
+            ? dto.description?.trim() || null
+            : undefined,
+        subGroupApplicable,
+        allCompanies,
+        forItem,
+        forProduct,
+        isActive: dto.isActive,
+        ...(companyIds
+          ? {
+              companies: {
+                deleteMany: {},
+                create: companyIds.map((cid) => ({ companyId: cid })),
+              },
+            }
+          : {}),
+      },
+      include: withRelations,
+    });
+    return this.flatten(updated);
   }
 
   async setLock(companyId: number | undefined, id: number, locked: boolean) {
@@ -151,11 +260,61 @@ export class GroupService {
   async remove(companyId: number | undefined, id: number) {
     const existing = await this.findOne(companyId, id);
     assertUnlocked(existing, 'group', 'deleting');
-    await this.prisma.group.delete({ where: { id } });
+    try {
+      await this.prisma.group.delete({ where: { id } });
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2003'
+      ) {
+        throw new ConflictException(
+          'This group has sub-groups or items/products under it. Remove those first.',
+        );
+      }
+      throw e;
+    }
     return { success: true };
   }
 
   // --- helpers ---
+
+  /** Lowest free 2-digit number for a group at `level` under a given parent. */
+  private async nextGroupNumber(
+    categoryId: number,
+    parentGroupId: number | null,
+    level: number,
+  ): Promise<number> {
+    const sibs = await this.prisma.group.findMany({
+      where: { categoryId, parentGroupId },
+      select: { code: true },
+    });
+    const used = sibs.map((s) => groupNumberAt(s.code, level));
+    const n = lowestFree(used, MAX_GROUP);
+    if (n == null) {
+      throw new BadRequestException(
+        `Maximum of ${MAX_GROUP} groups reached under this parent.`,
+      );
+    }
+    return n;
+  }
+
+  /** Re-run an allocate+insert if it loses the code-uniqueness race. */
+  private async withCodeRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
+    for (let i = 0; ; i++) {
+      try {
+        return await fn();
+      } catch (e) {
+        if (
+          i < attempts &&
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === 'P2002'
+        ) {
+          continue;
+        }
+        throw e;
+      }
+    }
+  }
 
   private flatten<
     T extends {
@@ -174,16 +333,6 @@ export class GroupService {
     return companyId != null
       ? group.companies.some((c) => c.companyId === companyId)
       : false;
-  }
-
-  private async assertCategoryExists(categoryId: number) {
-    const category = await this.prisma.category.findUnique({
-      where: { id: categoryId },
-      select: { id: true },
-    });
-    if (!category) {
-      throw new BadRequestException('Selected category does not exist.');
-    }
   }
 
   private resolveCompanies(
@@ -206,15 +355,5 @@ export class GroupService {
         'A group must apply to Item, Product, or both.',
       );
     }
-  }
-
-  private asDuplicate(e: unknown, code?: string): unknown {
-    if (
-      e instanceof Prisma.PrismaClientKnownRequestError &&
-      e.code === 'P2002'
-    ) {
-      return new ConflictException(`Group code "${code}" already exists.`);
-    }
-    return e;
   }
 }

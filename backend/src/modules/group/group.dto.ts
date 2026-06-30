@@ -10,14 +10,26 @@ import {
 } from 'class-validator';
 
 export class CreateGroupDto {
-  /** Parent category this group belongs to. */
+  /** Parent category this group belongs to (ignored for a sub-group, which
+   * inherits its parent group's category). */
   @IsInt()
   categoryId!: number;
 
+  /** When set, this is a sub-group under that (sub-group-applicable) group. */
+  @IsOptional()
+  @IsInt()
+  parentGroupId?: number | null;
+
+  /** true = this group holds sub-groups (a container) and cannot hold items. */
+  @IsOptional()
+  @IsBoolean()
+  subGroupApplicable?: boolean;
+
+  // Code is system-generated; ignored if sent.
+  @IsOptional()
   @IsString()
-  @MinLength(1)
   @MaxLength(30)
-  code!: string;
+  code?: string;
 
   @IsString()
   @MinLength(1)
@@ -54,13 +66,18 @@ export class CreateGroupDto {
 }
 
 export class UpdateGroupDto {
+  // categoryId / parentGroupId are immutable (part of the code) and ignored.
   @IsOptional()
   @IsInt()
   categoryId?: number;
 
   @IsOptional()
+  @IsBoolean()
+  subGroupApplicable?: boolean;
+
+  // Code is system-generated and immutable; ignored if sent.
+  @IsOptional()
   @IsString()
-  @MinLength(1)
   @MaxLength(30)
   code?: string;
 

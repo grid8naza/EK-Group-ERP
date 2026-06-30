@@ -554,11 +554,18 @@ export interface Category {
   isLocked?: boolean;
 }
 
-// ---- Inventory: Group Master (sub-level under a Category) ----
+// ---- Inventory: Group Master (multilayer sub-level under a Category) ----
 export interface Group {
   id: number;
   categoryId: number;
   category?: { id: number; code: string; name: string } | null;
+  /** null = primary group (level 1); otherwise the parent group it sits under. */
+  parentGroupId?: number | null;
+  parent?: { id: number; code: string; name: string } | null;
+  /** 1 = primary group … up to 5. */
+  level: number;
+  /** true = container that holds sub-groups and cannot hold items/products. */
+  subGroupApplicable: boolean;
   code: string;
   name: string;
   description?: string | null;
@@ -663,6 +670,24 @@ export interface Product {
 // ---- Backup & Restore ----
 export interface Backup {
   fileName: string;
+  sizeBytes: number;
+  createdAt: string;
+  note: string | null;
+  createdBy: string | null;
+}
+
+// A table that can be backed up / restored on its own.
+export interface BackupTableInfo {
+  name: string;
+  label: string;
+  rowCount: number;
+}
+
+// A per-table dump file on the server.
+export interface TableDump {
+  fileName: string;
+  table: string;
+  tableLabel: string;
   sizeBytes: number;
   createdAt: string;
   note: string | null;

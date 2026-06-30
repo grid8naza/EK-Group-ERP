@@ -7,6 +7,12 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
+import {
+  itemCode,
+  itemSeqOf,
+  lowestFree,
+  MAX_ITEM_SEQ,
+} from '../../common/hierarchy-code';
 import { CreateItemDto, UpdateItemDto } from './item.dto';
 
 // Items are returned with their masters (for display) + company links flattened.
@@ -60,17 +66,21 @@ export class ItemService {
 
   async create(dto: CreateItemDto) {
     await this.assertRefs(dto);
+    // Every item lives under a leaf group; its category is taken from that
+    // group, and its code is generated (manual codes are not accepted).
+    const group = await this.assertLeafGroup(dto.groupId);
     const allCompanies = dto.allCompanies ?? false;
     const companyIds = this.resolveCompanies(allCompanies, dto.companyIds);
 
-    try {
+    return this.withCodeRetry(async () => {
+      const seq = await this.nextLeafSeq(dto.groupId);
       const created = await this.prisma.item.create({
         data: {
-          code: dto.code.trim().toUpperCase(),
+          code: itemCode(group.code, seq),
           name: dto.name.trim(),
           description: dto.description?.trim() || null,
-          categoryId: dto.categoryId ?? null,
-          groupId: dto.groupId ?? null,
+          categoryId: group.categoryId,
+          groupId: dto.groupId,
           unitId: dto.unitId,
           unitPrice: dto.unitPrice ?? 0,
           boxQty: dto.boxQty ?? 0,
@@ -88,8 +98,76 @@ export class ItemService {
         include: withRelations,
       });
       return this.flatten(created);
-    } catch (e) {
-      throw this.asDuplicate(e, dto.code);
+    });
+  }
+
+  /**
+   * The group an item attaches to must be a leaf (no sub-groups) that applies
+   * to items. Returns its category + code for building the item's code.
+   */
+  private async assertLeafGroup(groupId: number) {
+    const group = await this.prisma.group.findUnique({
+      where: { id: groupId },
+      select: {
+        id: true,
+        categoryId: true,
+        code: true,
+        subGroupApplicable: true,
+        forItem: true,
+        isActive: true,
+      },
+    });
+    if (!group) {
+      throw new BadRequestException('Selected group does not exist.');
+    }
+    if (!group.isActive) {
+      throw new BadRequestException(
+        'The selected group is inactive. Items cannot be added under it.',
+      );
+    }
+    if (group.subGroupApplicable) {
+      throw new BadRequestException(
+        'Items cannot be added under a group that has sub-groups. Choose a leaf group.',
+      );
+    }
+    if (!group.forItem) {
+      throw new BadRequestException(
+        'The selected group does not apply to items.',
+      );
+    }
+    return group;
+  }
+
+  /** Lowest free 3-digit sequence under a leaf group (items + products share it). */
+  private async nextLeafSeq(groupId: number): Promise<number> {
+    const [items, products] = await Promise.all([
+      this.prisma.item.findMany({ where: { groupId }, select: { code: true } }),
+      this.prisma.product.findMany({ where: { groupId }, select: { code: true } }),
+    ]);
+    const used = [...items, ...products].map((r) => itemSeqOf(r.code));
+    const n = lowestFree(used, MAX_ITEM_SEQ);
+    if (n == null) {
+      throw new BadRequestException(
+        `Maximum of ${MAX_ITEM_SEQ} items/products reached under this group.`,
+      );
+    }
+    return n;
+  }
+
+  private async withCodeRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
+    for (let i = 0; ; i++) {
+      try {
+        return await fn();
+      } catch (e) {
+        if (
+          i < attempts &&
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === 'P2002'
+        ) {
+          continue;
+        }
+        throw e;
+      }
     }
   }
 
@@ -109,14 +187,13 @@ export class ItemService {
       const updated = await this.prisma.item.update({
         where: { id },
         data: {
-          code: dto.code !== undefined ? dto.code.trim().toUpperCase() : undefined,
+          // code, categoryId and groupId are part of the hierarchy code and are
+          // immutable after creation.
           name: dto.name?.trim(),
           description:
             dto.description !== undefined
               ? dto.description?.trim() || null
               : undefined,
-          categoryId: dto.categoryId,
-          groupId: dto.groupId,
           unitId: dto.unitId,
           unitPrice: dto.unitPrice,
           boxQty: dto.boxQty,

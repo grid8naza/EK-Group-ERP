@@ -32,8 +32,20 @@ export class GroupController {
   findAll(
     @CompanyId() companyId: number | undefined,
     @Query('search') search?: string,
+    @Query('primaryGroupId') primaryGroupId?: string,
+    @Query('parentGroupId') parentGroupId?: string,
   ) {
-    return this.service.findAll(companyId, search);
+    // Optional numeric query params: parse with Number() (a missing value must
+    // not 400 — see the query-int-parsing convention).
+    const toId = (v?: string) => {
+      const n = Number(v);
+      return v != null && v !== '' && Number.isFinite(n) ? n : undefined;
+    };
+    return this.service.findAll(companyId, {
+      search,
+      primaryGroupId: toId(primaryGroupId),
+      parentGroupId: toId(parentGroupId),
+    });
   }
 
   @Get(':id')
