@@ -275,16 +275,16 @@ export default function ProductsPage() {
     },
     { key: 'unit', header: 'Unit', accessor: (r) => r.unit?.code ?? '-' },
     {
-      key: 'wholesalePrice',
-      header: 'Wholesale',
-      accessor: (r) => (r.wholesalePrice ?? 0).toLocaleString(),
-      sortAccessor: (r) => r.wholesalePrice ?? 0,
-    },
-    {
       key: 'intercompanyPrice',
       header: 'Inter-Co',
       accessor: (r) => (r.intercompanyPrice ?? 0).toLocaleString(),
       sortAccessor: (r) => r.intercompanyPrice ?? 0,
+    },
+    {
+      key: 'wholesalePrice',
+      header: 'Wholesale',
+      accessor: (r) => (r.wholesalePrice ?? 0).toLocaleString(),
+      sortAccessor: (r) => r.wholesalePrice ?? 0,
     },
     {
       key: 'retailPrice',
@@ -499,16 +499,6 @@ export default function ProductsPage() {
               }))}
             />
             <Input
-              label="Wholesale Price"
-              type="number"
-              min={0}
-              step="any"
-              value={form.wholesalePrice}
-              onChange={(e) =>
-                setForm({ ...form, wholesalePrice: e.target.value })
-              }
-            />
-            <Input
               label="Intercompany Price"
               type="number"
               min={0}
@@ -516,6 +506,16 @@ export default function ProductsPage() {
               value={form.intercompanyPrice}
               onChange={(e) =>
                 setForm({ ...form, intercompanyPrice: e.target.value })
+              }
+            />
+            <Input
+              label="Wholesale Price"
+              type="number"
+              min={0}
+              step="any"
+              value={form.wholesalePrice}
+              onChange={(e) =>
+                setForm({ ...form, wholesalePrice: e.target.value })
               }
             />
             <Input
