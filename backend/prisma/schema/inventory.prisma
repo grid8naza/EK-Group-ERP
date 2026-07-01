@@ -206,7 +206,8 @@ model Item {
   categoryId   Int?
   groupId      Int?
   unitId       Int // stock unit
-  unitPrice    Float    @default(0)
+  lastPurchasePrice Float     @default(0) // updated on every purchase
+  lastPurchaseDate  DateTime? // updated on every purchase (null = never purchased)
   boxQty       Float    @default(0) // how many stock units per box
   boxUnitId    Int? // unit that represents a box (e.g. BOX, CARTON)
   hsnCodeId    Int?

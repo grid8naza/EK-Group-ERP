@@ -27,7 +27,8 @@ const empty = {
   categoryId: '',
   groupId: '',
   unitId: '',
-  unitPrice: '0',
+  lastPurchasePrice: '0',
+  lastPurchaseDate: '',
   boxQty: '0',
   boxUnitId: '',
   hsnCodeId: '',
@@ -101,7 +102,8 @@ export default function ItemsPage() {
     categoryId: i.categoryId != null ? String(i.categoryId) : '',
     groupId: i.groupId != null ? String(i.groupId) : '',
     unitId: String(i.unitId),
-    unitPrice: String(i.unitPrice ?? 0),
+    lastPurchasePrice: String(i.lastPurchasePrice ?? 0),
+    lastPurchaseDate: i.lastPurchaseDate ? i.lastPurchaseDate.slice(0, 10) : '',
     boxQty: String(i.boxQty ?? 0),
     boxUnitId: i.boxUnitId != null ? String(i.boxUnitId) : '',
     hsnCodeId: i.hsnCodeId != null ? String(i.hsnCodeId) : '',
@@ -181,7 +183,8 @@ export default function ItemsPage() {
       description: form.description.trim() || undefined,
       groupId: Number(form.groupId),
       unitId: Number(form.unitId),
-      unitPrice: num(form.unitPrice),
+      lastPurchasePrice: num(form.lastPurchasePrice),
+      lastPurchaseDate: form.lastPurchaseDate || null,
       boxQty: num(form.boxQty),
       boxUnitId: idOrNull(form.boxUnitId),
       hsnCodeId: idOrNull(form.hsnCodeId),
@@ -293,10 +296,19 @@ export default function ItemsPage() {
     },
     { key: 'unit', header: 'Unit', accessor: (r) => r.unit?.code ?? '-' },
     {
-      key: 'unitPrice',
-      header: 'Unit Price',
-      accessor: (r) => (r.unitPrice ?? 0).toLocaleString(),
-      sortAccessor: (r) => r.unitPrice ?? 0,
+      key: 'lastPurchasePrice',
+      header: 'Last Purchase Price',
+      accessor: (r) => (r.lastPurchasePrice ?? 0).toLocaleString(),
+      sortAccessor: (r) => r.lastPurchasePrice ?? 0,
+    },
+    {
+      key: 'lastPurchaseDate',
+      header: 'Last Purchase Date',
+      accessor: (r) =>
+        r.lastPurchaseDate
+          ? new Date(r.lastPurchaseDate).toLocaleDateString()
+          : '-',
+      sortAccessor: (r) => r.lastPurchaseDate ?? '',
     },
     { key: 'hsn', header: 'HSN', accessor: (r) => r.hsnCode?.code ?? '-' },
     {
@@ -371,10 +383,12 @@ export default function ItemsPage() {
               }}
               wrapClassName="w-44"
               placeholder="All categories"
-              options={(categories ?? []).map((c) => ({
-                value: String(c.id),
-                label: c.name,
-              }))}
+              options={(categories ?? [])
+                .filter((c) => c.forItem)
+                .map((c) => ({
+                  value: String(c.id),
+                  label: c.name,
+                }))}
             />
             <Select
               value={groupFilter}
@@ -493,7 +507,7 @@ export default function ItemsPage() {
                   }
                   placeholder="— None —"
                   options={(categories ?? [])
-                    .filter((c) => c.isActive)
+                    .filter((c) => c.isActive && c.forItem)
                     .map((c) => ({ value: c.id, label: c.name }))}
                 />
                 <Select
@@ -518,6 +532,7 @@ export default function ItemsPage() {
             <Select
               label="Stock Unit"
               required
+              wrapClassName="sm:col-span-2"
               value={form.unitId}
               onChange={(e) => setForm({ ...form, unitId: e.target.value })}
               placeholder="Select a unit"
@@ -527,12 +542,22 @@ export default function ItemsPage() {
               }))}
             />
             <Input
-              label="Unit Price"
+              label="Last Purchase Price"
               type="number"
               min={0}
               step="any"
-              value={form.unitPrice}
-              onChange={(e) => setForm({ ...form, unitPrice: e.target.value })}
+              value={form.lastPurchasePrice}
+              onChange={(e) =>
+                setForm({ ...form, lastPurchasePrice: e.target.value })
+              }
+            />
+            <Input
+              label="Last Purchase Date"
+              type="date"
+              value={form.lastPurchaseDate}
+              onChange={(e) =>
+                setForm({ ...form, lastPurchaseDate: e.target.value })
+              }
             />
 
             {/* Packing */}

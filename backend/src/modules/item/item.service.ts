@@ -82,7 +82,10 @@ export class ItemService {
           categoryId: group.categoryId,
           groupId: dto.groupId,
           unitId: dto.unitId,
-          unitPrice: dto.unitPrice ?? 0,
+          lastPurchasePrice: dto.lastPurchasePrice ?? 0,
+          lastPurchaseDate: dto.lastPurchaseDate
+            ? new Date(dto.lastPurchaseDate)
+            : null,
           boxQty: dto.boxQty ?? 0,
           boxUnitId: dto.boxUnitId ?? null,
           hsnCodeId: dto.hsnCodeId ?? null,
@@ -195,7 +198,13 @@ export class ItemService {
               ? dto.description?.trim() || null
               : undefined,
           unitId: dto.unitId,
-          unitPrice: dto.unitPrice,
+          lastPurchasePrice: dto.lastPurchasePrice,
+          lastPurchaseDate:
+            dto.lastPurchaseDate !== undefined
+              ? dto.lastPurchaseDate
+                ? new Date(dto.lastPurchaseDate)
+                : null
+              : undefined,
           boxQty: dto.boxQty,
           boxUnitId: dto.boxUnitId,
           hsnCodeId: dto.hsnCodeId,

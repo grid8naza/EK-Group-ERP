@@ -27,7 +27,7 @@ const COLUMNS = [
   'Code',
   'Item',
   'Unit',
-  'Unit Price',
+  'Last Price',
   'HSN',
   'Reorder',
   'Lead Time',
@@ -43,7 +43,7 @@ const itemCells = (i: Item): Cell[] => [
   i.code,
   i.name,
   i.unit?.code ?? '-',
-  i.unitPrice ?? 0,
+  i.lastPurchasePrice ?? 0,
   i.hsnCode?.code ?? '-',
   i.reorderLevel ?? 0,
   i.leadTime ?? 0,
@@ -117,6 +117,20 @@ export default function ItemsReportPage() {
   }, [data, categoryFilter, groupFilter]);
 
   const total = blocks.reduce((n, b) => n + (b.count ?? 0), 0);
+
+  // Summary reflects the filtered report: category blocks, group tables, items.
+  const summary = useMemo(
+    () => [
+      { label: 'Total Categories', value: blocks.length },
+      {
+        label: 'Total Groups',
+        value: blocks.reduce((n, b) => n + b.tables.length, 0),
+      },
+      { label: 'Total Items', value: total },
+    ],
+    [blocks, total],
+  );
+
   const spec: ReportSpec = {
     companyName,
     subtitle: `Items List - ${total} ${total === 1 ? 'item' : 'items'}`,
@@ -124,6 +138,8 @@ export default function ItemsReportPage() {
     weights: WEIGHTS,
     blocks,
     fileBase: 'items-report',
+    serial: true,
+    summary,
   };
 
   const has = total > 0;
@@ -190,7 +206,7 @@ export default function ItemsReportPage() {
           </span>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
           <ReportView
             columns={COLUMNS}
             weights={WEIGHTS}
@@ -198,6 +214,8 @@ export default function ItemsReportPage() {
             loading={loading}
             statusCol={8}
             boldCol={1}
+            serial
+            summary={summary}
             emptyText="No items match the current filters."
           />
         </div>

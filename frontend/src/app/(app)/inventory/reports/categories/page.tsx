@@ -20,7 +20,7 @@ import type { Category, Company } from '@/lib/types';
 
 const ROUTE = '/inventory/reports/categories';
 const COLUMNS = ['Code', 'Category', 'Description', 'Applies To', 'Status'] as const;
-const WEIGHTS = [10, 22, 42, 14, 12];
+const WEIGHTS = [16, 24, 34, 14, 12];
 
 const appliesTo = (forItem: boolean, forProduct: boolean) =>
   [forItem ? 'Item' : null, forProduct ? 'Product' : null]
@@ -41,22 +41,28 @@ export default function CategoryReportPage() {
     activeCompany?.name,
   );
 
-  const rows = useMemo<Cell[][]>(() => {
+  // Categories after the applicability filter, ordered by code.
+  const filteredCats = useMemo(() => {
     let cats = data ?? [];
     if (applies === 'item') cats = cats.filter((c) => c.forItem);
     else if (applies === 'product') cats = cats.filter((c) => c.forProduct);
-    return [...cats]
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map((c) => [
+    return [...cats].sort((a, b) => a.code.localeCompare(b.code));
+  }, [data, applies]);
+
+  const rows = useMemo<Cell[][]>(
+    () =>
+      filteredCats.map((c) => [
         c.code,
         c.name,
         c.description ?? '-',
         appliesTo(c.forItem, c.forProduct),
         c.isActive ? 'Active' : 'Inactive',
-      ]);
-  }, [data, applies]);
+      ]),
+    [filteredCats],
+  );
 
   const total = rows.length;
+
   const spec: ReportSpec = {
     companyName,
     subtitle: `Category List - ${total} ${total === 1 ? 'category' : 'categories'}`,
@@ -64,6 +70,7 @@ export default function CategoryReportPage() {
     weights: WEIGHTS,
     blocks: [{ tables: [{ rows }] }],
     fileBase: 'category-report',
+    serial: true,
   };
 
   const has = total > 0;
@@ -113,7 +120,7 @@ export default function CategoryReportPage() {
             {total} categor{total === 1 ? 'y' : 'ies'}
           </span>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
           <ReportView
             columns={COLUMNS}
             weights={WEIGHTS}
@@ -121,6 +128,7 @@ export default function CategoryReportPage() {
             loading={loading}
             statusCol={4}
             boldCol={1}
+            serial
             emptyText="No categories found."
           />
         </div>

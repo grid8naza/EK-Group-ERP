@@ -13,11 +13,18 @@ export interface ReportTable {
   subheading?: string;
   subcount?: number;
   rows: Cell[][];
+  /** Optional per-row flag; true renders that row with a light highlight
+   *  (e.g. primary / level-1 rows). Parallel to `rows`. */
+  shade?: boolean[];
 }
 export interface ReportBlock {
   heading?: string;
   count?: number;
   tables: ReportTable[];
+}
+export interface SummaryItem {
+  label: string;
+  value: number;
 }
 export interface ReportSpec {
   companyName: string;
@@ -26,6 +33,24 @@ export interface ReportSpec {
   weights: readonly number[]; // relative column widths, same length as columns
   blocks: ReportBlock[];
   fileBase: string; // e.g. "items-report"
+  /** Prepend a "Sl. No" column, numbered 1…n and reset for each table
+   *  (i.e. per parent group). */
+  serial?: boolean;
+  /** Totals shown in a summary strip at the foot of the report. */
+  summary?: SummaryItem[];
+}
+
+const SERIAL_HEAD = 'Sl. No';
+const SERIAL_WEIGHT = 6;
+
+/** Columns/weights with the serial column prepended when `serial` is set. */
+export function reportColumns(spec: Pick<ReportSpec, 'columns' | 'weights' | 'serial'>) {
+  return spec.serial
+    ? {
+        columns: [SERIAL_HEAD, ...spec.columns],
+        weights: [SERIAL_WEIGHT, ...spec.weights],
+      }
+    : { columns: spec.columns, weights: spec.weights };
 }
 
 export const reportStamp = () => new Date().toISOString().slice(0, 10);
@@ -69,7 +94,7 @@ export function printReport(
 ): boolean {
   const allowPrint = opts?.allowPrint ?? true;
   const autoPrint = opts?.autoPrint ?? false;
-  const { columns, weights } = spec;
+  const { columns, weights } = reportColumns(spec);
   const colgroup = `<colgroup>${columns
     .map((_, i) => `<col style="width:${colPercent(weights, i)}">`)
     .join('')}</colgroup>`;
@@ -78,10 +103,22 @@ export function printReport(
     .join('')}</tr></thead>`;
   const tableFor = (t: ReportTable) =>
     `<table>${colgroup}${head}<tbody>${t.rows
-      .map(
-        (r) => `<tr>${r.map((v) => `<td>${esc(fmt(v))}</td>`).join('')}</tr>`,
-      )
+      .map((r, i) => {
+        const cells = spec.serial ? [i + 1, ...r] : r;
+        return `<tr${t.shade?.[i] ? ' class="lvl1"' : ''}>${cells
+          .map((v) => `<td>${esc(fmt(v))}</td>`)
+          .join('')}</tr>`;
+      })
       .join('')}</tbody></table>`;
+  const summary =
+    spec.summary && spec.summary.length
+      ? `<div class="summary"><span class="summary-title">Summary</span>${spec.summary
+          .map(
+            (s) =>
+              `<span class="summary-item"><b>${esc(s.label)}:</b> ${s.value.toLocaleString()}</span>`,
+          )
+          .join('')}</div>`
+      : '';
   const body = spec.blocks
     .map((b) => {
       const h = b.heading
@@ -100,7 +137,7 @@ export function printReport(
     .join('');
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(spec.subtitle)}</title>
     <style>
-      *{box-sizing:border-box} body{font-family:Arial,Helvetica,sans-serif;color:#1e293b;margin:24px}
+      *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact} body{font-family:Arial,Helvetica,sans-serif;color:#1e293b;margin:24px}
       h1{font-size:20px;font-weight:bold;margin:0 0 2px;text-align:center}
       .sub{font-size:14px;margin:0;text-align:center}
       .date{color:#64748b;font-size:12px;margin:2px 0 16px;text-align:center}
@@ -108,8 +145,15 @@ export function printReport(
       h3{font-size:12px;margin:10px 0 4px;color:#475569}
       .muted{color:#94a3b8;font-weight:normal}
       table{width:100%;table-layout:fixed;border-collapse:collapse;margin-bottom:8px;font-size:11px}
-      th,td{border:1px solid #d8d2c6;padding:4px 6px;text-align:left;overflow-wrap:anywhere}
+      th,td{border:1px solid #d8d2c6;padding:4px 6px;text-align:left;overflow-wrap:anywhere;word-break:break-word}
       th{background:#f3ece0;text-align:center}
+      /* Repeat the column headings on every printed page. */
+      thead{display:table-header-group}
+      tr.lvl1 td{background:#f7ebd7}
+      ${spec.serial ? 'td:first-child{text-align:center}' : ''}
+      .summary{margin-top:14px;padding:8px 12px;border:1px solid #d8d2c6;border-radius:6px;background:#faf6ee;display:flex;flex-wrap:wrap;gap:6px 20px;font-size:12px;page-break-inside:avoid}
+      .summary-title{font-weight:bold;text-transform:uppercase;letter-spacing:.04em;color:#6d6258;margin-right:6px}
+      .summary-item b{color:#3f3a33}
       .toolbar{display:flex;gap:8px;margin-bottom:14px}
       .toolbar button{padding:6px 16px;font-size:13px;font-family:inherit;border:1px solid #cbd5e1;border-radius:6px;background:#f1f5f9;color:#334155;cursor:pointer}
       .toolbar button.primary{background:#8b5e34;border-color:#8b5e34;color:#fff}
@@ -125,6 +169,7 @@ export function printReport(
     <p class="sub">${esc(spec.subtitle)}</p>
     <p class="date">${new Date().toLocaleString()}</p>
     ${body || '<p>No records match the current filters.</p>'}
+    ${summary}
     ${autoPrint ? autoPrintScript : ''}
     </body></html>`;
   const w = window.open('', '_blank', 'width=1100,height=800');
@@ -136,7 +181,7 @@ export function printReport(
 }
 
 export function pdfReport(spec: ReportSpec): void {
-  const { columns, weights } = spec;
+  const { columns, weights } = reportColumns(spec);
   const doc = new jsPDF({ orientation: 'landscape' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
@@ -162,12 +207,14 @@ export function pdfReport(spec: ReportSpec): void {
       y = 16;
     }
   };
-  const columnStyles = Object.fromEntries(
-    columns.map((_, i) => [
-      i,
-      { cellWidth: (weights[i] / totalW) * tableWidth },
-    ]),
-  );
+  const columnStyles: Record<number, { cellWidth: number; halign?: 'center' }> =
+    Object.fromEntries(
+      columns.map((_, i) => [
+        i,
+        { cellWidth: (weights[i] / totalW) * tableWidth },
+      ]),
+    );
+  if (spec.serial) columnStyles[0].halign = 'center';
 
   for (const b of spec.blocks) {
     if (b.heading) {
@@ -197,13 +244,23 @@ export function pdfReport(spec: ReportSpec): void {
       autoTable(doc, {
         startY: y,
         head: [columns as unknown as string[]],
-        body: t.rows.map((r) => r.map(fmt)),
+        body: t.rows.map((r, i) =>
+          (spec.serial ? [i + 1, ...r] : r).map(fmt),
+        ),
         styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak' },
         headStyles: { fillColor: [120, 98, 72], halign: 'center' },
         columnStyles,
         margin: { left: 16, right: 14 },
         theme: 'grid',
         tableWidth,
+        didParseCell: (d: {
+          section: string;
+          row: { index: number };
+          cell: { styles: { fillColor?: number[] } };
+        }) => {
+          if (d.section === 'body' && t.shade?.[d.row.index])
+            d.cell.styles.fillColor = [247, 235, 215];
+        },
       });
       y =
         (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable
@@ -211,6 +268,25 @@ export function pdfReport(spec: ReportSpec): void {
     }
     if (b.heading) y += 1;
   }
+
+  if (spec.summary?.length) {
+    ensure(14);
+    y += 2;
+    doc.setDrawColor(200, 190, 170);
+    doc.setFillColor(250, 246, 238);
+    doc.rect(16, y - 4, tableWidth, 9, 'FD');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(90, 80, 70);
+    doc.text('SUMMARY', 19, y + 1.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(40);
+    const line = spec.summary
+      .map((s) => `${s.label}: ${s.value.toLocaleString()}`)
+      .join('     ');
+    doc.text(line, 44, y + 1.5);
+  }
+
   doc.save(`${spec.fileBase}-${reportStamp()}.pdf`);
 }
 
@@ -225,6 +301,7 @@ export function excelReport(
 ): void {
   const { headingLabel, subheadingLabel } = grouping ?? {};
   const header = [
+    ...(spec.serial ? ['Sl. No'] : []),
     ...(headingLabel ? [headingLabel] : []),
     ...(subheadingLabel ? [subheadingLabel] : []),
     ...spec.columns,
@@ -232,14 +309,26 @@ export function excelReport(
   const rows: Cell[][] = [];
   for (const b of spec.blocks)
     for (const t of b.tables)
-      for (const r of t.rows)
+      t.rows.forEach((r, i) =>
         rows.push([
+          ...(spec.serial ? [i + 1] : []),
           ...(headingLabel ? [b.heading ?? ''] : []),
           ...(subheadingLabel ? [t.subheading ?? ''] : []),
           ...r,
-        ]);
+        ]),
+      );
   const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Report');
+
+  // Optional summary sheet with the report totals.
+  if (spec.summary?.length) {
+    const sumWs = XLSX.utils.aoa_to_sheet([
+      ['Summary'],
+      ...spec.summary.map((s) => [s.label, s.value]),
+    ]);
+    XLSX.utils.book_append_sheet(wb, sumWs, 'Summary');
+  }
+
   XLSX.writeFile(wb, `${spec.fileBase}-${reportStamp()}.xlsx`);
 }

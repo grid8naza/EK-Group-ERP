@@ -3,7 +3,13 @@
 import { Eye, FileText, Printer, Sheet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from './Badge';
-import { colPercent, type Cell, type ReportBlock } from '@/lib/reportDoc';
+import {
+  colPercent,
+  reportColumns,
+  type Cell,
+  type ReportBlock,
+  type SummaryItem,
+} from '@/lib/reportDoc';
 
 interface ReportViewProps {
   columns: readonly string[];
@@ -14,6 +20,10 @@ interface ReportViewProps {
   statusCol?: number;
   /** Column index rendered in bold (e.g. the name). */
   boldCol?: number;
+  /** Prepend a "Sl. No" column, numbered per table (per parent group). */
+  serial?: boolean;
+  /** Totals shown in a summary strip under the report. */
+  summary?: SummaryItem[];
   emptyText?: string;
 }
 
@@ -28,6 +38,8 @@ export function ReportView({
   loading,
   statusCol,
   boldCol,
+  serial,
+  summary,
   emptyText = 'No records found.',
 }: ReportViewProps) {
   const total = blocks.reduce(
@@ -40,17 +52,30 @@ export function ReportView({
   if (total === 0)
     return <p className="py-12 text-center text-slate-400">{emptyText}</p>;
 
-  const table = (rows: Cell[][], key: string) => (
-    <div key={key} className="overflow-x-auto">
+  // Effective columns/weights + shifted status/bold indices when a serial
+  // column is prepended.
+  const eff = reportColumns({ columns, weights, serial });
+  const shift = serial ? 1 : 0;
+  const statusColX = statusCol == null ? undefined : statusCol + shift;
+  const boldColX = boldCol == null ? undefined : boldCol + shift;
+
+  const table = (
+    t: ReportBlock['tables'][number],
+    key: string,
+    hasHeading: boolean,
+  ) => (
+    <div key={key}>
       <table className="w-full table-fixed text-left text-sm">
         <colgroup>
-          {columns.map((col, i) => (
-            <col key={col} style={{ width: colPercent(weights, i) }} />
+          {eff.columns.map((col, i) => (
+            <col key={col} style={{ width: colPercent(eff.weights, i) }} />
           ))}
         </colgroup>
-        <thead>
-          <tr className="border-b border-[#efe7db] bg-[#fcfbf8] text-xs font-semibold uppercase tracking-wide text-[#6d6258] dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
-            {columns.map((col) => (
+        {/* Column header sits just below the sticky block heading (h-10) when
+            the block has one, otherwise pins to the top. */}
+        <thead className={cn('sticky z-10', hasHeading ? 'top-10' : 'top-0')}>
+          <tr className="border-b border-[#efe7db] bg-[#fcfbf8] text-xs font-semibold uppercase tracking-wide text-[#6d6258] shadow-[0_1px_0_#efe7db] dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
+            {eff.columns.map((col) => (
               <th key={col} className="px-3 py-2 text-center">
                 {col}
               </th>
@@ -58,13 +83,23 @@ export function ReportView({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, ri) => (
+          {t.rows.map((row, ri) => (
             <tr
               key={ri}
-              className="border-b border-slate-100 last:border-0 dark:border-slate-800/60"
+              className={cn(
+                'border-b border-slate-100 last:border-0 dark:border-slate-800/60',
+                t.shade?.[ri] && 'bg-brand-100/60 dark:bg-brand-950/40',
+              )}
             >
-              {row.map((v, ci) =>
-                ci === statusCol ? (
+              {(serial ? [ri + 1, ...row] : row).map((v, ci) =>
+                serial && ci === 0 ? (
+                  <td
+                    key={ci}
+                    className="px-3 py-2 text-center tabular-nums text-slate-500 dark:text-slate-400"
+                  >
+                    {ri + 1}
+                  </td>
+                ) : ci === statusColX ? (
                   <td key={ci} className="px-3 py-2">
                     <Badge color={String(v) === 'Active' ? 'green' : 'slate'}>
                       {String(v)}
@@ -74,8 +109,8 @@ export function ReportView({
                   <td
                     key={ci}
                     className={cn(
-                      'px-3 py-2',
-                      ci === boldCol
+                      'break-words px-3 py-2',
+                      ci === boldColX
                         ? 'font-medium text-slate-800 dark:text-slate-100'
                         : 'text-slate-700 dark:text-slate-300',
                     )}
@@ -92,11 +127,11 @@ export function ReportView({
   );
 
   return (
-    <>
+    <div className="pt-4">
       {blocks.map((b, bi) => (
         <div key={bi} className="mb-6">
           {b.heading && (
-            <h2 className="mb-2 flex items-center justify-center gap-2 border-b-2 border-[#c9b896] pb-1 text-base font-bold text-slate-800 dark:border-slate-700 dark:text-slate-100">
+            <h2 className="sticky top-0 z-20 flex h-10 items-center justify-center gap-2 border-b-2 border-[#c9b896] bg-white text-base font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
               {b.heading}
               {b.count != null && <Badge color="slate">{b.count}</Badge>}
             </h2>
@@ -111,12 +146,28 @@ export function ReportView({
                   )}
                 </h3>
               )}
-              {table(t.rows, `${bi}-${ti}`)}
+              {table(t, `${bi}-${ti}`, !!b.heading)}
             </div>
           ))}
         </div>
       ))}
-    </>
+
+      {summary && summary.length > 0 && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-[#e7ddcb] bg-[#faf6ee] px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-900/50">
+          <span className="text-xs font-semibold uppercase tracking-wide text-[#6d6258] dark:text-slate-400">
+            Summary
+          </span>
+          {summary.map((s) => (
+            <span key={s.label} className="text-slate-600 dark:text-slate-300">
+              {s.label}:{' '}
+              <span className="font-semibold text-slate-800 dark:text-slate-100">
+                {s.value.toLocaleString()}
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

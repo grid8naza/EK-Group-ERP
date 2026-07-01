@@ -2,6 +2,7 @@ import {
   ArrayUnique,
   IsArray,
   IsBoolean,
+  IsDateString,
   IsInt,
   IsNumber,
   IsOptional,
@@ -9,6 +10,7 @@ import {
   Min,
   MaxLength,
   MinLength,
+  ValidateIf,
 } from 'class-validator';
 
 export class CreateItemDto {
@@ -41,10 +43,18 @@ export class CreateItemDto {
   @IsInt()
   unitId!: number;
 
+  /** Last purchase price — maintained by the purchase flow; set here as an
+   *  opening value. */
   @IsOptional()
   @IsNumber()
   @Min(0)
-  unitPrice?: number;
+  lastPurchasePrice?: number;
+
+  /** Last purchase date (ISO). null clears it. */
+  @IsOptional()
+  @ValidateIf((o) => o.lastPurchaseDate != null)
+  @IsDateString()
+  lastPurchaseDate?: string | null;
 
   @IsOptional()
   @IsNumber()
@@ -132,7 +142,12 @@ export class UpdateItemDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
-  unitPrice?: number;
+  lastPurchasePrice?: number;
+
+  @IsOptional()
+  @ValidateIf((o) => o.lastPurchaseDate != null)
+  @IsDateString()
+  lastPurchaseDate?: string | null;
 
   @IsOptional()
   @IsNumber()

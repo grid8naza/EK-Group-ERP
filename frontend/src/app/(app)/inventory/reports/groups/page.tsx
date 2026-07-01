@@ -20,7 +20,7 @@ import type { Group, Category, Company } from '@/lib/types';
 
 const ROUTE = '/inventory/reports/groups';
 const COLUMNS = ['Code', 'Group', 'Description', 'Applies To', 'Status'] as const;
-const WEIGHTS = [10, 22, 42, 14, 12];
+const WEIGHTS = [16, 24, 34, 14, 12];
 const UNCATEGORISED = '— Uncategorised —';
 
 const appliesTo = (forItem: boolean, forProduct: boolean) =>
@@ -53,14 +53,19 @@ export default function GroupReportPage() {
     return cats;
   }, [categories, applies]);
 
-  // Groups grouped by category (sorted by name), groups sorted by name.
-  const blocks = useMemo<ReportBlock[]>(() => {
+  // Groups after applying the two filters — shared by the report and summary.
+  const filteredGroups = useMemo(() => {
     let rows = data ?? [];
     if (categoryFilter)
       rows = rows.filter((g) => String(g.categoryId) === categoryFilter);
     if (applies === 'item') rows = rows.filter((g) => g.forItem);
     else if (applies === 'product') rows = rows.filter((g) => g.forProduct);
+    return rows;
+  }, [data, categoryFilter, applies]);
 
+  // Groups grouped by category (sorted by name), groups sorted by name.
+  const blocks = useMemo<ReportBlock[]>(() => {
+    const rows = filteredGroups;
     const byCat = new Map<string, Group[]>();
     for (const g of rows) {
       const cat = g.category?.name ?? UNCATEGORISED;
@@ -69,26 +74,49 @@ export default function GroupReportPage() {
     }
     return [...byCat.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([categoryName, list]) => ({
-        heading: categoryName,
-        count: list.length,
-        tables: [
-          {
-            rows: [...list]
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((g) => [
+      .map(([categoryName, list]) => {
+        // Sort by code, not name, so sub-groups sit under their parent group
+        // (the 15-digit positional code encodes the hierarchy).
+        const sorted = [...list].sort((a, b) => a.code.localeCompare(b.code));
+        return {
+          heading: categoryName,
+          count: list.length,
+          tables: [
+            {
+              rows: sorted.map((g) => [
                 g.code,
                 g.name,
                 g.description ?? '-',
                 appliesTo(g.forItem, g.forProduct),
                 g.isActive ? 'Active' : 'Inactive',
               ]),
-          },
-        ],
-      }));
-  }, [data, categoryFilter, applies]);
+              // Primary (level-1) groups get a light highlight.
+              shade: sorted.map((g) => g.level === 1),
+            },
+          ],
+        };
+      });
+  }, [filteredGroups]);
 
   const total = blocks.reduce((n, b) => n + (b.count ?? 0), 0);
+
+  // Summary reflects the filtered report: categories shown, then a per-level
+  // group count (Group - L1, Group - L2, …). No item total — this is a groups
+  // report.
+  const summary = useMemo(() => {
+    const byLevel = new Map<number, number>();
+    for (const g of filteredGroups)
+      byLevel.set(g.level, (byLevel.get(g.level) ?? 0) + 1);
+    const levels = [...byLevel.keys()].sort((a, b) => a - b);
+    return [
+      { label: 'Total Categories', value: blocks.length },
+      ...levels.map((l) => ({
+        label: `Group - L${l}`,
+        value: byLevel.get(l)!,
+      })),
+    ];
+  }, [filteredGroups, blocks.length]);
+
   const spec: ReportSpec = {
     companyName,
     subtitle: `Group List - ${total} ${total === 1 ? 'group' : 'groups'}`,
@@ -96,6 +124,8 @@ export default function GroupReportPage() {
     weights: WEIGHTS,
     blocks,
     fileBase: 'group-report',
+    serial: true,
+    summary,
   };
 
   const has = total > 0;
@@ -158,7 +188,7 @@ export default function GroupReportPage() {
             {total} group{total === 1 ? '' : 's'}
           </span>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
           <ReportView
             columns={COLUMNS}
             weights={WEIGHTS}
@@ -166,6 +196,8 @@ export default function GroupReportPage() {
             loading={loading}
             statusCol={4}
             boldCol={1}
+            serial
+            summary={summary}
             emptyText="No groups match the current filter."
           />
         </div>

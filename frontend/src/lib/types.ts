@@ -607,7 +607,10 @@ export interface Item {
   group?: MasterRef | null;
   unitId: number;
   unit?: MasterRef | null;
-  unitPrice: number;
+  /** Last purchase price — refreshed on every purchase. */
+  lastPurchasePrice: number;
+  /** ISO datetime of the last purchase; null = never purchased. */
+  lastPurchaseDate?: string | null;
   boxQty: number;
   boxUnitId?: number | null;
   boxUnit?: MasterRef | null;
