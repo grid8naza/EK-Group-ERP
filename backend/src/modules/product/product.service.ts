@@ -93,6 +93,8 @@ export class ProductService {
           categoryId: group.categoryId,
           groupId: dto.groupId,
           unitId: dto.unitId,
+          unpacked: dto.unpacked ?? false,
+          packed: dto.packed ?? false,
           canSell: dto.canSell ?? true,
           costPrice: dto.costPrice ?? 0,
           wholesalePrice: dto.wholesalePrice ?? 0,
@@ -221,6 +223,8 @@ export class ProductService {
               ? dto.description?.trim() || null
               : undefined,
           unitId: dto.unitId,
+          unpacked: dto.unpacked,
+          packed: dto.packed,
           canSell: dto.canSell,
           costPrice: dto.costPrice,
           wholesalePrice: dto.wholesalePrice,

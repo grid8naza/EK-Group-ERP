@@ -265,6 +265,9 @@ model Product {
   categoryId   Int?
   groupId      Int?
   unitId       Int // selling / output unit
+  // Form factor: a product may be sold unpacked, packed, or both.
+  unpacked     Boolean @default(false)
+  packed       Boolean @default(false)
   canSell      Boolean @default(true) // false = not sold (e.g. intermediate/ingredient)
   costPrice    Float   @default(0) // cost incurred to make/buy one unit
   // Three selling prices, each with its profit % over cost (both stored; the

@@ -15,7 +15,10 @@ export class LookupService {
   // ---- Lookups ----
   findAll() {
     return this.prisma.lookup.findMany({
-      include: { _count: { select: { values: true } } },
+      include: {
+        _count: { select: { values: true } },
+        module: { select: { id: true, name: true } },
+      },
       orderBy: { name: 'asc' },
     });
   }

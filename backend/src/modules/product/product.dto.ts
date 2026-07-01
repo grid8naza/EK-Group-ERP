@@ -59,6 +59,14 @@ export class CreateProductDto {
 
   @IsOptional()
   @IsBoolean()
+  unpacked?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  packed?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   canSell?: boolean;
 
   @IsOptional()
@@ -193,6 +201,14 @@ export class UpdateProductDto {
   @IsOptional()
   @IsInt()
   unitId?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  unpacked?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  packed?: boolean;
 
   @IsOptional()
   @IsBoolean()

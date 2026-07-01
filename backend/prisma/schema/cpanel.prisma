@@ -30,6 +30,7 @@ model Module {
 
   objects             ObjectMaster[]
   mainMenus           MainMenu[]
+  lookups             Lookup[]
   userGroups          UserGroupModule[]
   userAccess          UserModule[]
   widgets             Widget[]
@@ -50,13 +51,16 @@ model Lookup {
   code        String   @unique // e.g. DEVELOPERS, ICONS
   name        String
   description String?
+  moduleId    Int? // the module this lookup belongs to (null = global / all modules)
   isSystem    Boolean  @default(false)
   isLocked    Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  module Module?       @relation(fields: [moduleId], references: [id], onDelete: SetNull)
   values LookupValue[]
 
+  @@index([moduleId])
   @@map("lookups")
 }
 
@@ -65,7 +69,8 @@ model LookupValue {
   lookupId  Int
   value     String
   label     String
-  extra     String?
+  alias     String? // optional custom name for this value (used where a bespoke label is needed)
+  remarks   String? // free-text remarks (was "extra")
   sortOrder Int      @default(0)
   isActive  Boolean  @default(true)
   isLocked  Boolean  @default(false) // when locked, must be unlocked before edit/delete

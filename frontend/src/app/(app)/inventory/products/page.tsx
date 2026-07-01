@@ -27,6 +27,8 @@ const empty = {
   categoryId: '',
   groupId: '',
   unitId: '',
+  unpacked: false,
+  packed: false,
   canSell: true,
   costPrice: '0',
   wholesalePrice: '0',
@@ -93,7 +95,9 @@ export default function ProductsPage() {
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState('');
-  const [groupFilter, setGroupFilter] = useState('');
+  const [primaryFilter, setPrimaryFilter] = useState('');
+  const [parentFilter, setParentFilter] = useState('');
+  const [applies, setApplies] = useState(''); // '' | 'item' | 'product'
   const [status, setStatus] = useState(''); // '' | 'active' | 'inactive'
   const codeRef = useRef<HTMLInputElement>(null);
 
@@ -115,10 +119,25 @@ export default function ProductsPage() {
       g.isActive &&
       (!form.categoryId || String(g.categoryId) === form.categoryId),
   );
-  // List filter: groups cascade from the category filter.
-  const filterGroups = productGroups.filter(
-    (g) => !categoryFilter || String(g.categoryId) === categoryFilter,
+
+  // Group lookups for the primary/parent list filters (each product attaches to
+  // a leaf group via r.groupId; resolve it to apply the same subtree/child
+  // predicates as the Group Master).
+  const groupById = useMemo(
+    () => new Map((groups ?? []).map((g) => [g.id, g])),
+    [groups],
   );
+  const primaryGroups = useMemo(
+    () => productGroups.filter((g) => g.level === 1),
+    [productGroups],
+  );
+  const parentCandidates = useMemo(
+    () => productGroups.filter((g) => g.subGroupApplicable && g.level < 5),
+    [productGroups],
+  );
+  const primaryGroupCode = primaryFilter
+    ? productGroups.find((g) => String(g.id) === primaryFilter)?.code
+    : undefined;
 
   const closeDrawer = () => {
     setOpen(false);
@@ -132,6 +151,8 @@ export default function ProductsPage() {
     categoryId: p.categoryId != null ? String(p.categoryId) : '',
     groupId: p.groupId != null ? String(p.groupId) : '',
     unitId: String(p.unitId),
+    unpacked: p.unpacked ?? false,
+    packed: p.packed ?? false,
     canSell: p.canSell ?? true,
     costPrice: String(p.costPrice ?? 0),
     wholesalePrice: String(p.wholesalePrice ?? 0),
@@ -225,6 +246,8 @@ export default function ProductsPage() {
       description: form.description.trim() || undefined,
       groupId: Number(form.groupId),
       unitId: Number(form.unitId),
+      unpacked: form.unpacked,
+      packed: form.packed,
       canSell: form.canSell,
       costPrice: num(form.costPrice),
       wholesalePrice: num(form.wholesalePrice),
@@ -308,12 +331,26 @@ export default function ProductsPage() {
     let rows = [...(data ?? [])];
     if (categoryFilter)
       rows = rows.filter((r) => String(r.categoryId) === categoryFilter);
-    if (groupFilter)
-      rows = rows.filter((r) => String(r.groupId) === groupFilter);
+    if (primaryFilter) {
+      const primary = (groups ?? []).find((g) => String(g.id) === primaryFilter);
+      if (primary) {
+        const prefix = primary.code.slice(0, 4);
+        rows = rows.filter((r) => groupById.get(r.groupId ?? -1)?.code.startsWith(prefix));
+      }
+    }
+    if (parentFilter) {
+      rows = rows.filter(
+        (r) => String(groupById.get(r.groupId ?? -1)?.parentGroupId ?? '') === parentFilter,
+      );
+    }
+    if (applies === 'item')
+      rows = rows.filter((r) => groupById.get(r.groupId ?? -1)?.forItem);
+    else if (applies === 'product')
+      rows = rows.filter((r) => groupById.get(r.groupId ?? -1)?.forProduct);
     if (status === 'active') rows = rows.filter((r) => r.isActive);
     else if (status === 'inactive') rows = rows.filter((r) => !r.isActive);
     return rows.sort((a, b) => a.code.localeCompare(b.code));
-  }, [data, categoryFilter, groupFilter, status]);
+  }, [data, categoryFilter, applies, status, primaryFilter, parentFilter, groups, groupById]);
 
   const columns: Column<Product>[] = [
     { key: 'code', header: 'Code', accessor: (r) => r.code },
@@ -385,7 +422,7 @@ export default function ProductsPage() {
         columns={columns}
         rows={visibleRows}
         defaultSort={{ key: 'code', dir: 'asc' }}
-        key={`${categoryFilter}|${groupFilter}|${status}`}
+        key={`${categoryFilter}|${primaryFilter}|${parentFilter}|${applies}|${status}`}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
@@ -397,9 +434,10 @@ export default function ProductsPage() {
               value={categoryFilter}
               onChange={(e) => {
                 setCategoryFilter(e.target.value);
-                setGroupFilter('');
+                setPrimaryFilter('');
+                setParentFilter('');
               }}
-              wrapClassName="w-44"
+              wrapClassName="w-40"
               placeholder="All categories"
               options={productCategories.map((c) => ({
                 value: String(c.id),
@@ -407,19 +445,51 @@ export default function ProductsPage() {
               }))}
             />
             <Select
-              value={groupFilter}
-              onChange={(e) => setGroupFilter(e.target.value)}
-              wrapClassName="w-44"
-              placeholder="All groups"
-              options={filterGroups.map((g) => ({
-                value: String(g.id),
-                label: g.name,
-              }))}
+              value={primaryFilter}
+              onChange={(e) => {
+                setPrimaryFilter(e.target.value);
+                setParentFilter('');
+              }}
+              wrapClassName="w-40"
+              placeholder="All primary groups"
+              options={primaryGroups
+                .filter(
+                  (g) => !categoryFilter || String(g.categoryId) === categoryFilter,
+                )
+                .map((g) => ({ value: String(g.id), label: g.name }))}
+            />
+            <Select
+              value={parentFilter}
+              onChange={(e) => setParentFilter(e.target.value)}
+              wrapClassName="w-40"
+              placeholder="Any parent group"
+              options={parentCandidates
+                .filter(
+                  (g) =>
+                    (!categoryFilter ||
+                      String(g.categoryId) === categoryFilter) &&
+                    (!primaryGroupCode ||
+                      g.code.startsWith(primaryGroupCode.slice(0, 4))),
+                )
+                .map((g) => ({
+                  value: String(g.id),
+                  label: `${'· '.repeat(g.level - 1)}${g.name}`,
+                }))}
+            />
+            <Select
+              value={applies}
+              onChange={(e) => setApplies(e.target.value)}
+              wrapClassName="w-36"
+              placeholder="Applies to: All"
+              options={[
+                { value: 'item', label: 'Item-wise' },
+                { value: 'product', label: 'Product-wise' },
+              ]}
             />
             <Select
               value={status}
               onChange={(e) => setStatus(e.target.value)}
-              wrapClassName="w-36"
+              wrapClassName="w-32"
               placeholder="All statuses"
               options={[
                 { value: 'active', label: 'Active' },
@@ -589,6 +659,22 @@ export default function ProductsPage() {
                 })
               }
             />
+
+            {/* Form factor — unpacked and/or packed. */}
+            <div className="flex items-center gap-8 sm:col-span-2">
+              <Checkbox
+                label="Unpacked"
+                checked={form.unpacked}
+                onChange={(e) =>
+                  setForm({ ...form, unpacked: e.target.checked })
+                }
+              />
+              <Checkbox
+                label="Packed"
+                checked={form.packed}
+                onChange={(e) => setForm({ ...form, packed: e.target.checked })}
+              />
+            </div>
 
             {/* Can Sell — gates the selling prices, profit %, and packing. */}
             <div className="sm:col-span-2">

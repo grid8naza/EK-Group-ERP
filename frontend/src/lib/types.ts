@@ -154,6 +154,9 @@ export interface Lookup {
   code: string;
   name: string;
   description?: string | null;
+  /** Module this lookup belongs to (null = global / all modules). */
+  moduleId?: number | null;
+  module?: { id: number; name: string } | null;
   isSystem: boolean;
   isLocked?: boolean;
 }
@@ -163,7 +166,10 @@ export interface LookupValue {
   lookupId: number;
   value: string;
   label: string;
-  extra?: string | null;
+  /** Optional custom name for this value. */
+  alias?: string | null;
+  /** Free-text remarks (was "extra"). */
+  remarks?: string | null;
   sortOrder?: number | null;
   isActive: boolean;
   isLocked?: boolean;
@@ -684,6 +690,9 @@ export interface Product {
   group?: MasterRef | null;
   unitId: number;
   unit?: MasterRef | null;
+  /** Form factor: product may be sold unpacked, packed, or both. */
+  unpacked: boolean;
+  packed: boolean;
   /** false = not sold (selling prices/packing disabled in the form). */
   canSell: boolean;
   /** Cost incurred per unit — the base for each profit %. */

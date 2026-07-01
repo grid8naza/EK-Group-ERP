@@ -13,18 +13,25 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
-import { Input, Textarea, Checkbox } from '@/components/ui/Field';
+import { Input, Textarea, Checkbox, Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import { cn } from '@/lib/utils';
-import type { Lookup, LookupValue } from '@/lib/types';
+import type { Lookup, LookupValue, Module } from '@/lib/types';
 
 const ROUTE = '/cpanel/lookups';
 
-const emptyLookup = { code: '', name: '', description: '', isSystem: false };
+const emptyLookup = {
+  code: '',
+  name: '',
+  description: '',
+  moduleId: '',
+  isSystem: false,
+};
 const emptyValue = {
   value: '',
   label: '',
-  extra: '',
+  alias: '',
+  remarks: '',
   sortOrder: 0,
   isActive: true,
 };
@@ -35,7 +42,13 @@ export default function LookupsPage() {
   const confirm = useConfirm();
 
   const { data: lookups, loading, refetch } = useFetch<Lookup[]>('/lookups');
+  const { data: modules } = useFetch<Module[]>('/modules');
   const [selected, setSelected] = useState<Lookup | null>(null);
+  // Module filter for the lookup list ('' = all modules).
+  const [moduleFilter, setModuleFilter] = useState('');
+  const shownLookups = (lookups ?? []).filter(
+    (l) => !moduleFilter || String(l.moduleId ?? '') === moduleFilter,
+  );
 
   // values for selected lookup
   const [values, setValues] = useState<LookupValue[]>([]);
@@ -105,6 +118,7 @@ export default function LookupsPage() {
     code: l.code,
     name: l.name,
     description: l.description ?? '',
+    moduleId: l.moduleId != null ? String(l.moduleId) : '',
     isSystem: l.isSystem,
   });
   const openAddLookup = () => {
@@ -133,12 +147,16 @@ export default function LookupsPage() {
     }
     setLkSaving(true);
     try {
+      const payload = {
+        ...lkForm,
+        moduleId: lkForm.moduleId ? Number(lkForm.moduleId) : null,
+      };
       let saved: Lookup;
       if (lkEditing) {
-        saved = await api.patch<Lookup>(`/lookups/${lkEditing.id}`, lkForm);
+        saved = await api.patch<Lookup>(`/lookups/${lkEditing.id}`, payload);
         toast.success('Lookup updated.');
       } else {
-        saved = await api.post<Lookup>('/lookups', lkForm);
+        saved = await api.post<Lookup>('/lookups', payload);
         toast.success('Lookup created.');
       }
       await refetch();
@@ -181,7 +199,8 @@ export default function LookupsPage() {
   const valueFormFrom = (val: LookupValue) => ({
     value: val.value,
     label: val.label,
-    extra: val.extra ?? '',
+    alias: val.alias ?? '',
+    remarks: val.remarks ?? '',
     sortOrder: val.sortOrder ?? 0,
     isActive: val.isActive,
   });
@@ -267,7 +286,8 @@ export default function LookupsPage() {
         </span>
       ),
     },
-    { key: 'extra', header: 'Extra', accessor: (r) => r.extra },
+    { key: 'alias', header: 'Alias', accessor: (r) => r.alias || '-' },
+    { key: 'remarks', header: 'Remarks', accessor: (r) => r.remarks || '-' },
     { key: 'sortOrder', header: 'Sort', accessor: (r) => r.sortOrder ?? 0 },
     {
       key: 'isActive',
@@ -298,23 +318,35 @@ export default function LookupsPage() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
         {/* Master list */}
         <div className="lg:col-span-5">
-          <div className="card overflow-hidden">
-            <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+          {/* No overflow-hidden here so the module dropdown isn't clipped; the
+              scroll area below rounds its own bottom corners instead. */}
+          <div className="card">
+            <div className="flex items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
               <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
                 Lookups
               </h2>
+              <Select
+                wrapClassName="w-44"
+                value={moduleFilter}
+                onChange={(e) => setModuleFilter(e.target.value)}
+                placeholder="All modules"
+                options={(modules ?? []).map((m) => ({
+                  value: String(m.id),
+                  label: m.name,
+                }))}
+              />
             </div>
-            <div className="max-h-[600px] overflow-y-auto">
+            <div className="max-h-[600px] overflow-y-auto rounded-b-2xl">
               {loading ? (
                 <p className="p-6 text-center text-sm text-slate-400">
                   Loading...
                 </p>
-              ) : (lookups ?? []).length === 0 ? (
+              ) : shownLookups.length === 0 ? (
                 <p className="p-6 text-center text-sm text-slate-400">
                   No lookups yet
                 </p>
               ) : (
-                (lookups ?? []).map((l) => (
+                shownLookups.map((l) => (
                   <button
                     key={l.id}
                     onClick={() => setSelected(l)}
@@ -331,6 +363,7 @@ export default function LookupsPage() {
                       </p>
                       <p className="truncate text-xs text-slate-400">
                         {l.code}
+                        {l.module ? ` · ${l.module.name}` : ''}
                       </p>
                     </div>
                     <ChevronRight
@@ -477,6 +510,18 @@ export default function LookupsPage() {
                 setLkForm({ ...lkForm, description: e.target.value })
               }
             />
+            <Select
+              label="Module"
+              value={lkForm.moduleId}
+              onChange={(e) =>
+                setLkForm({ ...lkForm, moduleId: e.target.value })
+              }
+              placeholder="— Global (all modules) —"
+              options={(modules ?? []).map((m) => ({
+                value: m.id,
+                label: m.name,
+              }))}
+            />
             <Checkbox
               label="System lookup"
               checked={lkForm.isSystem}
@@ -523,9 +568,15 @@ export default function LookupsPage() {
               onChange={(e) => setVForm({ ...vForm, label: e.target.value })}
             />
             <Input
-              label="Extra"
-              value={vForm.extra}
-              onChange={(e) => setVForm({ ...vForm, extra: e.target.value })}
+              label="Alias"
+              value={vForm.alias}
+              onChange={(e) => setVForm({ ...vForm, alias: e.target.value })}
+              placeholder="Custom name (optional)"
+            />
+            <Input
+              label="Remarks"
+              value={vForm.remarks}
+              onChange={(e) => setVForm({ ...vForm, remarks: e.target.value })}
             />
             <Input
               label="Sort Order"

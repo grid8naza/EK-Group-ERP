@@ -17,6 +17,8 @@ export class CreateLookupDto {
   name: string;
 
   @IsOptional() @IsString() description?: string;
+  /** Module this lookup belongs to (null = global / all modules). */
+  @IsOptional() @IsInt() moduleId?: number | null;
   @IsOptional() @IsBoolean() isSystem?: boolean;
 }
 
@@ -35,7 +37,8 @@ export class CreateLookupValueDto {
   @IsNotEmpty()
   label: string;
 
-  @IsOptional() @IsString() extra?: string;
+  @IsOptional() @IsString() alias?: string;
+  @IsOptional() @IsString() remarks?: string;
   @IsOptional() @IsInt() sortOrder?: number;
   @IsOptional() @IsBoolean() isActive?: boolean;
 }
