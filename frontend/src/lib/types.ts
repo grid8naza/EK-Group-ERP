@@ -577,6 +577,41 @@ export interface Group {
   isLocked?: boolean;
 }
 
+// ---- Asset: Category Master (flat; no Item/Product applicability) ----
+export interface AssetCategory {
+  id: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  /** true = available to every company; otherwise companyIds applies. */
+  allCompanies: boolean;
+  /** Companies this asset category is available in (when not allCompanies). */
+  companyIds: number[];
+  isActive: boolean;
+  isLocked?: boolean;
+}
+
+// ---- Asset: Group Master (multilayer sub-level under an Asset Category) ----
+export interface AssetGroup {
+  id: number;
+  categoryId: number;
+  category?: { id: number; code: string; name: string } | null;
+  /** null = primary group (level 1); otherwise the parent group it sits under. */
+  parentGroupId?: number | null;
+  parent?: { id: number; code: string; name: string } | null;
+  /** 1 = primary group … up to 5. */
+  level: number;
+  /** true = container that holds sub-groups and cannot hold assets. */
+  subGroupApplicable: boolean;
+  code: string;
+  name: string;
+  description?: string | null;
+  allCompanies: boolean;
+  companyIds: number[];
+  isActive: boolean;
+  isLocked?: boolean;
+}
+
 // ---- Inventory: HSN Code Master (global; GST rates) ----
 export interface HsnCode {
   id: number;

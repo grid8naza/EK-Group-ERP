@@ -26,6 +26,8 @@ import { GroupModule } from './modules/group/group.module';
 import { HsnModule } from './modules/hsn/hsn.module';
 import { ItemModule } from './modules/item/item.module';
 import { ProductModule } from './modules/product/product.module';
+import { AssetCategoryModule } from './modules/asset-category/asset-category.module';
+import { AssetGroupModule } from './modules/asset-group/asset-group.module';
 import { LoginScreenModule } from './modules/login-screen/login-screen.module';
 import { ScaffoldModule } from './scaffold/scaffold.module';
 
@@ -56,6 +58,8 @@ import { ScaffoldModule } from './scaffold/scaffold.module';
     HsnModule,
     ItemModule,
     ProductModule,
+    AssetCategoryModule,
+    AssetGroupModule,
     LoginScreenModule,
     ScaffoldModule,
   ],

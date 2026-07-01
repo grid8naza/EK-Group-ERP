@@ -1,0 +1,84 @@
+// Asset domain — Asset Category and Asset Group masters. Mirrors the Inventory
+// Category/Group masters (multi-company availability, system-generated positional
+// hierarchy codes, multilayer groups) but is a fully independent set of tables
+// and carries no Item/Product applicability (assets are flat in that sense).
+//
+// Cross-domain rule: company links are plain `companyId` columns (no @relation to
+// the Cpanel Company); every real @relation stays inside this domain file.
+
+/// Asset Category master — top level of the asset classification. Available to
+/// all companies or a chosen set (via AssetCategoryCompany links). Code is a
+/// system-generated 2-digit category segment.
+model AssetCategory {
+  id           Int      @id @default(autoincrement())
+  code         String   @unique
+  name         String
+  description  String?
+  allCompanies Boolean  @default(false) // true = available to every company
+  isActive     Boolean  @default(true)
+  isLocked     Boolean  @default(false) // when locked, must be unlocked before edit/delete
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  companies AssetCategoryCompany[]
+  groups    AssetGroup[]
+
+  @@map("asset_categories")
+}
+
+/// Links an asset category to a company it is available in (when not
+/// `allCompanies`). companyId is a plain id → Cpanel Company (no cross-domain FK).
+model AssetCategoryCompany {
+  id         Int @id @default(autoincrement())
+  categoryId Int
+  companyId  Int // -> Cpanel Company, by id (no cross-domain FK)
+
+  category AssetCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, companyId])
+  @@index([companyId])
+  @@map("asset_category_companies")
+}
+
+/// Asset Group master — a multilayer sub-level under an Asset Category (≤5
+/// levels), with system-generated positional codes. A "primary" group has no
+/// parent (level 1); a sub-group's parent is another group in the SAME category
+/// whose `subGroupApplicable` is true. Deleting a category is blocked while it
+/// still has groups (Restrict).
+model AssetGroup {
+  id                 Int     @id @default(autoincrement())
+  categoryId         Int
+  parentGroupId      Int?
+  level              Int     @default(1) // 1 = primary group … up to 5
+  subGroupApplicable Boolean @default(false) // true = container: holds sub-groups
+  code               String  @unique // system-generated positional hierarchy code
+  name               String
+  description        String?
+  allCompanies       Boolean @default(false) // true = available to every company
+  isActive           Boolean @default(true)
+  isLocked           Boolean @default(false) // when locked, must be unlocked before edit/delete
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  category  AssetCategory      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  parent    AssetGroup?        @relation("AssetGroupHierarchy", fields: [parentGroupId], references: [id], onDelete: Restrict)
+  children  AssetGroup[]       @relation("AssetGroupHierarchy")
+  companies AssetGroupCompany[]
+
+  @@index([categoryId])
+  @@index([parentGroupId])
+  @@map("asset_groups")
+}
+
+/// Links an asset group to a company it is available in (when not `allCompanies`).
+model AssetGroupCompany {
+  id        Int @id @default(autoincrement())
+  groupId   Int
+  companyId Int // -> Cpanel Company, by id (no cross-domain FK)
+
+  group AssetGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, companyId])
+  @@index([companyId])
+  @@map("asset_group_companies")
+}

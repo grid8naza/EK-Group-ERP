@@ -6,6 +6,7 @@ import {
   PRODUCTION_SUBS,
   seedInventoryDefaults,
 } from '../modules/unit/inventory-provisioning';
+import { ASSET_SUBS } from '../modules/asset-category/asset-provisioning';
 
 /**
  * Single source of truth for every module and the menus/screens it ships with.
@@ -110,5 +111,15 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     autoEnable: true, // on for every company so the Product BOM screen appears
     menu: { name: 'Production', icon: 'factory' },
     subs: PRODUCTION_SUBS,
+  },
+  {
+    code: 'ASSET',
+    name: 'Asset',
+    icon: 'building-2',
+    sortOrder: 7,
+    description: 'Fixed assets — asset category & group masters.',
+    autoEnable: true, // on for every company, like Inventory
+    menu: { name: 'Asset', icon: 'building-2' },
+    subs: ASSET_SUBS,
   },
 ];

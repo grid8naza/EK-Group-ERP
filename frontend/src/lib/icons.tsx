@@ -55,6 +55,7 @@ const MAP: Record<string, LucideIcon> = {
   groups: Users,
   building: Building2,
   building2: Building2,
+  'building-2': Building2,
   company: Building2,
   'fa-building': Building2,
   list: List,
