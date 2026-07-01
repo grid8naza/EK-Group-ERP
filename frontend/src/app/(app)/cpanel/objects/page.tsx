@@ -22,7 +22,7 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
+import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { IconPicker } from '@/components/ui/IconPicker';
@@ -282,7 +282,7 @@ export default function ObjectsPage() {
     notes: form.notes || null,
   });
 
-  const save = async (again = false) => {
+  const save = async (mode: SaveMode = 'saveClose') => {
     if (!form.moduleId || !form.author.trim() || !form.objectName.trim()) {
       toast.error('Module, Author and Object Name are required.');
       return;
@@ -293,18 +293,35 @@ export default function ObjectsPage() {
     }
     setSaving(true);
     try {
+      let saved: ErpObject;
       if (editing) {
-        await api.patch(`/objects/${editing.id}`, buildPayload());
+        saved = await api.patch<ErpObject>(`/objects/${editing.id}`, buildPayload());
         toast.success('Object updated.');
       } else {
-        await api.post('/objects', buildPayload());
+        saved = await api.post<ErpObject>('/objects', buildPayload());
         toast.success('Object created.');
       }
       await load();
-      if (again) {
+      if (mode === 'saveNew') {
         setEditing(null);
         setForm({ ...emptyForm });
         setTab('object');
+      } else if (mode === 'save') {
+        setEditing(saved);
+        setForm({
+          moduleId: String(saved.moduleId ?? ''),
+          author: saved.author ?? '',
+          objectType: saved.objectType,
+          objectName: saved.objectName ?? '',
+          showInMenu: saved.showInMenu,
+          nameInMenu: saved.nameInMenu ?? '',
+          description: saved.description ?? '',
+          route: saved.route ?? '',
+          icon: saved.icon ?? '',
+          help: !!saved.help,
+          isSystem: !!saved.isSystem,
+          notes: saved.notes ?? '',
+        });
       } else {
         setOpen(false);
       }
@@ -578,9 +595,9 @@ export default function ObjectsPage() {
           ) : tab === 'object' ? (
             <DrawerFooter
               onCancel={closeDrawer}
-              onSave={() => save(false)}
-              onSaveNew={editing ? undefined : () => save(true)}
+              onSave={save}
               saving={saving}
+              dataEntry
             />
           ) : undefined
         }

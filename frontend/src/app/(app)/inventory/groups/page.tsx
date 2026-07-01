@@ -12,7 +12,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { StatusToggle } from '@/components/ui/StatusToggle';
-import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
+import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -159,7 +159,7 @@ export default function GroupsPage() {
         : [...f.companyIds, id],
     }));
 
-  const save = async (again = false) => {
+  const save = async (mode: SaveMode = 'saveClose') => {
     if (!form.categoryId) {
       toast.error('Select a category.');
       return;
@@ -183,10 +183,11 @@ export default function GroupsPage() {
 
     setSaving(true);
     try {
+      let saved: Group;
       if (editing) {
         // Hierarchy (category/parent/code/level) is immutable — send only the
         // editable fields.
-        await api.patch(`/groups/${editing.id}`, {
+        saved = await api.patch<Group>(`/groups/${editing.id}`, {
           name: form.name.trim(),
           description: form.description.trim() || undefined,
           subGroupApplicable: form.subGroupApplicable,
@@ -198,7 +199,7 @@ export default function GroupsPage() {
         });
         toast.success('Group updated.');
       } else {
-        await api.post('/groups', {
+        saved = await api.post<Group>('/groups', {
           categoryId: effectiveCategoryId,
           parentGroupId: selectedParent ? selectedParent.id : undefined,
           subGroupApplicable: form.subGroupApplicable,
@@ -213,14 +214,17 @@ export default function GroupsPage() {
         toast.success('Group created.');
       }
       await refetch();
-      if (again) {
+      if (mode === 'saveNew') {
         // Fast entry: keep the placement (parent/category/availability), clear
         // only the per-record fields and refocus Name.
         setEditing(null);
         setForm((f) => ({ ...f, name: '', description: '' }));
         setTimeout(() => nameRef.current?.focus(), 0);
+      } else if (mode === 'save') {
+        setEditing(saved);
+        setForm(formFrom(saved));
       } else {
-        setOpen(false);
+        closeDrawer();
       }
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
@@ -536,9 +540,9 @@ export default function GroupsPage() {
           ) : (
             <DrawerFooter
               onCancel={closeDrawer}
-              onSave={() => save(false)}
-              onSaveNew={editing ? undefined : () => save(true)}
+              onSave={save}
               saving={saving}
+              dataEntry
             />
           )
         }

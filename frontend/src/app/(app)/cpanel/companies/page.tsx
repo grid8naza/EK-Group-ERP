@@ -21,7 +21,7 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
+import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Textarea, Checkbox, Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -275,7 +275,7 @@ export default function CompaniesPage() {
     setOpen(true);
   };
 
-  const save = async (again = false) => {
+  const save = async (mode: SaveMode = 'saveClose') => {
     if (!form.code.trim() || !form.name.trim()) {
       toast.error('Code and Name are required.');
       return;
@@ -295,20 +295,24 @@ export default function CompaniesPage() {
       booksStartDate: form.booksStartDate || undefined,
     };
     try {
+      let saved: Company;
       if (editing) {
-        await api.patch(`/companies/${editing.id}`, payload);
+        saved = await api.patch<Company>(`/companies/${editing.id}`, payload);
         toast.success('Company updated.');
       } else {
-        await api.post('/companies', payload);
+        saved = await api.post<Company>('/companies', payload);
         toast.success('Company created.');
       }
       await refetch();
       // Refresh the auth profile so the sidebar (active company logo / name)
       // reflects any change to the active company.
       void refreshProfile?.();
-      if (again) {
+      if (mode === 'saveNew') {
         setEditing(null);
         setForm({ ...empty });
+      } else if (mode === 'save') {
+        setEditing(saved);
+        setForm(formFrom(saved));
       } else {
         setOpen(false);
       }
@@ -783,9 +787,9 @@ export default function CompaniesPage() {
           ) : (
             <DrawerFooter
               onCancel={closeDrawer}
-              onSave={() => save(false)}
-              onSaveNew={editing ? undefined : () => save(true)}
+              onSave={save}
               saving={saving}
+              dataEntry
             />
           )
         }

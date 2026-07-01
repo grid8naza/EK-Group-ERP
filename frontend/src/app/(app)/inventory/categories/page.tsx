@@ -12,7 +12,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { StatusToggle } from '@/components/ui/StatusToggle';
-import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
+import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -119,7 +119,7 @@ export default function CategoriesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canAdd, open]);
 
-  const save = async (again = false) => {
+  const save = async (mode: SaveMode = 'saveClose') => {
     if (!form.name.trim()) {
       toast.error('Name is required.');
       return;
@@ -146,19 +146,23 @@ export default function CategoriesPage() {
 
     setSaving(true);
     try {
+      let saved: Category;
       if (editing) {
-        await api.patch(`/categories/${editing.id}`, payload);
+        saved = await api.patch<Category>(`/categories/${editing.id}`, payload);
         toast.success('Category updated.');
       } else {
-        await api.post('/categories', payload);
+        saved = await api.post<Category>('/categories', payload);
         toast.success('Category created.');
       }
       await refetch();
-      if (again) {
+      if (mode === 'saveNew') {
         setEditing(null);
         setForm({ ...empty });
+      } else if (mode === 'save') {
+        setEditing(saved);
+        setForm(formFrom(saved));
       } else {
-        setOpen(false);
+        closeDrawer();
       }
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
@@ -361,9 +365,9 @@ export default function CategoriesPage() {
           ) : (
             <DrawerFooter
               onCancel={closeDrawer}
-              onSave={() => save(false)}
-              onSaveNew={editing ? undefined : () => save(true)}
+              onSave={save}
               saving={saving}
+              dataEntry
             />
           )
         }

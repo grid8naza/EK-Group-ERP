@@ -58,9 +58,23 @@ export class CreateProductDto {
   unitId!: number;
 
   @IsOptional()
+  @IsBoolean()
+  canSell?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  costPrice?: number;
+
+  @IsOptional()
   @IsNumber()
   @Min(0)
   wholesalePrice?: number;
+
+  /** Profit % of wholesale price over cost (may be negative). */
+  @IsOptional()
+  @IsNumber()
+  wholesaleProfitPct?: number;
 
   @IsOptional()
   @IsNumber()
@@ -69,8 +83,16 @@ export class CreateProductDto {
 
   @IsOptional()
   @IsNumber()
+  intercompanyProfitPct?: number;
+
+  @IsOptional()
+  @IsNumber()
   @Min(0)
   retailPrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  retailProfitPct?: number;
 
   @IsOptional()
   @IsNumber()
@@ -98,6 +120,21 @@ export class CreateProductDto {
   @IsOptional()
   @IsInt()
   yieldUnitId?: number | null;
+
+  /** A production (recipe) BOM can be created for this product. */
+  @IsOptional()
+  @IsBoolean()
+  hasRecipe?: boolean;
+
+  /** A packing BOM can be created for this product. */
+  @IsOptional()
+  @IsBoolean()
+  hasPacking?: boolean;
+
+  /** This product can be used as an ingredient in another product. */
+  @IsOptional()
+  @IsBoolean()
+  isIngredient?: boolean;
 
   @IsOptional()
   @IsBoolean()
@@ -158,9 +195,22 @@ export class UpdateProductDto {
   unitId?: number;
 
   @IsOptional()
+  @IsBoolean()
+  canSell?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  costPrice?: number;
+
+  @IsOptional()
   @IsNumber()
   @Min(0)
   wholesalePrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  wholesaleProfitPct?: number;
 
   @IsOptional()
   @IsNumber()
@@ -169,8 +219,16 @@ export class UpdateProductDto {
 
   @IsOptional()
   @IsNumber()
+  intercompanyProfitPct?: number;
+
+  @IsOptional()
+  @IsNumber()
   @Min(0)
   retailPrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  retailProfitPct?: number;
 
   @IsOptional()
   @IsNumber()
@@ -198,6 +256,18 @@ export class UpdateProductDto {
   @IsOptional()
   @IsInt()
   yieldUnitId?: number | null;
+
+  @IsOptional()
+  @IsBoolean()
+  hasRecipe?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  hasPacking?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isIngredient?: boolean;
 
   @IsOptional()
   @IsBoolean()

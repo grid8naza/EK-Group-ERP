@@ -11,7 +11,7 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
+import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -143,7 +143,7 @@ export default function UnitsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canAdd, open]);
 
-  const save = async (again = false) => {
+  const save = async (mode: SaveMode = 'saveClose') => {
     if (!form.code.trim() || !form.name.trim()) {
       toast.error('Code and Name are required.');
       return;
@@ -200,19 +200,23 @@ export default function UnitsPage() {
 
     setSaving(true);
     try {
+      let saved: Unit;
       if (editing) {
-        await api.patch(`/units/${editing.id}`, payload);
+        saved = await api.patch<Unit>(`/units/${editing.id}`, payload);
         toast.success('Unit updated.');
       } else {
-        await api.post('/units', payload);
+        saved = await api.post<Unit>('/units', payload);
         toast.success('Unit created.');
       }
       await refetch();
-      if (again) {
+      if (mode === 'saveNew') {
         setEditing(null);
         setForm({ ...empty });
+      } else if (mode === 'save') {
+        setEditing(saved);
+        setForm(formFrom(saved));
       } else {
-        setOpen(false);
+        closeDrawer();
       }
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
@@ -351,9 +355,9 @@ export default function UnitsPage() {
           ) : (
             <DrawerFooter
               onCancel={closeDrawer}
-              onSave={() => save(false)}
-              onSaveNew={editing ? undefined : () => save(true)}
+              onSave={save}
               saving={saving}
+              dataEntry
             />
           )
         }

@@ -133,62 +133,97 @@ export function CloseFooter({ onClose }: { onClose: () => void }) {
   );
 }
 
+/** How a save was triggered — decides what the form does after persisting. */
+export type SaveMode = 'save' | 'saveClose' | 'saveNew';
+
 interface DrawerFooterProps {
   onCancel: () => void;
-  onSave: () => void;
-  onSaveNew?: () => void;
+  /** Called with the chosen mode. Action dialogs may ignore the argument. */
+  onSave: (mode: SaveMode) => void;
   saving?: boolean;
   saveLabel?: string;
+  /**
+   * Data-entry record forms set this to show the standard four-button set:
+   * Save (stay open), Save & New, Save & Close, Cancel. Left false for action
+   * dialogs (backup, password, assignments), which keep a single action button.
+   */
+  dataEntry?: boolean;
 }
 
+/**
+ * Standard drawer footer. For data-entry forms (`dataEntry`) it renders the
+ * mandatory buttons in a fixed order on a single line — Save (persists and keeps
+ * the form open), Save & New, Save & Close, Cancel. Otherwise it shows a single
+ * primary action button next to Cancel. Keyboard shortcuts are surfaced as
+ * tooltips (kept off the labels so all four fit on one row).
+ */
 export function DrawerFooter({
   onCancel,
   onSave,
-  onSaveNew,
   saving,
   saveLabel = 'Save',
+  dataEntry = false,
 }: DrawerFooterProps) {
-  // App-wide form shortcuts (active while a footer is mounted = a drawer is open):
-  //   Ctrl/⌘+S       → Save
-  //   Ctrl/⌘+Enter   → Save & New (falls back to Save when not available)
-  //   Esc            → Cancel (handled by the Drawer's own Escape listener)
+  // App-wide form shortcuts (active while a drawer footer is mounted):
+  //   Ctrl/⌘+S        → Save (keeps the form open on data-entry forms)
+  //   Ctrl/⌘+Shift+S  → Save & Close (data-entry forms)
+  //   Ctrl/⌘+Enter    → Save & New (data-entry forms) / Save otherwise
+  //   Esc             → Cancel (handled by the Drawer's own Escape listener)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || saving) return;
       if (e.key.toLowerCase() === 's') {
         e.preventDefault();
-        onSave();
+        onSave(e.shiftKey && dataEntry ? 'saveClose' : 'save');
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        (onSaveNew ?? onSave)();
+        onSave(dataEntry ? 'saveNew' : 'save');
       }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [onSave, onSaveNew, saving]);
+  }, [onSave, saving, dataEntry]);
 
   return (
-    <div className="flex items-center justify-end gap-2">
-      <button type="button" className="btn-secondary" onClick={onCancel}>
-        Cancel <Kbd>Esc</Kbd>
+    <div className="flex flex-nowrap items-center justify-end gap-2">
+      <button
+        type="button"
+        className="btn-success whitespace-nowrap"
+        title="Ctrl+S"
+        onClick={() => onSave('save')}
+        disabled={saving}
+      >
+        {saving ? 'Saving...' : saveLabel}
       </button>
-      {onSaveNew && (
-        <button
-          type="button"
-          className="btn-secondary"
-          onClick={onSaveNew}
-          disabled={saving}
-        >
-          Save &amp; New <Kbd>Ctrl+↵</Kbd>
-        </button>
+      {dataEntry && (
+        <>
+          <button
+            type="button"
+            className="btn-secondary whitespace-nowrap"
+            title="Ctrl+Enter"
+            onClick={() => onSave('saveNew')}
+            disabled={saving}
+          >
+            Save &amp; New
+          </button>
+          <button
+            type="button"
+            className="btn-secondary whitespace-nowrap"
+            title="Ctrl+Shift+S"
+            onClick={() => onSave('saveClose')}
+            disabled={saving}
+          >
+            Save &amp; Close
+          </button>
+        </>
       )}
       <button
         type="button"
-        className="btn-success"
-        onClick={onSave}
-        disabled={saving}
+        className="btn-secondary whitespace-nowrap"
+        title="Esc"
+        onClick={onCancel}
       >
-        {saving ? 'Saving...' : saveLabel} <Kbd>Ctrl+S</Kbd>
+        Cancel
       </button>
     </div>
   );

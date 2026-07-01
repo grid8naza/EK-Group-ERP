@@ -265,16 +265,27 @@ model Product {
   categoryId   Int?
   groupId      Int?
   unitId       Int // selling / output unit
-  // Three selling prices.
-  wholesalePrice    Float @default(0)
-  intercompanyPrice Float @default(0)
-  retailPrice       Float @default(0)
+  canSell      Boolean @default(true) // false = not sold (e.g. intermediate/ingredient)
+  costPrice    Float   @default(0) // cost incurred to make/buy one unit
+  // Three selling prices, each with its profit % over cost (both stored; the
+  // form keeps them in sync — edit a price to set its %, or a % to set the price).
+  wholesalePrice        Float @default(0)
+  wholesaleProfitPct    Float @default(0)
+  intercompanyPrice     Float @default(0)
+  intercompanyProfitPct Float @default(0)
+  retailPrice           Float @default(0)
+  retailProfitPct       Float @default(0)
   boxQty       Float    @default(0) // pack content quantity (in boxUnit)
   boxUnitId    Int? // unit the box/pack quantity is measured in (e.g. g, Kg)
   hsnCodeId    Int?
   shelfLife    Int      @default(0) // days
   yieldQty     Float    @default(1) // product units one recipe batch yields
   yieldUnitId  Int? // unit the yield quantity is measured in
+  // Capability flags: which BOMs may be created for this product, and whether
+  // it can itself be an ingredient in another product's recipe.
+  hasRecipe    Boolean  @default(false) // a production (recipe) BOM can be created
+  hasPacking   Boolean  @default(false) // a packing BOM can be created
+  isIngredient Boolean  @default(false) // usable as an ingredient in another product
   allCompanies Boolean  @default(false)
   isActive     Boolean  @default(true)
   isLocked     Boolean  @default(false) // when locked, must be unlocked before edit/delete

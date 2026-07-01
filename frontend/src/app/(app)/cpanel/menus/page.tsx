@@ -30,7 +30,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
+import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { RowActions } from '@/components/ui/RowActions';
 import {
@@ -288,7 +288,7 @@ export default function MenusPage() {
     setMOpen(false);
     setMView(false);
   };
-  const saveMain = async (again = false) => {
+  const saveMain = async (mode: SaveMode = 'saveClose') => {
     if (!mForm.menuName.trim()) {
       toast.error('Menu Name is required.');
       return;
@@ -303,17 +303,27 @@ export default function MenusPage() {
         isUserMenu: mForm.isUserMenu,
         icon: mForm.icon || null,
       };
+      let saved: MainMenu;
       if (mEditing) {
-        await api.patch(`/main-menus/${mEditing.id}`, payload);
+        saved = await api.patch<MainMenu>(`/main-menus/${mEditing.id}`, payload);
         toast.success('Main menu updated.');
       } else {
-        await api.post('/main-menus', payload);
+        saved = await api.post<MainMenu>('/main-menus', payload);
         toast.success('Main menu created.');
       }
       await loadMainMenus();
-      if (again) {
+      if (mode === 'saveNew') {
         setMEditing(null);
         setMForm({ ...emptyMain, sortOrder: mainMenus.length + 2 });
+      } else if (mode === 'save') {
+        setMEditing(saved);
+        setMForm({
+          sortOrder: saved.sortOrder ?? 0,
+          menuName: saved.menuName,
+          objectType: saved.objectType ?? 'FORM',
+          isUserMenu: saved.isUserMenu,
+          icon: saved.icon ?? '',
+        });
       } else setMOpen(false);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
@@ -385,7 +395,7 @@ export default function MenusPage() {
     setSOpen(false);
     setSView(false);
   };
-  const saveSub = async (again = false) => {
+  const saveSub = async (mode: SaveMode = 'saveClose') => {
     if (!selectedMain) return;
     if (!sForm.subMenuName.trim()) {
       toast.error('Sub Menu Name is required.');
@@ -403,17 +413,29 @@ export default function MenusPage() {
         route: sForm.route || null,
         icon: sForm.icon || null,
       };
+      let saved: SubMenu;
       if (sEditing) {
-        await api.patch(`/sub-menus/${sEditing.id}`, payload);
+        saved = await api.patch<SubMenu>(`/sub-menus/${sEditing.id}`, payload);
         toast.success('Sub menu updated.');
       } else {
-        await api.post('/sub-menus', payload);
+        saved = await api.post<SubMenu>('/sub-menus', payload);
         toast.success('Sub menu created.');
       }
       await loadSubMenus(selectedMain);
-      if (again) {
+      if (mode === 'saveNew') {
         setSEditing(null);
         setSForm({ ...emptySub, sortOrder: subMenus.length + 2 });
+      } else if (mode === 'save') {
+        setSEditing(saved);
+        setSForm({
+          objectId: saved.objectId ? String(saved.objectId) : '',
+          sortOrder: saved.sortOrder ?? 0,
+          subMenuName: saved.subMenuName,
+          objectType: selectedMain?.objectType ?? saved.objectType ?? 'FORM',
+          description: saved.description ?? '',
+          route: saved.route ?? '',
+          icon: saved.icon ?? '',
+        });
       } else setSOpen(false);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
@@ -680,9 +702,9 @@ export default function MenusPage() {
           ) : (
             <DrawerFooter
               onCancel={closeMain}
-              onSave={() => saveMain(false)}
-              onSaveNew={mEditing ? undefined : () => saveMain(true)}
+              onSave={saveMain}
               saving={mSaving}
+              dataEntry
             />
           )
         }
@@ -748,9 +770,9 @@ export default function MenusPage() {
           ) : (
             <DrawerFooter
               onCancel={closeSub}
-              onSave={() => saveSub(false)}
-              onSaveNew={sEditing ? undefined : () => saveSub(true)}
+              onSave={saveSub}
               saving={sSaving}
+              dataEntry
             />
           )
         }

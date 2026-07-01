@@ -12,7 +12,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { StatusToggle } from '@/components/ui/StatusToggle';
-import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
+import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -157,7 +157,7 @@ export default function ItemsPage() {
         : [...f.companyIds, id],
     }));
 
-  const save = async (again = false) => {
+  const save = async (mode: SaveMode = 'saveClose') => {
     if (!form.name.trim()) {
       toast.error('Name is required.');
       return;
@@ -200,23 +200,27 @@ export default function ItemsPage() {
 
     setSaving(true);
     try {
+      let saved: Item;
       if (editing) {
-        await api.patch(`/items/${editing.id}`, payload);
+        saved = await api.patch<Item>(`/items/${editing.id}`, payload);
         toast.success('Item updated.');
       } else {
-        await api.post('/items', payload);
+        saved = await api.post<Item>('/items', payload);
         toast.success('Item created.');
       }
       await refetch();
-      if (again) {
+      if (mode === 'saveNew') {
         // Fast entry: keep the context (category, group, unit, HSN, pricing,
         // stock levels, availability), clear only the identity fields and
         // refocus Name.
         setEditing(null);
         setForm((f) => ({ ...f, name: '', description: '' }));
         setTimeout(() => codeRef.current?.focus(), 0);
+      } else if (mode === 'save') {
+        setEditing(saved);
+        setForm(formFrom(saved));
       } else {
-        setOpen(false);
+        closeDrawer();
       }
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
@@ -449,9 +453,9 @@ export default function ItemsPage() {
           ) : (
             <DrawerFooter
               onCancel={closeDrawer}
-              onSave={() => save(false)}
-              onSaveNew={editing ? undefined : () => save(true)}
+              onSave={save}
               saving={saving}
+              dataEntry
             />
           )
         }

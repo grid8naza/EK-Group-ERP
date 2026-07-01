@@ -11,7 +11,7 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
+import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -86,7 +86,7 @@ export default function CurrenciesPage() {
     setOpen(true);
   };
 
-  const save = async (again = false) => {
+  const save = async (mode: SaveMode = 'saveClose') => {
     if (
       !form.code.trim() ||
       !form.name.trim() ||
@@ -98,19 +98,23 @@ export default function CurrenciesPage() {
     }
     setSaving(true);
     try {
+      let saved: Currency;
       if (editing) {
-        await api.patch(`/currencies/${editing.id}`, form);
+        saved = await api.patch<Currency>(`/currencies/${editing.id}`, form);
         toast.success('Currency updated.');
       } else {
-        await api.post('/currencies', form);
+        saved = await api.post<Currency>('/currencies', form);
         toast.success('Currency created.');
       }
       await refetch();
-      if (again) {
+      if (mode === 'saveNew') {
         setEditing(null);
         setForm({ ...empty });
+      } else if (mode === 'save') {
+        setEditing(saved);
+        setForm(formFrom(saved));
       } else {
-        setOpen(false);
+        closeDrawer();
       }
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
@@ -217,9 +221,9 @@ export default function CurrenciesPage() {
           ) : (
             <DrawerFooter
               onCancel={closeDrawer}
-              onSave={() => save(false)}
-              onSaveNew={editing ? undefined : () => save(true)}
+              onSave={save}
               saving={saving}
+              dataEntry
             />
           )
         }

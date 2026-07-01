@@ -20,7 +20,7 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
+import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -485,7 +485,7 @@ export default function UsersPage() {
   const toggleExpand = (id: number) =>
     setExpanded((ex) => ({ ...ex, [id]: !ex[id] }));
 
-  const save = async (again = false) => {
+  const save = async (mode: SaveMode = 'saveClose') => {
     if (!form.userCode.trim() || !form.username.trim() || !form.name.trim()) {
       toast.error('User Code, Username and Name are required.');
       return;
@@ -527,17 +527,20 @@ export default function UsersPage() {
       };
       if (form.password.trim()) payload.password = form.password;
 
+      let saved: AppUser;
       if (editing) {
-        await api.patch(`/users/${editing.id}`, payload);
+        saved = await api.patch<AppUser>(`/users/${editing.id}`, payload);
         toast.success('User updated.');
       } else {
-        await api.post('/users', payload);
+        saved = await api.post<AppUser>('/users', payload);
         toast.success('User created.');
       }
       await load();
-      if (again) {
+      if (mode === 'saveNew') {
         setEditing(null);
         setForm({ ...empty });
+      } else if (mode === 'save') {
+        loadInto(saved);
       } else setOpen(false);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
@@ -709,9 +712,9 @@ export default function UsersPage() {
           ) : (
             <DrawerFooter
               onCancel={closeDrawer}
-              onSave={() => save(false)}
-              onSaveNew={editing ? undefined : () => save(true)}
+              onSave={save}
               saving={saving}
+              dataEntry
             />
           )
         }

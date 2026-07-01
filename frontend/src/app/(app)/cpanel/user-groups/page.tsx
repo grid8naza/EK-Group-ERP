@@ -17,7 +17,7 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
+import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Textarea } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -180,7 +180,7 @@ export default function UserGroupsPage() {
         ? f.moduleIds.filter((m) => m !== id)
         : [...f.moduleIds, id],
     }));
-  const save = async (again = false) => {
+  const save = async (mode: SaveMode = 'saveClose') => {
     if (!form.name.trim()) {
       toast.error('Name is required.');
       return;
@@ -196,17 +196,25 @@ export default function UserGroupsPage() {
         description: form.description || null,
         moduleIds: form.moduleIds,
       };
+      let saved: UserGroup;
       if (editing) {
-        await api.patch(`/user-groups/${editing.id}`, payload);
+        saved = await api.patch<UserGroup>(`/user-groups/${editing.id}`, payload);
         toast.success('Group updated.');
       } else {
-        await api.post('/user-groups', payload);
+        saved = await api.post<UserGroup>('/user-groups', payload);
         toast.success('Group created.');
       }
       await refetch();
-      if (again) {
+      if (mode === 'saveNew') {
         setEditing(null);
         setForm({ ...empty });
+      } else if (mode === 'save') {
+        setEditing(saved);
+        setForm({
+          name: saved.name,
+          description: saved.description ?? '',
+          moduleIds: saved.modules?.map((m) => m.id) ?? [],
+        });
       } else setOpen(false);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
@@ -466,9 +474,9 @@ export default function UserGroupsPage() {
           ) : (
             <DrawerFooter
               onCancel={closeDrawer}
-              onSave={() => save(false)}
-              onSaveNew={editing ? undefined : () => save(true)}
+              onSave={save}
               saving={saving}
+              dataEntry
             />
           )
         }

@@ -12,7 +12,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { StatusToggle } from '@/components/ui/StatusToggle';
-import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
+import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -27,16 +27,46 @@ const empty = {
   categoryId: '',
   groupId: '',
   unitId: '',
+  canSell: true,
+  costPrice: '0',
   wholesalePrice: '0',
+  wholesaleProfitPct: '',
   intercompanyPrice: '0',
+  intercompanyProfitPct: '',
   retailPrice: '0',
+  retailProfitPct: '',
   boxQty: '0',
   boxUnitId: '',
   hsnCodeId: '',
   shelfLife: '0',
+  hasRecipe: false,
+  hasPacking: false,
+  isIngredient: false,
   allCompanies: true,
   companyIds: [] as number[],
   isActive: true,
+};
+
+// Profit % is a markup over cost: pct = (price - cost) / cost * 100, and the
+// inverse price = cost * (1 + pct/100). Both are stored; the form keeps the
+// matching price/% pair in sync as either side is edited.
+const round2 = (v: number) => Math.round(v * 100) / 100;
+const toN = (s: string) => Number(s) || 0;
+const pctFromPrice = (price: number, cost: number) =>
+  cost > 0 ? round2(((price - cost) / cost) * 100) : 0;
+const priceFromPct = (pct: number, cost: number) =>
+  cost > 0 ? round2(cost * (1 + pct / 100)) : 0;
+
+// Percentage shown for a price: blank when the price is null/empty/0 (no sale
+// price → no margin to show) or when the margin would be negative (below cost);
+// otherwise the margin over cost. When cost is 0 the margin can't be derived,
+// so the current value is kept.
+const pctDisplay = (priceStr: string, cost: number, current = '') => {
+  const price = toN(priceStr);
+  if (priceStr === '' || price === 0) return '';
+  if (cost <= 0) return current;
+  const pct = pctFromPrice(price, cost);
+  return pct < 0 ? '' : String(pct);
 };
 
 export default function ProductsPage() {
@@ -102,13 +132,27 @@ export default function ProductsPage() {
     categoryId: p.categoryId != null ? String(p.categoryId) : '',
     groupId: p.groupId != null ? String(p.groupId) : '',
     unitId: String(p.unitId),
+    canSell: p.canSell ?? true,
+    costPrice: String(p.costPrice ?? 0),
     wholesalePrice: String(p.wholesalePrice ?? 0),
+    wholesaleProfitPct: pctDisplay(
+      String(p.wholesalePrice ?? 0),
+      p.costPrice ?? 0,
+    ),
     intercompanyPrice: String(p.intercompanyPrice ?? 0),
+    intercompanyProfitPct: pctDisplay(
+      String(p.intercompanyPrice ?? 0),
+      p.costPrice ?? 0,
+    ),
     retailPrice: String(p.retailPrice ?? 0),
+    retailProfitPct: pctDisplay(String(p.retailPrice ?? 0), p.costPrice ?? 0),
     boxQty: String(p.boxQty ?? 0),
     boxUnitId: p.boxUnitId != null ? String(p.boxUnitId) : '',
     hsnCodeId: p.hsnCodeId != null ? String(p.hsnCodeId) : '',
     shelfLife: String(p.shelfLife ?? 0),
+    hasRecipe: p.hasRecipe ?? false,
+    hasPacking: p.hasPacking ?? false,
+    isIngredient: p.isIngredient ?? false,
     allCompanies: p.allCompanies,
     companyIds: p.companyIds ?? [],
     isActive: p.isActive,
@@ -153,7 +197,7 @@ export default function ProductsPage() {
         : [...f.companyIds, id],
     }));
 
-  const save = async (again = false) => {
+  const save = async (mode: SaveMode = 'saveClose') => {
     if (!form.name.trim()) {
       toast.error('Name is required.');
       return;
@@ -181,13 +225,21 @@ export default function ProductsPage() {
       description: form.description.trim() || undefined,
       groupId: Number(form.groupId),
       unitId: Number(form.unitId),
+      canSell: form.canSell,
+      costPrice: num(form.costPrice),
       wholesalePrice: num(form.wholesalePrice),
+      wholesaleProfitPct: num(form.wholesaleProfitPct),
       intercompanyPrice: num(form.intercompanyPrice),
+      intercompanyProfitPct: num(form.intercompanyProfitPct),
       retailPrice: num(form.retailPrice),
+      retailProfitPct: num(form.retailProfitPct),
       boxQty: num(form.boxQty),
       boxUnitId: idOrNull(form.boxUnitId),
       hsnCodeId: idOrNull(form.hsnCodeId),
       shelfLife: num(form.shelfLife),
+      hasRecipe: form.hasRecipe,
+      hasPacking: form.hasPacking,
+      isIngredient: form.isIngredient,
       allCompanies: form.allCompanies,
       companyIds: form.allCompanies ? [] : form.companyIds,
       isActive: form.isActive,
@@ -195,20 +247,24 @@ export default function ProductsPage() {
 
     setSaving(true);
     try {
+      let saved: Product;
       if (editing) {
-        await api.patch(`/products/${editing.id}`, payload);
+        saved = await api.patch<Product>(`/products/${editing.id}`, payload);
         toast.success('Product updated.');
       } else {
-        await api.post('/products', payload);
+        saved = await api.post<Product>('/products', payload);
         toast.success('Product created.');
       }
       await refetch();
-      if (again) {
+      if (mode === 'saveNew') {
         setEditing(null);
         setForm((f) => ({ ...f, name: '', description: '' }));
         setTimeout(() => codeRef.current?.focus(), 0);
+      } else if (mode === 'save') {
+        setEditing(saved);
+        setForm(formFrom(saved));
       } else {
-        setOpen(false);
+        closeDrawer();
       }
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
@@ -409,9 +465,9 @@ export default function ProductsPage() {
           ) : (
             <DrawerFooter
               onCancel={closeDrawer}
-              onSave={() => save(false)}
-              onSaveNew={editing ? undefined : () => save(true)}
+              onSave={save}
               saving={saving}
+              dataEntry
             />
           )
         }
@@ -498,14 +554,110 @@ export default function ProductsPage() {
                 label: u.name,
               }))}
             />
+            {/* Cost — the base for every profit %. Always editable, even for
+                non-sellable products (e.g. ingredients). */}
+            <Input
+              label="Cost Price"
+              type="number"
+              min={0}
+              step="any"
+              value={form.costPrice}
+              onChange={(e) =>
+                setForm((f) => {
+                  const cost = toN(e.target.value);
+                  // Keep the entered prices; refresh each margin against the
+                  // new cost (blank when the price is 0 or below cost).
+                  return {
+                    ...f,
+                    costPrice: e.target.value,
+                    intercompanyProfitPct: pctDisplay(
+                      f.intercompanyPrice,
+                      cost,
+                      f.intercompanyProfitPct,
+                    ),
+                    wholesaleProfitPct: pctDisplay(
+                      f.wholesalePrice,
+                      cost,
+                      f.wholesaleProfitPct,
+                    ),
+                    retailProfitPct: pctDisplay(
+                      f.retailPrice,
+                      cost,
+                      f.retailProfitPct,
+                    ),
+                  };
+                })
+              }
+            />
+
+            {/* Can Sell — gates the selling prices, profit %, and packing. */}
+            <div className="sm:col-span-2">
+              <Checkbox
+                label="Can Sell"
+                checked={form.canSell}
+                onChange={(e) => {
+                  const canSell = e.target.checked;
+                  // Unchecking clears the now-disabled selling fields.
+                  setForm((f) =>
+                    canSell
+                      ? { ...f, canSell }
+                      : {
+                          ...f,
+                          canSell,
+                          intercompanyPrice: '',
+                          intercompanyProfitPct: '',
+                          wholesalePrice: '',
+                          wholesaleProfitPct: '',
+                          retailPrice: '',
+                          retailProfitPct: '',
+                          boxQty: '',
+                          boxUnitId: '',
+                        },
+                  );
+                }}
+              />
+            </div>
+
             <Input
               label="Intercompany Price"
               type="number"
               min={0}
               step="any"
+              disabled={!form.canSell}
               value={form.intercompanyPrice}
               onChange={(e) =>
-                setForm({ ...form, intercompanyPrice: e.target.value })
+                setForm((f) => {
+                  const cost = toN(f.costPrice);
+                  return {
+                    ...f,
+                    intercompanyPrice: e.target.value,
+                    intercompanyProfitPct: pctDisplay(
+                      e.target.value,
+                      cost,
+                      f.intercompanyProfitPct,
+                    ),
+                  };
+                })
+              }
+            />
+            <Input
+              label="Intercompany Profit %"
+              type="number"
+              step="any"
+              disabled={!form.canSell}
+              value={form.intercompanyProfitPct}
+              onChange={(e) =>
+                setForm((f) => {
+                  const cost = toN(f.costPrice);
+                  return {
+                    ...f,
+                    intercompanyProfitPct: e.target.value,
+                    intercompanyPrice:
+                      e.target.value !== '' && cost > 0
+                        ? String(priceFromPct(toN(e.target.value), cost))
+                        : f.intercompanyPrice,
+                  };
+                })
               }
             />
             <Input
@@ -513,9 +665,41 @@ export default function ProductsPage() {
               type="number"
               min={0}
               step="any"
+              disabled={!form.canSell}
               value={form.wholesalePrice}
               onChange={(e) =>
-                setForm({ ...form, wholesalePrice: e.target.value })
+                setForm((f) => {
+                  const cost = toN(f.costPrice);
+                  return {
+                    ...f,
+                    wholesalePrice: e.target.value,
+                    wholesaleProfitPct: pctDisplay(
+                      e.target.value,
+                      cost,
+                      f.wholesaleProfitPct,
+                    ),
+                  };
+                })
+              }
+            />
+            <Input
+              label="Wholesale Profit %"
+              type="number"
+              step="any"
+              disabled={!form.canSell}
+              value={form.wholesaleProfitPct}
+              onChange={(e) =>
+                setForm((f) => {
+                  const cost = toN(f.costPrice);
+                  return {
+                    ...f,
+                    wholesaleProfitPct: e.target.value,
+                    wholesalePrice:
+                      e.target.value !== '' && cost > 0
+                        ? String(priceFromPct(toN(e.target.value), cost))
+                        : f.wholesalePrice,
+                  };
+                })
               }
             />
             <Input
@@ -523,9 +707,41 @@ export default function ProductsPage() {
               type="number"
               min={0}
               step="any"
+              disabled={!form.canSell}
               value={form.retailPrice}
               onChange={(e) =>
-                setForm({ ...form, retailPrice: e.target.value })
+                setForm((f) => {
+                  const cost = toN(f.costPrice);
+                  return {
+                    ...f,
+                    retailPrice: e.target.value,
+                    retailProfitPct: pctDisplay(
+                      e.target.value,
+                      cost,
+                      f.retailProfitPct,
+                    ),
+                  };
+                })
+              }
+            />
+            <Input
+              label="Retail Profit %"
+              type="number"
+              step="any"
+              disabled={!form.canSell}
+              value={form.retailProfitPct}
+              onChange={(e) =>
+                setForm((f) => {
+                  const cost = toN(f.costPrice);
+                  return {
+                    ...f,
+                    retailProfitPct: e.target.value,
+                    retailPrice:
+                      e.target.value !== '' && cost > 0
+                        ? String(priceFromPct(toN(e.target.value), cost))
+                        : f.retailPrice,
+                  };
+                })
               }
             />
 
@@ -535,11 +751,13 @@ export default function ProductsPage() {
               type="number"
               min={0}
               step="any"
+              disabled={!form.canSell}
               value={form.boxQty}
               onChange={(e) => setForm({ ...form, boxQty: e.target.value })}
             />
             <Select
               label="Box Unit"
+              disabled={!form.canSell}
               value={form.boxUnitId}
               onChange={(e) => setForm({ ...form, boxUnitId: e.target.value })}
               placeholder="— None —"
@@ -566,6 +784,35 @@ export default function ProductsPage() {
               value={form.shelfLife}
               onChange={(e) => setForm({ ...form, shelfLife: e.target.value })}
             />
+
+            {/* Capabilities — which BOMs may be built for this product, and
+                whether it can serve as an ingredient in another product. */}
+            <div className="flex flex-col gap-2 sm:col-span-2">
+              <span className="label !mb-0">Capabilities</span>
+              <div className="flex flex-wrap gap-x-8 gap-y-2">
+                <Checkbox
+                  label="Require Recipe"
+                  checked={form.hasRecipe}
+                  onChange={(e) =>
+                    setForm({ ...form, hasRecipe: e.target.checked })
+                  }
+                />
+                <Checkbox
+                  label="Require Packing"
+                  checked={form.hasPacking}
+                  onChange={(e) =>
+                    setForm({ ...form, hasPacking: e.target.checked })
+                  }
+                />
+                <Checkbox
+                  label="Can be Ingredient"
+                  checked={form.isIngredient}
+                  onChange={(e) =>
+                    setForm({ ...form, isIngredient: e.target.checked })
+                  }
+                />
+              </div>
+            </div>
 
             {/* Availability */}
             <div className="flex flex-col gap-2 sm:col-span-2">

@@ -649,9 +649,16 @@ export interface Product {
   group?: MasterRef | null;
   unitId: number;
   unit?: MasterRef | null;
+  /** false = not sold (selling prices/packing disabled in the form). */
+  canSell: boolean;
+  /** Cost incurred per unit — the base for each profit %. */
+  costPrice: number;
   wholesalePrice: number;
+  wholesaleProfitPct: number;
   intercompanyPrice: number;
+  intercompanyProfitPct: number;
   retailPrice: number;
+  retailProfitPct: number;
   boxQty: number;
   boxUnitId?: number | null;
   boxUnit?: MasterRef | null;
@@ -661,6 +668,12 @@ export interface Product {
   yieldQty: number;
   yieldUnitId?: number | null;
   yieldUnit?: MasterRef | null;
+  /** A production (recipe) BOM can be created for this product. */
+  hasRecipe: boolean;
+  /** A packing BOM can be created for this product. */
+  hasPacking: boolean;
+  /** This product can be used as an ingredient in another product. */
+  isIngredient: boolean;
   allCompanies: boolean;
   companyIds: number[];
   isActive: boolean;

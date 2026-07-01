@@ -11,7 +11,7 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
+import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Textarea, Checkbox } from '@/components/ui/Field';
 import { IconPicker } from '@/components/ui/IconPicker';
@@ -117,7 +117,7 @@ export default function ModulesPage() {
         : [...f.companyIds, id],
     }));
 
-  const save = async (again = false) => {
+  const save = async (mode: SaveMode = 'saveClose') => {
     if (!form.code.trim() || !form.name.trim()) {
       toast.error('Code and Name are required.');
       return;
@@ -128,19 +128,32 @@ export default function ModulesPage() {
         ...form,
         sortOrder: Number(form.sortOrder) || 0,
       };
+      let saved: Module;
       if (editing) {
-        await api.patch(`/modules/${editing.id}`, payload);
+        saved = await api.patch<Module>(`/modules/${editing.id}`, payload);
         toast.success('Module updated.');
       } else {
-        await api.post('/modules', payload);
+        saved = await api.post<Module>('/modules', payload);
         toast.success('Module created.');
       }
       await refetch();
-      if (again) {
+      if (mode === 'saveNew') {
         setEditing(null);
         setForm({ ...empty, companyIds: [] });
+      } else if (mode === 'save') {
+        setEditing(saved);
+        setForm({
+          code: saved.code,
+          name: saved.name,
+          description: saved.description ?? '',
+          icon: saved.icon ?? '',
+          sortOrder: saved.sortOrder ?? 0,
+          isActive: saved.isActive,
+          isCore: saved.isCore,
+          companyIds: saved.companyIds ?? [],
+        });
       } else {
-        setOpen(false);
+        closeDrawer();
       }
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save module.');
@@ -270,9 +283,9 @@ export default function ModulesPage() {
           ) : (
             <DrawerFooter
               onCancel={closeDrawer}
-              onSave={() => save(false)}
-              onSaveNew={editing ? undefined : () => save(true)}
+              onSave={save}
               saving={saving}
+              dataEntry
             />
           )
         }

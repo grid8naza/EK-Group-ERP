@@ -11,7 +11,7 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
+import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -113,7 +113,7 @@ export default function HsnCodesPage() {
     });
   };
 
-  const save = async (again = false) => {
+  const save = async (mode: SaveMode = 'saveClose') => {
     if (!form.code.trim() || !form.description.trim()) {
       toast.error('Code and Description are required.');
       return;
@@ -135,19 +135,23 @@ export default function HsnCodesPage() {
 
     setSaving(true);
     try {
+      let saved: HsnCode;
       if (editing) {
-        await api.patch(`/hsn-codes/${editing.id}`, payload);
+        saved = await api.patch<HsnCode>(`/hsn-codes/${editing.id}`, payload);
         toast.success('HSN code updated.');
       } else {
-        await api.post('/hsn-codes', payload);
+        saved = await api.post<HsnCode>('/hsn-codes', payload);
         toast.success('HSN code created.');
       }
       await refetch();
-      if (again) {
+      if (mode === 'saveNew') {
         setEditing(null);
         setForm({ ...empty });
+      } else if (mode === 'save') {
+        setEditing(saved);
+        setForm(formFrom(saved));
       } else {
-        setOpen(false);
+        closeDrawer();
       }
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
@@ -259,9 +263,9 @@ export default function HsnCodesPage() {
           ) : (
             <DrawerFooter
               onCancel={closeDrawer}
-              onSave={() => save(false)}
-              onSaveNew={editing ? undefined : () => save(true)}
+              onSave={save}
               saving={saving}
+              dataEntry
             />
           )
         }

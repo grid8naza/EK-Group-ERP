@@ -11,7 +11,7 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
+import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -126,24 +126,28 @@ export default function LookupsPage() {
     setLkForm(lookupFormFrom(l));
     setLkOpen(true);
   };
-  const saveLookup = async (again = false) => {
+  const saveLookup = async (mode: SaveMode = 'saveClose') => {
     if (!lkForm.code.trim() || !lkForm.name.trim()) {
       toast.error('Code and Name are required.');
       return;
     }
     setLkSaving(true);
     try {
+      let saved: Lookup;
       if (lkEditing) {
-        await api.patch(`/lookups/${lkEditing.id}`, lkForm);
+        saved = await api.patch<Lookup>(`/lookups/${lkEditing.id}`, lkForm);
         toast.success('Lookup updated.');
       } else {
-        await api.post('/lookups', lkForm);
+        saved = await api.post<Lookup>('/lookups', lkForm);
         toast.success('Lookup created.');
       }
       await refetch();
-      if (again) {
+      if (mode === 'saveNew') {
         setLkEditing(null);
         setLkForm({ ...emptyLookup });
+      } else if (mode === 'save') {
+        setLkEditing(saved);
+        setLkForm(lookupFormFrom(saved));
       } else setLkOpen(false);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
@@ -200,7 +204,7 @@ export default function LookupsPage() {
     setVForm(valueFormFrom(val));
     setVOpen(true);
   };
-  const saveValue = async (again = false) => {
+  const saveValue = async (mode: SaveMode = 'saveClose') => {
     if (!selected) return;
     if (!vForm.value.trim() || !vForm.label.trim()) {
       toast.error('Value and Label are required.');
@@ -213,17 +217,21 @@ export default function LookupsPage() {
         ...vForm,
         sortOrder: Number(vForm.sortOrder) || 0,
       };
+      let saved: LookupValue;
       if (vEditing) {
-        await api.patch(`/lookup-values/${vEditing.id}`, payload);
+        saved = await api.patch<LookupValue>(`/lookup-values/${vEditing.id}`, payload);
         toast.success('Value updated.');
       } else {
-        await api.post(`/lookups/${selected.id}/values`, payload);
+        saved = await api.post<LookupValue>(`/lookups/${selected.id}/values`, payload);
         toast.success('Value added.');
       }
       await loadValues(selected);
-      if (again) {
+      if (mode === 'saveNew') {
         setVEditing(null);
         setVForm({ ...emptyValue });
+      } else if (mode === 'save') {
+        setVEditing(saved);
+        setVForm(valueFormFrom(saved));
       } else setVOpen(false);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
@@ -441,9 +449,9 @@ export default function LookupsPage() {
           ) : (
             <DrawerFooter
               onCancel={closeLookupDrawer}
-              onSave={() => saveLookup(false)}
-              onSaveNew={lkEditing ? undefined : () => saveLookup(true)}
+              onSave={saveLookup}
               saving={lkSaving}
+              dataEntry
             />
           )
         }
@@ -493,9 +501,9 @@ export default function LookupsPage() {
           ) : (
             <DrawerFooter
               onCancel={closeValueDrawer}
-              onSave={() => saveValue(false)}
-              onSaveNew={vEditing ? undefined : () => saveValue(true)}
+              onSave={saveValue}
               saving={vSaving}
+              dataEntry
             />
           )
         }
