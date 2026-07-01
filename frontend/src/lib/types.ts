@@ -718,6 +718,32 @@ export interface Product {
   packing: ProductBomLine[];
 }
 
+// ---- Asset: Asset Master (individual assets/machines) ----
+export interface Asset {
+  id: number;
+  code: string;
+  categoryId: number;
+  category?: MasterRef | null;
+  groupId: number;
+  group?: MasterRef | null;
+  name: string;            // Machine Name
+  capacity: number;
+  capacityUnitId?: number | null;
+  perUnitId?: number | null;
+  brand?: string | null;
+  model?: string | null;
+  serialNumber?: string | null;
+  lifeSpanYears: number;
+  purchasedFrom?: string | null;
+  purchaseDate?: string | null;   // ISO date
+  purchasePrice: number;
+  warrantyPeriod?: string | null;
+  allCompanies: boolean;
+  companyIds: number[];
+  isActive: boolean;
+  isLocked?: boolean;
+}
+
 // ---- Backup & Restore ----
 export interface Backup {
   fileName: string;

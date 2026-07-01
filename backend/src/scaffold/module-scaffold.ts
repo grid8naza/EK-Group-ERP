@@ -6,7 +6,10 @@ import {
   PRODUCTION_SUBS,
   seedInventoryDefaults,
 } from '../modules/unit/inventory-provisioning';
-import { ASSET_SUBS } from '../modules/asset-category/asset-provisioning';
+import {
+  ASSET_SUBS,
+  seedAssetDefaults,
+} from '../modules/asset-category/asset-provisioning';
 
 /**
  * Single source of truth for every module and the menus/screens it ships with.
@@ -117,9 +120,10 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     name: 'Asset',
     icon: 'building-2',
     sortOrder: 7,
-    description: 'Fixed assets — asset category & group masters.',
+    description: 'Fixed assets — asset category, group & asset masters.',
     autoEnable: true, // on for every company, like Inventory
     menu: { name: 'Asset', icon: 'building-2' },
     subs: ASSET_SUBS,
+    seedData: seedAssetDefaults,
   },
 ];

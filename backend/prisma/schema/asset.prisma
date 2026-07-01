@@ -22,6 +22,7 @@ model AssetCategory {
 
   companies AssetCategoryCompany[]
   groups    AssetGroup[]
+  assets    Asset[]
 
   @@map("asset_categories")
 }
@@ -64,6 +65,7 @@ model AssetGroup {
   parent    AssetGroup?        @relation("AssetGroupHierarchy", fields: [parentGroupId], references: [id], onDelete: Restrict)
   children  AssetGroup[]       @relation("AssetGroupHierarchy")
   companies AssetGroupCompany[]
+  assets    Asset[]
 
   @@index([categoryId])
   @@index([parentGroupId])
@@ -81,4 +83,54 @@ model AssetGroupCompany {
   @@unique([groupId, companyId])
   @@index([companyId])
   @@map("asset_group_companies")
+}
+
+/// Asset Master — an individual asset (e.g. a machine), classified under a leaf
+/// Asset Group (whose parent chain gives the Group/Category). Its code is a
+/// system-generated positional code under that leaf group. Unit references
+/// (`capacityUnitId`, `perUnitId`) point to the global Unit master by plain id
+/// (cross-domain rule: no @relation). Availability mirrors the other masters.
+model Asset {
+  id             Int       @id @default(autoincrement())
+  code           String    @unique // system-generated (leaf-group positional code)
+  categoryId     Int
+  groupId        Int // leaf asset group this asset belongs to
+  name           String // Machine Name
+  capacity       Float     @default(0)
+  capacityUnitId Int? // -> Unit (plain id, no cross-domain FK): Cuts, Pieces, Litre…
+  perUnitId      Int? // -> Unit (plain id): the "per" basis (Minutes, Hour…)
+  brand          String?
+  model          String?
+  serialNumber   String?
+  lifeSpanYears  Int       @default(0)
+  purchasedFrom  String?
+  purchaseDate   DateTime?
+  purchasePrice  Float     @default(0)
+  warrantyPeriod String? // free text (e.g. "12 months", "2 years")
+  allCompanies   Boolean   @default(false)
+  isActive       Boolean   @default(true)
+  isLocked       Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  category  AssetCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  group     AssetGroup     @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  companies AssetCompany[]
+
+  @@index([categoryId])
+  @@index([groupId])
+  @@map("assets")
+}
+
+/// Links an asset to a company it is available in (when not `allCompanies`).
+model AssetCompany {
+  id        Int @id @default(autoincrement())
+  assetId   Int
+  companyId Int // -> Cpanel Company, by id (no cross-domain FK)
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@unique([assetId, companyId])
+  @@index([companyId])
+  @@map("asset_companies")
 }
