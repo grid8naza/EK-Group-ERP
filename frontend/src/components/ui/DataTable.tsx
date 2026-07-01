@@ -34,7 +34,7 @@ export interface Column<T> {
   headerClassName?: string;
 }
 
-type SortState = { key: string; dir: 'asc' | 'desc' };
+export type SortState = { key: string; dir: 'asc' | 'desc' };
 
 interface DataTableProps<T> {
   columns: Column<T>[];
@@ -83,6 +83,15 @@ interface DataTableProps<T> {
     pageSize: number;
     onPageChange: (page: number) => void;
   };
+  /**
+   * Server-side sort control. Provide this to keep sortable headers even under
+   * server pagination — clicking a header calls `onSortChange` (the parent
+   * re-fetches sorted) instead of sorting the current page slice.
+   */
+  serverSort?: {
+    sort: SortState | null;
+    onSortChange: (sort: SortState) => void;
+  };
 
   emptyMessage?: string;
 
@@ -129,6 +138,7 @@ export function DataTable<T>({
   onRefresh,
   pageSize = 10,
   serverPagination,
+  serverSort,
   emptyMessage = 'No records found',
   defaultSort,
   columnToggle = true,
@@ -144,13 +154,20 @@ export function DataTable<T>({
     defaultSort ?? null,
   );
 
+  // The effective sort comes from the parent in server-sort mode, else local.
+  const activeSort = serverSort ? serverSort.sort : sortState;
   const toggleSort = (key: string) => {
-    setSortState((prev) =>
-      prev?.key === key
-        ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
-        : { key, dir: 'asc' },
-    );
-    if (!serverPagination) setPage(1);
+    const cur = activeSort;
+    const next: SortState =
+      cur?.key === key
+        ? { key, dir: cur.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: 'asc' };
+    if (serverSort) {
+      serverSort.onSortChange(next);
+    } else {
+      setSortState(next);
+      if (!serverPagination) setPage(1);
+    }
   };
 
   // Hidden columns, remembered per listing (keyed by tableId or the route).
@@ -314,8 +331,8 @@ export function DataTable<T>({
               {visibleColumns.map((c) => {
                 const sortable =
                   (c.sortable ?? (!!c.accessor || !!c.sortAccessor)) &&
-                  !serverPagination;
-                const active = sortState?.key === c.key;
+                  (!serverPagination || !!serverSort);
+                const active = activeSort?.key === c.key;
                 return (
                   <th
                     key={c.key}
@@ -338,7 +355,7 @@ export function DataTable<T>({
                       >
                         {c.header}
                         {active ? (
-                          sortState!.dir === 'asc' ? (
+                          activeSort!.dir === 'asc' ? (
                             <ChevronUp className="h-3.5 w-3.5" />
                           ) : (
                             <ChevronDown className="h-3.5 w-3.5" />

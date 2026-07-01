@@ -37,6 +37,8 @@ export class ObjectMasterController {
     @Query('isSystem') isSystem?: string,
     @Query('page') page?: string,
     @Query('pageSize') pageSize?: string,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortDir') sortDir?: string,
   ) {
     return this.service.findAll({
       search,
@@ -47,6 +49,8 @@ export class ObjectMasterController {
         isSystem === 'true' ? true : isSystem === 'false' ? false : undefined,
       page: page ? Number(page) : undefined,
       pageSize: pageSize ? Number(pageSize) : undefined,
+      sortBy,
+      sortDir: sortDir === 'asc' ? 'asc' : sortDir === 'desc' ? 'desc' : undefined,
     });
   }
 

@@ -20,7 +20,7 @@ import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { DataTable, type Column } from '@/components/ui/DataTable';
+import { DataTable, type Column, type SortState } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
@@ -79,6 +79,7 @@ export default function ObjectsPage() {
   // System/User classification filter (super admin only): '' | 'system' | 'user'.
   const [classFilter, setClassFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<SortState>({ key: 'createdAt', dir: 'desc' });
 
   const canAdd = can(ROUTE, 'add');
   const canEdit = can(ROUTE, 'edit');
@@ -111,6 +112,8 @@ export default function ObjectsPage() {
       if (moduleId) params.set('moduleId', moduleId);
       if (objectType) params.set('objectType', objectType);
       if (classFilter) params.set('isSystem', String(classFilter === 'system'));
+      params.set('sortBy', sort.key);
+      params.set('sortDir', sort.dir);
       params.set('page', String(page));
       params.set('pageSize', String(PAGE_SIZE));
       const res = await api.get<ObjectListResponse>(
@@ -124,7 +127,7 @@ export default function ObjectsPage() {
       setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, moduleId, objectType, classFilter, page]);
+  }, [search, moduleId, objectType, classFilter, page, sort]);
 
   useEffect(() => {
     load();
@@ -172,10 +175,10 @@ export default function ObjectsPage() {
     };
   }, []);
 
-  // reset to page 1 on filter change
+  // reset to page 1 on filter or sort change
   useEffect(() => {
     setPage(1);
-  }, [search, moduleId, objectType, classFilter]);
+  }, [search, moduleId, objectType, classFilter, sort]);
 
   const moduleOptions = modules.map((m) => ({ value: m.id, label: m.name }));
 
@@ -399,6 +402,7 @@ export default function ObjectsPage() {
     {
       key: 'createdAt',
       header: 'Date',
+      sortable: true,
       render: (r) => (
         <span className="whitespace-nowrap text-slate-500 dark:text-slate-400">
           {formatDate(r.createdAt)}
@@ -408,6 +412,7 @@ export default function ObjectsPage() {
     {
       key: 'author',
       header: 'Author',
+      sortable: true,
       // Resolve the stored developer code to its name; fall back to the raw
       // value for legacy free-text authors no longer in the list.
       render: (r) =>
@@ -416,6 +421,7 @@ export default function ObjectsPage() {
     {
       key: 'module',
       header: 'Module',
+      sortable: true,
       render: (r) =>
         r.module?.name ??
         modules.find((m) => m.id === r.moduleId)?.name ??
@@ -424,11 +430,13 @@ export default function ObjectsPage() {
     {
       key: 'objectType',
       header: 'Object Type',
+      sortable: true,
       render: (r) => typeBadge(r.objectType),
     },
     {
       key: 'objectName',
       header: 'Object Name',
+      sortable: true,
       render: (r) => (
         <span className="flex items-center gap-1.5 font-medium text-slate-800 dark:text-slate-100">
           {r.objectName}
@@ -444,6 +452,7 @@ export default function ObjectsPage() {
     {
       key: 'isSystem',
       header: 'Type',
+      sortable: true,
       render: (r) =>
         r.isSystem ? (
           <Badge color="slate">
@@ -460,6 +469,7 @@ export default function ObjectsPage() {
     {
       key: 'nameInMenu',
       header: 'Menu',
+      sortable: true,
       render: (r) =>
         r.showInMenu ? (
           <span>{r.nameInMenu || r.objectName}</span>
@@ -544,6 +554,7 @@ export default function ObjectsPage() {
           pageSize: PAGE_SIZE,
           onPageChange: setPage,
         }}
+        serverSort={{ sort, onSortChange: setSort }}
         toolbar={
           <>
             <Select

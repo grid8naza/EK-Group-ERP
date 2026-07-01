@@ -18,7 +18,24 @@ interface FindAllParams {
   isSystem?: boolean;
   page?: number;
   pageSize?: number;
+  sortBy?: string;
+  sortDir?: 'asc' | 'desc';
 }
+
+// Whitelist of sortable columns → their Prisma orderBy shape. Keys match the
+// frontend column keys; anything else falls back to the default order.
+const SORT_FIELDS: Record<
+  string,
+  (dir: Prisma.SortOrder) => Prisma.ObjectMasterOrderByWithRelationInput
+> = {
+  createdAt: (dir) => ({ createdAt: dir }),
+  author: (dir) => ({ author: dir }),
+  module: (dir) => ({ module: { name: dir } }),
+  objectType: (dir) => ({ objectType: dir }),
+  objectName: (dir) => ({ objectName: dir }),
+  isSystem: (dir) => ({ isSystem: dir }),
+  nameInMenu: (dir) => ({ nameInMenu: dir }),
+};
 
 @Injectable()
 export class ObjectMasterService {
@@ -51,6 +68,13 @@ export class ObjectMasterService {
       ];
     }
 
+    // Sort order: a whitelisted column (with nulls last), else newest first.
+    const dir: Prisma.SortOrder = params.sortDir === 'asc' ? 'asc' : 'desc';
+    const build = params.sortBy ? SORT_FIELDS[params.sortBy] : undefined;
+    const orderBy: Prisma.ObjectMasterOrderByWithRelationInput = build
+      ? build(dir)
+      : { createdAt: 'desc' };
+
     // Stat-card counts respect the same visibility (but ignore the active filters).
     const countWhere = (objectType: ObjectType) => ({
       ...visibility,
@@ -60,7 +84,7 @@ export class ObjectMasterService {
       this.prisma.objectMaster.findMany({
         where,
         include: { module: { select: { id: true, name: true, code: true } } },
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
       }),
