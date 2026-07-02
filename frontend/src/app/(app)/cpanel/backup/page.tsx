@@ -420,7 +420,7 @@ export default function BackupPage() {
   ];
 
   return (
-    <div className="mx-auto flex h-full max-w-7xl flex-col">
+    <div className="mx-auto flex max-w-7xl flex-col">
       <PageHeader
         title="Backup & Restore"
         description="Create database backups and restore from them. Protected by the high security password."
@@ -473,6 +473,7 @@ export default function BackupPage() {
         rows={data ?? []}
         rowKey={(r) => r.fileName}
         loading={loading}
+        fillHeight={false}
         onRefresh={refetch}
         searchPlaceholder="Search backups..."
         onDelete={remove}
@@ -623,6 +624,7 @@ export default function BackupPage() {
         rows={tableDumps ?? []}
         rowKey={(r) => r.fileName}
         loading={dumpsLoading}
+        fillHeight={false}
         onRefresh={refetchDumps}
         searchPlaceholder="Search table dumps..."
         onDelete={removeTableDump}
