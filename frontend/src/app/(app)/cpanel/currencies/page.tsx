@@ -32,7 +32,7 @@ export default function CurrenciesPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<Currency[]>('/currencies');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete } = useLock<Currency>({
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<Currency>({
     endpoint: '/currencies',
     route: ROUTE,
     noun: 'currency',
@@ -196,6 +196,7 @@ export default function CurrenciesPage() {
         canView={canView}
         canEdit={canEdit}
         canDelete={canDelete}
+        bulkLock={bulkLock}
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}

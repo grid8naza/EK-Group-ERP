@@ -35,7 +35,7 @@ export default function AssetCategoriesPage() {
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<AssetCategory[]>('/asset-categories');
   const { data: companies } = useFetch<Company[]>('/companies');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete } = useLock<AssetCategory>({
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<AssetCategory>({
     endpoint: '/asset-categories',
     route: ROUTE,
     noun: 'asset category',
@@ -302,6 +302,7 @@ export default function AssetCategoriesPage() {
             onToggle={() => toggleActive(r)}
           />
         )}
+        bulkLock={bulkLock}
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}

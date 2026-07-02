@@ -65,7 +65,7 @@ export default function ProductBomPage() {
   const canView = can(ROUTE, 'view');
   // The BOM lock is the product's lock (governed by the Product Master screen),
   // so locking here also blocks editing the product under Inventory.
-  const { canLock, canUnlock, toggleLock, guardEdit } = useLock<Product>({
+  const { canLock, canUnlock, toggleLock, guardEdit, bulkLock } = useLock<Product>({
     endpoint: '/products',
     route: '/inventory/products',
     noun: 'BOM',
@@ -243,6 +243,7 @@ export default function ProductBomPage() {
         onEdit={canEdit ? (r) => guardEdit(r, () => openFor(r, false)) : undefined}
         canView={canView}
         canEdit={canEdit}
+        bulkLock={bulkLock}
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}

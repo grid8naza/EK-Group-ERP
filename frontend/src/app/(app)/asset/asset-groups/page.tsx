@@ -39,7 +39,7 @@ export default function AssetGroupsPage() {
   const { data, loading, refetch } = useFetch<AssetGroup[]>('/asset-groups');
   const { data: categories } = useFetch<AssetCategory[]>('/asset-categories');
   const { data: companies } = useFetch<Company[]>('/companies');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete } = useLock<AssetGroup>({
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<AssetGroup>({
     endpoint: '/asset-groups',
     route: ROUTE,
     noun: 'asset group',
@@ -474,6 +474,7 @@ export default function AssetGroupsPage() {
             onToggle={() => toggleActive(r)}
           />
         )}
+        bulkLock={bulkLock}
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}

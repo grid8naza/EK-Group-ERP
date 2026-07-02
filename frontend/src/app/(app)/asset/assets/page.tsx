@@ -16,9 +16,21 @@ import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/u
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import type { Asset, AssetCategory, AssetGroup, Unit, Company } from '@/lib/types';
+import type {
+  Asset,
+  AssetCategory,
+  AssetGroup,
+  Unit,
+  Company,
+  Lookup,
+  LookupValue,
+} from '@/lib/types';
 
 const ROUTE = '/asset/assets';
+
+// Lookup that backs the Brand dropdown (kept in sync with the backend
+// ASSET_BRANDS_LOOKUP_CODE seed). Admins manage the list in Cpanel → Lookups.
+const ASSET_BRANDS_LOOKUP_CODE = 'ASSET_BRANDS';
 
 const empty = {
   code: '',
@@ -50,7 +62,8 @@ export default function AssetsPage() {
   const { data: groups } = useFetch<AssetGroup[]>('/asset-groups');
   const { data: units } = useFetch<Unit[]>('/units');
   const { data: companies } = useFetch<Company[]>('/companies');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete } = useLock<Asset>({
+  const { data: lookups } = useFetch<Lookup[]>('/lookups');
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<Asset>({
     endpoint: '/assets',
     route: ROUTE,
     noun: 'asset',
@@ -68,7 +81,32 @@ export default function AssetsPage() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [groupFilter, setGroupFilter] = useState('');
   const [status, setStatus] = useState(''); // '' | 'active' | 'inactive'
+  const [brands, setBrands] = useState<LookupValue[]>([]);
   const nameRef = useRef<HTMLInputElement>(null);
+
+  // Load the Asset Brands lookup values for the Brand dropdown: find the lookup
+  // by code, then fetch its values. Runs once the lookup catalog is available.
+  useEffect(() => {
+    const brandLookup = (lookups ?? []).find(
+      (l) => l.code === ASSET_BRANDS_LOOKUP_CODE,
+    );
+    if (!brandLookup) {
+      setBrands([]);
+      return;
+    }
+    let cancelled = false;
+    api
+      .get<LookupValue[]>(`/lookups/${brandLookup.id}/values`)
+      .then((vals) => {
+        if (!cancelled) setBrands(vals ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setBrands([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lookups]);
 
   const canAdd = can(ROUTE, 'add');
   const canEdit = can(ROUTE, 'edit');
@@ -89,6 +127,22 @@ export default function AssetsPage() {
       g.isActive &&
       (!form.categoryId || String(g.categoryId) === form.categoryId),
   );
+
+  // Brand choices come from the active Asset Brands lookup values. If the asset
+  // being edited has a brand no longer in the list, keep it selectable so the
+  // stored value isn't silently lost.
+  const brandChoices = brands
+    .filter((b) => b.isActive)
+    .map((b) => ({ value: b.value, label: b.label }));
+  const brandOptions =
+    form.brand && !brandChoices.some((o) => o.value === form.brand)
+      ? [...brandChoices, { value: form.brand, label: `${form.brand} (not in list)` }]
+      : brandChoices;
+  // Assets store the lookup value (a stable key); resolve it to the current
+  // label for display so a renamed brand shows its new name in the list.
+  const brandLabelByValue = new Map(brands.map((b) => [b.value, b.label]));
+  const brandLabel = (v?: string | null) =>
+    v ? brandLabelByValue.get(v) ?? v : '-';
 
   const closeDrawer = () => {
     setOpen(false);
@@ -308,7 +362,7 @@ export default function AssetsPage() {
       accessor: (r) => capacityText(r),
       sortAccessor: (r) => r.capacity ?? 0,
     },
-    { key: 'brand', header: 'Brand', accessor: (r) => r.brand ?? '-' },
+    { key: 'brand', header: 'Brand', accessor: (r) => brandLabel(r.brand) },
     { key: 'serialNumber', header: 'Serial Number', accessor: (r) => r.serialNumber ?? '-' },
     {
       key: 'purchaseDate',
@@ -423,6 +477,7 @@ export default function AssetsPage() {
             onToggle={() => toggleActive(r)}
           />
         )}
+        bulkLock={bulkLock}
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}
@@ -547,10 +602,12 @@ export default function AssetsPage() {
             </div>
 
             {/* Identification */}
-            <Input
+            <Select
               label="Brand"
               value={form.brand}
               onChange={(e) => setForm({ ...form, brand: e.target.value })}
+              placeholder="— None —"
+              options={brandOptions}
             />
             <Input
               label="Model"

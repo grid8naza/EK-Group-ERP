@@ -8,9 +8,12 @@ import {
 } from 'class-validator';
 
 export class CreateLookupDto {
-  @IsString()
-  @IsNotEmpty()
-  code: string;
+  /**
+   * Stable internal key. Optional from the UI — the server generates one from
+   * the name when omitted (see LookupService.create). Seeds still pass a fixed
+   * code (e.g. ASSET_BRANDS) that dropdowns resolve by.
+   */
+  @IsOptional() @IsString() code?: string;
 
   @IsString()
   @IsNotEmpty()
@@ -29,9 +32,12 @@ export class CreateLookupValueDto {
   @IsNotEmpty()
   lookupId: number;
 
-  @IsString()
-  @IsNotEmpty()
-  value: string;
+  /**
+   * Stable internal key for this value. Optional from the UI — the server
+   * derives it from the label when omitted, so the label can be renamed later
+   * without changing what dependent records (e.g. Asset.brand) stored.
+   */
+  @IsOptional() @IsString() value?: string;
 
   @IsString()
   @IsNotEmpty()
@@ -39,7 +45,6 @@ export class CreateLookupValueDto {
 
   @IsOptional() @IsString() alias?: string;
   @IsOptional() @IsString() remarks?: string;
-  @IsOptional() @IsInt() sortOrder?: number;
   @IsOptional() @IsBoolean() isActive?: boolean;
 }
 

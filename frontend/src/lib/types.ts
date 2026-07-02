@@ -159,6 +159,8 @@ export interface Lookup {
   module?: { id: number; name: string } | null;
   isSystem: boolean;
   isLocked?: boolean;
+  /** Value count (returned by the list endpoint). */
+  _count?: { values: number };
 }
 
 export interface LookupValue {

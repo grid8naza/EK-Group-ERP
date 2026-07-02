@@ -81,7 +81,7 @@ export default function ProductsPage() {
   const { data: units } = useFetch<Unit[]>('/units');
   const { data: hsnCodes } = useFetch<HsnCode[]>('/hsn-codes');
   const { data: companies } = useFetch<Company[]>('/companies');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete } = useLock<Product>({
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<Product>({
     endpoint: '/products',
     route: ROUTE,
     noun: 'product',
@@ -511,6 +511,7 @@ export default function ProductsPage() {
             onToggle={() => toggleActive(r)}
           />
         )}
+        bulkLock={bulkLock}
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}

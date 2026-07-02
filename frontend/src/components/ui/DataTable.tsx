@@ -15,6 +15,7 @@ import {
 import { cn } from '@/lib/utils';
 import { RowActions } from './RowActions';
 import { ColumnToggle } from './ColumnToggle';
+import { BulkLockMenu } from './BulkLockMenu';
 
 export interface Column<T> {
   key: string;
@@ -64,6 +65,16 @@ interface DataTableProps<T> {
    * View, Edit, Delete, Lock order.
    */
   renderLock?: (row: T) => React.ReactNode;
+  /**
+   * Adds a "Lock all / Unlock all" control to the toolbar. Acts on the rows that
+   * currently match the search/filter (across all pages). Pass useLock().bulkLock.
+   */
+  bulkLock?: {
+    canLock?: boolean;
+    canUnlock?: boolean;
+    onLockAll: (rows: T[]) => void;
+    onUnlockAll: (rows: T[]) => void;
+  };
   onRowClick?: (row: T) => void;
   /** Extra classes per row (e.g. to highlight a category of rows). */
   rowClassName?: (row: T) => string | undefined;
@@ -131,6 +142,7 @@ export function DataTable<T>({
   canDelete = true,
   rowActions,
   renderLock,
+  bulkLock,
   onRowClick,
   rowClassName,
   toolbar,
@@ -299,6 +311,16 @@ export function DataTable<T>({
             />
           </div>
           {toolbarRight}
+          {bulkLock && (bulkLock.canLock || bulkLock.canUnlock) && (
+            <BulkLockMenu
+              canLock={bulkLock.canLock}
+              canUnlock={bulkLock.canUnlock}
+              // Apply to every row matching the current search/filter, not just
+              // the visible page.
+              onLockAll={() => bulkLock.onLockAll(sorted)}
+              onUnlockAll={() => bulkLock.onUnlockAll(sorted)}
+            />
+          )}
           {showColumnToggle && (
             <ColumnToggle
               columns={columns.map((c) => ({ key: c.key, label: c.header }))}

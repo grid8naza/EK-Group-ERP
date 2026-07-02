@@ -134,7 +134,7 @@ export default function ObjectsPage() {
   }, [load]);
 
   // Shared lock/unlock behavior, gated by the screen's lock/unlock privileges.
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete } = useLock<ErpObject>({
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<ErpObject>({
     endpoint: '/objects',
     route: ROUTE,
     noun: 'object',
@@ -539,6 +539,7 @@ export default function ObjectsPage() {
         canView={canView}
         canEdit={canEdit}
         canDelete={canDelete}
+        bulkLock={bulkLock}
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}

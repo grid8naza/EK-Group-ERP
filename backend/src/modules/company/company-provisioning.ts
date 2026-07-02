@@ -217,3 +217,29 @@ export async function backfillCpanelScaffold(
     });
   }
 }
+
+// Codes of the reference lookups that belong to the Cpanel module. Seeded
+// module-less in older databases; this re-homes them so they only appear in
+// Cpanel's Lookups screen (strict per-module isolation).
+const CPANEL_LOOKUP_CODES = ['DEVELOPERS', 'ICONS'];
+
+/**
+ * One-time Cpanel data seed (safe to run every boot). Re-homes the global
+ * Developers/Icons lookups under the Cpanel module so a module's lookup values
+ * never surface in another module's Lookups screen.
+ */
+export async function seedCpanelDefaults(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  const cpanel = await prisma.module.findUnique({
+    where: { code: 'CPANEL' },
+    select: { id: true },
+  });
+  if (!cpanel) return; // catalog not synced yet
+
+  // Only touch lookups still unassigned — never override an admin's later choice.
+  await prisma.lookup.updateMany({
+    where: { code: { in: CPANEL_LOOKUP_CODES }, moduleId: null },
+    data: { moduleId: cpanel.id },
+  });
+}

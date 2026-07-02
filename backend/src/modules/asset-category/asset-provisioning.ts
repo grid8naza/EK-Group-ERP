@@ -21,6 +21,15 @@ export const ASSET_SUBS = [
     order: 2,
   },
   { name: 'Asset Master', route: '/asset/assets', icon: 'box', order: 3 },
+  // Per-module reference data (Brands, etc.). Super-admin-only; managed here so a
+  // module's lookup values never leak into another module.
+  {
+    name: 'Lookups',
+    route: '/asset/lookups',
+    icon: 'list',
+    order: 4,
+    superAdminOnly: true,
+  },
 ];
 
 // Units used by the Asset Master's Capacity / Per-Unit that the inventory seed
@@ -32,6 +41,16 @@ const ASSET_UNITS: { code: string; name: string; symbol: string }[] = [
   { code: 'MIN', name: 'Minute', symbol: 'min' },
   { code: 'HR', name: 'Hour', symbol: 'hr' },
 ];
+
+// Lookup code the Asset Master's Brand dropdown reads (kept in sync with the
+// frontend ASSET_BRANDS_LOOKUP_CODE constant). A module-scoped lookup so admins
+// manage the brand list from Cpanel → Lookups.
+export const ASSET_BRANDS_LOOKUP_CODE = 'ASSET_BRANDS';
+
+// Starter brands so the dropdown is usable out of the box; admins add more via
+// Cpanel → Lookups. Values are stored on the asset as free text (Asset.brand),
+// so the list can grow without a schema change.
+const ASSET_BRAND_VALUES = ['Bosch', 'Siemens', 'ABB', 'Hitachi', 'Generic'];
 
 /** One-time seed for Asset defaults (safe to run every boot). */
 export async function seedAssetDefaults(
@@ -53,5 +72,29 @@ export async function seedAssetDefaults(
         },
       });
     }
+  }
+
+  // Brand lookup — created once, scoped to the Asset module. Guarded by code so
+  // re-runs (and admin edits to the value list) are preserved.
+  const existingBrands = await prisma.lookup.findFirst({
+    where: { code: ASSET_BRANDS_LOOKUP_CODE },
+    select: { id: true },
+  });
+  if (!existingBrands) {
+    const assetModule = await prisma.module.findUnique({
+      where: { code: 'ASSET' },
+      select: { id: true },
+    });
+    await prisma.lookup.create({
+      data: {
+        code: ASSET_BRANDS_LOOKUP_CODE,
+        name: 'Asset Brands',
+        description: 'Brands / makes for assets and machines',
+        moduleId: assetModule?.id ?? null,
+        values: {
+          create: ASSET_BRAND_VALUES.map((value) => ({ value, label: value })),
+        },
+      },
+    });
   }
 }

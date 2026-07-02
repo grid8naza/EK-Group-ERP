@@ -79,7 +79,7 @@ export default function CompaniesPage() {
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<Company[]>('/companies');
   const { data: currencies } = useFetch<Currency[]>('/currencies');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete } = useLock<Company>({
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<Company>({
     endpoint: '/companies',
     route: ROUTE,
     noun: 'company',
@@ -763,6 +763,7 @@ export default function CompaniesPage() {
             </>
           ) : null
         }
+        bulkLock={bulkLock}
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}

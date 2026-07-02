@@ -7,6 +7,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -26,9 +27,12 @@ import {
 export class LookupController {
   constructor(private readonly service: LookupService) {}
 
+  // `moduleId` scopes the list to one module (module-hosted Lookups screens).
+  // Parsed with Number() rather than ParseIntPipe so an absent param is allowed.
   @Get()
-  findAll() {
-    return this.service.findAll();
+  findAll(@Query('moduleId') moduleId?: string) {
+    const scoped = moduleId != null && moduleId !== '' ? Number(moduleId) : undefined;
+    return this.service.findAll(Number.isNaN(scoped as number) ? undefined : scoped);
   }
 
   @Get(':id')

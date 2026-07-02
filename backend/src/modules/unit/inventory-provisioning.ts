@@ -16,12 +16,28 @@ export const INVENTORY_SUBS = [
   { name: 'HSN Code Master', route: '/inventory/hsn-codes', icon: 'percent', order: 4 },
   { name: 'Item Master', route: '/inventory/items', icon: 'box', order: 5 },
   { name: 'Product Master', route: '/inventory/products', icon: 'package-2', order: 6 },
+  // Per-module reference data. Super-admin-only; isolated from other modules.
+  {
+    name: 'Lookups',
+    route: '/inventory/lookups',
+    icon: 'list',
+    order: 7,
+    superAdminOnly: true,
+  },
 ];
 
 // Production module screens. The BOM (recipe + packing) for each product is
 // edited here, while the product's master data lives under Inventory.
 export const PRODUCTION_SUBS = [
   { name: 'Product BOM', route: '/production/product-bom', icon: 'list-tree', order: 1 },
+  // Per-module reference data. Super-admin-only; isolated from other modules.
+  {
+    name: 'Lookups',
+    route: '/production/lookups',
+    icon: 'list',
+    order: 2,
+    superAdminOnly: true,
+  },
 ];
 
 // A second main menu under the Inventory module for reports (kept separate from
@@ -36,18 +52,21 @@ export const INVENTORY_REPORT_MENUS = [
         route: '/inventory/reports/items',
         icon: 'file-text',
         order: 1,
+        objectType: ObjectType.REPORT,
       },
       {
         name: 'Category List',
         route: '/inventory/reports/categories',
         icon: 'tag',
         order: 2,
+        objectType: ObjectType.REPORT,
       },
       {
         name: 'Group List',
         route: '/inventory/reports/groups',
         icon: 'layers',
         order: 3,
+        objectType: ObjectType.REPORT,
       },
     ],
   },
@@ -221,12 +240,21 @@ export async function backfillInventoryScaffold(
           visible: true,
         },
       });
+      // Skip super-admin-only screens (e.g. Lookups) — the SubMenu exists so
+      // super admins can reach it, but the Administrators group isn't granted.
+      const superAdminRoutes = new Set(
+        INVENTORY_SUBS.filter(
+          (s) => (s as { superAdminOnly?: boolean }).superAdminOnly,
+        ).map((s) => s.route),
+      );
       const subs = await prisma.subMenu.findMany({
         where: { mainMenuId: main.id },
-        select: { id: true },
+        select: { id: true, route: true },
       });
       await prisma.groupSubMenuPrivilege.createMany({
-        data: subs.map((sub) => ({
+        data: subs
+          .filter((sub) => !superAdminRoutes.has(sub.route ?? ''))
+          .map((sub) => ({
           userGroupId: adminGroup.id,
           subMenuId: sub.id,
           canMenu: true,

@@ -8,13 +8,26 @@ import {
   UpdateLookupValueDto,
 } from './lookup.dto';
 
+/** Normalize free text into an UPPER_SNAKE key (letters/digits only). */
+function slugKey(text: string): string {
+  return text
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
 @Injectable()
 export class LookupService {
   constructor(private prisma: PrismaService) {}
 
   // ---- Lookups ----
-  findAll() {
+  // When `moduleId` is given, scope to that module only (strict per-module
+  // isolation for the module-hosted Lookups screens). No filter = every lookup,
+  // used by consumers that resolve a lookup by code (e.g. Object Master Author).
+  findAll(moduleId?: number) {
     return this.prisma.lookup.findMany({
+      where: moduleId !== undefined ? { moduleId } : undefined,
       include: {
         _count: { select: { values: true } },
         module: { select: { id: true, name: true } },
@@ -26,14 +39,35 @@ export class LookupService {
   async findOne(id: number) {
     const lookup = await this.prisma.lookup.findUnique({
       where: { id },
-      include: { values: { orderBy: { sortOrder: 'asc' } } },
+      include: { values: { orderBy: { label: 'asc' } } },
     });
     if (!lookup) throw new NotFoundException('Lookup not found');
     return lookup;
   }
 
-  create(dto: CreateLookupDto) {
-    return this.prisma.lookup.create({ data: dto });
+  async create(dto: CreateLookupDto) {
+    // Code is system-generated (the UI never asks for one). Seeds may still pass
+    // a fixed code — honour it. Otherwise derive a stable, unique key from name.
+    const code = dto.code?.trim()
+      ? dto.code.trim()
+      : await this.uniqueLookupCode(dto.name);
+    return this.prisma.lookup.create({ data: { ...dto, code } });
+  }
+
+  // Turn a name into a stable UPPER_SNAKE key and disambiguate against existing
+  // lookup codes (they are globally unique). e.g. "Asset Brands" -> ASSET_BRANDS,
+  // then ASSET_BRANDS_2 if taken.
+  private async uniqueLookupCode(name: string): Promise<string> {
+    const base = slugKey(name) || 'LOOKUP';
+    let code = base;
+    for (let n = 2; ; n++) {
+      const clash = await this.prisma.lookup.findUnique({
+        where: { code },
+        select: { id: true },
+      });
+      if (!clash) return code;
+      code = `${base}_${n}`;
+    }
   }
 
   async update(id: number, dto: UpdateLookupDto) {
@@ -62,7 +96,7 @@ export class LookupService {
     await this.ensureLookup(lookupId);
     return this.prisma.lookupValue.findMany({
       where: { lookupId },
-      orderBy: { sortOrder: 'asc' },
+      orderBy: { label: 'asc' },
     });
   }
 
@@ -71,14 +105,39 @@ export class LookupService {
     dto: Omit<CreateLookupValueDto, 'lookupId'> & { lookupId?: number },
   ) {
     await this.ensureLookup(lookupId);
+    const value = dto.value?.trim()
+      ? dto.value.trim()
+      : await this.uniqueValueKey(lookupId, dto.label);
     return this.prisma.lookupValue.create({
-      data: { ...dto, lookupId },
+      data: { ...dto, lookupId, value },
     });
   }
 
   // ---- LookupValue CRUD ----
-  createValue(dto: CreateLookupValueDto) {
-    return this.prisma.lookupValue.create({ data: dto });
+  async createValue(dto: CreateLookupValueDto) {
+    await this.ensureLookup(dto.lookupId);
+    const value = dto.value?.trim()
+      ? dto.value.trim()
+      : await this.uniqueValueKey(dto.lookupId, dto.label);
+    return this.prisma.lookupValue.create({ data: { ...dto, value } });
+  }
+
+  // Derive a stable key from a value's label, unique within its lookup so the
+  // label stays freely renamable without disturbing what was stored elsewhere.
+  private async uniqueValueKey(
+    lookupId: number,
+    label: string,
+  ): Promise<string> {
+    const base = slugKey(label) || 'VALUE';
+    let value = base;
+    for (let n = 2; ; n++) {
+      const clash = await this.prisma.lookupValue.findFirst({
+        where: { lookupId, value },
+        select: { id: true },
+      });
+      if (!clash) return value;
+      value = `${base}_${n}`;
+    }
   }
 
   async findOneValue(id: number) {

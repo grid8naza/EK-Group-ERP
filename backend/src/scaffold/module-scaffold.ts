@@ -1,5 +1,8 @@
-import { Prisma } from '@prisma/client';
-import { CPANEL_SUBS } from '../modules/company/company-provisioning';
+import { ObjectType, Prisma } from '@prisma/client';
+import {
+  CPANEL_SUBS,
+  seedCpanelDefaults,
+} from '../modules/company/company-provisioning';
 import {
   INVENTORY_SUBS,
   INVENTORY_REPORT_MENUS,
@@ -26,6 +29,18 @@ export interface ScaffoldSub {
   route: string;
   icon: string;
   order: number;
+  /**
+   * Screen kind — decides which privilege actions apply (forms use
+   * Add/Edit/Delete/Lock/Unlock; reports use Print/PDF/Excel). Defaults to FORM.
+   */
+  objectType?: ObjectType;
+  /**
+   * Super-admin-only screen: the menu + Object Master entry are still created,
+   * but the Administrators group is NOT granted privileges, so only super admins
+   * (who bypass the privilege gate) see it. Used for the per-module Lookups
+   * screens, which manage that module's reference data.
+   */
+  superAdminOnly?: boolean;
 }
 
 export interface ModuleScaffold {
@@ -71,6 +86,7 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     menu: { name: 'Cpanel', icon: 'settings' },
     subs: CPANEL_SUBS,
     objectSystem: true,
+    seedData: seedCpanelDefaults,
   },
   {
     code: 'CRM',

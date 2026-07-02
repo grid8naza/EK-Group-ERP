@@ -57,6 +57,57 @@ export function useLock<T extends Lockable>(opts: {
     }
   };
 
+  // Bulk lock/unlock across a set of rows (the current filtered list). Only the
+  // rows that actually need changing are touched, then the list reloads once.
+  const lockAll = async (rows: T[]) => {
+    const targets = rows.filter((r) => !r.isLocked);
+    if (targets.length === 0) {
+      toast.info(`No unlocked ${opts.noun}s to lock.`);
+      return;
+    }
+    const ok = await confirm({
+      title: `Lock all ${opts.noun}s`,
+      message: `Lock ${targets.length} ${opts.noun}${targets.length === 1 ? '' : 's'}? They can't be edited or deleted until unlocked.`,
+      confirmText: 'Lock all',
+    });
+    if (!ok) return;
+    await bulkSetLock(targets, true);
+  };
+
+  const unlockAll = async (rows: T[]) => {
+    const targets = rows.filter((r) => r.isLocked);
+    if (targets.length === 0) {
+      toast.info(`No locked ${opts.noun}s to unlock.`);
+      return;
+    }
+    const ok = await confirm({
+      title: `Unlock all ${opts.noun}s`,
+      message: `Unlock ${targets.length} ${opts.noun}${targets.length === 1 ? '' : 's'}?`,
+      confirmText: 'Unlock all',
+    });
+    if (!ok) return;
+    await bulkSetLock(targets, false);
+  };
+
+  const bulkSetLock = async (targets: T[], locked: boolean) => {
+    const results = await Promise.allSettled(
+      targets.map((row) =>
+        api.patch(`${opts.endpoint}/${row.id}/lock`, { locked }),
+      ),
+    );
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    const done = targets.length - failed;
+    if (done > 0)
+      toast.success(
+        `${done} ${opts.noun}${done === 1 ? '' : 's'} ${locked ? 'locked' : 'unlocked'}.`,
+      );
+    if (failed > 0)
+      toast.error(
+        `${failed} ${opts.noun}${failed === 1 ? '' : 's'} could not be ${locked ? 'locked' : 'unlocked'}.`,
+      );
+    opts.reload();
+  };
+
   const guardEdit = (row: T, fn: () => void) => {
     if (row.isLocked) {
       toast.error(`This ${opts.noun} is locked. Unlock it first to edit.`);
@@ -73,7 +124,18 @@ export function useLock<T extends Lockable>(opts: {
     fn();
   };
 
-  return { canLock, canUnlock, canToggle, toggleLock, guardEdit, guardDelete };
+  return {
+    canLock,
+    canUnlock,
+    canToggle,
+    toggleLock,
+    lockAll,
+    unlockAll,
+    guardEdit,
+    guardDelete,
+    // Ready-to-pass bundle for the DataTable's `bulkLock` prop.
+    bulkLock: { canLock, canUnlock, onLockAll: lockAll, onUnlockAll: unlockAll },
+  };
 }
 
 function cap(s: string) {

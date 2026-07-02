@@ -38,7 +38,7 @@ export default function UnitsPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<Unit[]>('/units');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete } = useLock<Unit>({
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<Unit>({
     endpoint: '/units',
     route: ROUTE,
     noun: 'unit',
@@ -332,6 +332,7 @@ export default function UnitsPage() {
         canView={canView}
         canEdit={canEdit}
         canDelete={canDelete}
+        bulkLock={bulkLock}
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}

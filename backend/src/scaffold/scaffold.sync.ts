@@ -61,7 +61,14 @@ export async function syncScaffold(
 interface MenuGroup {
   name: string;
   icon: string;
-  subs: { name: string; route: string; icon: string; order: number }[];
+  subs: {
+    name: string;
+    route: string;
+    icon: string;
+    order: number;
+    objectType?: ObjectType;
+    superAdminOnly?: boolean;
+  }[];
   /** The module's primary menu is matched by module (so a rename is reused);
    *  extra menus are matched by name, so they coexist with the primary. */
   primary: boolean;
@@ -89,30 +96,42 @@ async function syncModuleMenus(
   const allSubs = menuGroups.flatMap((g) => g.subs);
 
   // ---- Global Object Master entries (one per screen, company-independent) ----
-  const existingRoutes = new Set(
+  // Match by route across ALL types (not just FORM) so a report screen isn't
+  // duplicated every boot, and so a screen mistyped earlier can be reconciled.
+  const existingObjects = new Map(
     (
       await prisma.objectMaster.findMany({
-        where: { moduleId, objectType: ObjectType.FORM },
-        select: { route: true },
+        where: { moduleId },
+        select: { route: true, objectType: true },
       })
-    ).map((o) => o.route),
+    ).map((o) => [o.route, o.objectType]),
   );
   for (const s of allSubs) {
-    if (existingRoutes.has(s.route)) continue;
-    await prisma.objectMaster.create({
-      data: {
-        moduleId,
-        author: 'System',
-        objectType: ObjectType.FORM,
-        objectName: s.name,
-        nameInMenu: s.name,
-        showInMenu: true,
-        route: s.route,
-        icon: s.icon,
-        isSystem: !!m.objectSystem,
-        isLocked: !!m.objectSystem,
-      },
-    });
+    const objectType = s.objectType ?? ObjectType.FORM;
+    const current = existingObjects.get(s.route);
+    if (current === undefined) {
+      await prisma.objectMaster.create({
+        data: {
+          moduleId,
+          author: 'System',
+          objectType,
+          objectName: s.name,
+          nameInMenu: s.name,
+          showInMenu: true,
+          route: s.route,
+          icon: s.icon,
+          isSystem: !!m.objectSystem,
+          isLocked: !!m.objectSystem,
+        },
+      });
+    } else if (current !== objectType) {
+      // Reconcile a screen seeded with the wrong kind (e.g. a report that was
+      // created as FORM before it was tagged REPORT).
+      await prisma.objectMaster.updateMany({
+        where: { moduleId, route: s.route },
+        data: { objectType },
+      });
+    }
   }
 
   // ---- Which companies get this module's menu ----
@@ -202,15 +221,15 @@ async function syncOneMenu(
   }
 
   // Missing sub-menus (matched by route).
-  const have = new Set(
+  const existingSubs = new Map(
     (
       await prisma.subMenu.findMany({
         where: { mainMenuId: main.id },
-        select: { route: true },
+        select: { id: true, route: true, objectType: true },
       })
-    ).map((s) => s.route),
+    ).map((s) => [s.route, s]),
   );
-  const missing = group.subs.filter((s) => !have.has(s.route));
+  const missing = group.subs.filter((s) => !existingSubs.has(s.route));
   if (missing.length) {
     await prisma.subMenu.createMany({
       data: missing.map((s) => ({
@@ -219,9 +238,22 @@ async function syncOneMenu(
         route: s.route,
         icon: s.icon,
         sortOrder: s.order,
-        objectType: ObjectType.FORM,
+        objectType: s.objectType ?? ObjectType.FORM,
       })),
     });
+  }
+  // Reconcile the kind of any existing sub-menu that was seeded before it was
+  // tagged (e.g. an Inventory Report screen created as FORM). This is what makes
+  // the Privileges matrix show Print/PDF/Excel for reports instead of Add/Edit.
+  for (const s of group.subs) {
+    const existing = existingSubs.get(s.route);
+    const objectType = s.objectType ?? ObjectType.FORM;
+    if (existing && existing.objectType !== objectType) {
+      await prisma.subMenu.update({
+        where: { id: existing.id },
+        data: { objectType },
+      });
+    }
   }
 
   // Grant the Administrators group full privileges on the menu + all its subs.
@@ -236,12 +268,20 @@ async function syncOneMenu(
       update: { visible: true },
       create: { userGroupId: adminGroupId, mainMenuId: main.id, visible: true },
     });
+    // Super-admin-only screens (e.g. per-module Lookups) get a SubMenu + Object
+    // Master entry so super admins can reach them, but the Administrators group
+    // is NOT granted privileges — regular admins never see them.
+    const superAdminRoutes = new Set(
+      group.subs.filter((s) => s.superAdminOnly).map((s) => s.route),
+    );
     const subs = await prisma.subMenu.findMany({
       where: { mainMenuId: main.id },
-      select: { id: true },
+      select: { id: true, route: true },
     });
     await prisma.groupSubMenuPrivilege.createMany({
-      data: subs.map((sub) => ({
+      data: subs
+        .filter((sub) => !superAdminRoutes.has(sub.route ?? ''))
+        .map((sub) => ({
         userGroupId: adminGroupId,
         subMenuId: sub.id,
         canMenu: true,

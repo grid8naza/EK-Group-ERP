@@ -37,7 +37,7 @@ export default function CategoriesPage() {
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<Category[]>('/categories');
   const { data: companies } = useFetch<Company[]>('/companies');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete } = useLock<Category>({
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<Category>({
     endpoint: '/categories',
     route: ROUTE,
     noun: 'category',
@@ -342,6 +342,7 @@ export default function CategoriesPage() {
             onToggle={() => toggleActive(r)}
           />
         )}
+        bulkLock={bulkLock}
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}

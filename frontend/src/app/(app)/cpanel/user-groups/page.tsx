@@ -93,7 +93,7 @@ export default function UserGroupsPage() {
 
   const { data: groups, loading, refetch } =
     useFetch<UserGroup[]>('/user-groups');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete } = useLock<UserGroup>({
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<UserGroup>({
     endpoint: '/user-groups',
     route: ROUTE,
     noun: 'user group',
@@ -451,6 +451,7 @@ export default function UserGroupsPage() {
             <KeyRound className="h-4 w-4" /> Privileges
           </button>
         )}
+        bulkLock={bulkLock}
         renderLock={(r) => (
           <LockButton
             locked={r.isLocked}
