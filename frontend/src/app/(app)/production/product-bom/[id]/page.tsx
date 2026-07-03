@@ -75,6 +75,10 @@ export default function ProductBomEditorPage() {
     () => new Map(itemList.map((i) => [i.id, i])),
     [itemList],
   );
+  const unitById = useMemo(
+    () => new Map(unitList.map((u) => [u.id, u])),
+    [unitList],
+  );
 
   // --- editable state ---
   const [yieldQty, setYieldQty] = useState('1');
@@ -106,9 +110,27 @@ export default function ProductBomEditorPage() {
   }, [product]);
 
   // --- ingredient helpers ---
-  const rateOf = (itemId: string) =>
-    itemById.get(Number(itemId))?.lastPurchasePrice ?? 0;
-  const amountOf = (l: Line) => (Number(l.quantity) || 0) * rateOf(l.itemId);
+  // A unit's base unit id and how many base units make one of it (SIMPLE units
+  // are their own base with factor 1; COMPOUND/CHAINING carry the resolved
+  // baseUnitId + conversionFactor, e.g. 1 KG = 1000 GM).
+  const baseOf = (u?: Unit) => (u ? (u.baseUnitId ?? u.id) : undefined);
+  const factorOf = (u?: Unit) => u?.conversionFactor ?? 1;
+
+  // Rate = the item's last purchase price (which is per the item's stock unit)
+  // converted into the BOM line's unit. e.g. price 210/KG, line in GM → 0.21/GM.
+  // Falls back to the raw price when the units are the same or not convertible
+  // (different base unit).
+  const rateOf = (l: Line) => {
+    const item = itemById.get(Number(l.itemId));
+    if (!item) return 0;
+    const price = item.lastPurchasePrice ?? 0;
+    const itemUnit = unitById.get(item.unitId);
+    const lineUnit = l.unitId ? unitById.get(Number(l.unitId)) : undefined;
+    if (!itemUnit || !lineUnit || itemUnit.id === lineUnit.id) return price;
+    if (baseOf(itemUnit) !== baseOf(lineUnit)) return price;
+    return (price * factorOf(lineUnit)) / factorOf(itemUnit);
+  };
+  const amountOf = (l: Line) => (Number(l.quantity) || 0) * rateOf(l);
   const materialCost = recipe.reduce((s, l) => s + amountOf(l), 0);
 
   // --- costing ---
@@ -364,7 +386,7 @@ export default function ProductBomEditorPage() {
                             />
                           </td>
                           <td className="px-1 text-right tabular-nums text-slate-600 dark:text-slate-300">
-                            {money(rateOf(line.itemId))}
+                            {money(rateOf(line))}
                           </td>
                           <td className="pl-1 text-right font-medium tabular-nums text-slate-800 dark:text-slate-100">
                             {money(amountOf(line))}
