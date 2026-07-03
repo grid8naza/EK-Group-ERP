@@ -6,6 +6,24 @@
 // Cross-domain rule: company links are plain `companyId` columns (no @relation to
 // the Cpanel Company); every real @relation stays inside this domain file.
 
+/// Operational availability of a machine. Replaces the old isActive boolean so a
+/// machine that is temporarily out of service (maintenance) is distinct from one
+/// that is retired.
+enum AssetStatus {
+  ACTIVE
+  INACTIVE
+  UNDER_REPAIR
+}
+
+/// Lifecycle of a production-line booking (a machine time-slot reserved while
+/// planning production). Bookings are created/updated from the Production module.
+enum AssetBookingStatus {
+  PLANNED
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
 /// Asset Category master — top level of the asset classification. Available to
 /// all companies or a chosen set (via AssetCategoryCompany links). Code is a
 /// system-generated 2-digit category segment.
@@ -96,7 +114,8 @@ model Asset {
   categoryId     Int
   groupId        Int // leaf asset group this asset belongs to
   name           String // Machine Name
-  capacity       Float     @default(0)
+  minCapacity    Float     @default(0)
+  maxCapacity    Float     @default(0)
   capacityUnitId Int? // -> Unit (plain id, no cross-domain FK): Cuts, Pieces, Litre…
   perUnitId      Int? // -> Unit (plain id): the "per" basis (Minutes, Hour…)
   brand          String?
@@ -107,19 +126,46 @@ model Asset {
   purchaseDate   DateTime?
   purchasePrice  Float     @default(0)
   warrantyPeriod String? // free text (e.g. "12 months", "2 years")
-  allCompanies   Boolean   @default(false)
-  isActive       Boolean   @default(true)
-  isLocked       Boolean   @default(false)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  allCompanies   Boolean     @default(false)
+  status         AssetStatus @default(ACTIVE)
+  // Machines flagged here can be reserved (prebooked) when planning production.
+  isProductionLine Boolean   @default(false)
+  isLocked       Boolean     @default(false)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
 
   category  AssetCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   group     AssetGroup     @relation(fields: [groupId], references: [id], onDelete: Restrict)
   companies AssetCompany[]
+  bookings  AssetBooking[]
 
   @@index([categoryId])
   @@index([groupId])
   @@map("assets")
+}
+
+/// A production-line booking: a machine reserved for a product/batch over a time
+/// slot on a given day. Rows are created/updated when planning production in the
+/// Production module. `productId` points to the Inventory Product master by plain
+/// id (cross-domain: no @relation); `productName` is a snapshot for display.
+model AssetBooking {
+  id          Int                @id @default(autoincrement())
+  assetId     Int
+  productId   Int? // -> Inventory Product (plain id, no cross-domain FK)
+  productName String // snapshot of the product name at booking time
+  batchNo     String?
+  date        DateTime // the booking day (time carried by timeFrom/timeTo)
+  timeFrom    String // "HH:mm"
+  timeTo      String // "HH:mm"
+  status      AssetBookingStatus @default(PLANNED)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  asset Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@index([assetId])
+  @@index([date])
+  @@map("asset_bookings")
 }
 
 /// Links an asset to a company it is available in (when not `allCompanies`).

@@ -18,6 +18,7 @@ import { Input, Select, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import type {
   Asset,
+  AssetStatus,
   AssetCategory,
   AssetGroup,
   Unit,
@@ -25,6 +26,23 @@ import type {
   Lookup,
   LookupValue,
 } from '@/lib/types';
+
+// Machine status options shared by the form dropdown, listing badge, and filter.
+const STATUS_OPTIONS: { value: AssetStatus; label: string }[] = [
+  { value: 'ACTIVE', label: 'Active' },
+  { value: 'INACTIVE', label: 'Inactive' },
+  { value: 'UNDER_REPAIR', label: 'Under Repair' },
+];
+const STATUS_LABEL: Record<AssetStatus, string> = {
+  ACTIVE: 'Active',
+  INACTIVE: 'Inactive',
+  UNDER_REPAIR: 'Under Repair',
+};
+const STATUS_COLOR: Record<AssetStatus, 'green' | 'slate' | 'amber'> = {
+  ACTIVE: 'green',
+  INACTIVE: 'slate',
+  UNDER_REPAIR: 'amber',
+};
 
 const ROUTE = '/asset/assets';
 
@@ -37,7 +55,8 @@ const empty = {
   name: '',
   categoryId: '',
   groupId: '',
-  capacity: '0',
+  minCapacity: '0',
+  maxCapacity: '0',
   capacityUnitId: '',
   perUnitId: '',
   brand: '',
@@ -50,7 +69,8 @@ const empty = {
   warrantyPeriod: '',
   allCompanies: true,
   companyIds: [] as number[],
-  isActive: true,
+  status: 'ACTIVE' as AssetStatus,
+  isProductionLine: false,
 };
 
 export default function AssetsPage() {
@@ -80,7 +100,7 @@ export default function AssetsPage() {
   // selected category.
   const [categoryFilter, setCategoryFilter] = useState('');
   const [groupFilter, setGroupFilter] = useState('');
-  const [status, setStatus] = useState(''); // '' | 'active' | 'inactive'
+  const [status, setStatus] = useState<'' | AssetStatus>(''); // '' = all
   const [brands, setBrands] = useState<LookupValue[]>([]);
   const nameRef = useRef<HTMLInputElement>(null);
 
@@ -154,7 +174,8 @@ export default function AssetsPage() {
     name: a.name,
     categoryId: a.categoryId != null ? String(a.categoryId) : '',
     groupId: a.groupId != null ? String(a.groupId) : '',
-    capacity: String(a.capacity ?? 0),
+    minCapacity: String(a.minCapacity ?? 0),
+    maxCapacity: String(a.maxCapacity ?? 0),
     capacityUnitId: a.capacityUnitId != null ? String(a.capacityUnitId) : '',
     perUnitId: a.perUnitId != null ? String(a.perUnitId) : '',
     brand: a.brand ?? '',
@@ -167,7 +188,8 @@ export default function AssetsPage() {
     warrantyPeriod: a.warrantyPeriod ?? '',
     allCompanies: a.allCompanies,
     companyIds: a.companyIds ?? [],
-    isActive: a.isActive,
+    status: a.status,
+    isProductionLine: a.isProductionLine,
   });
 
   const openAdd = () => {
@@ -230,7 +252,8 @@ export default function AssetsPage() {
       // code + category are derived server-side from the group.
       name: form.name.trim(),
       groupId: Number(form.groupId),
-      capacity: num(form.capacity),
+      minCapacity: num(form.minCapacity),
+      maxCapacity: num(form.maxCapacity),
       capacityUnitId: idOrNull(form.capacityUnitId),
       perUnitId: idOrNull(form.perUnitId),
       brand: form.brand.trim() || undefined,
@@ -243,7 +266,8 @@ export default function AssetsPage() {
       warrantyPeriod: form.warrantyPeriod.trim() || undefined,
       allCompanies: form.allCompanies,
       companyIds: form.allCompanies ? [] : form.companyIds,
-      isActive: form.isActive,
+      status: form.status,
+      isProductionLine: form.isProductionLine,
     };
 
     setSaving(true);
@@ -293,12 +317,16 @@ export default function AssetsPage() {
     }
   };
 
-  // Retire/restore without deleting — keeps the code, leaves no gap.
+  // Quick retire/restore without deleting — toggles Active ↔ Inactive (the
+  // "Under Repair" state is set from the form). Keeps the code, leaves no gap.
   const toggleActive = (a: Asset) =>
     guardEdit(a, async () => {
+      const next: AssetStatus = a.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
       try {
-        await api.patch(`/assets/${a.id}`, { isActive: !a.isActive });
-        toast.success(a.isActive ? 'Asset set inactive.' : 'Asset set active.');
+        await api.patch(`/assets/${a.id}`, { status: next });
+        toast.success(
+          next === 'ACTIVE' ? 'Asset set active.' : 'Asset set inactive.',
+        );
         refetch();
       } catch (e) {
         toast.error(e instanceof ApiError ? e.message : 'Failed to update.');
@@ -323,21 +351,22 @@ export default function AssetsPage() {
       rows = rows.filter((r) => String(r.categoryId) === categoryFilter);
     if (groupFilter)
       rows = rows.filter((r) => String(r.groupId) === groupFilter);
-    if (status === 'active') rows = rows.filter((r) => r.isActive);
-    else if (status === 'inactive') rows = rows.filter((r) => !r.isActive);
+    if (status) rows = rows.filter((r) => r.status === status);
     return rows;
   }, [data, categoryFilter, groupFilter, status]);
 
   const availabilityText = (a: Asset) =>
     a.companyIds.map((id) => companyNameById.get(id) ?? `#${id}`).join(', ');
 
-  // Render capacity as "value unitCode / perUnitCode" resolving unit ids from
-  // the /units fetch.
+  // Render capacity as "min–max unitCode / perUnitCode" (or just "min …" when no
+  // maximum is set), resolving unit ids from the /units fetch.
   const capacityText = (a: Asset) => {
-    const cap = a.capacity ?? 0;
+    const min = a.minCapacity ?? 0;
+    const max = a.maxCapacity ?? 0;
+    const range = max > 0 ? `${min}–${max}` : String(min);
     const capUnit = a.capacityUnitId != null ? unitCodeById.get(a.capacityUnitId) : undefined;
     const perUnit = a.perUnitId != null ? unitCodeById.get(a.perUnitId) : undefined;
-    let text = capUnit ? `${cap} ${capUnit}` : String(cap);
+    let text = capUnit ? `${range} ${capUnit}` : range;
     if (perUnit) text += ` / ${perUnit}`;
     return text;
   };
@@ -360,7 +389,7 @@ export default function AssetsPage() {
       key: 'capacity',
       header: 'Capacity',
       accessor: (r) => capacityText(r),
-      sortAccessor: (r) => r.capacity ?? 0,
+      sortAccessor: (r) => r.minCapacity ?? 0,
     },
     { key: 'brand', header: 'Brand', accessor: (r) => brandLabel(r.brand) },
     { key: 'serialNumber', header: 'Serial Number', accessor: (r) => r.serialNumber ?? '-' },
@@ -385,13 +414,22 @@ export default function AssetsPage() {
         ),
     },
     {
-      key: 'isActive',
+      key: 'isProductionLine',
+      header: 'Prod. Line',
+      sortAccessor: (r) => (r.isProductionLine ? 1 : 0),
+      render: (r) =>
+        r.isProductionLine ? (
+          <Badge color="blue">Production</Badge>
+        ) : (
+          <span className="text-slate-400">-</span>
+        ),
+    },
+    {
+      key: 'status',
       header: 'Status',
-      sortAccessor: (r) => (r.isActive ? 'Active' : 'Inactive'),
+      sortAccessor: (r) => STATUS_LABEL[r.status],
       render: (r) => (
-        <Badge color={r.isActive ? 'green' : 'slate'}>
-          {r.isActive ? 'Active' : 'Inactive'}
-        </Badge>
+        <Badge color={STATUS_COLOR[r.status]}>{STATUS_LABEL[r.status]}</Badge>
       ),
     },
   ];
@@ -454,13 +492,10 @@ export default function AssetsPage() {
             />
             <Select
               value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              wrapClassName="w-36"
+              onChange={(e) => setStatus(e.target.value as '' | AssetStatus)}
+              wrapClassName="w-40"
               placeholder="All statuses"
-              options={[
-                { value: 'active', label: 'Active' },
-                { value: 'inactive', label: 'Inactive' },
-              ]}
+              options={STATUS_OPTIONS}
             />
           </div>
         }
@@ -472,7 +507,7 @@ export default function AssetsPage() {
         canDelete={canDelete}
         rowActions={(r) => (
           <StatusToggle
-            active={r.isActive}
+            active={r.status === 'ACTIVE'}
             canEdit={canEdit}
             onToggle={() => toggleActive(r)}
           />
@@ -574,14 +609,28 @@ export default function AssetsPage() {
             )}
 
             {/* Capacity */}
-            <Input
-              label="Capacity"
-              type="number"
-              min={0}
-              step="any"
-              value={form.capacity}
-              onChange={(e) => setForm({ ...form, capacity: e.target.value })}
-            />
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Minimum Capacity"
+                type="number"
+                min={0}
+                step="any"
+                value={form.minCapacity}
+                onChange={(e) =>
+                  setForm({ ...form, minCapacity: e.target.value })
+                }
+              />
+              <Input
+                label="Maximum Capacity"
+                type="number"
+                min={0}
+                step="any"
+                value={form.maxCapacity}
+                onChange={(e) =>
+                  setForm({ ...form, maxCapacity: e.target.value })
+                }
+              />
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <Select
                 label="Capacity Unit"
@@ -695,12 +744,20 @@ export default function AssetsPage() {
               )}
             </div>
 
-            <div className="sm:col-span-2">
+            <Select
+              label="Status"
+              value={form.status}
+              onChange={(e) =>
+                setForm({ ...form, status: e.target.value as AssetStatus })
+              }
+              options={STATUS_OPTIONS}
+            />
+            <div className="flex items-end sm:col-span-1">
               <Checkbox
-                label="Active"
-                checked={form.isActive}
+                label="Used in production line"
+                checked={form.isProductionLine}
                 onChange={(e) =>
-                  setForm({ ...form, isActive: e.target.checked })
+                  setForm({ ...form, isProductionLine: e.target.checked })
                 }
               />
             </div>

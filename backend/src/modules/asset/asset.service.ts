@@ -80,7 +80,8 @@ export class AssetService {
           categoryId: group.categoryId,
           groupId: dto.groupId,
           name: dto.name.trim(),
-          capacity: dto.capacity ?? 0,
+          minCapacity: dto.minCapacity ?? 0,
+          maxCapacity: dto.maxCapacity ?? 0,
           capacityUnitId: dto.capacityUnitId ?? null,
           perUnitId: dto.perUnitId ?? null,
           brand: dto.brand?.trim() || null,
@@ -92,7 +93,8 @@ export class AssetService {
           purchasePrice: dto.purchasePrice ?? 0,
           warrantyPeriod: dto.warrantyPeriod?.trim() || null,
           allCompanies,
-          isActive: dto.isActive ?? true,
+          status: dto.status ?? 'ACTIVE',
+          isProductionLine: dto.isProductionLine ?? false,
           companies: { create: companyIds.map((companyId) => ({ companyId })) },
         },
         include: withRelations,
@@ -184,7 +186,8 @@ export class AssetService {
           // code, categoryId and groupId are part of the hierarchy code and are
           // immutable after creation.
           name: dto.name?.trim(),
-          capacity: dto.capacity,
+          minCapacity: dto.minCapacity,
+          maxCapacity: dto.maxCapacity,
           capacityUnitId: dto.capacityUnitId,
           perUnitId: dto.perUnitId,
           brand: dto.brand !== undefined ? dto.brand?.trim() || null : undefined,
@@ -210,7 +213,8 @@ export class AssetService {
               ? dto.warrantyPeriod?.trim() || null
               : undefined,
           allCompanies,
-          isActive: dto.isActive,
+          status: dto.status,
+          isProductionLine: dto.isProductionLine,
           ...(companyIds
             ? {
                 companies: {

@@ -3,6 +3,7 @@ import {
   IsArray,
   IsBoolean,
   IsDateString,
+  IsEnum,
   IsInt,
   IsNumber,
   IsOptional,
@@ -12,6 +13,7 @@ import {
   MinLength,
   ValidateIf,
 } from 'class-validator';
+import { AssetStatus } from '@prisma/client';
 
 export class CreateAssetDto {
   // Code is system-generated; ignored if sent.
@@ -38,7 +40,12 @@ export class CreateAssetDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
-  capacity?: number;
+  minCapacity?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maxCapacity?: number;
 
   /** Unit the capacity is measured in (Unit master id). */
   @IsOptional()
@@ -100,9 +107,15 @@ export class CreateAssetDto {
   @IsInt({ each: true })
   companyIds?: number[];
 
+  /** Operational availability (defaults to ACTIVE). */
+  @IsOptional()
+  @IsEnum(AssetStatus)
+  status?: AssetStatus;
+
+  /** Flag machines that can be reserved when planning production. */
   @IsOptional()
   @IsBoolean()
-  isActive?: boolean;
+  isProductionLine?: boolean;
 }
 
 export class UpdateAssetDto {
@@ -130,7 +143,12 @@ export class UpdateAssetDto {
   @IsOptional()
   @IsNumber()
   @Min(0)
-  capacity?: number;
+  minCapacity?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maxCapacity?: number;
 
   @IsOptional()
   @IsInt()
@@ -191,6 +209,10 @@ export class UpdateAssetDto {
   companyIds?: number[];
 
   @IsOptional()
+  @IsEnum(AssetStatus)
+  status?: AssetStatus;
+
+  @IsOptional()
   @IsBoolean()
-  isActive?: boolean;
+  isProductionLine?: boolean;
 }

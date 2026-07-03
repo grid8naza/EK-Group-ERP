@@ -738,7 +738,8 @@ export interface Asset {
   groupId: number;
   group?: MasterRef | null;
   name: string;            // Machine Name
-  capacity: number;
+  minCapacity: number;
+  maxCapacity: number;
   capacityUnitId?: number | null;
   perUnitId?: number | null;
   brand?: string | null;
@@ -751,8 +752,32 @@ export interface Asset {
   warrantyPeriod?: string | null;
   allCompanies: boolean;
   companyIds: number[];
-  isActive: boolean;
+  status: AssetStatus;
+  isProductionLine: boolean;
   isLocked?: boolean;
+}
+
+// Operational availability of a machine (replaces the old active/inactive flag).
+export type AssetStatus = 'ACTIVE' | 'INACTIVE' | 'UNDER_REPAIR';
+
+export type AssetBookingStatus =
+  | 'PLANNED'
+  | 'CONFIRMED'
+  | 'COMPLETED'
+  | 'CANCELLED';
+
+/// A production-line booking: a machine reserved for a product/batch over a time
+/// slot on a day. Created/updated from the Production module.
+export interface AssetBooking {
+  id: number;
+  assetId: number;
+  productId?: number | null;
+  productName: string;
+  batchNo?: string | null;
+  date: string; // ISO date
+  timeFrom: string; // "HH:mm"
+  timeTo: string; // "HH:mm"
+  status: AssetBookingStatus;
 }
 
 // ---- Backup & Restore ----
