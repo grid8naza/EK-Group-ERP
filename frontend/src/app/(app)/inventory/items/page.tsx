@@ -526,22 +526,6 @@ export default function ItemsPage() {
               value={editing ? editing.code : 'Generated from the group'}
               disabled
             />
-            <Input
-              ref={codeRef}
-              label="Name"
-              required
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="e.g. Wheat Flour 1kg"
-            />
-            <Textarea
-              label="Description"
-              value={form.description}
-              onChange={(e) =>
-                setForm({ ...form, description: e.target.value })
-              }
-              wrapClassName="sm:col-span-2"
-            />
 
             {/* Classification — immutable after creation (the code encodes it),
                 so it's read-only when editing. To move an item, inactivate it
@@ -591,11 +575,29 @@ export default function ItemsPage() {
               </>
             )}
 
-            {/* Unit & pricing */}
+            <Input
+              ref={codeRef}
+              label="Name"
+              required
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. Wheat Flour 1kg"
+            />
+
+            {/* Tax & unit */}
+            <Select
+              label="HSN Code"
+              value={form.hsnCodeId}
+              onChange={(e) => setForm({ ...form, hsnCodeId: e.target.value })}
+              placeholder="— None —"
+              options={(hsnCodes ?? []).map((h) => ({
+                value: h.id,
+                label: `${h.code} — ${h.description} (IGST ${h.igst}%)`,
+              }))}
+            />
             <Select
               label="Stock Unit"
               required
-              wrapClassName="sm:col-span-2"
               value={form.unitId}
               onChange={(e) => setForm({ ...form, unitId: e.target.value })}
               placeholder="Select a unit"
@@ -603,24 +605,6 @@ export default function ItemsPage() {
                 value: u.id,
                 label: u.name,
               }))}
-            />
-            <Input
-              label="Last Purchase Price"
-              type="number"
-              min={0}
-              step="any"
-              value={form.lastPurchasePrice}
-              onChange={(e) =>
-                setForm({ ...form, lastPurchasePrice: e.target.value })
-              }
-            />
-            <Input
-              label="Last Purchase Date"
-              type="date"
-              value={form.lastPurchaseDate}
-              onChange={(e) =>
-                setForm({ ...form, lastPurchaseDate: e.target.value })
-              }
             />
 
             {/* Packing */}
@@ -640,19 +624,6 @@ export default function ItemsPage() {
               options={unitList.map((u) => ({
                 value: u.id,
                 label: u.name,
-              }))}
-            />
-
-            {/* Tax */}
-            <Select
-              label="HSN Code"
-              value={form.hsnCodeId}
-              onChange={(e) => setForm({ ...form, hsnCodeId: e.target.value })}
-              placeholder="— None —"
-              wrapClassName="sm:col-span-2"
-              options={(hsnCodes ?? []).map((h) => ({
-                value: h.id,
-                label: `${h.code} — ${h.description} (IGST ${h.igst}%)`,
               }))}
             />
 
@@ -702,6 +673,26 @@ export default function ItemsPage() {
               onChange={(e) => setForm({ ...form, shelfLife: e.target.value })}
             />
 
+            {/* Purchase */}
+            <Input
+              label="Last Purchase Date"
+              type="date"
+              value={form.lastPurchaseDate}
+              onChange={(e) =>
+                setForm({ ...form, lastPurchaseDate: e.target.value })
+              }
+            />
+            <Input
+              label="Last Purchase Price"
+              type="number"
+              min={0}
+              step="any"
+              value={form.lastPurchasePrice}
+              onChange={(e) =>
+                setForm({ ...form, lastPurchasePrice: e.target.value })
+              }
+            />
+
             {/* Availability */}
             <div className="flex flex-col gap-2 sm:col-span-2">
               <span className="label !mb-0">Availability</span>
@@ -739,6 +730,16 @@ export default function ItemsPage() {
                 }
               />
             </div>
+
+            {/* Description — kept at the very bottom of the form. */}
+            <Textarea
+              label="Description"
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
+              wrapClassName="sm:col-span-2"
+            />
           </div>
         </ReadOnlyFieldset>
       </Drawer>
