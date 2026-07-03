@@ -97,13 +97,16 @@ export default function ProductBomEditorPage() {
   const [bomMarginPct, setBomMarginPct] = useState('0');
   const [saving, setSaving] = useState(false);
 
-  // Overlay data-entry forms.
+  // Overlay data-entry forms. The `*Seq` counters bump after each add so the
+  // form remounts and the first field re-focuses, ready for the next entry.
   const [ingForm, setIngForm] = useState<{ index: number | null; draft: Line } | null>(
     null,
   );
   const [procForm, setProcForm] = useState<{ index: number | null; draft: Proc } | null>(
     null,
   );
+  const [ingSeq, setIngSeq] = useState(0);
+  const [procSeq, setProcSeq] = useState(0);
 
   // Hydrate once the product loads.
   useEffect(() => {
@@ -192,6 +195,7 @@ export default function ProductBomEditorPage() {
       setRecipe((rows) => [...rows, d]);
       toast.success(`${itemName(d.itemId)} added.`);
       setIngForm({ index: null, draft: { ...BLANK_LINE } });
+      setIngSeq((s) => s + 1); // remount → item combo re-opens for the next entry
     } else {
       setRecipe((rows) => rows.map((r, i) => (i === ingForm.index ? d : r)));
       setIngForm(null);
@@ -215,6 +219,7 @@ export default function ProductBomEditorPage() {
       setProcesses((rows) => [...rows, clean]);
       toast.success(`${clean.name} added.`);
       setProcForm({ index: null, draft: { ...BLANK_PROC } });
+      setProcSeq((s) => s + 1); // remount → name field re-focuses for the next entry
     } else {
       setProcesses((rows) => rows.map((r, i) => (i === procForm.index ? clean : r)));
       setProcForm(null);
@@ -586,6 +591,7 @@ export default function ProductBomEditorPage() {
       >
         {ingForm && (
           <form
+            key={ingSeq}
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
@@ -595,6 +601,8 @@ export default function ProductBomEditorPage() {
             <Select
               label="Item"
               required
+              autoFocus={ingForm.index == null}
+              openOnFocus
               value={ingForm.draft.itemId}
               onChange={(e) => onPickIngItem(e.target.value)}
               placeholder="Select item"
@@ -617,6 +625,7 @@ export default function ProductBomEditorPage() {
               <Select
                 label="Unit"
                 required
+                openOnFocus
                 value={ingForm.draft.unitId}
                 onChange={(e) =>
                   setIngForm((f) =>
@@ -666,6 +675,7 @@ export default function ProductBomEditorPage() {
       >
         {procForm && (
           <form
+            key={procSeq}
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
@@ -675,6 +685,7 @@ export default function ProductBomEditorPage() {
             <Input
               label="Process / step name"
               required
+              autoFocus={procForm.index == null}
               value={procForm.draft.name}
               onChange={(e) =>
                 setProcForm((f) =>
@@ -698,6 +709,7 @@ export default function ProductBomEditorPage() {
               />
               <Select
                 label="Unit"
+                openOnFocus
                 value={procForm.draft.timeUnit}
                 onChange={(e) =>
                   setProcForm((f) =>
@@ -720,6 +732,7 @@ export default function ProductBomEditorPage() {
             </div>
             <Select
               label="Machine"
+              openOnFocus
               value={procForm.draft.machineId}
               onChange={(e) =>
                 setProcForm((f) =>

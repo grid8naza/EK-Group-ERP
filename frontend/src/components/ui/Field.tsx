@@ -91,6 +91,12 @@ type SelectProps = {
   sortOptions?: boolean;
   /** Show the type-to-search box once the list has more than this many items. */
   searchThreshold?: number;
+  /** Open the dropdown (and focus its search) on mount — for fast keyboard
+   *  entry when the field is the first in a freshly opened form. */
+  autoFocus?: boolean;
+  /** Open (ready to search) whenever the field receives focus, e.g. via Tab —
+   *  so keyboard users never need to click to start searching. */
+  openOnFocus?: boolean;
 };
 
 /**
@@ -116,13 +122,19 @@ export function Select({
   title,
   sortOptions = true,
   searchThreshold = 8,
+  autoFocus = false,
+  openOnFocus = false,
 }: SelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  // True immediately after a value is picked, so the focus we return to the
+  // trigger doesn't re-open the dropdown (openOnFocus).
+  const justPickedRef = useRef(false);
 
   // Sorted copy of the caller's options (A→Z by label) — leaves the source
   // array untouched.
@@ -167,9 +179,24 @@ export function Select({
     if (showSearch) searchRef.current?.focus();
   }, [open, showSearch]);
 
+  // Open on mount (which focuses the search) when asked — lets the user start
+  // typing to search as soon as the field appears, no mouse click needed. The
+  // small delay lets a slide-in drawer settle so focus reliably sticks.
+  useEffect(() => {
+    if (!autoFocus) return;
+    const t = setTimeout(() => setOpen(true), 80);
+    return () => clearTimeout(t);
+  }, [autoFocus]);
+
   const choose = (val: string | number) => {
     onChange?.({ target: { value: String(val) } });
     setOpen(false);
+    if (openOnFocus) {
+      // Return focus to the trigger (so Tab continues), but suppress the
+      // focus-triggered re-open.
+      justPickedRef.current = true;
+      buttonRef.current?.focus();
+    }
   };
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -212,12 +239,21 @@ export function Select({
     >
       <div className="relative" ref={ref}>
         <button
+          ref={buttonRef}
           type="button"
           id={id}
           name={name}
           title={title}
           disabled={disabled}
           onClick={() => !disabled && setOpen((v) => !v)}
+          onFocus={() => {
+            if (!openOnFocus || disabled) return;
+            if (justPickedRef.current) {
+              justPickedRef.current = false;
+              return;
+            }
+            setOpen(true);
+          }}
           onKeyDown={onKeyDown}
           className={cn('input-base flex w-full items-center gap-2 text-left', className)}
         >
