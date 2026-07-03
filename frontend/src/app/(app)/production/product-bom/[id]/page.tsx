@@ -294,7 +294,7 @@ export default function ProductBomEditorPage() {
                 )}
               </div>
 
-              <div className="overflow-x-auto">
+              <div>
                 <table className="w-full table-fixed text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700">
