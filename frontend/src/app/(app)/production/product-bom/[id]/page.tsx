@@ -276,14 +276,12 @@ export default function ProductBomEditorPage() {
             </div>
           </div>
 
-          {/* Ingredients + Process Flow */}
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {/* Ingredients — full width, process flow below it */}
+          <div className="space-y-4">
             {/* Ingredients (recipe) */}
             <div className="card flex flex-col p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-                  Ingredients
-                </h2>
+              <div className="-mx-4 -mt-4 mb-3 flex items-center justify-between rounded-t-2xl bg-[#5b544c] px-4 py-2.5 dark:bg-slate-800">
+                <h2 className="text-sm font-semibold text-white">Ingredients</h2>
                 {!view && (
                   <button
                     className="btn-secondary text-xs"
@@ -406,10 +404,8 @@ export default function ProductBomEditorPage() {
 
             {/* Process Flow */}
             <div className="card flex flex-col p-4">
-              <div className="mb-2 flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-                  Process Flow
-                </h2>
+              <div className="-mx-4 -mt-4 mb-3 flex items-center justify-between rounded-t-2xl bg-[#5b544c] px-4 py-2.5 dark:bg-slate-800">
+                <h2 className="text-sm font-semibold text-white">Process Flow</h2>
                 {!view && (
                   <button className="btn-secondary text-xs" onClick={addProc}>
                     <Plus className="h-3.5 w-3.5" /> Add process
@@ -524,9 +520,9 @@ export default function ProductBomEditorPage() {
 
           {/* Costing */}
           <div className="card p-4">
-            <h2 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
-              Costing
-            </h2>
+            <div className="-mx-4 -mt-4 mb-4 rounded-t-2xl bg-[#5b544c] px-4 py-2.5 dark:bg-slate-800">
+              <h2 className="text-sm font-semibold text-white">Costing</h2>
+            </div>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               {/* Cost inputs */}
               <div className="space-y-2">
