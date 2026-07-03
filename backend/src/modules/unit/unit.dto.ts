@@ -28,10 +28,13 @@ export class ChainLinkInput {
 }
 
 export class CreateUnitDto {
+  // System-generated when omitted (the UI never asks for one). Seeds may still
+  // pass a fixed code — honoured when present.
+  @IsOptional()
   @IsString()
   @MinLength(1)
   @MaxLength(20)
-  code!: string;
+  code?: string;
 
   @IsString()
   @MinLength(1)

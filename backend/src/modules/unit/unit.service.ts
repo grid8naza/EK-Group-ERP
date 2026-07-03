@@ -52,10 +52,15 @@ export class UnitService {
     const chain = await this.validateChaining(dto.type, dto.chainLinks);
     // Resolve base/factor: explicit for COMPOUND, computed for CHAINING, null else.
     const resolved = chain ?? this.compoundResolved(dto);
+    // Code is system-generated (the UI never asks for one). Seeds may still pass
+    // a fixed code — honour it. Otherwise derive a stable, unique key from name.
+    const code = dto.code?.trim()
+      ? dto.code.trim().toUpperCase()
+      : await this.uniqueUnitCode(dto.name);
     try {
       return await this.prisma.unit.create({
         data: {
-          code: dto.code.trim().toUpperCase(),
+          code,
           name: dto.name.trim(),
           symbol: dto.symbol?.trim() || null,
           type: dto.type,
@@ -68,7 +73,27 @@ export class UnitService {
         include: UNIT_INCLUDE,
       });
     } catch (e) {
-      throw this.asDuplicate(e, dto.code);
+      throw this.asDuplicate(e, code);
+    }
+  }
+
+  // Turn a name into a stable UPPER_SNAKE key and disambiguate against existing
+  // unit codes (globally unique). e.g. "Pieces" -> PIECES, then PIECES_2 if taken.
+  private async uniqueUnitCode(name: string): Promise<string> {
+    const base =
+      name
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '') || 'UNIT';
+    let code = base;
+    for (let n = 2; ; n++) {
+      const clash = await this.prisma.unit.findUnique({
+        where: { code },
+        select: { id: true },
+      });
+      if (!clash) return code;
+      code = `${base}_${n}`;
     }
   }
 

@@ -22,7 +22,6 @@ const ROUTE = '/inventory/units';
 type ChainRung = { unitId: string; quantity: string };
 
 const empty = {
-  code: '',
   name: '',
   symbol: '',
   type: 'SIMPLE' as UnitType,
@@ -72,7 +71,6 @@ export default function UnitsPage() {
   };
 
   const formFrom = (u: Unit) => ({
-    code: u.code,
     name: u.name,
     symbol: u.symbol ?? '',
     type: u.type,
@@ -144,8 +142,8 @@ export default function UnitsPage() {
   }, [canAdd, open]);
 
   const save = async (mode: SaveMode = 'saveClose') => {
-    if (!form.code.trim() || !form.name.trim()) {
-      toast.error('Code and Name are required.');
+    if (!form.name.trim()) {
+      toast.error('Name is required.');
       return;
     }
     if (form.type === 'COMPOUND') {
@@ -174,7 +172,6 @@ export default function UnitsPage() {
     }
 
     const payload = {
-      code: form.code.trim().toUpperCase(),
       name: form.name.trim(),
       symbol: form.symbol.trim() || undefined,
       type: form.type,
@@ -243,7 +240,6 @@ export default function UnitsPage() {
   };
 
   const columns: Column<Unit>[] = [
-    { key: 'code', header: 'Code', accessor: (r) => r.code },
     {
       key: 'name',
       header: 'Name',
@@ -366,16 +362,6 @@ export default function UnitsPage() {
         <ReadOnlyFieldset readOnly={view}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Input
-              label="Code"
-              required
-              maxLength={20}
-              value={form.code}
-              onChange={(e) =>
-                setForm({ ...form, code: e.target.value.toUpperCase() })
-              }
-              placeholder="e.g. PCS"
-            />
-            <Input
               label="Symbol"
               maxLength={20}
               value={form.symbol}
@@ -441,8 +427,7 @@ export default function UnitsPage() {
                   placeholder="e.g. 12"
                 />
                 <p className="text-xs text-slate-500 dark:text-slate-400 sm:col-span-2">
-                  1 {form.code || 'unit'} ={' '}
-                  {form.conversionFactor || '…'}{' '}
+                  1 {form.name || 'unit'} = {form.conversionFactor || '…'}{' '}
                   {simpleUnits.find((u) => String(u.id) === form.baseUnitId)
                     ?.code || 'base unit'}
                 </p>
@@ -479,7 +464,7 @@ export default function UnitsPage() {
                     {form.chainLinks.map((rung, i) => {
                       const above =
                         i === 0
-                          ? form.code || 'unit'
+                          ? form.name || 'unit'
                           : linkUnits.find(
                               (u) =>
                                 String(u.id) === form.chainLinks[i - 1].unitId,
@@ -530,7 +515,7 @@ export default function UnitsPage() {
 
                 {form.chainLinks.length > 0 && (
                   <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-                    1 {form.code || 'unit'} = {chainFactor || '…'}{' '}
+                    1 {form.name || 'unit'} = {chainFactor || '…'}{' '}
                     {chainBase?.code || 'base unit'}
                   </p>
                 )}
