@@ -18,93 +18,121 @@ import {
   pdfReport,
   excelReport,
   resolveCompanyName,
+  money,
+  qty,
   type ReportBlock,
   type ReportColumn,
   type ReportSpec,
 } from '@/lib/reportDoc';
-import type { Product, Group, Company } from '@/lib/types';
+import type { Product, Group, Unit, Company } from '@/lib/types';
 
 const ROUTE = '/inventory/reports/products';
 const UNGROUPED = '— Ungrouped —';
-
-// Rows are grouped by product group (the group is the block heading), so it is
-// not repeated as a column.
-const ALL_COLUMNS: ReportColumn<Product>[] = [
-  { key: 'code', header: 'Code', weight: 11, cell: (p) => p.code },
-  { key: 'name', header: 'Name', weight: 20, bold: true, cell: (p) => p.name },
-  { key: 'cost', header: 'Cost Price', weight: 9, cell: (p) => p.costPrice ?? 0 },
-  { key: 'unit', header: 'Unit', weight: 7, cell: (p) => p.unit?.code ?? '-' },
-  {
-    key: 'intercoPrice',
-    header: 'Intercompany Price',
-    weight: 10,
-    cell: (p) => p.intercompanyPrice ?? 0,
-  },
-  {
-    key: 'intercoPct',
-    header: 'Intercompany Profit %',
-    weight: 10,
-    cell: (p) => p.intercompanyProfitPct ?? 0,
-  },
-  {
-    key: 'wholesalePrice',
-    header: 'Wholesale Price',
-    weight: 10,
-    cell: (p) => p.wholesalePrice ?? 0,
-  },
-  {
-    key: 'wholesalePct',
-    header: 'Wholesale Profit %',
-    weight: 10,
-    cell: (p) => p.wholesaleProfitPct ?? 0,
-  },
-  {
-    key: 'retailPrice',
-    header: 'Retail Price',
-    weight: 10,
-    cell: (p) => p.retailPrice ?? 0,
-  },
-  {
-    key: 'retailPct',
-    header: 'Retail Profit %',
-    weight: 10,
-    cell: (p) => p.retailProfitPct ?? 0,
-  },
-  {
-    key: 'boxQty',
-    header: 'Box Quantity',
-    weight: 8,
-    cell: (p) => p.boxQty ?? 0,
-  },
-  {
-    key: 'boxUnit',
-    header: 'Box Unit',
-    weight: 8,
-    cell: (p) => p.boxUnit?.code ?? '-',
-  },
-  {
-    key: 'status',
-    header: 'Status',
-    weight: 9,
-    status: true,
-    cell: (p) => (p.isActive ? 'Active' : 'Inactive'),
-  },
-];
 
 export default function ProductsReportPage() {
   const { can, activeCompany, activeCompanyId } = useAuth();
   const toast = useToast();
   const { data, loading } = useFetch<Product[]>('/products');
   const { data: groups } = useFetch<Group[]>('/groups');
+  const { data: units } = useFetch<Unit[]>('/units');
   const { data: companies } = useFetch<Company[]>('/companies');
-
-  const { hidden, toggle, selected } = useReportColumns(ROUTE, ALL_COLUMNS);
 
   const companyName = resolveCompanyName(
     companies,
     activeCompanyId,
     activeCompany?.name,
   );
+
+  // A stock unit's decimal places (from the Unit master) drives quantity
+  // precision; prices/percentages are always two decimals.
+  const unitDecimalsById = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const u of units ?? []) m.set(u.id, u.decimalPlaces);
+    return m;
+  }, [units]);
+
+  // Rows are grouped by product group (the group is the block heading), so it is
+  // not repeated as a column. Rebuilt when the unit map loads so Box Quantity
+  // resolves its unit's decimals.
+  const allColumns = useMemo<ReportColumn<Product>[]>(
+    () => [
+      { key: 'code', header: 'Code', weight: 11, cell: (p) => p.code },
+      { key: 'name', header: 'Name', weight: 20, bold: true, cell: (p) => p.name },
+      {
+        key: 'cost',
+        header: 'Cost Price',
+        weight: 9,
+        numeric: true,
+        cell: (p) => money(p.costPrice ?? 0),
+      },
+      { key: 'unit', header: 'Unit', weight: 7, cell: (p) => p.unit?.code ?? '-' },
+      {
+        key: 'intercoPrice',
+        header: 'Intercompany Price',
+        weight: 10,
+        numeric: true,
+        cell: (p) => money(p.intercompanyPrice ?? 0),
+      },
+      {
+        key: 'intercoPct',
+        header: 'Intercompany Profit %',
+        weight: 10,
+        numeric: true,
+        cell: (p) => money(p.intercompanyProfitPct ?? 0),
+      },
+      {
+        key: 'wholesalePrice',
+        header: 'Wholesale Price',
+        weight: 10,
+        numeric: true,
+        cell: (p) => money(p.wholesalePrice ?? 0),
+      },
+      {
+        key: 'wholesalePct',
+        header: 'Wholesale Profit %',
+        weight: 10,
+        numeric: true,
+        cell: (p) => money(p.wholesaleProfitPct ?? 0),
+      },
+      {
+        key: 'retailPrice',
+        header: 'Retail Price',
+        weight: 10,
+        numeric: true,
+        cell: (p) => money(p.retailPrice ?? 0),
+      },
+      {
+        key: 'retailPct',
+        header: 'Retail Profit %',
+        weight: 10,
+        numeric: true,
+        cell: (p) => money(p.retailProfitPct ?? 0),
+      },
+      {
+        key: 'boxQty',
+        header: 'Box Quantity',
+        weight: 8,
+        numeric: true,
+        cell: (p) => qty(p.boxQty ?? 0, unitDecimalsById.get(p.unitId) ?? 0),
+      },
+      {
+        key: 'boxUnit',
+        header: 'Box Unit',
+        weight: 8,
+        cell: (p) => p.boxUnit?.code ?? '-',
+      },
+      {
+        key: 'status',
+        header: 'Status',
+        weight: 9,
+        status: true,
+        cell: (p) => (p.isActive ? 'Active' : 'Inactive'),
+      },
+    ],
+    [unitDecimalsById],
+  );
+
+  const { hidden, toggle, selected } = useReportColumns(ROUTE, allColumns);
 
   const [groupFilter, setGroupFilter] = useState('');
   const [packing, setPacking] = useState(''); // '' | 'packed' | 'unpacked'
@@ -113,8 +141,7 @@ export default function ProductsReportPage() {
 
   // Group filter lists only the leaf groups products actually attach to.
   const productGroups = useMemo(
-    () =>
-      (groups ?? []).filter((g) => g.forProduct && !g.subGroupApplicable),
+    () => (groups ?? []).filter((g) => g.forProduct && !g.subGroupApplicable),
     [groups],
   );
 
@@ -172,6 +199,7 @@ export default function ProductsReportPage() {
     fileBase: 'products-report',
     serial: true,
     summary,
+    numericCols: selected.numericCols,
   };
 
   const has = total > 0;
@@ -249,7 +277,7 @@ export default function ProductsReportPage() {
           />
           <div className="ml-auto flex items-center gap-2">
             <ColumnToggle
-              columns={ALL_COLUMNS.map((c) => ({ key: c.key, label: c.header }))}
+              columns={allColumns.map((c) => ({ key: c.key, label: c.header }))}
               hidden={hidden}
               onToggle={toggle}
             />
@@ -267,6 +295,7 @@ export default function ProductsReportPage() {
             loading={loading}
             statusCol={selected.statusCol}
             boldCol={selected.boldCol}
+            numericCols={selected.numericCols}
             serial
             summary={summary}
             emptyText="No products match the current filters."

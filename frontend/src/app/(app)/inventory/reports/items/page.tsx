@@ -18,39 +18,18 @@ import {
   pdfReport,
   excelReport,
   resolveCompanyName,
+  money,
+  qty,
   type ReportBlock,
   type ReportColumn,
   type ReportSpec,
 } from '@/lib/reportDoc';
-import type { Item, Category, Group, Company } from '@/lib/types';
+import type { Item, Category, Group, Unit, Company } from '@/lib/types';
 
 const ROUTE = '/inventory/reports/items';
 
 const UNCATEGORISED = '— Uncategorised —';
 const UNGROUPED = '— Ungrouped —';
-
-const ALL_COLUMNS: ReportColumn<Item>[] = [
-  { key: 'code', header: 'Code', weight: 9, cell: (i) => i.code },
-  { key: 'name', header: 'Item', weight: 26, bold: true, cell: (i) => i.name },
-  { key: 'unit', header: 'Unit', weight: 7, cell: (i) => i.unit?.code ?? '-' },
-  {
-    key: 'lastPrice',
-    header: 'Last Price',
-    weight: 11,
-    cell: (i) => i.lastPurchasePrice ?? 0,
-  },
-  { key: 'hsn', header: 'HSN', weight: 9, cell: (i) => i.hsnCode?.code ?? '-' },
-  { key: 'reorder', header: 'Reorder', weight: 10, cell: (i) => i.reorderLevel ?? 0 },
-  { key: 'leadTime', header: 'Lead Time', weight: 11, cell: (i) => i.leadTime ?? 0 },
-  { key: 'shelfLife', header: 'Shelf Life', weight: 11, cell: (i) => i.shelfLife ?? 0 },
-  {
-    key: 'status',
-    header: 'Status',
-    weight: 10,
-    status: true,
-    cell: (i) => (i.isActive ? 'Active' : 'Inactive'),
-  },
-];
 
 export default function ItemsReportPage() {
   const { can, activeCompany, activeCompanyId } = useAuth();
@@ -58,9 +37,51 @@ export default function ItemsReportPage() {
   const { data, loading } = useFetch<Item[]>('/items');
   const { data: categories } = useFetch<Category[]>('/categories');
   const { data: groups } = useFetch<Group[]>('/groups');
+  const { data: units } = useFetch<Unit[]>('/units');
   const { data: companies } = useFetch<Company[]>('/companies');
 
-  const { hidden, toggle, selected } = useReportColumns(ROUTE, ALL_COLUMNS);
+  // A stock unit's decimal places (Unit master) drives quantity precision; the
+  // price is always two decimals.
+  const unitDecimalsById = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const u of units ?? []) m.set(u.id, u.decimalPlaces);
+    return m;
+  }, [units]);
+
+  const allColumns = useMemo<ReportColumn<Item>[]>(
+    () => [
+      { key: 'code', header: 'Code', weight: 9, cell: (i) => i.code },
+      { key: 'name', header: 'Item', weight: 26, bold: true, cell: (i) => i.name },
+      { key: 'unit', header: 'Unit', weight: 7, cell: (i) => i.unit?.code ?? '-' },
+      {
+        key: 'lastPrice',
+        header: 'Last Price',
+        weight: 11,
+        numeric: true,
+        cell: (i) => money(i.lastPurchasePrice ?? 0),
+      },
+      { key: 'hsn', header: 'HSN', weight: 9, cell: (i) => i.hsnCode?.code ?? '-' },
+      {
+        key: 'reorder',
+        header: 'Reorder',
+        weight: 10,
+        numeric: true,
+        cell: (i) => qty(i.reorderLevel ?? 0, unitDecimalsById.get(i.unitId) ?? 0),
+      },
+      { key: 'leadTime', header: 'Lead Time', weight: 11, cell: (i) => i.leadTime ?? 0 },
+      { key: 'shelfLife', header: 'Shelf Life', weight: 11, cell: (i) => i.shelfLife ?? 0 },
+      {
+        key: 'status',
+        header: 'Status',
+        weight: 10,
+        status: true,
+        cell: (i) => (i.isActive ? 'Active' : 'Inactive'),
+      },
+    ],
+    [unitDecimalsById],
+  );
+
+  const { hidden, toggle, selected } = useReportColumns(ROUTE, allColumns);
 
   const companyName = resolveCompanyName(
     companies,
@@ -143,6 +164,7 @@ export default function ItemsReportPage() {
     fileBase: 'items-report',
     serial: true,
     summary,
+    numericCols: selected.numericCols,
   };
 
   const has = total > 0;
@@ -206,7 +228,7 @@ export default function ItemsReportPage() {
           />
           <div className="ml-auto flex items-center gap-2">
             <ColumnToggle
-              columns={ALL_COLUMNS.map((c) => ({ key: c.key, label: c.header }))}
+              columns={allColumns.map((c) => ({ key: c.key, label: c.header }))}
               hidden={hidden}
               onToggle={toggle}
             />
@@ -224,6 +246,7 @@ export default function ItemsReportPage() {
             loading={loading}
             statusCol={selected.statusCol}
             boldCol={selected.boldCol}
+            numericCols={selected.numericCols}
             serial
             summary={summary}
             emptyText="No items match the current filters."

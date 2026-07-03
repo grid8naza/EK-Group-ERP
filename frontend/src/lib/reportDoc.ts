@@ -38,6 +38,37 @@ export interface ReportSpec {
   serial?: boolean;
   /** Totals shown in a summary strip at the foot of the report. */
   summary?: SummaryItem[];
+  /** Indices (into `columns`) of numeric columns to right-align. Columns whose
+   *  cells are raw numbers are right-aligned automatically regardless. */
+  numericCols?: readonly number[];
+}
+
+/**
+ * Column indices (into `spec.columns`, no serial) that should be right-aligned:
+ * every column flagged numeric, plus any whose first data cell is a raw number.
+ */
+function numericColIndices(spec: ReportSpec): Set<number> {
+  const set = new Set<number>(spec.numericCols ?? []);
+  let firstRow: Cell[] | undefined;
+  for (const b of spec.blocks) {
+    for (const t of b.tables) {
+      if (t.rows.length) {
+        firstRow = t.rows[0];
+        break;
+      }
+    }
+    if (firstRow) break;
+  }
+  firstRow?.forEach((v, i) => {
+    if (typeof v === 'number') set.add(i);
+  });
+  return set;
+}
+
+/** numericColIndices shifted for a prepended serial column (→ output indices). */
+function rightAlignedOutputCols(spec: ReportSpec): Set<number> {
+  const shift = spec.serial ? 1 : 0;
+  return new Set([...numericColIndices(spec)].map((i) => i + shift));
 }
 
 /**
@@ -55,6 +86,12 @@ export interface ReportColumn<T> {
   cell: (row: T) => Cell;
   status?: boolean;
   bold?: boolean;
+  /**
+   * Numeric column — right-aligned in every output. Set this when the cell is a
+   * pre-formatted number string (e.g. money() / qty()); columns that return a
+   * raw `number` are detected and right-aligned automatically.
+   */
+  numeric?: boolean;
 }
 
 export interface SelectedColumns<T> {
@@ -62,6 +99,8 @@ export interface SelectedColumns<T> {
   weights: number[];
   statusCol?: number;
   boldCol?: number;
+  /** Indices of the visible columns that are numeric (right-aligned). */
+  numericCols: number[];
   /** Build a row's cells for the visible columns, in order. */
   cells: (row: T) => Cell[];
 }
@@ -82,9 +121,25 @@ export function selectColumns<T>(
     weights: visible.map((c) => c.weight),
     statusCol: statusIdx === -1 ? undefined : statusIdx,
     boldCol: boldIdx === -1 ? undefined : boldIdx,
+    numericCols: visible
+      .map((c, i) => (c.numeric ? i : -1))
+      .filter((i) => i >= 0),
     cells: (row: T) => visible.map((c) => c.cell(row)),
   };
 }
+
+/** Fixed-decimal formatting for report numbers (thousands separators + `d`
+ *  fraction digits). Money uses 2; quantities pass the unit-master decimals. */
+export const fixed = (v: number, d: number) =>
+  (Number.isFinite(v) ? v : 0).toLocaleString(undefined, {
+    minimumFractionDigits: d,
+    maximumFractionDigits: d,
+  });
+/** Prices / percentages — always two decimals. */
+export const money = (v: number) => fixed(v, 2);
+/** A quantity shown with its unit's decimal places (from the Unit master). */
+export const qty = (v: number, decimals: number) =>
+  fixed(v, Math.max(0, decimals));
 
 const SERIAL_HEAD = 'Sl. No';
 const SERIAL_WEIGHT = 6;
@@ -141,6 +196,7 @@ export function printReport(
   const allowPrint = opts?.allowPrint ?? true;
   const autoPrint = opts?.autoPrint ?? false;
   const { columns, weights } = reportColumns(spec);
+  const rightCols = rightAlignedOutputCols(spec);
   const colgroup = `<colgroup>${columns
     .map((_, i) => `<col style="width:${colPercent(weights, i)}">`)
     .join('')}</colgroup>`;
@@ -152,7 +208,7 @@ export function printReport(
       .map((r, i) => {
         const cells = spec.serial ? [i + 1, ...r] : r;
         return `<tr${t.shade?.[i] ? ' class="lvl1"' : ''}>${cells
-          .map((v) => `<td>${esc(fmt(v))}</td>`)
+          .map((v, ci) => `<td${rightCols.has(ci) ? ' class="num"' : ''}>${esc(fmt(v))}</td>`)
           .join('')}</tr>`;
       })
       .join('')}</tbody></table>`;
@@ -196,6 +252,7 @@ export function printReport(
       /* Repeat the column headings on every printed page. */
       thead{display:table-header-group}
       tr.lvl1 td{background:#f7ebd7}
+      td.num{text-align:right;font-variant-numeric:tabular-nums}
       ${spec.serial ? 'td:first-child{text-align:center}' : ''}
       .summary{margin-top:14px;padding:8px 12px;border:1px solid #d8d2c6;border-radius:6px;background:#faf6ee;display:flex;flex-wrap:wrap;gap:6px 20px;font-size:12px;page-break-inside:avoid}
       .summary-title{font-weight:bold;text-transform:uppercase;letter-spacing:.04em;color:#6d6258;margin-right:6px}
@@ -253,13 +310,18 @@ export function pdfReport(spec: ReportSpec): void {
       y = 16;
     }
   };
-  const columnStyles: Record<number, { cellWidth: number; halign?: 'center' }> =
-    Object.fromEntries(
-      columns.map((_, i) => [
-        i,
-        { cellWidth: (weights[i] / totalW) * tableWidth },
-      ]),
-    );
+  const rightCols = rightAlignedOutputCols(spec);
+  const columnStyles: Record<
+    number,
+    { cellWidth: number; halign?: 'center' }
+  > = Object.fromEntries(
+    columns.map((_, i) => [
+      i,
+      { cellWidth: (weights[i] / totalW) * tableWidth },
+    ]),
+  );
+  // Serial stays centered; numeric columns are right-aligned in the BODY only
+  // (via didParseCell) so headers keep the centered headStyles alignment.
   if (spec.serial) columnStyles[0].halign = 'center';
 
   for (const b of spec.blocks) {
@@ -302,10 +364,13 @@ export function pdfReport(spec: ReportSpec): void {
         didParseCell: (d: {
           section: string;
           row: { index: number };
-          cell: { styles: { fillColor?: number[] } };
+          column: { index: number };
+          cell: { styles: { fillColor?: number[]; halign?: 'right' } };
         }) => {
           if (d.section === 'body' && t.shade?.[d.row.index])
             d.cell.styles.fillColor = [247, 235, 215];
+          if (d.section === 'body' && rightCols.has(d.column.index))
+            d.cell.styles.halign = 'right';
         },
       });
       y =

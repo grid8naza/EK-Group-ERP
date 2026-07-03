@@ -73,6 +73,9 @@ interface ReportViewProps {
   serial?: boolean;
   /** Totals shown in a summary strip under the report. */
   summary?: SummaryItem[];
+  /** Column indices to right-align. Columns whose cells are raw numbers are
+   *  right-aligned automatically regardless. */
+  numericCols?: number[];
   emptyText?: string;
 }
 
@@ -89,6 +92,7 @@ export function ReportView({
   boldCol,
   serial,
   summary,
+  numericCols,
   emptyText = 'No records found.',
 }: ReportViewProps) {
   const total = blocks.reduce(
@@ -107,6 +111,19 @@ export function ReportView({
   const shift = serial ? 1 : 0;
   const statusColX = statusCol == null ? undefined : statusCol + shift;
   const boldColX = boldCol == null ? undefined : boldCol + shift;
+  // Output column indices to right-align: flagged numeric columns plus any
+  // whose first data cell is a raw number.
+  const firstRow = blocks
+    .flatMap((b) => b.tables)
+    .find((t) => t.rows.length)?.rows[0];
+  const numericColX = new Set(
+    [
+      ...(numericCols ?? []),
+      ...(firstRow
+        ? firstRow.flatMap((v, i) => (typeof v === 'number' ? [i] : []))
+        : []),
+    ].map((i) => i + shift),
+  );
 
   const table = (
     t: ReportBlock['tables'][number],
@@ -159,6 +176,7 @@ export function ReportView({
                     key={ci}
                     className={cn(
                       'break-words px-3 py-2',
+                      numericColX.has(ci) && 'text-right tabular-nums',
                       ci === boldColX
                         ? 'font-medium text-slate-800 dark:text-slate-100'
                         : 'text-slate-700 dark:text-slate-300',
