@@ -97,6 +97,10 @@ type SelectProps = {
   /** Open (ready to search) whenever the field receives focus, e.g. via Tab —
    *  so keyboard users never need to click to start searching. */
   openOnFocus?: boolean;
+  /** After a value is chosen, move focus to the element with this id (the next
+   *  field, or the submit button on the last field) — for Enter-to-advance
+   *  keyboard data entry. */
+  advanceToId?: string;
 };
 
 /**
@@ -124,6 +128,7 @@ export function Select({
   searchThreshold = 8,
   autoFocus = false,
   openOnFocus = false,
+  advanceToId,
 }: SelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -191,7 +196,12 @@ export function Select({
   const choose = (val: string | number) => {
     onChange?.({ target: { value: String(val) } });
     setOpen(false);
-    if (openOnFocus) {
+    if (advanceToId) {
+      // Enter-to-advance: move to the next field once a value is picked. Wait a
+      // tick so the dropdown has closed before we move focus.
+      const target = advanceToId;
+      setTimeout(() => document.getElementById(target)?.focus(), 0);
+    } else if (openOnFocus) {
       // Return focus to the trigger (so Tab continues), but suppress the
       // focus-triggered re-open.
       justPickedRef.current = true;

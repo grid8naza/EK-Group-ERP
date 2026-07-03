@@ -145,6 +145,15 @@ export default function ProductBomEditorPage() {
   const amountOf = (l: Line) => (Number(l.quantity) || 0) * rateOf(l);
   const materialCost = recipe.reduce((s, l) => s + amountOf(l), 0);
 
+  // Enter in a plain field moves focus to the next field (by element id); the
+  // last field points at the Add button, so a final Enter adds the row.
+  const enterTo = (nextId: string) => (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      document.getElementById(nextId)?.focus();
+    }
+  };
+
   // --- costing ---
   const num = (s: string) => Number(s) || 0;
   const costPrice =
@@ -583,26 +592,21 @@ export default function ProductBomEditorPage() {
             <button className="btn-secondary" onClick={() => setIngForm(null)}>
               Cancel <Kbd>Esc</Kbd>
             </button>
-            <button className="btn-primary" onClick={saveIng}>
+            <button id="ing-add" className="btn-primary" onClick={saveIng}>
               {ingForm?.index == null ? 'Add' : 'Update'} <Kbd>↵</Kbd>
             </button>
           </div>
         }
       >
         {ingForm && (
-          <form
-            key={ingSeq}
-            className="space-y-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              saveIng();
-            }}
-          >
+          <div key={ingSeq} className="space-y-4">
             <Select
               label="Item"
               required
+              id="ing-item"
               autoFocus={ingForm.index == null}
               openOnFocus
+              advanceToId="ing-qty"
               value={ingForm.draft.itemId}
               onChange={(e) => onPickIngItem(e.target.value)}
               placeholder="Select item"
@@ -612,10 +616,12 @@ export default function ProductBomEditorPage() {
               <Input
                 label="Quantity"
                 required
+                id="ing-qty"
                 type="number"
                 min={0}
                 step="any"
                 value={ingForm.draft.quantity}
+                onKeyDown={enterTo('ing-unit')}
                 onChange={(e) =>
                   setIngForm((f) =>
                     f ? { ...f, draft: { ...f.draft, quantity: e.target.value } } : f,
@@ -625,7 +631,9 @@ export default function ProductBomEditorPage() {
               <Select
                 label="Unit"
                 required
+                id="ing-unit"
                 openOnFocus
+                advanceToId="ing-add"
                 value={ingForm.draft.unitId}
                 onChange={(e) =>
                   setIngForm((f) =>
@@ -646,11 +654,11 @@ export default function ProductBomEditorPage() {
             </div>
             {ingForm.index == null && (
               <p className="text-xs text-slate-400">
-                Press Enter to add and keep adding — Esc to close.
+                Enter moves to the next field; from the last field it lands on
+                Add. Esc closes.
               </p>
             )}
-            <button type="submit" className="hidden" aria-hidden />
-          </form>
+          </div>
         )}
       </Drawer>
 
@@ -667,26 +675,21 @@ export default function ProductBomEditorPage() {
             <button className="btn-secondary" onClick={() => setProcForm(null)}>
               Cancel <Kbd>Esc</Kbd>
             </button>
-            <button className="btn-primary" onClick={saveProc}>
+            <button id="proc-add" className="btn-primary" onClick={saveProc}>
               {procForm?.index == null ? 'Add' : 'Update'} <Kbd>↵</Kbd>
             </button>
           </div>
         }
       >
         {procForm && (
-          <form
-            key={procSeq}
-            className="space-y-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              saveProc();
-            }}
-          >
+          <div key={procSeq} className="space-y-4">
             <Input
               label="Process / step name"
               required
+              id="proc-name"
               autoFocus={procForm.index == null}
               value={procForm.draft.name}
+              onKeyDown={enterTo('proc-time')}
               onChange={(e) =>
                 setProcForm((f) =>
                   f ? { ...f, draft: { ...f.draft, name: e.target.value } } : f,
@@ -697,10 +700,12 @@ export default function ProductBomEditorPage() {
             <div className="grid grid-cols-2 gap-3">
               <Input
                 label="Time"
+                id="proc-time"
                 type="number"
                 min={0}
                 step="any"
                 value={procForm.draft.timeValue}
+                onKeyDown={enterTo('proc-tunit')}
                 onChange={(e) =>
                   setProcForm((f) =>
                     f ? { ...f, draft: { ...f.draft, timeValue: e.target.value } } : f,
@@ -709,7 +714,9 @@ export default function ProductBomEditorPage() {
               />
               <Select
                 label="Unit"
+                id="proc-tunit"
                 openOnFocus
+                advanceToId="proc-machine"
                 value={procForm.draft.timeUnit}
                 onChange={(e) =>
                   setProcForm((f) =>
@@ -732,7 +739,9 @@ export default function ProductBomEditorPage() {
             </div>
             <Select
               label="Machine"
+              id="proc-machine"
               openOnFocus
+              advanceToId="proc-add"
               value={procForm.draft.machineId}
               onChange={(e) =>
                 setProcForm((f) =>
@@ -747,11 +756,11 @@ export default function ProductBomEditorPage() {
             />
             {procForm.index == null && (
               <p className="text-xs text-slate-400">
-                Press Enter to add and keep adding — Esc to close.
+                Enter moves to the next field; from the last field it lands on
+                Add. Esc closes.
               </p>
             )}
-            <button type="submit" className="hidden" aria-hidden />
-          </form>
+          </div>
         )}
       </Drawer>
     </div>
