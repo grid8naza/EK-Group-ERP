@@ -2,6 +2,7 @@ import {
   ArrayUnique,
   IsArray,
   IsBoolean,
+  IsEnum,
   IsInt,
   IsNumber,
   IsOptional,
@@ -13,6 +14,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { ProcessTimeUnit } from '@prisma/client';
 
 /** One BOM line — `quantity` of `itemId`, measured in `unitId`. */
 export class BomLineInput {
@@ -25,6 +27,33 @@ export class BomLineInput {
 
   @IsInt()
   unitId!: number;
+}
+
+/** One production process step: an ordered stage with its time and machine. */
+export class ProcessInput {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  name!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  description?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  timeValue?: number;
+
+  @IsOptional()
+  @IsEnum(ProcessTimeUnit)
+  timeUnit?: ProcessTimeUnit;
+
+  /** Asset (production-line machine) id — plain cross-domain id, optional. */
+  @IsOptional()
+  @IsInt()
+  machineId?: number | null;
 }
 
 export class CreateProductDto {
@@ -170,6 +199,33 @@ export class CreateProductDto {
   @ValidateNested({ each: true })
   @Type(() => BomLineInput)
   packing?: BomLineInput[];
+
+  // Production process flow (ordered steps with time + machine).
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProcessInput)
+  processes?: ProcessInput[];
+
+  // BOM costing inputs (material cost is computed from the recipe).
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  labourCost?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  fuelCost?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  overheadCost?: number;
+
+  @IsOptional()
+  @IsNumber()
+  bomMarginPct?: number;
 }
 
 export class UpdateProductDto {
@@ -310,4 +366,29 @@ export class UpdateProductDto {
   @ValidateNested({ each: true })
   @Type(() => BomLineInput)
   packing?: BomLineInput[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProcessInput)
+  processes?: ProcessInput[];
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  labourCost?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  fuelCost?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  overheadCost?: number;
+
+  @IsOptional()
+  @IsNumber()
+  bomMarginPct?: number;
 }

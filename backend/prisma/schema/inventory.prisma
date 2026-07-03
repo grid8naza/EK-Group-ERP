@@ -284,6 +284,12 @@ model Product {
   shelfLife    Int      @default(0) // days
   yieldQty     Float    @default(1) // product units one recipe batch yields
   yieldUnitId  Int? // unit the yield quantity is measured in
+  // BOM costing inputs. Material cost is computed from the recipe lines; these
+  // are the other cost buckets and the margin used to derive the sales price.
+  labourCost   Float    @default(0)
+  fuelCost     Float    @default(0)
+  overheadCost Float    @default(0)
+  bomMarginPct Float    @default(0) // profit margin % applied to the total cost
   // Capability flags: which BOMs may be created for this product, and whether
   // it can itself be an ingredient in another product's recipe.
   hasRecipe    Boolean  @default(false) // a production (recipe) BOM can be created
@@ -304,10 +310,37 @@ model Product {
 
   companies ProductCompany[]
   bomLines  ProductBomLine[]
+  processes ProductProcess[]
 
   @@index([categoryId])
   @@index([groupId])
   @@map("products")
+}
+
+/// Time unit for a production process step.
+enum ProcessTimeUnit {
+  MIN
+  HR
+}
+
+/// One step of a Product's production process flow: an ordered stage with the
+/// time it takes and the machine it runs on. `machineId` points at the Asset
+/// (production-line machine) master by plain id — cross-domain, so no @relation
+/// (mirrors AssetBooking.productId). Ordered by `sequence`.
+model ProductProcess {
+  id          Int             @id @default(autoincrement())
+  productId   Int
+  sequence    Int             @default(0)
+  name        String // process / step name
+  description String?
+  timeValue   Float           @default(0)
+  timeUnit    ProcessTimeUnit @default(MIN)
+  machineId   Int? // -> Asset (production-line machine), plain id (no cross-domain FK)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@map("product_processes")
 }
 
 /// One line of a Product's RECIPE or PACKING bill of materials: `quantity` of

@@ -13,7 +13,12 @@ import {
   lowestFree,
   MAX_ITEM_SEQ,
 } from '../../common/hierarchy-code';
-import { BomLineInput, CreateProductDto, UpdateProductDto } from './product.dto';
+import {
+  BomLineInput,
+  CreateProductDto,
+  ProcessInput,
+  UpdateProductDto,
+} from './product.dto';
 
 // Products are returned with their masters + company links flattened + the two
 // BOMs split out of the single bomLines table.
@@ -32,6 +37,7 @@ const withRelations = {
       unit: { select: { id: true, code: true, name: true } },
     },
   },
+  processes: { orderBy: { sequence: 'asc' } },
 } satisfies Prisma.ProductInclude;
 
 type ProductRow = Prisma.ProductGetPayload<{ include: typeof withRelations }>;
@@ -109,6 +115,10 @@ export class ProductService {
           shelfLife: dto.shelfLife ?? 0,
           yieldQty: dto.yieldQty ?? 1,
           yieldUnitId: dto.yieldUnitId ?? null,
+          labourCost: dto.labourCost ?? 0,
+          fuelCost: dto.fuelCost ?? 0,
+          overheadCost: dto.overheadCost ?? 0,
+          bomMarginPct: dto.bomMarginPct ?? 0,
           hasRecipe: dto.hasRecipe ?? false,
           hasPacking: dto.hasPacking ?? false,
           isIngredient: dto.isIngredient ?? false,
@@ -116,6 +126,7 @@ export class ProductService {
           isActive: dto.isActive ?? true,
           companies: { create: companyIds.map((companyId) => ({ companyId })) },
           bomLines: { create: this.bomCreate(dto.recipe, dto.packing) },
+          processes: { create: this.processCreate(dto.processes) },
         },
         include: withRelations,
       });
@@ -205,11 +216,12 @@ export class ProductService {
       ? this.resolveCompanies(allCompanies, dto.companyIds ?? existing.companyIds)
       : null;
 
-    // Only touch the BOM when the caller sends recipe/packing (Production
-    // screen); the Inventory master screen omits them and leaves it intact.
+    // Only touch the BOM / process flow when the caller sends them (Production
+    // screen); the Inventory master screen omits them and leaves them intact.
     const wantsBomChange = dto.recipe !== undefined || dto.packing !== undefined;
     const recipe = (dto.recipe ?? existing.recipe).map(this.lineData);
     const packing = (dto.packing ?? existing.packing).map(this.lineData);
+    const wantsProcessChange = dto.processes !== undefined;
 
     try {
       const updated = await this.prisma.product.update({
@@ -239,6 +251,10 @@ export class ProductService {
           shelfLife: dto.shelfLife,
           yieldQty: dto.yieldQty,
           yieldUnitId: dto.yieldUnitId,
+          labourCost: dto.labourCost,
+          fuelCost: dto.fuelCost,
+          overheadCost: dto.overheadCost,
+          bomMarginPct: dto.bomMarginPct,
           hasRecipe: dto.hasRecipe,
           hasPacking: dto.hasPacking,
           isIngredient: dto.isIngredient,
@@ -257,6 +273,14 @@ export class ProductService {
                 bomLines: {
                   deleteMany: {},
                   create: this.bomCreate(recipe, packing),
+                },
+              }
+            : {}),
+          ...(wantsProcessChange
+            ? {
+                processes: {
+                  deleteMany: {},
+                  create: this.processCreate(dto.processes),
                 },
               }
             : {}),
@@ -328,6 +352,20 @@ export class ProductService {
       ...rows(recipe, BomKind.RECIPE),
       ...rows(packing, BomKind.PACKING),
     ];
+  }
+
+  /** Build ProductProcess create rows from the process-flow array. */
+  private processCreate(
+    processes: ProcessInput[] | undefined,
+  ): Prisma.ProductProcessUncheckedCreateWithoutProductInput[] {
+    return (processes ?? []).map((p, i) => ({
+      sequence: i,
+      name: p.name.trim(),
+      description: p.description?.trim() || null,
+      timeValue: p.timeValue ?? 0,
+      timeUnit: p.timeUnit ?? 'MIN',
+      machineId: p.machineId ?? null,
+    }));
   }
 
   private isVisible(

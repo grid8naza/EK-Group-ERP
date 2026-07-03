@@ -681,6 +681,21 @@ export interface ProductBomLine {
   unit?: MasterRef | null;
 }
 
+export type ProcessTimeUnit = 'MIN' | 'HR';
+
+/// One step of a product's production process flow: an ordered stage with the
+/// time it takes and the machine (Asset) it runs on. `machineId` is a plain
+/// Asset id (production-line machine).
+export interface ProductProcess {
+  id?: number;
+  sequence?: number;
+  name: string;
+  description?: string | null;
+  timeValue: number;
+  timeUnit: ProcessTimeUnit;
+  machineId?: number | null;
+}
+
 export interface Product {
   id: number;
   code: string;
@@ -714,6 +729,11 @@ export interface Product {
   yieldQty: number;
   yieldUnitId?: number | null;
   yieldUnit?: MasterRef | null;
+  // BOM costing inputs (material cost is computed from the recipe).
+  labourCost: number;
+  fuelCost: number;
+  overheadCost: number;
+  bomMarginPct: number;
   /** A production (recipe) BOM can be created for this product. */
   hasRecipe: boolean;
   /** A packing BOM can be created for this product. */
@@ -727,6 +747,8 @@ export interface Product {
   /** Recipe BOM (ingredients) and packing BOM — edited under Production. */
   recipe: ProductBomLine[];
   packing: ProductBomLine[];
+  /** Production process flow (ordered steps with time + machine). */
+  processes: ProductProcess[];
 }
 
 // ---- Asset: Asset Master (individual assets/machines) ----
