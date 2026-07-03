@@ -186,12 +186,16 @@ export default function ProductBomEditorPage() {
       toast.error('Pick an item, a positive quantity and a unit.');
       return;
     }
-    setRecipe((rows) =>
-      ingForm.index == null
-        ? [...rows, d]
-        : rows.map((r, i) => (i === ingForm.index ? d : r)),
-    );
-    setIngForm(null);
+    if (ingForm.index == null) {
+      // Adding: keep the drawer open with a fresh row so more can be added;
+      // the user closes with Cancel when done.
+      setRecipe((rows) => [...rows, d]);
+      toast.success(`${itemName(d.itemId)} added.`);
+      setIngForm({ index: null, draft: { ...BLANK_LINE } });
+    } else {
+      setRecipe((rows) => rows.map((r, i) => (i === ingForm.index ? d : r)));
+      setIngForm(null);
+    }
   };
 
   // --- process overlay ---
@@ -205,12 +209,16 @@ export default function ProductBomEditorPage() {
       toast.error('Enter a process name.');
       return;
     }
-    setProcesses((rows) =>
-      procForm.index == null
-        ? [...rows, { ...d, name: d.name.trim() }]
-        : rows.map((r, i) => (i === procForm.index ? { ...d, name: d.name.trim() } : r)),
-    );
-    setProcForm(null);
+    const clean = { ...d, name: d.name.trim() };
+    if (procForm.index == null) {
+      // Adding: keep the drawer open for the next process; Cancel closes it.
+      setProcesses((rows) => [...rows, clean]);
+      toast.success(`${clean.name} added.`);
+      setProcForm({ index: null, draft: { ...BLANK_PROC } });
+    } else {
+      setProcesses((rows) => rows.map((r, i) => (i === procForm.index ? clean : r)));
+      setProcForm(null);
+    }
   };
 
   const save = async (close: boolean) => {
@@ -593,6 +601,11 @@ export default function ProductBomEditorPage() {
                 {money(amountOf(ingForm.draft))}
               </span>
             </div>
+            {ingForm.index == null && (
+              <p className="text-xs text-slate-400">
+                Click Add to save and keep adding — Cancel to close.
+              </p>
+            )}
           </div>
         )}
       </Drawer>
@@ -678,6 +691,11 @@ export default function ProductBomEditorPage() {
                 label: `${m.name} (${m.code})`,
               }))}
             />
+            {procForm.index == null && (
+              <p className="text-xs text-slate-400">
+                Click Add to save and keep adding — Cancel to close.
+              </p>
+            )}
           </div>
         )}
       </Drawer>
