@@ -82,6 +82,13 @@ const ALL_COLUMNS: ReportColumn<Product>[] = [
     weight: 8,
     cell: (p) => p.boxUnit?.code ?? '-',
   },
+  {
+    key: 'status',
+    header: 'Status',
+    weight: 9,
+    status: true,
+    cell: (p) => (p.isActive ? 'Active' : 'Inactive'),
+  },
 ];
 
 export default function ProductsReportPage() {

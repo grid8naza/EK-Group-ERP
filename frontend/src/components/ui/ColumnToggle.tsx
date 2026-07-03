@@ -52,8 +52,8 @@ export function ColumnToggle({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-30 mt-1 w-52 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-          <p className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        <div className="absolute right-0 z-30 mt-1 max-h-[min(70vh,24rem)] w-52 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+          <p className="sticky top-0 bg-white px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:bg-slate-900">
             Columns
           </p>
           {columns.map((c) => {
