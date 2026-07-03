@@ -1,0 +1,239 @@
+'use client';
+
+import { useMemo, useState } from 'react';
+import { BarChart3 } from 'lucide-react';
+import { useFetch } from '@/lib/hooks';
+import { useAuth } from '@/providers/AuthProvider';
+import { useToast } from '@/providers/ToastProvider';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Select } from '@/components/ui/Field';
+import { ColumnToggle } from '@/components/ui/ColumnToggle';
+import {
+  ReportView,
+  ReportExportButtons,
+  useReportColumns,
+} from '@/components/ui/ReportView';
+import {
+  printReport,
+  pdfReport,
+  excelReport,
+  resolveCompanyName,
+  type ReportBlock,
+  type ReportColumn,
+  type ReportSpec,
+} from '@/lib/reportDoc';
+import type { Product, Category, Group, Company } from '@/lib/types';
+
+const ROUTE = '/inventory/reports/products';
+
+const UNCATEGORISED = '— Uncategorised —';
+const UNGROUPED = '— Ungrouped —';
+
+const ALL_COLUMNS: ReportColumn<Product>[] = [
+  { key: 'code', header: 'Code', weight: 9, cell: (p) => p.code },
+  { key: 'name', header: 'Product', weight: 24, bold: true, cell: (p) => p.name },
+  { key: 'unit', header: 'Unit', weight: 7, cell: (p) => p.unit?.code ?? '-' },
+  { key: 'cost', header: 'Cost', weight: 10, cell: (p) => p.costPrice ?? 0 },
+  {
+    key: 'wholesale',
+    header: 'Wholesale',
+    weight: 11,
+    cell: (p) => p.wholesalePrice ?? 0,
+  },
+  { key: 'retail', header: 'Retail', weight: 10, cell: (p) => p.retailPrice ?? 0 },
+  { key: 'hsn', header: 'HSN', weight: 9, cell: (p) => p.hsnCode?.code ?? '-' },
+  {
+    key: 'shelfLife',
+    header: 'Shelf Life',
+    weight: 10,
+    cell: (p) => p.shelfLife ?? 0,
+  },
+  {
+    key: 'status',
+    header: 'Status',
+    weight: 10,
+    status: true,
+    cell: (p) => (p.isActive ? 'Active' : 'Inactive'),
+  },
+];
+
+export default function ProductsReportPage() {
+  const { can, activeCompany, activeCompanyId } = useAuth();
+  const toast = useToast();
+  const { data, loading } = useFetch<Product[]>('/products');
+  const { data: categories } = useFetch<Category[]>('/categories');
+  const { data: groups } = useFetch<Group[]>('/groups');
+  const { data: companies } = useFetch<Company[]>('/companies');
+
+  const { hidden, toggle, selected } = useReportColumns(ROUTE, ALL_COLUMNS);
+
+  const companyName = resolveCompanyName(
+    companies,
+    activeCompanyId,
+    activeCompany?.name,
+  );
+
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [groupFilter, setGroupFilter] = useState('');
+
+  // Group dropdown follows the selected category (all groups when none chosen).
+  const filterGroups = useMemo(
+    () =>
+      (groups ?? []).filter(
+        (g) => !categoryFilter || String(g.categoryId) === categoryFilter,
+      ),
+    [groups, categoryFilter],
+  );
+
+  // Build the grouped, sorted report: category (by name) → group (by name) →
+  // products (by name), honouring the two filters and the visible columns.
+  const blocks = useMemo<ReportBlock[]>(() => {
+    let rows = data ?? [];
+    if (categoryFilter)
+      rows = rows.filter((r) => String(r.categoryId) === categoryFilter);
+    if (groupFilter)
+      rows = rows.filter((r) => String(r.groupId) === groupFilter);
+
+    const byCat = new Map<string, Map<string, Product[]>>();
+    for (const p of rows) {
+      const cat = p.category?.name ?? UNCATEGORISED;
+      const grp = p.group?.name ?? UNGROUPED;
+      if (!byCat.has(cat)) byCat.set(cat, new Map());
+      const g = byCat.get(cat)!;
+      if (!g.has(grp)) g.set(grp, []);
+      g.get(grp)!.push(p);
+    }
+
+    return [...byCat.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([categoryName, groupsMap]) => {
+        const tables = [...groupsMap.entries()]
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([groupName, products]) => ({
+            subheading: groupName,
+            subcount: products.length,
+            rows: [...products]
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map(selected.cells),
+          }));
+        return {
+          heading: categoryName,
+          count: tables.reduce((n, t) => n + t.rows.length, 0),
+          tables,
+        };
+      });
+  }, [data, categoryFilter, groupFilter, selected]);
+
+  const total = blocks.reduce((n, b) => n + (b.count ?? 0), 0);
+
+  // Summary reflects the filtered report: category blocks, group tables, products.
+  const summary = useMemo(
+    () => [
+      { label: 'Total Categories', value: blocks.length },
+      {
+        label: 'Total Groups',
+        value: blocks.reduce((n, b) => n + b.tables.length, 0),
+      },
+      { label: 'Total Products', value: total },
+    ],
+    [blocks, total],
+  );
+
+  const spec: ReportSpec = {
+    companyName,
+    subtitle: `Products List - ${total} ${total === 1 ? 'product' : 'products'}`,
+    columns: selected.columns,
+    weights: selected.weights,
+    blocks,
+    fileBase: 'products-report',
+    serial: true,
+    summary,
+  };
+
+  const has = total > 0;
+  const canPrint = can(ROUTE, 'print');
+  const popupBlocked = () =>
+    toast.error('Pop-up blocked — allow pop-ups to print.');
+  const onPreview = () => {
+    if (!printReport(spec, { allowPrint: canPrint })) popupBlocked();
+  };
+  const onPrint = () => {
+    if (!printReport(spec, { autoPrint: true })) popupBlocked();
+  };
+
+  return (
+    <div className="mx-auto flex h-full max-w-7xl flex-col">
+      <PageHeader
+        title="Products List Report"
+        description="Products grouped by category and group, with print and export"
+        icon={<BarChart3 className="h-5 w-5" />}
+        actions={
+          <ReportExportButtons
+            canPrint={canPrint}
+            canPdf={can(ROUTE, 'downloadPdf')}
+            canExcel={can(ROUTE, 'downloadExcel')}
+            onPreview={onPreview}
+            onPrint={onPrint}
+            onPdf={() => pdfReport(spec)}
+            onExcel={() =>
+              excelReport(spec, { headingLabel: 'Category', subheadingLabel: 'Group' })
+            }
+            disabled={!has}
+          />
+        }
+      />
+
+      <div className="card flex min-h-0 flex-1 flex-col overflow-hidden">
+        {/* Filters — group cascades from category */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-4 dark:border-slate-800">
+          <Select
+            value={categoryFilter}
+            onChange={(e) => {
+              setCategoryFilter(e.target.value);
+              setGroupFilter(''); // reset group when category changes
+            }}
+            wrapClassName="w-48"
+            placeholder="All categories"
+            options={(categories ?? [])
+              .filter((c) => c.forProduct)
+              .map((c) => ({ value: String(c.id), label: c.name }))}
+          />
+          <Select
+            value={groupFilter}
+            onChange={(e) => setGroupFilter(e.target.value)}
+            wrapClassName="w-48"
+            placeholder="All groups"
+            options={filterGroups.map((g) => ({
+              value: String(g.id),
+              label: g.name,
+            }))}
+          />
+          <div className="ml-auto flex items-center gap-2">
+            <ColumnToggle
+              columns={ALL_COLUMNS.map((c) => ({ key: c.key, label: c.header }))}
+              hidden={hidden}
+              onToggle={toggle}
+            />
+            <span className="text-sm text-slate-500 dark:text-slate-400">
+              {total} product{total === 1 ? '' : 's'}
+            </span>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+          <ReportView
+            columns={selected.columns}
+            weights={selected.weights}
+            blocks={blocks}
+            loading={loading}
+            statusCol={selected.statusCol}
+            boldCol={selected.boldCol}
+            serial
+            summary={summary}
+            emptyText="No products match the current filters."
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
