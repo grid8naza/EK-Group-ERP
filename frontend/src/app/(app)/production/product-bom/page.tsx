@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ListTree } from 'lucide-react';
+import { ListTree, Plus } from 'lucide-react';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useAuth } from '@/providers/AuthProvider';
@@ -10,6 +10,7 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
+import { Drawer } from '@/components/ui/Drawer';
 import { Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import type { Product, Category, Group } from '@/lib/types';
@@ -46,6 +47,7 @@ export default function ProductBomPage() {
     return rows;
   }, [data, categoryFilter, groupFilter, recipeFilter]);
 
+  const canAdd = can(ROUTE, 'add');
   const canEdit = can(ROUTE, 'edit');
   const canView = can(ROUTE, 'view');
   // The BOM lock is the product's lock (governed by the Product Master screen),
@@ -67,6 +69,37 @@ export default function ProductBomPage() {
       return;
     }
     openBom(p, false);
+  };
+
+  // "Add New BOM" — pick a product (its BOM lives on the product), then open the
+  // full-screen editor. Products themselves are created under Inventory.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickCategory, setPickCategory] = useState('');
+  const [pickGroup, setPickGroup] = useState('');
+  const [pickProduct, setPickProduct] = useState('');
+  const pickerGroups = (groups ?? []).filter(
+    (g) =>
+      g.forProduct && (!pickCategory || String(g.categoryId) === pickCategory),
+  );
+  const pickerProducts = (data ?? []).filter(
+    (p) =>
+      (!pickCategory || String(p.categoryId) === pickCategory) &&
+      (!pickGroup || String(p.groupId) === pickGroup),
+  );
+  const openPicker = () => {
+    setPickCategory('');
+    setPickGroup('');
+    setPickProduct('');
+    setPickerOpen(true);
+  };
+  const confirmPick = () => {
+    const p = (data ?? []).find((x) => String(x.id) === pickProduct);
+    if (!p) {
+      toast.error('Select a product to define its BOM.');
+      return;
+    }
+    setPickerOpen(false);
+    editBom(p);
   };
 
   const columns: Column<Product>[] = [
@@ -123,6 +156,13 @@ export default function ProductBomPage() {
         title="Product BOM"
         description="Define each product's ingredients, process flow and costing"
         icon={<ListTree className="h-5 w-5" />}
+        actions={
+          canAdd && (
+            <button className="btn-primary" onClick={openPicker}>
+              <Plus className="h-4 w-4" /> Add New
+            </button>
+          )
+        }
       />
 
       <DataTable
@@ -186,6 +226,70 @@ export default function ProductBomPage() {
         )}
         emptyMessage="No products found — create products under Inventory → Product Master"
       />
+
+      <Drawer
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        title="New BOM"
+        subtitle="Pick the product to define a BOM for"
+        icon={<ListTree className="h-5 w-5" />}
+        width="sm"
+        footer={
+          <div className="flex justify-end gap-2">
+            <button className="btn-secondary" onClick={() => setPickerOpen(false)}>
+              Cancel
+            </button>
+            <button className="btn-primary" onClick={confirmPick}>
+              Open BOM
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            A BOM belongs to a product. Choose the product below to open its
+            full-screen BOM (ingredients, process flow &amp; costing). New
+            products are created under Inventory → Product Master.
+          </p>
+          <Select
+            label="Category"
+            value={pickCategory}
+            onChange={(e) => {
+              setPickCategory(e.target.value);
+              setPickGroup('');
+              setPickProduct('');
+            }}
+            placeholder="All categories"
+            options={filterCategories.map((c) => ({
+              value: String(c.id),
+              label: c.name,
+            }))}
+          />
+          <Select
+            label="Group"
+            value={pickGroup}
+            onChange={(e) => {
+              setPickGroup(e.target.value);
+              setPickProduct('');
+            }}
+            placeholder="All groups"
+            options={pickerGroups.map((g) => ({
+              value: String(g.id),
+              label: g.name,
+            }))}
+          />
+          <Select
+            label="Product"
+            value={pickProduct}
+            onChange={(e) => setPickProduct(e.target.value)}
+            placeholder="Select a product"
+            options={pickerProducts.map((p) => ({
+              value: String(p.id),
+              label: `${p.name} (${p.code})`,
+            }))}
+          />
+        </div>
+      </Drawer>
     </div>
   );
 }
