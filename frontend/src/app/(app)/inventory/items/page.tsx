@@ -665,15 +665,8 @@ export default function ItemsPage() {
               value={form.leadTime}
               onChange={(e) => setForm({ ...form, leadTime: e.target.value })}
             />
-            <Input
-              label="Shelf Life (days)"
-              type="number"
-              min={0}
-              value={form.shelfLife}
-              onChange={(e) => setForm({ ...form, shelfLife: e.target.value })}
-            />
 
-            {/* Purchase */}
+            {/* Purchase — date + price share a row */}
             <Input
               label="Last Purchase Date"
               type="date"
@@ -691,6 +684,15 @@ export default function ItemsPage() {
               onChange={(e) =>
                 setForm({ ...form, lastPurchasePrice: e.target.value })
               }
+            />
+
+            {/* Shelf Life on its own row below the purchase pair */}
+            <Input
+              label="Shelf Life (days)"
+              type="number"
+              min={0}
+              value={form.shelfLife}
+              onChange={(e) => setForm({ ...form, shelfLife: e.target.value })}
             />
 
             {/* Availability */}
