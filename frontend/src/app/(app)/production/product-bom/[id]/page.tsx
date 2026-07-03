@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
   ListTree,
@@ -258,6 +258,32 @@ export default function ProductBomEditorPage() {
     }
   };
 
+  // Keep the latest save closure for the keyboard shortcut (avoids stale state).
+  const saveRef = useRef(save);
+  saveRef.current = save;
+
+  // Page shortcuts (only when editing and no overlay is open):
+  //   Alt+I → add ingredient · Alt+P → add process · Alt+S → save
+  useEffect(() => {
+    if (view) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!e.altKey || ingForm || procForm) return;
+      const k = e.key.toLowerCase();
+      if (k === 'i') {
+        e.preventDefault();
+        setIngForm({ index: null, draft: { ...BLANK_LINE } });
+      } else if (k === 'p') {
+        e.preventDefault();
+        setProcForm({ index: null, draft: { ...BLANK_PROC } });
+      } else if (k === 's') {
+        e.preventDefault();
+        saveRef.current(false);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [view, ingForm, procForm]);
+
   if (loading || !product) {
     return (
       <div className="mx-auto flex h-full max-w-[1400px] flex-col">
@@ -286,7 +312,7 @@ export default function ProductBomEditorPage() {
                   onClick={() => save(false)}
                   disabled={saving}
                 >
-                  Save
+                  Save <Kbd>Alt+S</Kbd>
                 </button>
                 <button
                   className="btn-primary"
@@ -333,6 +359,7 @@ export default function ProductBomEditorPage() {
               title="Ingredients"
               onAdd={!view ? openAddIng : undefined}
               addLabel="Add item"
+              shortcut="Alt+I"
             />
             <table className="w-full text-sm">
               <thead>
@@ -412,6 +439,7 @@ export default function ProductBomEditorPage() {
               title="Process Flow"
               onAdd={!view ? openAddProc : undefined}
               addLabel="Add process"
+              shortcut="Alt+P"
             />
             <table className="w-full text-sm">
               <thead>
@@ -548,16 +576,22 @@ export default function ProductBomEditorPage() {
         footer={
           <div className="flex justify-end gap-2">
             <button className="btn-secondary" onClick={() => setIngForm(null)}>
-              Cancel
+              Cancel <Kbd>Esc</Kbd>
             </button>
             <button className="btn-primary" onClick={saveIng}>
-              {ingForm?.index == null ? 'Add' : 'Update'}
+              {ingForm?.index == null ? 'Add' : 'Update'} <Kbd>↵</Kbd>
             </button>
           </div>
         }
       >
         {ingForm && (
-          <div className="space-y-4">
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveIng();
+            }}
+          >
             <Select
               label="Item"
               required
@@ -603,10 +637,11 @@ export default function ProductBomEditorPage() {
             </div>
             {ingForm.index == null && (
               <p className="text-xs text-slate-400">
-                Click Add to save and keep adding — Cancel to close.
+                Press Enter to add and keep adding — Esc to close.
               </p>
             )}
-          </div>
+            <button type="submit" className="hidden" aria-hidden />
+          </form>
         )}
       </Drawer>
 
@@ -621,16 +656,22 @@ export default function ProductBomEditorPage() {
         footer={
           <div className="flex justify-end gap-2">
             <button className="btn-secondary" onClick={() => setProcForm(null)}>
-              Cancel
+              Cancel <Kbd>Esc</Kbd>
             </button>
             <button className="btn-primary" onClick={saveProc}>
-              {procForm?.index == null ? 'Add' : 'Update'}
+              {procForm?.index == null ? 'Add' : 'Update'} <Kbd>↵</Kbd>
             </button>
           </div>
         }
       >
         {procForm && (
-          <div className="space-y-4">
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveProc();
+            }}
+          >
             <Input
               label="Process / step name"
               required
@@ -693,10 +734,11 @@ export default function ProductBomEditorPage() {
             />
             {procForm.index == null && (
               <p className="text-xs text-slate-400">
-                Click Add to save and keep adding — Cancel to close.
+                Press Enter to add and keep adding — Esc to close.
               </p>
             )}
-          </div>
+            <button type="submit" className="hidden" aria-hidden />
+          </form>
         )}
       </Drawer>
     </div>
@@ -707,10 +749,12 @@ function SectionHeader({
   title,
   onAdd,
   addLabel,
+  shortcut,
 }: {
   title: string;
   onAdd?: () => void;
   addLabel: string;
+  shortcut?: string;
 }) {
   return (
     <div className="-mx-4 -mt-4 mb-3 flex items-center justify-between rounded-t-2xl bg-[#5b544c] px-4 py-2.5 dark:bg-slate-800">
@@ -718,9 +762,19 @@ function SectionHeader({
       {onAdd && (
         <button className="btn-secondary text-xs" onClick={onAdd}>
           <Plus className="h-3.5 w-3.5" /> {addLabel}
+          {shortcut && <Kbd>{shortcut}</Kbd>}
         </button>
       )}
     </div>
+  );
+}
+
+/** A subtle keyboard-shortcut hint next to a button label. */
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="ml-1.5 hidden rounded border border-current px-1 text-[10px] font-normal leading-tight opacity-50 sm:inline">
+      {children}
+    </span>
   );
 }
 
