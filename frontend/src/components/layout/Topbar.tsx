@@ -93,7 +93,7 @@ export function Topbar({
   };
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 flex-none items-center gap-3 border-b border-[#efe7db] bg-white/80 px-4 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
+    <header className="sticky top-0 z-30 flex h-16 flex-none items-center gap-3 border-b border-[#efe7db] bg-white/80 px-4 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
       {/* Mobile menu button */}
       <button
         onClick={onToggleMobile}
