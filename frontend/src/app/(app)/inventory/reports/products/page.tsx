@@ -18,25 +18,20 @@ import {
   pdfReport,
   excelReport,
   resolveCompanyName,
-  type Cell,
+  type ReportBlock,
   type ReportColumn,
   type ReportSpec,
 } from '@/lib/reportDoc';
 import type { Product, Group, Company } from '@/lib/types';
 
 const ROUTE = '/inventory/reports/products';
+const UNGROUPED = '— Ungrouped —';
 
-// Flat list — Category and Group are columns (not grouping headings).
+// Rows are grouped by product group (the group is the block heading), so it is
+// not repeated as a column.
 const ALL_COLUMNS: ReportColumn<Product>[] = [
-  { key: 'code', header: 'Code', weight: 10, cell: (p) => p.code },
-  {
-    key: 'category',
-    header: 'Category',
-    weight: 12,
-    cell: (p) => p.category?.name ?? '-',
-  },
-  { key: 'group', header: 'Group', weight: 12, cell: (p) => p.group?.name ?? '-' },
-  { key: 'name', header: 'Name', weight: 18, bold: true, cell: (p) => p.name },
+  { key: 'code', header: 'Code', weight: 11, cell: (p) => p.code },
+  { key: 'name', header: 'Name', weight: 20, bold: true, cell: (p) => p.name },
   { key: 'cost', header: 'Cost Price', weight: 9, cell: (p) => p.costPrice ?? 0 },
   { key: 'unit', header: 'Unit', weight: 7, cell: (p) => p.unit?.code ?? '-' },
   {
@@ -116,9 +111,9 @@ export default function ProductsReportPage() {
     [groups],
   );
 
-  // Flat report: products after the filters, sorted by code, cells from the
-  // visible columns.
-  const rows = useMemo<Cell[][]>(() => {
+  // Report grouped by product group (heading), products sorted by name within
+  // each; groups ordered by code so they follow the hierarchy.
+  const blocks = useMemo<ReportBlock[]>(() => {
     let list = data ?? [];
     if (groupFilter)
       list = list.filter((p) => String(p.groupId) === groupFilter);
@@ -128,22 +123,48 @@ export default function ProductsReportPage() {
     else if (ingredient === 'no') list = list.filter((p) => !p.isIngredient);
     if (sellable === 'yes') list = list.filter((p) => p.canSell);
     else if (sellable === 'no') list = list.filter((p) => !p.canSell);
-    return [...list]
-      .sort((a, b) => a.code.localeCompare(b.code))
-      .map(selected.cells);
+
+    const byGroup = new Map<string, { code: string; items: Product[] }>();
+    for (const p of list) {
+      const name = p.group?.name ?? UNGROUPED;
+      if (!byGroup.has(name))
+        byGroup.set(name, { code: p.group?.code ?? '￿', items: [] });
+      byGroup.get(name)!.items.push(p);
+    }
+    return [...byGroup.entries()]
+      .sort((a, b) => a[1].code.localeCompare(b[1].code))
+      .map(([groupName, { items }]) => ({
+        heading: groupName,
+        count: items.length,
+        tables: [
+          {
+            rows: [...items]
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map(selected.cells),
+          },
+        ],
+      }));
   }, [data, groupFilter, packing, ingredient, sellable, selected]);
 
-  const total = rows.length;
+  const total = blocks.reduce((n, b) => n + (b.count ?? 0), 0);
+
+  const summary = useMemo(
+    () => [
+      { label: 'Total Groups', value: blocks.length },
+      { label: 'Total Products', value: total },
+    ],
+    [blocks.length, total],
+  );
 
   const spec: ReportSpec = {
     companyName,
     subtitle: `Products List - ${total} ${total === 1 ? 'product' : 'products'}`,
     columns: selected.columns,
     weights: selected.weights,
-    blocks: [{ tables: [{ rows }] }],
+    blocks,
     fileBase: 'products-report',
     serial: true,
-    summary: [{ label: 'Total Products', value: total }],
+    summary,
   };
 
   const has = total > 0;
@@ -161,7 +182,7 @@ export default function ProductsReportPage() {
     <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="Products List Report"
-        description="Products with pricing, profit margins and packing, with print and export"
+        description="Products grouped by product group, with pricing, profit margins and packing"
         icon={<BarChart3 className="h-5 w-5" />}
         actions={
           <ReportExportButtons
@@ -171,7 +192,7 @@ export default function ProductsReportPage() {
             onPreview={onPreview}
             onPrint={onPrint}
             onPdf={() => pdfReport(spec)}
-            onExcel={() => excelReport(spec)}
+            onExcel={() => excelReport(spec, { headingLabel: 'Group' })}
             disabled={!has}
           />
         }
@@ -235,12 +256,12 @@ export default function ProductsReportPage() {
           <ReportView
             columns={selected.columns}
             weights={selected.weights}
-            blocks={spec.blocks}
+            blocks={blocks}
             loading={loading}
             statusCol={selected.statusCol}
             boldCol={selected.boldCol}
             serial
-            summary={spec.summary}
+            summary={summary}
             emptyText="No products match the current filters."
           />
         </div>
