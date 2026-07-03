@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client';
+import { ObjectType, type Prisma } from '@prisma/client';
 
 /**
  * Screens shipped by the Asset module. Consumed by the module scaffold registry
@@ -29,6 +29,40 @@ export const ASSET_SUBS = [
     icon: 'list',
     order: 4,
     superAdminOnly: true,
+  },
+];
+
+// A second main menu under the Asset module for reports (kept separate from the
+// master-data "Asset" menu, mirroring how "Inventory Report" sits beside
+// "Inventory"). Routes match the frontend report page paths and the privilege
+// keys the pages pass to can(ROUTE, 'print' | 'downloadPdf' | 'downloadExcel').
+export const ASSET_REPORT_MENUS = [
+  {
+    name: 'Asset Report',
+    icon: 'bar-chart-3',
+    subs: [
+      {
+        name: 'Asset List',
+        route: '/asset/reports/assets',
+        icon: 'file-text',
+        order: 1,
+        objectType: ObjectType.REPORT,
+      },
+      {
+        name: 'Asset Category List',
+        route: '/asset/reports/asset-categories',
+        icon: 'tag',
+        order: 2,
+        objectType: ObjectType.REPORT,
+      },
+      {
+        name: 'Asset Group List',
+        route: '/asset/reports/asset-groups',
+        icon: 'layers',
+        order: 3,
+        objectType: ObjectType.REPORT,
+      },
+    ],
   },
 ];
 

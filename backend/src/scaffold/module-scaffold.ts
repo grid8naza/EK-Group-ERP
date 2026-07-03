@@ -11,6 +11,7 @@ import {
 } from '../modules/unit/inventory-provisioning';
 import {
   ASSET_SUBS,
+  ASSET_REPORT_MENUS,
   seedAssetDefaults,
 } from '../modules/asset-category/asset-provisioning';
 
@@ -140,6 +141,7 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     autoEnable: true, // on for every company, like Inventory
     menu: { name: 'Asset', icon: 'building-2' },
     subs: ASSET_SUBS,
+    extraMenus: ASSET_REPORT_MENUS,
     seedData: seedAssetDefaults,
   },
 ];
