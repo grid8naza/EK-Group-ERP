@@ -7,48 +7,49 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Select } from '@/components/ui/Field';
-import { ReportView, ReportExportButtons } from '@/components/ui/ReportView';
+import { ColumnToggle } from '@/components/ui/ColumnToggle';
+import {
+  ReportView,
+  ReportExportButtons,
+  useReportColumns,
+} from '@/components/ui/ReportView';
 import {
   printReport,
   pdfReport,
   excelReport,
   resolveCompanyName,
-  type Cell,
   type ReportBlock,
+  type ReportColumn,
   type ReportSpec,
 } from '@/lib/reportDoc';
 import type { Item, Category, Group, Company } from '@/lib/types';
 
 const ROUTE = '/inventory/reports/items';
 
-// Report columns (the "standard set"). Item gets the most room; the rest are
-// fixed and equal across all groups so every table lines up.
-const COLUMNS = [
-  'Code',
-  'Item',
-  'Unit',
-  'Last Price',
-  'HSN',
-  'Reorder',
-  'Lead Time',
-  'Shelf Life',
-  'Status',
-] as const;
-const WEIGHTS = [9, 26, 7, 11, 9, 10, 11, 11, 10];
-
 const UNCATEGORISED = '— Uncategorised —';
 const UNGROUPED = '— Ungrouped —';
 
-const itemCells = (i: Item): Cell[] => [
-  i.code,
-  i.name,
-  i.unit?.code ?? '-',
-  i.lastPurchasePrice ?? 0,
-  i.hsnCode?.code ?? '-',
-  i.reorderLevel ?? 0,
-  i.leadTime ?? 0,
-  i.shelfLife ?? 0,
-  i.isActive ? 'Active' : 'Inactive',
+const ALL_COLUMNS: ReportColumn<Item>[] = [
+  { key: 'code', header: 'Code', weight: 9, cell: (i) => i.code },
+  { key: 'name', header: 'Item', weight: 26, bold: true, cell: (i) => i.name },
+  { key: 'unit', header: 'Unit', weight: 7, cell: (i) => i.unit?.code ?? '-' },
+  {
+    key: 'lastPrice',
+    header: 'Last Price',
+    weight: 11,
+    cell: (i) => i.lastPurchasePrice ?? 0,
+  },
+  { key: 'hsn', header: 'HSN', weight: 9, cell: (i) => i.hsnCode?.code ?? '-' },
+  { key: 'reorder', header: 'Reorder', weight: 10, cell: (i) => i.reorderLevel ?? 0 },
+  { key: 'leadTime', header: 'Lead Time', weight: 11, cell: (i) => i.leadTime ?? 0 },
+  { key: 'shelfLife', header: 'Shelf Life', weight: 11, cell: (i) => i.shelfLife ?? 0 },
+  {
+    key: 'status',
+    header: 'Status',
+    weight: 10,
+    status: true,
+    cell: (i) => (i.isActive ? 'Active' : 'Inactive'),
+  },
 ];
 
 export default function ItemsReportPage() {
@@ -58,6 +59,8 @@ export default function ItemsReportPage() {
   const { data: categories } = useFetch<Category[]>('/categories');
   const { data: groups } = useFetch<Group[]>('/groups');
   const { data: companies } = useFetch<Company[]>('/companies');
+
+  const { hidden, toggle, selected } = useReportColumns(ROUTE, ALL_COLUMNS);
 
   const companyName = resolveCompanyName(
     companies,
@@ -78,7 +81,7 @@ export default function ItemsReportPage() {
   );
 
   // Build the grouped, sorted report: category (by name) → group (by name) →
-  // items (by name), honouring the two filters.
+  // items (by name), honouring the two filters and the visible columns.
   const blocks = useMemo<ReportBlock[]>(() => {
     let rows = data ?? [];
     if (categoryFilter)
@@ -106,7 +109,7 @@ export default function ItemsReportPage() {
             subcount: items.length,
             rows: [...items]
               .sort((a, b) => a.name.localeCompare(b.name))
-              .map(itemCells),
+              .map(selected.cells),
           }));
         return {
           heading: categoryName,
@@ -114,7 +117,7 @@ export default function ItemsReportPage() {
           tables,
         };
       });
-  }, [data, categoryFilter, groupFilter]);
+  }, [data, categoryFilter, groupFilter, selected]);
 
   const total = blocks.reduce((n, b) => n + (b.count ?? 0), 0);
 
@@ -134,8 +137,8 @@ export default function ItemsReportPage() {
   const spec: ReportSpec = {
     companyName,
     subtitle: `Items List - ${total} ${total === 1 ? 'item' : 'items'}`,
-    columns: COLUMNS,
-    weights: WEIGHTS,
+    columns: selected.columns,
+    weights: selected.weights,
     blocks,
     fileBase: 'items-report',
     serial: true,
@@ -201,19 +204,26 @@ export default function ItemsReportPage() {
               label: g.name,
             }))}
           />
-          <span className="ml-auto text-sm text-slate-500 dark:text-slate-400">
-            {total} item{total === 1 ? '' : 's'}
-          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <ColumnToggle
+              columns={ALL_COLUMNS.map((c) => ({ key: c.key, label: c.header }))}
+              hidden={hidden}
+              onToggle={toggle}
+            />
+            <span className="text-sm text-slate-500 dark:text-slate-400">
+              {total} item{total === 1 ? '' : 's'}
+            </span>
+          </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
           <ReportView
-            columns={COLUMNS}
-            weights={WEIGHTS}
+            columns={selected.columns}
+            weights={selected.weights}
             blocks={blocks}
             loading={loading}
-            statusCol={8}
-            boldCol={1}
+            statusCol={selected.statusCol}
+            boldCol={selected.boldCol}
             serial
             summary={summary}
             emptyText="No items match the current filters."

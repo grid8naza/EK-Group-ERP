@@ -7,14 +7,19 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Select } from '@/components/ui/Field';
-import { ReportView, ReportExportButtons } from '@/components/ui/ReportView';
+import { ColumnToggle } from '@/components/ui/ColumnToggle';
+import {
+  ReportView,
+  ReportExportButtons,
+  useReportColumns,
+} from '@/components/ui/ReportView';
 import {
   printReport,
   pdfReport,
   excelReport,
   resolveCompanyName,
-  type Cell,
   type ReportBlock,
+  type ReportColumn,
   type ReportSpec,
 } from '@/lib/reportDoc';
 import type {
@@ -27,21 +32,6 @@ import type {
 } from '@/lib/types';
 
 const ROUTE = '/asset/reports/assets';
-
-// The standard set. Machine gets the most room; the rest are fixed and equal
-// across all groups so every table lines up.
-const COLUMNS = [
-  'Code',
-  'Machine',
-  'Capacity',
-  'Unit',
-  'Brand',
-  'Serial No',
-  'Life Span',
-  'Prod. Line',
-  'Status',
-] as const;
-const WEIGHTS = [9, 22, 11, 8, 13, 13, 9, 8, 10];
 
 const UNCATEGORISED = '— Uncategorised —';
 const UNGROUPED = '— Ungrouped —';
@@ -78,6 +68,55 @@ export default function AssetListReportPage() {
     return m;
   }, [units]);
 
+  // Column model — Code is wide (18-digit positional code stays on one line);
+  // the user can show/hide any column via the picker. Rebuilt when the unit map
+  // loads so the Unit cell resolves.
+  const allColumns = useMemo<ReportColumn<Asset>[]>(
+    () => [
+      { key: 'code', header: 'Code', weight: 17, cell: (a) => a.code },
+      { key: 'name', header: 'Machine', weight: 20, bold: true, cell: (a) => a.name },
+      { key: 'capacity', header: 'Capacity', weight: 9, cell: capacityText },
+      {
+        key: 'unit',
+        header: 'Unit',
+        weight: 7,
+        cell: (a) =>
+          a.capacityUnitId != null
+            ? (unitCodeById.get(a.capacityUnitId) ?? '-')
+            : '-',
+      },
+      { key: 'brand', header: 'Brand', weight: 11, cell: (a) => a.brand ?? '-' },
+      {
+        key: 'serial',
+        header: 'Serial No',
+        weight: 11,
+        cell: (a) => a.serialNumber ?? '-',
+      },
+      {
+        key: 'lifeSpan',
+        header: 'Life Span',
+        weight: 7,
+        cell: (a) => a.lifeSpanYears ?? 0,
+      },
+      {
+        key: 'prodLine',
+        header: 'Prod. Line',
+        weight: 8,
+        cell: (a) => (a.isProductionLine ? 'Yes' : 'No'),
+      },
+      {
+        key: 'status',
+        header: 'Status',
+        weight: 8,
+        status: true,
+        cell: (a) => STATUS_LABEL[a.status],
+      },
+    ],
+    [unitCodeById],
+  );
+
+  const { hidden, toggle, selected } = useReportColumns(ROUTE, allColumns);
+
   const [categoryFilter, setCategoryFilter] = useState('');
   const [groupFilter, setGroupFilter] = useState('');
 
@@ -90,20 +129,8 @@ export default function AssetListReportPage() {
     [groups, categoryFilter],
   );
 
-  const assetCells = (a: Asset): Cell[] => [
-    a.code,
-    a.name,
-    capacityText(a),
-    a.capacityUnitId != null ? (unitCodeById.get(a.capacityUnitId) ?? '-') : '-',
-    a.brand ?? '-',
-    a.serialNumber ?? '-',
-    a.lifeSpanYears ?? 0,
-    a.isProductionLine ? 'Yes' : 'No',
-    STATUS_LABEL[a.status],
-  ];
-
   // Build the grouped, sorted report: category (by name) → group (by name) →
-  // assets (by name), honouring the two filters.
+  // assets (by name), honouring the two filters and the visible columns.
   const blocks = useMemo<ReportBlock[]>(() => {
     let rows = data ?? [];
     if (categoryFilter)
@@ -131,7 +158,7 @@ export default function AssetListReportPage() {
             subcount: assets.length,
             rows: [...assets]
               .sort((a, b) => a.name.localeCompare(b.name))
-              .map(assetCells),
+              .map(selected.cells),
           }));
         return {
           heading: categoryName,
@@ -139,8 +166,7 @@ export default function AssetListReportPage() {
           tables,
         };
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, categoryFilter, groupFilter, unitCodeById]);
+  }, [data, categoryFilter, groupFilter, selected]);
 
   const total = blocks.reduce((n, b) => n + (b.count ?? 0), 0);
 
@@ -160,8 +186,8 @@ export default function AssetListReportPage() {
   const spec: ReportSpec = {
     companyName,
     subtitle: `Asset List - ${total} ${total === 1 ? 'asset' : 'assets'}`,
-    columns: COLUMNS,
-    weights: WEIGHTS,
+    columns: selected.columns,
+    weights: selected.weights,
     blocks,
     fileBase: 'asset-list-report',
     serial: true,
@@ -227,19 +253,26 @@ export default function AssetListReportPage() {
               label: g.name,
             }))}
           />
-          <span className="ml-auto text-sm text-slate-500 dark:text-slate-400">
-            {total} asset{total === 1 ? '' : 's'}
-          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <ColumnToggle
+              columns={allColumns.map((c) => ({ key: c.key, label: c.header }))}
+              hidden={hidden}
+              onToggle={toggle}
+            />
+            <span className="text-sm text-slate-500 dark:text-slate-400">
+              {total} asset{total === 1 ? '' : 's'}
+            </span>
+          </div>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
           <ReportView
-            columns={COLUMNS}
-            weights={WEIGHTS}
+            columns={selected.columns}
+            weights={selected.weights}
             blocks={blocks}
             loading={loading}
-            statusCol={8}
-            boldCol={1}
+            statusCol={selected.statusCol}
+            boldCol={selected.boldCol}
             serial
             summary={summary}
             emptyText="No assets match the current filters."

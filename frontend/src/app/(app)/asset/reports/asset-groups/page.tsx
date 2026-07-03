@@ -7,21 +7,43 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Select } from '@/components/ui/Field';
-import { ReportView, ReportExportButtons } from '@/components/ui/ReportView';
+import { ColumnToggle } from '@/components/ui/ColumnToggle';
+import {
+  ReportView,
+  ReportExportButtons,
+  useReportColumns,
+} from '@/components/ui/ReportView';
 import {
   printReport,
   pdfReport,
   excelReport,
   resolveCompanyName,
   type ReportBlock,
+  type ReportColumn,
   type ReportSpec,
 } from '@/lib/reportDoc';
 import type { AssetGroup, AssetCategory, Company } from '@/lib/types';
 
 const ROUTE = '/asset/reports/asset-groups';
-const COLUMNS = ['Code', 'Group', 'Description', 'Status'] as const;
-const WEIGHTS = [18, 28, 42, 12];
 const UNCATEGORISED = '— Uncategorised —';
+
+const ALL_COLUMNS: ReportColumn<AssetGroup>[] = [
+  { key: 'code', header: 'Code', weight: 18, cell: (g) => g.code },
+  { key: 'name', header: 'Group', weight: 28, bold: true, cell: (g) => g.name },
+  {
+    key: 'description',
+    header: 'Description',
+    weight: 42,
+    cell: (g) => g.description ?? '-',
+  },
+  {
+    key: 'status',
+    header: 'Status',
+    weight: 12,
+    status: true,
+    cell: (g) => (g.isActive ? 'Active' : 'Inactive'),
+  },
+];
 
 export default function AssetGroupReportPage() {
   const { can, activeCompany, activeCompanyId } = useAuth();
@@ -30,6 +52,7 @@ export default function AssetGroupReportPage() {
   const { data: categories } = useFetch<AssetCategory[]>('/asset-categories');
   const { data: companies } = useFetch<Company[]>('/companies');
 
+  const { hidden, toggle, selected } = useReportColumns(ROUTE, ALL_COLUMNS);
   const [categoryFilter, setCategoryFilter] = useState('');
 
   const companyName = resolveCompanyName(
@@ -64,19 +87,14 @@ export default function AssetGroupReportPage() {
           count: list.length,
           tables: [
             {
-              rows: sorted.map((g) => [
-                g.code,
-                g.name,
-                g.description ?? '-',
-                g.isActive ? 'Active' : 'Inactive',
-              ]),
+              rows: sorted.map(selected.cells),
               // Primary (level-1) groups get a light highlight.
               shade: sorted.map((g) => g.level === 1),
             },
           ],
         };
       });
-  }, [filteredGroups]);
+  }, [filteredGroups, selected]);
 
   const total = blocks.reduce((n, b) => n + (b.count ?? 0), 0);
 
@@ -96,8 +114,8 @@ export default function AssetGroupReportPage() {
   const spec: ReportSpec = {
     companyName,
     subtitle: `Asset Group List - ${total} ${total === 1 ? 'group' : 'groups'}`,
-    columns: COLUMNS,
-    weights: WEIGHTS,
+    columns: selected.columns,
+    weights: selected.weights,
     blocks,
     fileBase: 'asset-group-report',
     serial: true,
@@ -147,18 +165,25 @@ export default function AssetGroupReportPage() {
               label: c.name,
             }))}
           />
-          <span className="ml-auto text-sm text-slate-500 dark:text-slate-400">
-            {total} group{total === 1 ? '' : 's'}
-          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <ColumnToggle
+              columns={ALL_COLUMNS.map((c) => ({ key: c.key, label: c.header }))}
+              hidden={hidden}
+              onToggle={toggle}
+            />
+            <span className="text-sm text-slate-500 dark:text-slate-400">
+              {total} group{total === 1 ? '' : 's'}
+            </span>
+          </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
           <ReportView
-            columns={COLUMNS}
-            weights={WEIGHTS}
+            columns={selected.columns}
+            weights={selected.weights}
             blocks={blocks}
             loading={loading}
-            statusCol={3}
-            boldCol={1}
+            statusCol={selected.statusCol}
+            boldCol={selected.boldCol}
             serial
             summary={summary}
             emptyText="No asset groups match the current filter."

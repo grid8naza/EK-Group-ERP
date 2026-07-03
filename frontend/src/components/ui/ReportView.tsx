@@ -1,15 +1,64 @@
 'use client';
 
+import { useEffect, useMemo, useState } from 'react';
 import { Eye, FileText, Printer, Sheet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Badge } from './Badge';
 import {
   colPercent,
   reportColumns,
+  selectColumns,
   type Cell,
   type ReportBlock,
+  type ReportColumn,
   type SummaryItem,
 } from '@/lib/reportDoc';
+
+/**
+ * Manages a report's user-chosen visible columns. Returns the `hidden` set (for
+ * ColumnToggle), a `toggle` handler, and `selected` (the columns/weights/cells
+ * for the visible subset). Hidden columns are remembered per report via
+ * localStorage (keyed by `storageKey`, usually the route), and at least one
+ * column is always kept visible.
+ */
+export function useReportColumns<T>(
+  storageKey: string,
+  all: readonly ReportColumn<T>[],
+) {
+  const lsKey = `report.hiddenColumns.${storageKey}`;
+  // Start empty so the server and first client render match, then load the
+  // saved selection after mount (avoids a hydration mismatch).
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(lsKey);
+      setHidden(raw ? new Set(JSON.parse(raw) as string[]) : new Set());
+    } catch {
+      setHidden(new Set());
+    }
+  }, [lsKey]);
+
+  const toggle = (key: string) =>
+    setHidden((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        // Keep at least one column visible.
+        if (all.length - next.size <= 1) return prev;
+        next.add(key);
+      }
+      try {
+        window.localStorage.setItem(lsKey, JSON.stringify([...next]));
+      } catch {
+        /* ignore quota / privacy-mode failures */
+      }
+      return next;
+    });
+
+  const selected = useMemo(() => selectColumns(all, hidden), [all, hidden]);
+  return { hidden, toggle, selected };
+}
 
 interface ReportViewProps {
   columns: readonly string[];

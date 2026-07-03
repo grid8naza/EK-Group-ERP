@@ -7,26 +7,54 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Select } from '@/components/ui/Field';
-import { ReportView, ReportExportButtons } from '@/components/ui/ReportView';
+import { ColumnToggle } from '@/components/ui/ColumnToggle';
+import {
+  ReportView,
+  ReportExportButtons,
+  useReportColumns,
+} from '@/components/ui/ReportView';
 import {
   printReport,
   pdfReport,
   excelReport,
   resolveCompanyName,
   type ReportBlock,
+  type ReportColumn,
   type ReportSpec,
 } from '@/lib/reportDoc';
 import type { Group, Category, Company } from '@/lib/types';
 
 const ROUTE = '/inventory/reports/groups';
-const COLUMNS = ['Code', 'Group', 'Description', 'Applies To', 'Status'] as const;
-const WEIGHTS = [16, 24, 34, 14, 12];
 const UNCATEGORISED = '— Uncategorised —';
 
 const appliesTo = (forItem: boolean, forProduct: boolean) =>
   [forItem ? 'Item' : null, forProduct ? 'Product' : null]
     .filter(Boolean)
     .join(', ') || '-';
+
+const ALL_COLUMNS: ReportColumn<Group>[] = [
+  { key: 'code', header: 'Code', weight: 16, cell: (g) => g.code },
+  { key: 'name', header: 'Group', weight: 24, bold: true, cell: (g) => g.name },
+  {
+    key: 'description',
+    header: 'Description',
+    weight: 34,
+    cell: (g) => g.description ?? '-',
+  },
+  {
+    key: 'applies',
+    header: 'Applies To',
+    weight: 14,
+    cell: (g) => appliesTo(g.forItem, g.forProduct),
+  },
+  {
+    key: 'status',
+    header: 'Status',
+    weight: 12,
+    status: true,
+    cell: (g) => (g.isActive ? 'Active' : 'Inactive'),
+  },
+];
 
 export default function GroupReportPage() {
   const { can, activeCompany, activeCompanyId } = useAuth();
@@ -35,6 +63,7 @@ export default function GroupReportPage() {
   const { data: categories } = useFetch<Category[]>('/categories');
   const { data: companies } = useFetch<Company[]>('/companies');
 
+  const { hidden, toggle, selected } = useReportColumns(ROUTE, ALL_COLUMNS);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [applies, setApplies] = useState(''); // '' | 'item' | 'product'
 
@@ -63,11 +92,11 @@ export default function GroupReportPage() {
     return rows;
   }, [data, categoryFilter, applies]);
 
-  // Groups grouped by category (sorted by name), groups sorted by name.
+  // Groups grouped by category (sorted by name); groups sorted by code so
+  // sub-groups sit under their parent (the 15-digit positional code encodes it).
   const blocks = useMemo<ReportBlock[]>(() => {
-    const rows = filteredGroups;
     const byCat = new Map<string, Group[]>();
-    for (const g of rows) {
+    for (const g of filteredGroups) {
       const cat = g.category?.name ?? UNCATEGORISED;
       if (!byCat.has(cat)) byCat.set(cat, []);
       byCat.get(cat)!.push(g);
@@ -75,34 +104,25 @@ export default function GroupReportPage() {
     return [...byCat.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([categoryName, list]) => {
-        // Sort by code, not name, so sub-groups sit under their parent group
-        // (the 15-digit positional code encodes the hierarchy).
         const sorted = [...list].sort((a, b) => a.code.localeCompare(b.code));
         return {
           heading: categoryName,
           count: list.length,
           tables: [
             {
-              rows: sorted.map((g) => [
-                g.code,
-                g.name,
-                g.description ?? '-',
-                appliesTo(g.forItem, g.forProduct),
-                g.isActive ? 'Active' : 'Inactive',
-              ]),
+              rows: sorted.map(selected.cells),
               // Primary (level-1) groups get a light highlight.
               shade: sorted.map((g) => g.level === 1),
             },
           ],
         };
       });
-  }, [filteredGroups]);
+  }, [filteredGroups, selected]);
 
   const total = blocks.reduce((n, b) => n + (b.count ?? 0), 0);
 
   // Summary reflects the filtered report: categories shown, then a per-level
-  // group count (Group - L1, Group - L2, …). No item total — this is a groups
-  // report.
+  // group count (Group - L1, Group - L2, …).
   const summary = useMemo(() => {
     const byLevel = new Map<number, number>();
     for (const g of filteredGroups)
@@ -110,18 +130,15 @@ export default function GroupReportPage() {
     const levels = [...byLevel.keys()].sort((a, b) => a - b);
     return [
       { label: 'Total Categories', value: blocks.length },
-      ...levels.map((l) => ({
-        label: `Group - L${l}`,
-        value: byLevel.get(l)!,
-      })),
+      ...levels.map((l) => ({ label: `Group - L${l}`, value: byLevel.get(l)! })),
     ];
   }, [filteredGroups, blocks.length]);
 
   const spec: ReportSpec = {
     companyName,
     subtitle: `Group List - ${total} ${total === 1 ? 'group' : 'groups'}`,
-    columns: COLUMNS,
-    weights: WEIGHTS,
+    columns: selected.columns,
+    weights: selected.weights,
     blocks,
     fileBase: 'group-report',
     serial: true,
@@ -184,18 +201,25 @@ export default function GroupReportPage() {
               label: c.name,
             }))}
           />
-          <span className="ml-auto text-sm text-slate-500 dark:text-slate-400">
-            {total} group{total === 1 ? '' : 's'}
-          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <ColumnToggle
+              columns={ALL_COLUMNS.map((c) => ({ key: c.key, label: c.header }))}
+              hidden={hidden}
+              onToggle={toggle}
+            />
+            <span className="text-sm text-slate-500 dark:text-slate-400">
+              {total} group{total === 1 ? '' : 's'}
+            </span>
+          </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
           <ReportView
-            columns={COLUMNS}
-            weights={WEIGHTS}
+            columns={selected.columns}
+            weights={selected.weights}
             blocks={blocks}
             loading={loading}
-            statusCol={4}
-            boldCol={1}
+            statusCol={selected.statusCol}
+            boldCol={selected.boldCol}
             serial
             summary={summary}
             emptyText="No groups match the current filter."

@@ -40,6 +40,52 @@ export interface ReportSpec {
   summary?: SummaryItem[];
 }
 
+/**
+ * A single report column: its header, relative width, and how to pull the cell
+ * value from a row. `status` marks the column rendered as an Active/Inactive
+ * badge on screen; `bold` marks the emphasised column (e.g. the name). Used with
+ * selectColumns() so the user can choose which columns appear — the chosen
+ * subset drives the on-screen table AND every export (print / PDF / Excel),
+ * since all of them read from the resulting ReportSpec.
+ */
+export interface ReportColumn<T> {
+  key: string;
+  header: string;
+  weight: number;
+  cell: (row: T) => Cell;
+  status?: boolean;
+  bold?: boolean;
+}
+
+export interface SelectedColumns<T> {
+  columns: string[];
+  weights: number[];
+  statusCol?: number;
+  boldCol?: number;
+  /** Build a row's cells for the visible columns, in order. */
+  cells: (row: T) => Cell[];
+}
+
+/**
+ * Derive the ReportView / ReportSpec inputs from the visible subset of columns
+ * (everything not in `hidden`, preserving declaration order).
+ */
+export function selectColumns<T>(
+  all: readonly ReportColumn<T>[],
+  hidden: ReadonlySet<string>,
+): SelectedColumns<T> {
+  const visible = all.filter((c) => !hidden.has(c.key));
+  const statusIdx = visible.findIndex((c) => c.status);
+  const boldIdx = visible.findIndex((c) => c.bold);
+  return {
+    columns: visible.map((c) => c.header),
+    weights: visible.map((c) => c.weight),
+    statusCol: statusIdx === -1 ? undefined : statusIdx,
+    boldCol: boldIdx === -1 ? undefined : boldIdx,
+    cells: (row: T) => visible.map((c) => c.cell(row)),
+  };
+}
+
 const SERIAL_HEAD = 'Sl. No';
 const SERIAL_WEIGHT = 6;
 

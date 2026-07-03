@@ -7,25 +7,52 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Select } from '@/components/ui/Field';
-import { ReportView, ReportExportButtons } from '@/components/ui/ReportView';
+import { ColumnToggle } from '@/components/ui/ColumnToggle';
+import {
+  ReportView,
+  ReportExportButtons,
+  useReportColumns,
+} from '@/components/ui/ReportView';
 import {
   printReport,
   pdfReport,
   excelReport,
   resolveCompanyName,
-  type Cell,
+  type ReportColumn,
   type ReportSpec,
 } from '@/lib/reportDoc';
 import type { Category, Company } from '@/lib/types';
 
 const ROUTE = '/inventory/reports/categories';
-const COLUMNS = ['Code', 'Category', 'Description', 'Applies To', 'Status'] as const;
-const WEIGHTS = [16, 24, 34, 14, 12];
 
 const appliesTo = (forItem: boolean, forProduct: boolean) =>
   [forItem ? 'Item' : null, forProduct ? 'Product' : null]
     .filter(Boolean)
     .join(', ') || '-';
+
+const ALL_COLUMNS: ReportColumn<Category>[] = [
+  { key: 'code', header: 'Code', weight: 16, cell: (c) => c.code },
+  { key: 'name', header: 'Category', weight: 24, bold: true, cell: (c) => c.name },
+  {
+    key: 'description',
+    header: 'Description',
+    weight: 34,
+    cell: (c) => c.description ?? '-',
+  },
+  {
+    key: 'applies',
+    header: 'Applies To',
+    weight: 14,
+    cell: (c) => appliesTo(c.forItem, c.forProduct),
+  },
+  {
+    key: 'status',
+    header: 'Status',
+    weight: 12,
+    status: true,
+    cell: (c) => (c.isActive ? 'Active' : 'Inactive'),
+  },
+];
 
 export default function CategoryReportPage() {
   const { can, activeCompany, activeCompanyId } = useAuth();
@@ -33,6 +60,7 @@ export default function CategoryReportPage() {
   const { data, loading } = useFetch<Category[]>('/categories');
   const { data: companies } = useFetch<Company[]>('/companies');
 
+  const { hidden, toggle, selected } = useReportColumns(ROUTE, ALL_COLUMNS);
   const [applies, setApplies] = useState(''); // '' | 'item' | 'product'
 
   const companyName = resolveCompanyName(
@@ -41,33 +69,24 @@ export default function CategoryReportPage() {
     activeCompany?.name,
   );
 
-  // Categories after the applicability filter, ordered by code.
-  const filteredCats = useMemo(() => {
+  // Categories after the applicability filter, ordered by code, cells built
+  // from the visible columns.
+  const rows = useMemo(() => {
     let cats = data ?? [];
     if (applies === 'item') cats = cats.filter((c) => c.forItem);
     else if (applies === 'product') cats = cats.filter((c) => c.forProduct);
-    return [...cats].sort((a, b) => a.code.localeCompare(b.code));
-  }, [data, applies]);
-
-  const rows = useMemo<Cell[][]>(
-    () =>
-      filteredCats.map((c) => [
-        c.code,
-        c.name,
-        c.description ?? '-',
-        appliesTo(c.forItem, c.forProduct),
-        c.isActive ? 'Active' : 'Inactive',
-      ]),
-    [filteredCats],
-  );
+    return [...cats]
+      .sort((a, b) => a.code.localeCompare(b.code))
+      .map(selected.cells);
+  }, [data, applies, selected]);
 
   const total = rows.length;
 
   const spec: ReportSpec = {
     companyName,
     subtitle: `Category List - ${total} ${total === 1 ? 'category' : 'categories'}`,
-    columns: COLUMNS,
-    weights: WEIGHTS,
+    columns: selected.columns,
+    weights: selected.weights,
     blocks: [{ tables: [{ rows }] }],
     fileBase: 'category-report',
     serial: true,
@@ -116,18 +135,25 @@ export default function CategoryReportPage() {
               { value: 'product', label: 'Product-wise' },
             ]}
           />
-          <span className="ml-auto text-sm text-slate-500 dark:text-slate-400">
-            {total} categor{total === 1 ? 'y' : 'ies'}
-          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <ColumnToggle
+              columns={ALL_COLUMNS.map((c) => ({ key: c.key, label: c.header }))}
+              hidden={hidden}
+              onToggle={toggle}
+            />
+            <span className="text-sm text-slate-500 dark:text-slate-400">
+              {total} categor{total === 1 ? 'y' : 'ies'}
+            </span>
+          </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
           <ReportView
-            columns={COLUMNS}
-            weights={WEIGHTS}
+            columns={selected.columns}
+            weights={selected.weights}
             blocks={spec.blocks}
             loading={loading}
-            statusCol={4}
-            boldCol={1}
+            statusCol={selected.statusCol}
+            boldCol={selected.boldCol}
             serial
             emptyText="No categories found."
           />
