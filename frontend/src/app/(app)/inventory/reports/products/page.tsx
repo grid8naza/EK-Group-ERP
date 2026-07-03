@@ -18,42 +18,74 @@ import {
   pdfReport,
   excelReport,
   resolveCompanyName,
-  type ReportBlock,
+  type Cell,
   type ReportColumn,
   type ReportSpec,
 } from '@/lib/reportDoc';
-import type { Product, Category, Group, Company } from '@/lib/types';
+import type { Product, Group, Company } from '@/lib/types';
 
 const ROUTE = '/inventory/reports/products';
 
-const UNCATEGORISED = '— Uncategorised —';
-const UNGROUPED = '— Ungrouped —';
-
+// Flat list — Category and Group are columns (not grouping headings).
 const ALL_COLUMNS: ReportColumn<Product>[] = [
-  { key: 'code', header: 'Code', weight: 9, cell: (p) => p.code },
-  { key: 'name', header: 'Product', weight: 24, bold: true, cell: (p) => p.name },
-  { key: 'unit', header: 'Unit', weight: 7, cell: (p) => p.unit?.code ?? '-' },
-  { key: 'cost', header: 'Cost', weight: 10, cell: (p) => p.costPrice ?? 0 },
+  { key: 'code', header: 'Code', weight: 10, cell: (p) => p.code },
   {
-    key: 'wholesale',
-    header: 'Wholesale',
-    weight: 11,
+    key: 'category',
+    header: 'Category',
+    weight: 12,
+    cell: (p) => p.category?.name ?? '-',
+  },
+  { key: 'group', header: 'Group', weight: 12, cell: (p) => p.group?.name ?? '-' },
+  { key: 'name', header: 'Name', weight: 18, bold: true, cell: (p) => p.name },
+  { key: 'cost', header: 'Cost Price', weight: 9, cell: (p) => p.costPrice ?? 0 },
+  { key: 'unit', header: 'Unit', weight: 7, cell: (p) => p.unit?.code ?? '-' },
+  {
+    key: 'intercoPrice',
+    header: 'Intercompany Price',
+    weight: 10,
+    cell: (p) => p.intercompanyPrice ?? 0,
+  },
+  {
+    key: 'intercoPct',
+    header: 'Intercompany Profit %',
+    weight: 10,
+    cell: (p) => p.intercompanyProfitPct ?? 0,
+  },
+  {
+    key: 'wholesalePrice',
+    header: 'Wholesale Price',
+    weight: 10,
     cell: (p) => p.wholesalePrice ?? 0,
   },
-  { key: 'retail', header: 'Retail', weight: 10, cell: (p) => p.retailPrice ?? 0 },
-  { key: 'hsn', header: 'HSN', weight: 9, cell: (p) => p.hsnCode?.code ?? '-' },
   {
-    key: 'shelfLife',
-    header: 'Shelf Life',
+    key: 'wholesalePct',
+    header: 'Wholesale Profit %',
     weight: 10,
-    cell: (p) => p.shelfLife ?? 0,
+    cell: (p) => p.wholesaleProfitPct ?? 0,
   },
   {
-    key: 'status',
-    header: 'Status',
+    key: 'retailPrice',
+    header: 'Retail Price',
     weight: 10,
-    status: true,
-    cell: (p) => (p.isActive ? 'Active' : 'Inactive'),
+    cell: (p) => p.retailPrice ?? 0,
+  },
+  {
+    key: 'retailPct',
+    header: 'Retail Profit %',
+    weight: 10,
+    cell: (p) => p.retailProfitPct ?? 0,
+  },
+  {
+    key: 'boxQty',
+    header: 'Box Quantity',
+    weight: 8,
+    cell: (p) => p.boxQty ?? 0,
+  },
+  {
+    key: 'boxUnit',
+    header: 'Box Unit',
+    weight: 8,
+    cell: (p) => p.boxUnit?.code ?? '-',
   },
 ];
 
@@ -61,7 +93,6 @@ export default function ProductsReportPage() {
   const { can, activeCompany, activeCompanyId } = useAuth();
   const toast = useToast();
   const { data, loading } = useFetch<Product[]>('/products');
-  const { data: categories } = useFetch<Category[]>('/categories');
   const { data: groups } = useFetch<Group[]>('/groups');
   const { data: companies } = useFetch<Company[]>('/companies');
 
@@ -73,81 +104,46 @@ export default function ProductsReportPage() {
     activeCompany?.name,
   );
 
-  const [categoryFilter, setCategoryFilter] = useState('');
   const [groupFilter, setGroupFilter] = useState('');
+  const [packing, setPacking] = useState(''); // '' | 'packed' | 'unpacked'
+  const [ingredient, setIngredient] = useState(''); // '' | 'yes' | 'no'
+  const [sellable, setSellable] = useState(''); // '' | 'yes' | 'no'
 
-  // Group dropdown follows the selected category (all groups when none chosen).
-  const filterGroups = useMemo(
+  // Group filter lists only the leaf groups products actually attach to.
+  const productGroups = useMemo(
     () =>
-      (groups ?? []).filter(
-        (g) => !categoryFilter || String(g.categoryId) === categoryFilter,
-      ),
-    [groups, categoryFilter],
+      (groups ?? []).filter((g) => g.forProduct && !g.subGroupApplicable),
+    [groups],
   );
 
-  // Build the grouped, sorted report: category (by name) → group (by name) →
-  // products (by name), honouring the two filters and the visible columns.
-  const blocks = useMemo<ReportBlock[]>(() => {
-    let rows = data ?? [];
-    if (categoryFilter)
-      rows = rows.filter((r) => String(r.categoryId) === categoryFilter);
+  // Flat report: products after the filters, sorted by code, cells from the
+  // visible columns.
+  const rows = useMemo<Cell[][]>(() => {
+    let list = data ?? [];
     if (groupFilter)
-      rows = rows.filter((r) => String(r.groupId) === groupFilter);
+      list = list.filter((p) => String(p.groupId) === groupFilter);
+    if (packing === 'packed') list = list.filter((p) => p.packed);
+    else if (packing === 'unpacked') list = list.filter((p) => p.unpacked);
+    if (ingredient === 'yes') list = list.filter((p) => p.isIngredient);
+    else if (ingredient === 'no') list = list.filter((p) => !p.isIngredient);
+    if (sellable === 'yes') list = list.filter((p) => p.canSell);
+    else if (sellable === 'no') list = list.filter((p) => !p.canSell);
+    return [...list]
+      .sort((a, b) => a.code.localeCompare(b.code))
+      .map(selected.cells);
+  }, [data, groupFilter, packing, ingredient, sellable, selected]);
 
-    const byCat = new Map<string, Map<string, Product[]>>();
-    for (const p of rows) {
-      const cat = p.category?.name ?? UNCATEGORISED;
-      const grp = p.group?.name ?? UNGROUPED;
-      if (!byCat.has(cat)) byCat.set(cat, new Map());
-      const g = byCat.get(cat)!;
-      if (!g.has(grp)) g.set(grp, []);
-      g.get(grp)!.push(p);
-    }
-
-    return [...byCat.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([categoryName, groupsMap]) => {
-        const tables = [...groupsMap.entries()]
-          .sort((a, b) => a[0].localeCompare(b[0]))
-          .map(([groupName, products]) => ({
-            subheading: groupName,
-            subcount: products.length,
-            rows: [...products]
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map(selected.cells),
-          }));
-        return {
-          heading: categoryName,
-          count: tables.reduce((n, t) => n + t.rows.length, 0),
-          tables,
-        };
-      });
-  }, [data, categoryFilter, groupFilter, selected]);
-
-  const total = blocks.reduce((n, b) => n + (b.count ?? 0), 0);
-
-  // Summary reflects the filtered report: category blocks, group tables, products.
-  const summary = useMemo(
-    () => [
-      { label: 'Total Categories', value: blocks.length },
-      {
-        label: 'Total Groups',
-        value: blocks.reduce((n, b) => n + b.tables.length, 0),
-      },
-      { label: 'Total Products', value: total },
-    ],
-    [blocks, total],
-  );
+  const total = rows.length;
 
   const spec: ReportSpec = {
     companyName,
     subtitle: `Products List - ${total} ${total === 1 ? 'product' : 'products'}`,
     columns: selected.columns,
     weights: selected.weights,
-    blocks,
+    blocks: [{ tables: [{ rows }] }],
     fileBase: 'products-report',
     serial: true,
-    summary,
+    summary: [{ label: 'Total Products', value: total }],
   };
 
   const has = total > 0;
@@ -165,7 +161,7 @@ export default function ProductsReportPage() {
     <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="Products List Report"
-        description="Products grouped by category and group, with print and export"
+        description="Products with pricing, profit margins and packing, with print and export"
         icon={<BarChart3 className="h-5 w-5" />}
         actions={
           <ReportExportButtons
@@ -175,38 +171,53 @@ export default function ProductsReportPage() {
             onPreview={onPreview}
             onPrint={onPrint}
             onPdf={() => pdfReport(spec)}
-            onExcel={() =>
-              excelReport(spec, { headingLabel: 'Category', subheadingLabel: 'Group' })
-            }
+            onExcel={() => excelReport(spec)}
             disabled={!has}
           />
         }
       />
 
       <div className="card flex min-h-0 flex-1 flex-col overflow-hidden">
-        {/* Filters — group cascades from category */}
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-4 dark:border-slate-800">
-          <Select
-            value={categoryFilter}
-            onChange={(e) => {
-              setCategoryFilter(e.target.value);
-              setGroupFilter(''); // reset group when category changes
-            }}
-            wrapClassName="w-48"
-            placeholder="All categories"
-            options={(categories ?? [])
-              .filter((c) => c.forProduct)
-              .map((c) => ({ value: String(c.id), label: c.name }))}
-          />
           <Select
             value={groupFilter}
             onChange={(e) => setGroupFilter(e.target.value)}
             wrapClassName="w-48"
             placeholder="All groups"
-            options={filterGroups.map((g) => ({
+            options={productGroups.map((g) => ({
               value: String(g.id),
               label: g.name,
             }))}
+          />
+          <Select
+            value={packing}
+            onChange={(e) => setPacking(e.target.value)}
+            wrapClassName="w-40"
+            placeholder="Packing: All"
+            options={[
+              { value: 'packed', label: 'Packed' },
+              { value: 'unpacked', label: 'Unpacked' },
+            ]}
+          />
+          <Select
+            value={ingredient}
+            onChange={(e) => setIngredient(e.target.value)}
+            wrapClassName="w-44"
+            placeholder="Recipe Ingredient: All"
+            options={[
+              { value: 'yes', label: 'Ingredient' },
+              { value: 'no', label: 'Not ingredient' },
+            ]}
+          />
+          <Select
+            value={sellable}
+            onChange={(e) => setSellable(e.target.value)}
+            wrapClassName="w-40"
+            placeholder="Sellable: All"
+            options={[
+              { value: 'yes', label: 'Sellable' },
+              { value: 'no', label: 'Not sellable' },
+            ]}
           />
           <div className="ml-auto flex items-center gap-2">
             <ColumnToggle
@@ -220,16 +231,16 @@ export default function ProductsReportPage() {
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+        <div className="min-h-0 flex-1 overflow-auto px-4 pb-4">
           <ReportView
             columns={selected.columns}
             weights={selected.weights}
-            blocks={blocks}
+            blocks={spec.blocks}
             loading={loading}
             statusCol={selected.statusCol}
             boldCol={selected.boldCol}
             serial
-            summary={summary}
+            summary={spec.summary}
             emptyText="No products match the current filters."
           />
         </div>
