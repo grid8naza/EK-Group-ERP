@@ -6,9 +6,8 @@ import {
   ListTree,
   Plus,
   Trash2,
+  Pencil,
   ArrowLeft,
-  ChevronUp,
-  ChevronDown,
   Cog,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
@@ -17,6 +16,7 @@ import { useToast } from '@/providers/ToastProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
+import { Drawer } from '@/components/ui/Drawer';
 import { Input, Select } from '@/components/ui/Field';
 import type {
   Product,
@@ -49,15 +49,23 @@ const money = (v: number) =>
     maximumFractionDigits: 2,
   });
 
+const BLANK_LINE: Line = { itemId: '', quantity: '', unitId: '' };
+const BLANK_PROC: Proc = {
+  name: '',
+  timeValue: '0',
+  timeUnit: 'MIN',
+  machineId: '',
+};
+
 export default function ProductBomEditorPage() {
   const params = useParams();
-  const search = useSearchParams();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const { can } = useAuth();
   const toast = useToast();
 
   const id = String(params.id);
-  const view = search.get('view') === '1' || !can(ROUTE, 'edit');
+  const view = searchParams.get('view') === '1' || !can(ROUTE, 'edit');
 
   const { data: product, loading } = useFetch<Product>(`/products/${id}`);
   const { data: items } = useFetch<Item[]>('/items');
@@ -66,18 +74,17 @@ export default function ProductBomEditorPage() {
 
   const itemList = items ?? [];
   const unitList = units ?? [];
-  // Only production-line machines that are currently active can be assigned.
+  // Only production-line machines that are currently active can be assigned;
+  // any already-referenced machine still resolves for display.
   const machineList = useMemo(
     () => (assets ?? []).filter((a) => a.isProductionLine && a.status === 'ACTIVE'),
     [assets],
   );
-  const itemById = useMemo(
-    () => new Map(itemList.map((i) => [i.id, i])),
-    [itemList],
-  );
-  const unitById = useMemo(
-    () => new Map(unitList.map((u) => [u.id, u])),
-    [unitList],
+  const itemById = useMemo(() => new Map(itemList.map((i) => [i.id, i])), [itemList]);
+  const unitById = useMemo(() => new Map(unitList.map((u) => [u.id, u])), [unitList]);
+  const assetById = useMemo(
+    () => new Map((assets ?? []).map((a) => [a.id, a])),
+    [assets],
   );
 
   // --- editable state ---
@@ -89,6 +96,14 @@ export default function ProductBomEditorPage() {
   const [overheadCost, setOverheadCost] = useState('0');
   const [bomMarginPct, setBomMarginPct] = useState('0');
   const [saving, setSaving] = useState(false);
+
+  // Overlay data-entry forms.
+  const [ingForm, setIngForm] = useState<{ index: number | null; draft: Line } | null>(
+    null,
+  );
+  const [procForm, setProcForm] = useState<{ index: number | null; draft: Proc } | null>(
+    null,
+  );
 
   // Hydrate once the product loads.
   useEffect(() => {
@@ -109,26 +124,20 @@ export default function ProductBomEditorPage() {
     setBomMarginPct(String(product.bomMarginPct ?? 0));
   }, [product]);
 
-  // --- ingredient helpers ---
-  // A unit's base unit id and how many base units make one of it (SIMPLE units
-  // are their own base with factor 1; COMPOUND/CHAINING carry the resolved
-  // baseUnitId + conversionFactor, e.g. 1 KG = 1000 GM).
+  // --- rate / amount (with unit conversion) ---
   const baseOf = (u?: Unit) => (u ? (u.baseUnitId ?? u.id) : undefined);
   const factorOf = (u?: Unit) => u?.conversionFactor ?? 1;
-
-  // Rate = the item's last purchase price (which is per the item's stock unit)
-  // converted into the BOM line's unit. e.g. price 210/KG, line in GM → 0.21/GM.
-  // Falls back to the raw price when the units are the same or not convertible
-  // (different base unit).
+  // The item's last purchase price is per its stock unit; convert it into the
+  // BOM line's unit (e.g. 210/KG → 0.21/GM). Fallback: same unit or no shared base.
   const rateOf = (l: Line) => {
     const item = itemById.get(Number(l.itemId));
     if (!item) return 0;
     const price = item.lastPurchasePrice ?? 0;
-    const itemUnit = unitById.get(item.unitId);
-    const lineUnit = l.unitId ? unitById.get(Number(l.unitId)) : undefined;
-    if (!itemUnit || !lineUnit || itemUnit.id === lineUnit.id) return price;
-    if (baseOf(itemUnit) !== baseOf(lineUnit)) return price;
-    return (price * factorOf(lineUnit)) / factorOf(itemUnit);
+    const iu = unitById.get(item.unitId);
+    const lu = l.unitId ? unitById.get(Number(l.unitId)) : undefined;
+    if (!iu || !lu || iu.id === lu.id) return price;
+    if (baseOf(iu) !== baseOf(lu)) return price;
+    return (price * factorOf(lu)) / factorOf(iu);
   };
   const amountOf = (l: Line) => (Number(l.quantity) || 0) * rateOf(l);
   const materialCost = recipe.reduce((s, l) => s + amountOf(l), 0);
@@ -140,71 +149,82 @@ export default function ProductBomEditorPage() {
   const salesPrice = costPrice * (1 + num(bomMarginPct) / 100);
   const grossProfit = salesPrice - costPrice;
   const yQty = num(yieldQty) || 1;
-  const estCostPerUnit = costPrice / yQty; // BOM-estimated
+  const estCostPerUnit = costPrice / yQty;
   const estSalesPerUnit = salesPrice / yQty;
 
-  const setLine = (
-    lines: Line[],
-    setLines: (l: Line[]) => void,
-    i: number,
-    patch: Partial<Line>,
-  ) => setLines(lines.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+  // --- display resolvers ---
+  const itemName = (idStr: string) => itemById.get(Number(idStr))?.name ?? '—';
+  const unitCode = (unitId?: number | string | null) =>
+    unitById.get(Number(unitId))?.code ?? '';
+  const machineName = (idStr: string) =>
+    idStr ? (assetById.get(Number(idStr))?.name ?? `#${idStr}`) : '—';
+  const yieldUnitCode = unitCode(product?.boxUnitId ?? product?.unitId);
 
-  const onPickItem = (
-    lines: Line[],
-    setLines: (l: Line[]) => void,
-    i: number,
-    itemId: string,
-  ) => {
-    const it = itemById.get(Number(itemId));
-    setLine(lines, setLines, i, {
-      itemId,
-      ...(lines[i].unitId ? {} : { unitId: it ? String(it.unitId) : '' }),
-    });
+  // --- ingredient overlay ---
+  const openAddIng = () => setIngForm({ index: null, draft: { ...BLANK_LINE } });
+  const openEditIng = (i: number) =>
+    setIngForm({ index: i, draft: { ...recipe[i] } });
+  const onPickIngItem = (itemId: string) =>
+    setIngForm((f) =>
+      f
+        ? {
+            ...f,
+            draft: {
+              ...f.draft,
+              itemId,
+              unitId:
+                f.draft.unitId ||
+                String(itemById.get(Number(itemId))?.unitId ?? ''),
+            },
+          }
+        : f,
+    );
+  const saveIng = () => {
+    if (!ingForm) return;
+    const d = ingForm.draft;
+    if (!d.itemId || !(Number(d.quantity) > 0) || !d.unitId) {
+      toast.error('Pick an item, a positive quantity and a unit.');
+      return;
+    }
+    setRecipe((rows) =>
+      ingForm.index == null
+        ? [...rows, d]
+        : rows.map((r, i) => (i === ingForm.index ? d : r)),
+    );
+    setIngForm(null);
   };
 
-  // --- process helpers ---
-  const addProc = () =>
-    setProcesses((p) => [
-      ...p,
-      { name: '', timeValue: '0', timeUnit: 'MIN', machineId: '' },
-    ]);
-  const setProc = (i: number, patch: Partial<Proc>) =>
-    setProcesses((p) => p.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
-  const removeProc = (i: number) =>
-    setProcesses((p) => p.filter((_, idx) => idx !== i));
-  const moveProc = (i: number, dir: -1 | 1) =>
-    setProcesses((p) => {
-      const j = i + dir;
-      if (j < 0 || j >= p.length) return p;
-      const next = [...p];
-      [next[i], next[j]] = [next[j], next[i]];
-      return next;
-    });
-
-  const validLines = (lines: Line[]) =>
-    lines.filter((l) => l.itemId && Number(l.quantity) > 0 && l.unitId);
+  // --- process overlay ---
+  const openAddProc = () => setProcForm({ index: null, draft: { ...BLANK_PROC } });
+  const openEditProc = (i: number) =>
+    setProcForm({ index: i, draft: { ...processes[i] } });
+  const saveProc = () => {
+    if (!procForm) return;
+    const d = procForm.draft;
+    if (!d.name.trim()) {
+      toast.error('Enter a process name.');
+      return;
+    }
+    setProcesses((rows) =>
+      procForm.index == null
+        ? [...rows, { ...d, name: d.name.trim() }]
+        : rows.map((r, i) => (i === procForm.index ? { ...d, name: d.name.trim() } : r)),
+    );
+    setProcForm(null);
+  };
 
   const save = async (close: boolean) => {
     if (!product) return;
-    const badLine = (lines: Line[]) =>
-      lines.some((l) => l.itemId && (!(Number(l.quantity) > 0) || !l.unitId));
-    if (badLine(recipe)) {
-      toast.error('Each ingredient line needs a positive quantity and a unit.');
-      return;
-    }
-    if (processes.some((p) => !p.name.trim())) {
-      toast.error('Each process needs a name.');
-      return;
-    }
     const payload = {
       yieldQty: num(yieldQty) || 1,
       yieldUnitId: product.boxUnitId ?? product.unitId,
-      recipe: validLines(recipe).map((l) => ({
-        itemId: Number(l.itemId),
-        quantity: Number(l.quantity),
-        unitId: Number(l.unitId),
-      })),
+      recipe: recipe
+        .filter((l) => l.itemId && Number(l.quantity) > 0 && l.unitId)
+        .map((l) => ({
+          itemId: Number(l.itemId),
+          quantity: Number(l.quantity),
+          unitId: Number(l.unitId),
+        })),
       processes: processes
         .filter((p) => p.name.trim())
         .map((p) => ({
@@ -230,10 +250,6 @@ export default function ProductBomEditorPage() {
     }
   };
 
-  const unitCode = (unitId?: number | null) =>
-    unitList.find((u) => u.id === unitId)?.code ?? '';
-  const yieldUnitCode = unitCode(product?.boxUnitId ?? product?.unitId);
-
   if (loading || !product) {
     return (
       <div className="mx-auto flex h-full max-w-[1400px] flex-col">
@@ -241,6 +257,8 @@ export default function ProductBomEditorPage() {
       </div>
     );
   }
+
+  const timeUnitLabel = (u: ProcessTimeUnit) => (u === 'HR' ? 'Hr' : 'Min');
 
   return (
     <div className="mx-auto flex h-full max-w-[1400px] flex-col">
@@ -275,14 +293,14 @@ export default function ProductBomEditorPage() {
         }
       />
 
-      <ReadOnlyFieldset readOnly={view}>
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-4">
-          {/* Header — identity + yield */}
-          <div className="card grid grid-cols-2 gap-4 p-4 sm:grid-cols-4">
-            <ReadField label="Category" value={product.category?.name ?? '-'} />
-            <ReadField label="Group" value={product.group?.name ?? '-'} />
-            <ReadField label="Product" value={product.name} />
-            <div className="flex items-end gap-2">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-4">
+        {/* Header — identity + yield */}
+        <div className="card grid grid-cols-2 gap-4 p-4 sm:grid-cols-4">
+          <ReadField label="Category" value={product.category?.name ?? '-'} />
+          <ReadField label="Group" value={product.group?.name ?? '-'} />
+          <ReadField label="Product" value={product.name} />
+          <div className="flex items-end gap-2">
+            <ReadOnlyFieldset readOnly={view}>
               <Input
                 label="Yield"
                 type="number"
@@ -292,261 +310,170 @@ export default function ProductBomEditorPage() {
                 onChange={(e) => setYieldQty(e.target.value)}
                 wrapClassName="flex-1"
               />
-              <span className="pb-2 text-sm text-slate-500 dark:text-slate-400">
-                {yieldUnitCode}
-              </span>
-            </div>
+            </ReadOnlyFieldset>
+            <span className="pb-2 text-sm text-slate-500 dark:text-slate-400">
+              {yieldUnitCode}
+            </span>
           </div>
+        </div>
 
-          {/* Ingredients — full width, process flow below it */}
-          <div className="space-y-4">
-            {/* Ingredients (recipe) */}
-            <div className="card flex flex-col p-4">
-              <div className="-mx-4 -mt-4 mb-3 flex items-center justify-between rounded-t-2xl bg-[#5b544c] px-4 py-2.5 dark:bg-slate-800">
-                <h2 className="text-sm font-semibold text-white">Ingredients</h2>
-                {!view && (
-                  <button
-                    className="btn-secondary text-xs"
-                    onClick={() =>
-                      setRecipe([...recipe, { itemId: '', quantity: '', unitId: '' }])
-                    }
-                  >
-                    <Plus className="h-3.5 w-3.5" /> Add item
-                  </button>
-                )}
-              </div>
-
-              <div>
-                <table className="w-full table-fixed text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700">
-                      <th className="min-w-[10rem] py-2 pr-2">Item</th>
-                      <th className="w-20 py-2 px-1 text-right">Qty</th>
-                      <th className="w-24 py-2 px-1">Unit</th>
-                      <th className="w-24 py-2 px-1 text-right">Rate</th>
-                      <th className="w-28 py-2 pl-1 text-right">Amount</th>
-                      {!view && <th className="w-8" />}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recipe.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={view ? 5 : 6}
-                          className="py-6 text-center text-xs text-slate-400"
-                        >
-                          No ingredients yet.
-                        </td>
-                      </tr>
-                    ) : (
-                      recipe.map((line, i) => (
-                        <tr
-                          key={i}
-                          className="border-b border-slate-100 dark:border-slate-800/60"
-                        >
-                          <td className="py-1.5 pr-2">
-                            <Select
-                              value={line.itemId}
-                              onChange={(e) =>
-                                onPickItem(recipe, setRecipe, i, e.target.value)
-                              }
-                              placeholder="Select item"
-                              options={itemList.map((it) => ({
-                                value: it.id,
-                                label: it.name,
-                              }))}
-                            />
-                          </td>
-                          <td className="px-1">
-                            <Input
-                              type="number"
-                              min={0}
-                              step="any"
-                              value={line.quantity}
-                              onChange={(e) =>
-                                setLine(recipe, setRecipe, i, {
-                                  quantity: e.target.value,
-                                })
-                              }
-                            />
-                          </td>
-                          <td className="px-1">
-                            <Select
-                              value={line.unitId}
-                              onChange={(e) =>
-                                setLine(recipe, setRecipe, i, {
-                                  unitId: e.target.value,
-                                })
-                              }
-                              placeholder="Unit"
-                              options={unitList.map((u) => ({
-                                value: u.id,
-                                label: u.code,
-                              }))}
-                            />
-                          </td>
-                          <td className="px-1 text-right tabular-nums text-slate-600 dark:text-slate-300">
-                            {money(rateOf(line))}
-                          </td>
-                          <td className="pl-1 text-right font-medium tabular-nums text-slate-800 dark:text-slate-100">
-                            {money(amountOf(line))}
-                          </td>
-                          {!view && (
-                            <td className="text-right">
-                              <button
-                                type="button"
-                                className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600 dark:hover:bg-slate-800"
-                                onClick={() =>
-                                  setRecipe(recipe.filter((_, idx) => idx !== i))
-                                }
-                                aria-label="Remove"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </td>
-                          )}
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t-2 border-slate-200 dark:border-slate-700">
-                      <td colSpan={4} className="py-2 text-right text-sm font-semibold">
-                        Total Amount
-                      </td>
-                      <td className="py-2 pl-1 text-right text-sm font-bold tabular-nums text-slate-900 dark:text-white">
-                        {money(materialCost)}
-                      </td>
-                      {!view && <td />}
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-
-            {/* Process Flow */}
-            <div className="card flex flex-col p-4">
-              <div className="-mx-4 -mt-4 mb-3 flex items-center justify-between rounded-t-2xl bg-[#5b544c] px-4 py-2.5 dark:bg-slate-800">
-                <h2 className="text-sm font-semibold text-white">Process Flow</h2>
-                {!view && (
-                  <button className="btn-secondary text-xs" onClick={addProc}>
-                    <Plus className="h-3.5 w-3.5" /> Add process
-                  </button>
-                )}
-              </div>
-              <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
-                Steps involved in production — processing time and the machine
-                required for each stage.
-              </p>
-
-              {processes.length === 0 ? (
-                <p className="rounded-md border border-dashed border-slate-300 px-3 py-6 text-center text-xs text-slate-400 dark:border-slate-600">
-                  No processes yet — add one to start the flow.
-                </p>
-              ) : (
-                <div className="space-y-2">
-                  {processes.map((p, i) => (
-                    <div
-                      key={i}
-                      className="rounded-lg border border-slate-200 p-3 dark:border-slate-700"
+        {/* Ingredients + Process Flow side by side */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {/* Ingredients */}
+          <div className="card flex flex-col p-4">
+            <SectionHeader
+              title="Ingredients"
+              onAdd={!view ? openAddIng : undefined}
+              addLabel="Add item"
+            />
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700">
+                  <th className="w-8 py-2 pr-1 text-center">#</th>
+                  <th className="py-2 pr-2">Item</th>
+                  <th className="w-16 py-2 px-1 text-right">Qty</th>
+                  <th className="w-14 py-2 px-1">Unit</th>
+                  <th className="w-20 py-2 px-1 text-right">Rate</th>
+                  <th className="w-24 py-2 px-1 text-right">Amount</th>
+                  {!view && <th className="w-16 py-2 pl-1 text-center">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {recipe.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={view ? 6 : 7}
+                      className="py-6 text-center text-xs text-slate-400"
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-brand-100 text-xs font-semibold text-brand-700 dark:bg-brand-950 dark:text-brand-300">
-                          {i + 1}
-                        </span>
-                        <Input
-                          value={p.name}
-                          onChange={(e) => setProc(i, { name: e.target.value })}
-                          placeholder="Process / step name"
-                          wrapClassName="flex-1"
-                        />
-                        {!view && (
-                          <div className="flex flex-none items-center">
-                            <button
-                              type="button"
-                              className="rounded p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30 dark:hover:text-slate-200"
-                              onClick={() => moveProc(i, -1)}
-                              disabled={i === 0}
-                              aria-label="Move up"
-                            >
-                              <ChevronUp className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30 dark:hover:text-slate-200"
-                              onClick={() => moveProc(i, 1)}
-                              disabled={i === processes.length - 1}
-                              aria-label="Move down"
-                            >
-                              <ChevronDown className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              className="rounded p-1 text-slate-400 hover:text-red-600"
-                              onClick={() => removeProc(i)}
-                              aria-label="Remove process"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      <div className="mt-2 flex items-end gap-2 pl-8">
-                        <Input
-                          label="Time"
-                          type="number"
-                          min={0}
-                          step="any"
-                          value={p.timeValue}
-                          onChange={(e) => setProc(i, { timeValue: e.target.value })}
-                          wrapClassName="w-24"
-                        />
-                        <Select
-                          label="Unit"
-                          value={p.timeUnit}
-                          onChange={(e) =>
-                            setProc(i, {
-                              timeUnit: e.target.value as ProcessTimeUnit,
-                            })
-                          }
-                          options={[
-                            { value: 'MIN', label: 'Min' },
-                            { value: 'HR', label: 'Hr' },
-                          ]}
-                          wrapClassName="w-24"
-                        />
-                        <Select
-                          label="Machine"
-                          value={p.machineId}
-                          onChange={(e) => setProc(i, { machineId: e.target.value })}
-                          placeholder="— Select machine —"
-                          options={machineList.map((m) => ({
-                            value: m.id,
-                            label: `${m.name} (${m.code})`,
-                          }))}
-                          wrapClassName="flex-1"
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {machineList.length === 0 && !view && (
-                <p className="mt-2 flex items-center gap-1 text-xs text-amber-600">
-                  <Cog className="h-3.5 w-3.5" /> No production-line machines yet —
-                  mark assets as “production line” in the Asset module.
-                </p>
-              )}
-            </div>
+                      No ingredients yet.
+                    </td>
+                  </tr>
+                ) : (
+                  recipe.map((line, i) => (
+                    <tr
+                      key={i}
+                      className="border-b border-slate-100 dark:border-slate-800/60"
+                    >
+                      <td className="py-2 pr-1 text-center tabular-nums text-slate-500">
+                        {i + 1}
+                      </td>
+                      <td className="py-2 pr-2 font-medium text-slate-800 dark:text-slate-100">
+                        {itemName(line.itemId)}
+                      </td>
+                      <td className="px-1 text-right tabular-nums">
+                        {Number(line.quantity) || 0}
+                      </td>
+                      <td className="px-1">{unitCode(line.unitId)}</td>
+                      <td className="px-1 text-right tabular-nums text-slate-600 dark:text-slate-300">
+                        {money(rateOf(line))}
+                      </td>
+                      <td className="px-1 text-right font-medium tabular-nums text-slate-800 dark:text-slate-100">
+                        {money(amountOf(line))}
+                      </td>
+                      {!view && (
+                        <td className="pl-1">
+                          <RowActions
+                            onEdit={() => openEditIng(i)}
+                            onDelete={() =>
+                              setRecipe(recipe.filter((_, idx) => idx !== i))
+                            }
+                          />
+                        </td>
+                      )}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-slate-200 dark:border-slate-700">
+                  <td colSpan={5} className="py-2 text-right text-sm font-semibold">
+                    Total Amount
+                  </td>
+                  <td className="py-2 px-1 text-right text-sm font-bold tabular-nums text-slate-900 dark:text-white">
+                    {money(materialCost)}
+                  </td>
+                  {!view && <td />}
+                </tr>
+              </tfoot>
+            </table>
           </div>
 
-          {/* Costing */}
-          <div className="card p-4">
-            <div className="-mx-4 -mt-4 mb-4 rounded-t-2xl bg-[#5b544c] px-4 py-2.5 dark:bg-slate-800">
-              <h2 className="text-sm font-semibold text-white">Costing</h2>
-            </div>
+          {/* Process Flow */}
+          <div className="card flex flex-col p-4">
+            <SectionHeader
+              title="Process Flow"
+              onAdd={!view ? openAddProc : undefined}
+              addLabel="Add process"
+            />
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700">
+                  <th className="w-8 py-2 pr-1 text-center">#</th>
+                  <th className="py-2 pr-2">Process</th>
+                  <th className="w-24 py-2 px-1">Time</th>
+                  <th className="py-2 px-1">Machine</th>
+                  {!view && <th className="w-16 py-2 pl-1 text-center">Actions</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {processes.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={view ? 4 : 5}
+                      className="py-6 text-center text-xs text-slate-400"
+                    >
+                      No processes yet.
+                    </td>
+                  </tr>
+                ) : (
+                  processes.map((p, i) => (
+                    <tr
+                      key={i}
+                      className="border-b border-slate-100 dark:border-slate-800/60"
+                    >
+                      <td className="py-2 pr-1 text-center tabular-nums text-slate-500">
+                        {i + 1}
+                      </td>
+                      <td className="py-2 pr-2 font-medium text-slate-800 dark:text-slate-100">
+                        {p.name}
+                      </td>
+                      <td className="px-1 tabular-nums">
+                        {Number(p.timeValue) || 0} {timeUnitLabel(p.timeUnit)}
+                      </td>
+                      <td className="px-1 text-slate-600 dark:text-slate-300">
+                        {machineName(p.machineId)}
+                      </td>
+                      {!view && (
+                        <td className="pl-1">
+                          <RowActions
+                            onEdit={() => openEditProc(i)}
+                            onDelete={() =>
+                              setProcesses(processes.filter((_, idx) => idx !== i))
+                            }
+                          />
+                        </td>
+                      )}
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+            {machineList.length === 0 && !view && (
+              <p className="mt-3 flex items-center gap-1 text-xs text-amber-600">
+                <Cog className="h-3.5 w-3.5" /> No production-line machines yet —
+                mark assets as “production line” in the Asset module.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Costing */}
+        <div className="card p-4">
+          <div className="-mx-4 -mt-4 mb-4 rounded-t-2xl bg-[#5b544c] px-4 py-2.5 dark:bg-slate-800">
+            <h2 className="text-sm font-semibold text-white">Costing</h2>
+          </div>
+          <ReadOnlyFieldset readOnly={view}>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              {/* Cost inputs */}
               <div className="space-y-2">
                 <ReadField label="Material Cost (from BOM)" value={money(materialCost)} numeric />
                 <Input
@@ -574,7 +501,6 @@ export default function ProductBomEditorPage() {
                   onChange={(e) => setOverheadCost(e.target.value)}
                 />
               </div>
-              {/* Derived totals */}
               <div className="space-y-2">
                 <Input
                   label="Profit Margin %"
@@ -587,7 +513,6 @@ export default function ProductBomEditorPage() {
                 <ReadField label="Sales Price" value={money(salesPrice)} numeric />
                 <ReadField label="Gross Profit" value={money(grossProfit)} numeric />
               </div>
-              {/* Per-unit price comparison */}
               <div className="rounded-lg border border-[#e7ddcb] bg-[#faf6ee] p-3 dark:border-slate-800 dark:bg-slate-900/50">
                 <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-[#6d6258] dark:text-slate-400">
                   Price per {yieldUnitCode || 'unit'}
@@ -600,9 +525,212 @@ export default function ProductBomEditorPage() {
                 </div>
               </div>
             </div>
-          </div>
+          </ReadOnlyFieldset>
         </div>
-      </ReadOnlyFieldset>
+      </div>
+
+      {/* Ingredient data-entry overlay */}
+      <Drawer
+        open={!!ingForm}
+        onClose={() => setIngForm(null)}
+        title={ingForm?.index == null ? 'Add Ingredient' : 'Edit Ingredient'}
+        subtitle="Item, quantity and unit"
+        icon={<ListTree className="h-5 w-5" />}
+        width="sm"
+        footer={
+          <div className="flex justify-end gap-2">
+            <button className="btn-secondary" onClick={() => setIngForm(null)}>
+              Cancel
+            </button>
+            <button className="btn-primary" onClick={saveIng}>
+              {ingForm?.index == null ? 'Add' : 'Update'}
+            </button>
+          </div>
+        }
+      >
+        {ingForm && (
+          <div className="space-y-4">
+            <Select
+              label="Item"
+              required
+              value={ingForm.draft.itemId}
+              onChange={(e) => onPickIngItem(e.target.value)}
+              placeholder="Select item"
+              options={itemList.map((it) => ({ value: it.id, label: it.name }))}
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Quantity"
+                required
+                type="number"
+                min={0}
+                step="any"
+                value={ingForm.draft.quantity}
+                onChange={(e) =>
+                  setIngForm((f) =>
+                    f ? { ...f, draft: { ...f.draft, quantity: e.target.value } } : f,
+                  )
+                }
+              />
+              <Select
+                label="Unit"
+                required
+                value={ingForm.draft.unitId}
+                onChange={(e) =>
+                  setIngForm((f) =>
+                    f ? { ...f, draft: { ...f.draft, unitId: e.target.value } } : f,
+                  )
+                }
+                placeholder="Unit"
+                options={unitList.map((u) => ({ value: u.id, label: u.name }))}
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/50">
+              <span className="text-slate-500 dark:text-slate-400">
+                Rate {money(rateOf(ingForm.draft))} × {Number(ingForm.draft.quantity) || 0}
+              </span>
+              <span className="font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                {money(amountOf(ingForm.draft))}
+              </span>
+            </div>
+          </div>
+        )}
+      </Drawer>
+
+      {/* Process data-entry overlay */}
+      <Drawer
+        open={!!procForm}
+        onClose={() => setProcForm(null)}
+        title={procForm?.index == null ? 'Add Process' : 'Edit Process'}
+        subtitle="Step, processing time and machine"
+        icon={<Cog className="h-5 w-5" />}
+        width="sm"
+        footer={
+          <div className="flex justify-end gap-2">
+            <button className="btn-secondary" onClick={() => setProcForm(null)}>
+              Cancel
+            </button>
+            <button className="btn-primary" onClick={saveProc}>
+              {procForm?.index == null ? 'Add' : 'Update'}
+            </button>
+          </div>
+        }
+      >
+        {procForm && (
+          <div className="space-y-4">
+            <Input
+              label="Process / step name"
+              required
+              value={procForm.draft.name}
+              onChange={(e) =>
+                setProcForm((f) =>
+                  f ? { ...f, draft: { ...f.draft, name: e.target.value } } : f,
+                )
+              }
+              placeholder="e.g. Boiling"
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Time"
+                type="number"
+                min={0}
+                step="any"
+                value={procForm.draft.timeValue}
+                onChange={(e) =>
+                  setProcForm((f) =>
+                    f ? { ...f, draft: { ...f.draft, timeValue: e.target.value } } : f,
+                  )
+                }
+              />
+              <Select
+                label="Unit"
+                value={procForm.draft.timeUnit}
+                onChange={(e) =>
+                  setProcForm((f) =>
+                    f
+                      ? {
+                          ...f,
+                          draft: {
+                            ...f.draft,
+                            timeUnit: e.target.value as ProcessTimeUnit,
+                          },
+                        }
+                      : f,
+                  )
+                }
+                options={[
+                  { value: 'MIN', label: 'Min' },
+                  { value: 'HR', label: 'Hr' },
+                ]}
+              />
+            </div>
+            <Select
+              label="Machine"
+              value={procForm.draft.machineId}
+              onChange={(e) =>
+                setProcForm((f) =>
+                  f ? { ...f, draft: { ...f.draft, machineId: e.target.value } } : f,
+                )
+              }
+              placeholder="— Select machine —"
+              options={machineList.map((m) => ({
+                value: m.id,
+                label: `${m.name} (${m.code})`,
+              }))}
+            />
+          </div>
+        )}
+      </Drawer>
+    </div>
+  );
+}
+
+function SectionHeader({
+  title,
+  onAdd,
+  addLabel,
+}: {
+  title: string;
+  onAdd?: () => void;
+  addLabel: string;
+}) {
+  return (
+    <div className="-mx-4 -mt-4 mb-3 flex items-center justify-between rounded-t-2xl bg-[#5b544c] px-4 py-2.5 dark:bg-slate-800">
+      <h2 className="text-sm font-semibold text-white">{title}</h2>
+      {onAdd && (
+        <button className="btn-secondary text-xs" onClick={onAdd}>
+          <Plus className="h-3.5 w-3.5" /> {addLabel}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function RowActions({
+  onEdit,
+  onDelete,
+}: {
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-center gap-1">
+      <button
+        type="button"
+        className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800"
+        onClick={onEdit}
+        aria-label="Edit"
+      >
+        <Pencil className="h-4 w-4" />
+      </button>
+      <button
+        type="button"
+        className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600 dark:hover:bg-slate-800"
+        onClick={onDelete}
+        aria-label="Delete"
+      >
+        <Trash2 className="h-4 w-4" />
+      </button>
     </div>
   );
 }
