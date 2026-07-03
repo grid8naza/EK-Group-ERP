@@ -79,13 +79,11 @@ export default function ProductBomEditorPage() {
   // --- editable state ---
   const [yieldQty, setYieldQty] = useState('1');
   const [recipe, setRecipe] = useState<Line[]>([]);
-  const [packing, setPacking] = useState<Line[]>([]);
   const [processes, setProcesses] = useState<Proc[]>([]);
   const [labourCost, setLabourCost] = useState('0');
   const [fuelCost, setFuelCost] = useState('0');
   const [overheadCost, setOverheadCost] = useState('0');
   const [bomMarginPct, setBomMarginPct] = useState('0');
-  const [showPacking, setShowPacking] = useState(false);
   const [saving, setSaving] = useState(false);
 
   // Hydrate once the product loads.
@@ -93,7 +91,6 @@ export default function ProductBomEditorPage() {
     if (!product) return;
     setYieldQty(String(product.yieldQty ?? 1));
     setRecipe(toLines(product.recipe ?? []));
-    setPacking(toLines(product.packing ?? []));
     setProcesses(
       (product.processes ?? []).map((p) => ({
         name: p.name,
@@ -106,7 +103,6 @@ export default function ProductBomEditorPage() {
     setFuelCost(String(product.fuelCost ?? 0));
     setOverheadCost(String(product.overheadCost ?? 0));
     setBomMarginPct(String(product.bomMarginPct ?? 0));
-    setShowPacking((product.packing ?? []).length > 0);
   }, [product]);
 
   // --- ingredient helpers ---
@@ -171,8 +167,8 @@ export default function ProductBomEditorPage() {
     if (!product) return;
     const badLine = (lines: Line[]) =>
       lines.some((l) => l.itemId && (!(Number(l.quantity) > 0) || !l.unitId));
-    if (badLine(recipe) || badLine(packing)) {
-      toast.error('Each BOM line needs a positive quantity and a unit.');
+    if (badLine(recipe)) {
+      toast.error('Each ingredient line needs a positive quantity and a unit.');
       return;
     }
     if (processes.some((p) => !p.name.trim())) {
@@ -183,11 +179,6 @@ export default function ProductBomEditorPage() {
       yieldQty: num(yieldQty) || 1,
       yieldUnitId: product.boxUnitId ?? product.unitId,
       recipe: validLines(recipe).map((l) => ({
-        itemId: Number(l.itemId),
-        quantity: Number(l.quantity),
-        unitId: Number(l.unitId),
-      })),
-      packing: validLines(packing).map((l) => ({
         itemId: Number(l.itemId),
         quantity: Number(l.quantity),
         unitId: Number(l.unitId),
@@ -529,92 +520,6 @@ export default function ProductBomEditorPage() {
                 </p>
               )}
             </div>
-          </div>
-
-          {/* Packing BOM — secondary, collapsible */}
-          <div className="card p-4">
-            <button
-              type="button"
-              className="flex w-full items-center justify-between text-sm font-semibold text-slate-700 dark:text-slate-200"
-              onClick={() => setShowPacking((v) => !v)}
-            >
-              <span>Packing BOM {packing.length ? `(${packing.length})` : ''}</span>
-              {showPacking ? (
-                <ChevronUp className="h-4 w-4" />
-              ) : (
-                <ChevronDown className="h-4 w-4" />
-              )}
-            </button>
-            {showPacking && (
-              <div className="mt-3 space-y-2">
-                {!view && (
-                  <button
-                    className="btn-secondary text-xs"
-                    onClick={() =>
-                      setPacking([...packing, { itemId: '', quantity: '', unitId: '' }])
-                    }
-                  >
-                    <Plus className="h-3.5 w-3.5" /> Add packing line
-                  </button>
-                )}
-                {packing.length === 0 ? (
-                  <p className="rounded-md border border-dashed border-slate-300 px-3 py-4 text-center text-xs text-slate-400 dark:border-slate-600">
-                    No packing lines.
-                  </p>
-                ) : (
-                  packing.map((line, i) => (
-                    <div key={i} className="flex items-end gap-2">
-                      <Select
-                        value={line.itemId}
-                        onChange={(e) =>
-                          onPickItem(packing, setPacking, i, e.target.value)
-                        }
-                        placeholder="Select item"
-                        options={itemList.map((it) => ({
-                          value: it.id,
-                          label: it.name,
-                        }))}
-                        wrapClassName="flex-1"
-                      />
-                      <Input
-                        type="number"
-                        min={0}
-                        step="any"
-                        value={line.quantity}
-                        onChange={(e) =>
-                          setLine(packing, setPacking, i, {
-                            quantity: e.target.value,
-                          })
-                        }
-                        placeholder="qty"
-                        wrapClassName="w-24"
-                      />
-                      <Select
-                        value={line.unitId}
-                        onChange={(e) =>
-                          setLine(packing, setPacking, i, { unitId: e.target.value })
-                        }
-                        placeholder="Unit"
-                        options={unitList.map((u) => ({ value: u.id, label: u.code }))}
-                        wrapClassName="w-28"
-                      />
-                      {!view && (
-                        <button
-                          type="button"
-                          className="mb-1 rounded-md p-2 text-slate-400 hover:bg-slate-100 hover:text-red-600 dark:hover:bg-slate-800"
-                          onClick={() =>
-                            setPacking(packing.filter((_, idx) => idx !== i))
-                          }
-                          aria-label="Remove line"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
           </div>
 
           {/* Costing */}

@@ -139,15 +139,6 @@ export default function ProductBomPage() {
         </Badge>
       ),
     },
-    {
-      key: 'packing',
-      header: 'Packing',
-      render: (r) => (
-        <Badge color={r.packing.length ? 'violet' : 'slate'}>
-          {r.packing.length}
-        </Badge>
-      ),
-    },
   ];
 
   return (
