@@ -297,10 +297,10 @@ export default function ProductBomEditorPage() {
               </div>
 
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full table-fixed text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700">
-                      <th className="py-2 pr-2">Item</th>
+                      <th className="min-w-[10rem] py-2 pr-2">Item</th>
                       <th className="w-20 py-2 px-1 text-right">Qty</th>
                       <th className="w-24 py-2 px-1">Unit</th>
                       <th className="w-24 py-2 px-1 text-right">Rate</th>
