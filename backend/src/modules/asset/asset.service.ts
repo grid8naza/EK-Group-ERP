@@ -95,6 +95,7 @@ export class AssetService {
           allCompanies,
           status: dto.status ?? 'ACTIVE',
           isProductionLine: dto.isProductionLine ?? false,
+          costPerHour: dto.costPerHour ?? 0,
           companies: { create: companyIds.map((companyId) => ({ companyId })) },
         },
         include: withRelations,
@@ -215,6 +216,7 @@ export class AssetService {
           allCompanies,
           status: dto.status,
           isProductionLine: dto.isProductionLine,
+          costPerHour: dto.costPerHour,
           ...(companyIds
             ? {
                 companies: {

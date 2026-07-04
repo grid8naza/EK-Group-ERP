@@ -776,6 +776,7 @@ export interface Asset {
   companyIds: number[];
   status: AssetStatus;
   isProductionLine: boolean;
+  costPerHour?: number | null;
   isLocked?: boolean;
 }
 

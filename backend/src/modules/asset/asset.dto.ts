@@ -116,6 +116,12 @@ export class CreateAssetDto {
   @IsOptional()
   @IsBoolean()
   isProductionLine?: boolean;
+
+  /** Running cost per hour of a production-line machine (for recipe costing). */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  costPerHour?: number;
 }
 
 export class UpdateAssetDto {
@@ -215,4 +221,9 @@ export class UpdateAssetDto {
   @IsOptional()
   @IsBoolean()
   isProductionLine?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  costPerHour?: number;
 }

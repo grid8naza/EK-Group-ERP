@@ -130,6 +130,9 @@ model Asset {
   status         AssetStatus @default(ACTIVE)
   // Machines flagged here can be reserved (prebooked) when planning production.
   isProductionLine Boolean   @default(false)
+  // Running cost per hour of this machine; feeds the equipment cost in a recipe's
+  // process flow. Only meaningful for production-line machines.
+  costPerHour    Float       @default(0)
   isLocked       Boolean     @default(false)
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt

@@ -71,6 +71,7 @@ const empty = {
   companyIds: [] as number[],
   status: 'ACTIVE' as AssetStatus,
   isProductionLine: false,
+  costPerHour: '0',
 };
 
 export default function AssetsPage() {
@@ -190,6 +191,7 @@ export default function AssetsPage() {
     companyIds: a.companyIds ?? [],
     status: a.status,
     isProductionLine: a.isProductionLine,
+    costPerHour: String(a.costPerHour ?? 0),
   });
 
   const openAdd = () => {
@@ -268,6 +270,8 @@ export default function AssetsPage() {
       companyIds: form.allCompanies ? [] : form.companyIds,
       status: form.status,
       isProductionLine: form.isProductionLine,
+      // Only meaningful for production-line machines; reset to 0 otherwise.
+      costPerHour: form.isProductionLine ? num(form.costPerHour) : 0,
     };
 
     setSaving(true);
@@ -761,6 +765,19 @@ export default function AssetsPage() {
                 }
               />
             </div>
+            {form.isProductionLine && (
+              <Input
+                label="Cost per Hour"
+                type="number"
+                min={0}
+                step="any"
+                value={form.costPerHour}
+                onChange={(e) =>
+                  setForm({ ...form, costPerHour: e.target.value })
+                }
+                placeholder="Running cost per hour"
+              />
+            )}
           </div>
         </ReadOnlyFieldset>
       </Drawer>
