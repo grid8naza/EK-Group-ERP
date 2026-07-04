@@ -140,6 +140,10 @@ export function Select({
   // True immediately after a value is picked, so the focus we return to the
   // trigger doesn't re-open the dropdown (openOnFocus).
   const justPickedRef = useRef(false);
+  // True between mousedown and click on the trigger, so the focus-triggered open
+  // (openOnFocus) stands down and lets the click toggle own the open state —
+  // otherwise focus opens it and the same click immediately toggles it shut.
+  const mouseDownRef = useRef(false);
 
   // Sorted copy of the caller's options (A→Z by label) — leaves the source
   // array untouched.
@@ -255,13 +259,22 @@ export function Select({
           name={name}
           title={title}
           disabled={disabled}
-          onClick={() => !disabled && setOpen((v) => !v)}
+          onMouseDown={() => {
+            mouseDownRef.current = true;
+          }}
+          onClick={() => {
+            mouseDownRef.current = false;
+            if (!disabled) setOpen((v) => !v);
+          }}
           onFocus={() => {
             if (!openOnFocus || disabled) return;
             if (justPickedRef.current) {
               justPickedRef.current = false;
               return;
             }
+            // A mouse press is opening this; let the click toggle handle it so
+            // focus+click don't cancel each other out.
+            if (mouseDownRef.current) return;
             setOpen(true);
           }}
           onKeyDown={onKeyDown}
