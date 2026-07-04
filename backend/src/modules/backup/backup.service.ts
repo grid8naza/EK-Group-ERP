@@ -32,7 +32,7 @@ const EXCLUDED_TABLES = new Set(['security_settings', '_prisma_migrations']);
 /** Friendlier display names; anything unlisted is prettified from its name. */
 const TABLE_LABELS: Record<string, string> = {
   hsn_codes: 'HSN Codes',
-  product_bom_lines: 'Product BOM Lines',
+  product_bom_lines: 'Recipe Master Lines',
   category_companies: 'Category–Company Links',
   group_companies: 'Group–Company Links',
   item_companies: 'Item–Company Links',

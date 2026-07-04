@@ -404,7 +404,7 @@ export default function ProductsPage() {
     <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="Product Master"
-        description="Finished products — recipe & packing BOM are set under Production"
+        description="Finished products — recipe & packing are set under Production → Recipe Master"
         icon={<PackageOpen className="h-5 w-5" />}
         actions={
           canAdd && (

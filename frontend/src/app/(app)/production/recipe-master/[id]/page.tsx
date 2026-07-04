@@ -26,7 +26,7 @@ import type {
   ProcessTimeUnit,
 } from '@/lib/types';
 
-const ROUTE = '/production/product-bom';
+const ROUTE = '/production/recipe-master';
 
 type Line = { itemId: string; quantity: string; unitId: string };
 type Proc = {
@@ -57,7 +57,7 @@ const BLANK_PROC: Proc = {
   machineId: '',
 };
 
-export default function ProductBomEditorPage() {
+export default function RecipeMasterEditorPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -131,7 +131,7 @@ export default function ProductBomEditorPage() {
   const baseOf = (u?: Unit) => (u ? (u.baseUnitId ?? u.id) : undefined);
   const factorOf = (u?: Unit) => u?.conversionFactor ?? 1;
   // The item's last purchase price is per its stock unit; convert it into the
-  // BOM line's unit (e.g. 210/KG → 0.21/GM). Fallback: same unit or no shared base.
+  // recipe line's unit (e.g. 210/KG → 0.21/GM). Fallback: same unit or no shared base.
   const rateOf = (l: Line) => {
     const item = itemById.get(Number(l.itemId));
     if (!item) return 0;
@@ -145,6 +145,20 @@ export default function ProductBomEditorPage() {
   const amountOf = (l: Line) => (Number(l.quantity) || 0) * rateOf(l);
   const materialCost = recipe.reduce((s, l) => s + amountOf(l), 0);
 
+  // Units an ingredient may be entered in: every unit in the SAME measurement
+  // family as the item's stock unit (e.g. an item stocked in Kg → Tonne, Kg and
+  // Gram — never an unrelated family). This guarantees rateOf() has a shared
+  // base to convert through. Sorted largest → smallest.
+  const unitsForItem = (itemId: string): Unit[] => {
+    const item = itemById.get(Number(itemId));
+    const u = item ? unitById.get(item.unitId) : undefined;
+    if (!u) return [];
+    const baseId = baseOf(u);
+    return unitList
+      .filter((x) => baseOf(x) === baseId)
+      .sort((a, b) => factorOf(b) - factorOf(a));
+  };
+
   // Enter in a plain field moves focus to the next field (by element id); the
   // last field points at the Add button, so a final Enter adds the row.
   const enterTo = (nextId: string) => (e: React.KeyboardEvent) => {
@@ -156,8 +170,20 @@ export default function ProductBomEditorPage() {
 
   // --- costing ---
   const num = (s: string) => Number(s) || 0;
+  // Equipment cost: for each process step, the machine's running cost/hour × the
+  // step's time in hours (time may be entered in minutes, so normalise to hours).
+  const hoursOf = (p: Proc) =>
+    p.timeUnit === 'HR' ? num(p.timeValue) : num(p.timeValue) / 60;
+  const equipmentCost = processes.reduce(
+    (s, p) => s + (assetById.get(Number(p.machineId))?.costPerHour ?? 0) * hoursOf(p),
+    0,
+  );
   const costPrice =
-    materialCost + num(labourCost) + num(fuelCost) + num(overheadCost);
+    materialCost +
+    equipmentCost +
+    num(labourCost) +
+    num(fuelCost) +
+    num(overheadCost);
   const salesPrice = costPrice * (1 + num(bomMarginPct) / 100);
   const grossProfit = salesPrice - costPrice;
   const yQty = num(yieldQty) || 1;
@@ -177,20 +203,18 @@ export default function ProductBomEditorPage() {
   const openEditIng = (i: number) =>
     setIngForm({ index: i, draft: { ...recipe[i] } });
   const onPickIngItem = (itemId: string) =>
-    setIngForm((f) =>
-      f
-        ? {
-            ...f,
-            draft: {
-              ...f.draft,
-              itemId,
-              unitId:
-                f.draft.unitId ||
-                String(itemById.get(Number(itemId))?.unitId ?? ''),
-            },
-          }
-        : f,
-    );
+    setIngForm((f) => {
+      if (!f) return f;
+      // Default to the item's own stock unit; keep the current pick only if it's
+      // still a valid unit for the new item (same family), so switching items
+      // never leaves an out-of-family unit selected in the filtered combo.
+      const valid = unitsForItem(itemId).map((u) => String(u.id));
+      const unitId =
+        f.draft.unitId && valid.includes(f.draft.unitId)
+          ? f.draft.unitId
+          : String(itemById.get(Number(itemId))?.unitId ?? '');
+      return { ...f, draft: { ...f.draft, itemId, unitId } };
+    });
   const saveIng = () => {
     if (!ingForm) return;
     const d = ingForm.draft;
@@ -263,10 +287,10 @@ export default function ProductBomEditorPage() {
     setSaving(true);
     try {
       await api.patch(`/products/${product.id}`, payload);
-      toast.success('BOM saved.');
+      toast.success('Recipe saved.');
       if (close) router.push(ROUTE);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Failed to save BOM.');
+      toast.error(e instanceof ApiError ? e.message : 'Failed to save recipe.');
     } finally {
       setSaving(false);
     }
@@ -301,7 +325,7 @@ export default function ProductBomEditorPage() {
   if (loading || !product) {
     return (
       <div className="mx-auto flex h-full max-w-[1400px] flex-col">
-        <p className="py-16 text-center text-slate-400">Loading BOM…</p>
+        <p className="py-16 text-center text-slate-400">Loading recipe…</p>
       </div>
     );
   }
@@ -311,7 +335,7 @@ export default function ProductBomEditorPage() {
   return (
     <div className="mx-auto flex h-full max-w-[1400px] flex-col">
       <PageHeader
-        title={`${view ? 'BOM' : 'Edit BOM'} — ${product.name}`}
+        title={`${view ? 'Recipe' : 'Edit Recipe'} — ${product.name}`}
         description={`Product code ${product.code} · ingredients, process flow & costing`}
         icon={<ListTree className="h-5 w-5" />}
         actions={
@@ -343,10 +367,10 @@ export default function ProductBomEditorPage() {
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-4">
         {/* Header — identity + yield */}
-        <div className="card grid grid-cols-2 gap-4 p-4 sm:grid-cols-4">
-          <ReadField label="Category" value={product.category?.name ?? '-'} />
-          <ReadField label="Group" value={product.group?.name ?? '-'} />
-          <ReadField label="Product" value={product.name} />
+        <div className="card grid grid-cols-2 gap-4 border-[#e7ddcb] bg-[#fbf9f4] p-4 dark:border-slate-800 dark:bg-slate-900 sm:grid-cols-4">
+          <ReadField label="Category" value={product.category?.name ?? '-'} bold />
+          <ReadField label="Group" value={product.group?.name ?? '-'} bold />
+          <ReadField label="Product" value={product.name} bold />
           <div className="flex items-end gap-2">
             <ReadOnlyFieldset readOnly={view}>
               <Input
@@ -357,9 +381,10 @@ export default function ProductBomEditorPage() {
                 value={yieldQty}
                 onChange={(e) => setYieldQty(e.target.value)}
                 wrapClassName="flex-1"
+                className="font-semibold"
               />
             </ReadOnlyFieldset>
-            <span className="pb-2 text-sm text-slate-500 dark:text-slate-400">
+            <span className="pb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
               {yieldUnitCode}
             </span>
           </div>
@@ -368,7 +393,7 @@ export default function ProductBomEditorPage() {
         {/* Ingredients + Process Flow side by side */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {/* Ingredients */}
-          <div className="card flex flex-col p-4">
+          <div className="card flex flex-col border-[#e7ddcb] bg-[#fbf9f4] p-4 dark:border-slate-800 dark:bg-slate-900">
             <SectionHeader
               title="Ingredients"
               onAdd={!view ? openAddIng : undefined}
@@ -448,7 +473,7 @@ export default function ProductBomEditorPage() {
           </div>
 
           {/* Process Flow */}
-          <div className="card flex flex-col p-4">
+          <div className="card flex flex-col border-[#e7ddcb] bg-[#fbf9f4] p-4 dark:border-slate-800 dark:bg-slate-900">
             <SectionHeader
               title="Process Flow"
               onAdd={!view ? openAddProc : undefined}
@@ -518,14 +543,15 @@ export default function ProductBomEditorPage() {
         </div>
 
         {/* Costing */}
-        <div className="card p-4">
+        <div className="card border-[#e7ddcb] bg-[#fbf9f4] p-4 dark:border-slate-800 dark:bg-slate-900">
           <div className="-mx-4 -mt-4 mb-4 rounded-t-2xl bg-[#5b544c] px-4 py-2.5 dark:bg-slate-800">
             <h2 className="text-sm font-semibold text-white">Costing</h2>
           </div>
           <ReadOnlyFieldset readOnly={view}>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               <div className="space-y-2">
-                <ReadField label="Material Cost (from BOM)" value={money(materialCost)} numeric />
+                <ReadField label="Material Cost (from recipe)" value={money(materialCost)} numeric />
+                <ReadField label="Equipment Cost (from process)" value={money(equipmentCost)} numeric />
                 <Input
                   label="Labour Cost"
                   type="number"
@@ -634,14 +660,18 @@ export default function ProductBomEditorPage() {
                 id="ing-unit"
                 openOnFocus
                 advanceToId="ing-add"
+                disabled={!ingForm.draft.itemId}
                 value={ingForm.draft.unitId}
                 onChange={(e) =>
                   setIngForm((f) =>
                     f ? { ...f, draft: { ...f.draft, unitId: e.target.value } } : f,
                   )
                 }
-                placeholder="Unit"
-                options={unitList.map((u) => ({ value: u.id, label: u.name }))}
+                placeholder={ingForm.draft.itemId ? 'Unit' : 'Pick an item first'}
+                options={unitsForItem(ingForm.draft.itemId).map((u) => ({
+                  value: u.id,
+                  label: u.name,
+                }))}
               />
             </div>
             <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/50">
@@ -751,7 +781,7 @@ export default function ProductBomEditorPage() {
               placeholder="— Select machine —"
               options={machineList.map((m) => ({
                 value: m.id,
-                label: `${m.name} (${m.code})`,
+                label: m.name,
               }))}
             />
             {procForm.index == null && (
@@ -833,10 +863,12 @@ function ReadField({
   label,
   value,
   numeric,
+  bold,
 }: {
   label: string;
   value: string;
   numeric?: boolean;
+  bold?: boolean;
 }) {
   return (
     <div>
@@ -844,7 +876,7 @@ function ReadField({
       <div
         className={`rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-200 ${
           numeric ? 'text-right tabular-nums' : ''
-        }`}
+        } ${bold ? 'font-semibold text-slate-900 dark:text-white' : ''}`}
       >
         {value}
       </div>

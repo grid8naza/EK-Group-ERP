@@ -26,10 +26,10 @@ export const INVENTORY_SUBS = [
   },
 ];
 
-// Production module screens. The BOM (recipe + packing) for each product is
-// edited here, while the product's master data lives under Inventory.
+// Production module screens. The recipe (ingredients + packing) for each product
+// is edited here, while the product's master data lives under Inventory.
 export const PRODUCTION_SUBS = [
-  { name: 'Product BOM', route: '/production/product-bom', icon: 'list-tree', order: 1 },
+  { name: 'Recipe Master', route: '/production/recipe-master', icon: 'list-tree', order: 1 },
   // Per-module reference data. Super-admin-only; isolated from other modules.
   {
     name: 'Lookups',

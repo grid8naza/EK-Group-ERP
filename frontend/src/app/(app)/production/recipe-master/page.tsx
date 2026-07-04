@@ -15,9 +15,9 @@ import { Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import type { Product, Category, Group } from '@/lib/types';
 
-const ROUTE = '/production/product-bom';
+const ROUTE = '/production/recipe-master';
 
-export default function ProductBomPage() {
+export default function RecipeMasterPage() {
   const { can } = useAuth();
   const toast = useToast();
   const router = useRouter();
@@ -50,29 +50,29 @@ export default function ProductBomPage() {
   const canAdd = can(ROUTE, 'add');
   const canEdit = can(ROUTE, 'edit');
   const canView = can(ROUTE, 'view');
-  // The BOM lock is the product's lock (governed by the Product Master screen),
+  // The recipe lock is the product's lock (governed by the Product Master screen),
   // so locking here also blocks editing the product under Inventory.
   const { canLock, canUnlock, toggleLock, guardEdit, bulkLock } = useLock<Product>({
     endpoint: '/products',
     route: '/inventory/products',
-    noun: 'BOM',
+    noun: 'Recipe',
     nameOf: (p) => p.name,
     reload: refetch,
   });
 
-  // The BOM is edited/viewed on a dedicated full-screen page.
-  const openBom = (p: Product, view: boolean) =>
+  // The recipe is edited/viewed on a dedicated full-screen page.
+  const openRecipe = (p: Product, view: boolean) =>
     router.push(`${ROUTE}/${p.id}${view ? '?view=1' : ''}`);
-  const editBom = (p: Product) => {
+  const editRecipe = (p: Product) => {
     if (p.isLocked) {
-      toast.error('This product is locked. Unlock it first (Inventory) to edit the BOM.');
+      toast.error('This product is locked. Unlock it first (Inventory) to edit the recipe.');
       return;
     }
-    openBom(p, false);
+    openRecipe(p, false);
   };
 
-  // "Add New BOM" — pick a product (its BOM lives on the product), then open the
-  // full-screen editor. Products themselves are created under Inventory.
+  // "Add New Recipe" — pick a product (its recipe lives on the product), then open
+  // the full-screen editor. Products themselves are created under Inventory.
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickCategory, setPickCategory] = useState('');
   const [pickGroup, setPickGroup] = useState('');
@@ -95,11 +95,11 @@ export default function ProductBomPage() {
   const confirmPick = () => {
     const p = (data ?? []).find((x) => String(x.id) === pickProduct);
     if (!p) {
-      toast.error('Select a product to define its BOM.');
+      toast.error('Select a product to define its recipe.');
       return;
     }
     setPickerOpen(false);
-    editBom(p);
+    editRecipe(p);
   };
 
   const columns: Column<Product>[] = [
@@ -144,7 +144,7 @@ export default function ProductBomPage() {
   return (
     <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
-        title="Product BOM"
+        title="Recipe Master"
         description="Define each product's ingredients, process flow and costing"
         icon={<ListTree className="h-5 w-5" />}
         actions={
@@ -202,8 +202,8 @@ export default function ProductBomPage() {
             />
           </div>
         }
-        onView={canView ? (r) => openBom(r, true) : undefined}
-        onEdit={canEdit ? (r) => guardEdit(r, () => editBom(r)) : undefined}
+        onView={canView ? (r) => openRecipe(r, true) : undefined}
+        onEdit={canEdit ? (r) => guardEdit(r, () => editRecipe(r)) : undefined}
         canView={canView}
         canEdit={canEdit}
         bulkLock={bulkLock}
@@ -221,8 +221,8 @@ export default function ProductBomPage() {
       <Drawer
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
-        title="New BOM"
-        subtitle="Pick the product to define a BOM for"
+        title="New Recipe"
+        subtitle="Pick the product to define a recipe for"
         icon={<ListTree className="h-5 w-5" />}
         width="sm"
         footer={
@@ -231,15 +231,15 @@ export default function ProductBomPage() {
               Cancel
             </button>
             <button className="btn-primary" onClick={confirmPick}>
-              Open BOM
+              Open Recipe
             </button>
           </div>
         }
       >
         <div className="space-y-4">
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            A BOM belongs to a product. Choose the product below to open its
-            full-screen BOM (ingredients, process flow &amp; costing). New
+            A recipe belongs to a product. Choose the product below to open its
+            full-screen recipe (ingredients, process flow &amp; costing). New
             products are created under Inventory → Product Master.
           </p>
           <Select

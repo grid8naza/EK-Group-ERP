@@ -128,7 +128,7 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     icon: 'factory',
     sortOrder: 6,
     description: 'Manufacturing & production orders.',
-    autoEnable: true, // on for every company so the Product BOM screen appears
+    autoEnable: true, // on for every company so the Recipe Master screen appears
     menu: { name: 'Production', icon: 'factory' },
     subs: PRODUCTION_SUBS,
   },
