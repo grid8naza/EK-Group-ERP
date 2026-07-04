@@ -381,7 +381,7 @@ export default function RecipeMasterEditorPage() {
                 value={yieldQty}
                 onChange={(e) => setYieldQty(e.target.value)}
                 wrapClassName="flex-1"
-                className="font-semibold"
+                className="text-right font-semibold tabular-nums"
               />
             </ReadOnlyFieldset>
             <span className="pb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
