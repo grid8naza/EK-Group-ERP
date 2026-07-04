@@ -24,9 +24,15 @@ import type {
   Unit,
   Asset,
   ProcessTimeUnit,
+  Lookup,
+  LookupValue,
 } from '@/lib/types';
 
 const ROUTE = '/production/recipe-master';
+
+// Lookup code the Process combo reads (kept in sync with the backend
+// PRODUCTION_PROCESS_LOOKUP_CODE). Values are managed in Production → Lookups.
+const PRODUCTION_PROCESS_LOOKUP_CODE = 'PRODUCTION_PROCESS';
 
 type Line = { itemId: string; quantity: string; unitId: string };
 type Proc = {
@@ -71,6 +77,32 @@ export default function RecipeMasterEditorPage() {
   const { data: items } = useFetch<Item[]>('/items');
   const { data: units } = useFetch<Unit[]>('/units');
   const { data: assets } = useFetch<Asset[]>('/assets');
+  const { data: lookups } = useFetch<Lookup[]>('/lookups');
+
+  // Production Process lookup values for the process-name combo: find the lookup
+  // by code, then fetch its values (mirrors the Asset Brand pattern).
+  const [processValues, setProcessValues] = useState<LookupValue[]>([]);
+  useEffect(() => {
+    const lookup = (lookups ?? []).find(
+      (l) => l.code === PRODUCTION_PROCESS_LOOKUP_CODE,
+    );
+    if (!lookup) {
+      setProcessValues([]);
+      return;
+    }
+    let cancelled = false;
+    api
+      .get<LookupValue[]>(`/lookups/${lookup.id}/values`)
+      .then((vals) => {
+        if (!cancelled) setProcessValues(vals ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setProcessValues([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lookups]);
 
   const itemList = items ?? [];
   const unitList = units ?? [];
@@ -80,6 +112,12 @@ export default function RecipeMasterEditorPage() {
     () => (assets ?? []).filter((a) => a.isProductionLine && a.status === 'ACTIVE'),
     [assets],
   );
+  // Process step names come from the Production Process lookup; the process
+  // stores the chosen name (label) as free text. Active values only.
+  const processChoices = processValues
+    .filter((v) => v.isActive)
+    .map((v) => ({ value: v.label, label: v.label }));
+
   const itemById = useMemo(() => new Map(itemList.map((i) => [i.id, i])), [itemList]);
   const unitById = useMemo(() => new Map(unitList.map((u) => [u.id, u])), [unitList]);
   const assetById = useMemo(
@@ -660,6 +698,7 @@ export default function RecipeMasterEditorPage() {
                 id="ing-unit"
                 openOnFocus
                 advanceToId="ing-add"
+                plainSelected
                 disabled={!ingForm.draft.itemId}
                 value={ingForm.draft.unitId}
                 onChange={(e) =>
@@ -713,19 +752,32 @@ export default function RecipeMasterEditorPage() {
       >
         {procForm && (
           <div key={procSeq} className="space-y-4">
-            <Input
+            <Select
               label="Process / step name"
               required
               id="proc-name"
               autoFocus={procForm.index == null}
+              openOnFocus
+              advanceToId="proc-time"
               value={procForm.draft.name}
-              onKeyDown={enterTo('proc-time')}
               onChange={(e) =>
                 setProcForm((f) =>
                   f ? { ...f, draft: { ...f.draft, name: e.target.value } } : f,
                 )
               }
-              placeholder="e.g. Boiling"
+              placeholder="Select a process"
+              options={
+                procForm.draft.name &&
+                !processChoices.some((o) => o.value === procForm.draft.name)
+                  ? [
+                      ...processChoices,
+                      {
+                        value: procForm.draft.name,
+                        label: `${procForm.draft.name} (not in list)`,
+                      },
+                    ]
+                  : processChoices
+              }
             />
             <div className="grid grid-cols-2 gap-3">
               <Input
@@ -747,6 +799,7 @@ export default function RecipeMasterEditorPage() {
                 id="proc-tunit"
                 openOnFocus
                 advanceToId="proc-machine"
+                plainSelected
                 value={procForm.draft.timeUnit}
                 onChange={(e) =>
                   setProcForm((f) =>

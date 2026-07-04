@@ -101,6 +101,10 @@ type SelectProps = {
    *  field, or the submit button on the last field) — for Enter-to-advance
    *  keyboard data entry. */
   advanceToId?: string;
+  /** Render the selected option in normal font (still ticked) instead of the
+   *  default bold + brand colour — used where the current value shouldn't stand
+   *  out, e.g. the unit pickers. */
+  plainSelected?: boolean;
 };
 
 /**
@@ -129,6 +133,7 @@ export function Select({
   autoFocus = false,
   openOnFocus = false,
   advanceToId,
+  plainSelected = false,
 }: SelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -338,13 +343,23 @@ export function Select({
                       className={cn(
                         'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition',
                         i === highlight && 'bg-slate-100 dark:bg-slate-800',
+                        // Bold the cursored (hovered/arrowed) row and the current
+                        // selection (plain selections stay normal until cursored).
+                        (i === highlight || (active && !plainSelected)) &&
+                          'font-semibold',
+                        // Colour: the current selection is green; the cursored row
+                        // is brand; everything else neutral.
                         active
-                          ? 'font-medium text-brand-700 dark:text-brand-300'
-                          : 'text-slate-700 dark:text-slate-200',
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : i === highlight
+                            ? 'text-brand-700 dark:text-brand-300'
+                            : 'text-slate-700 dark:text-slate-200',
                       )}
                     >
                       <span className="flex-1 truncate text-left">{o.label}</span>
-                      {active && <Check className="h-4 w-4 flex-none text-brand-600" />}
+                      {active && (
+                        <Check className="h-4 w-4 flex-none text-emerald-600 dark:text-emerald-400" />
+                      )}
                     </button>
                   );
                 })

@@ -8,6 +8,7 @@ import {
   INVENTORY_REPORT_MENUS,
   PRODUCTION_SUBS,
   seedInventoryDefaults,
+  seedProductionDefaults,
 } from '../modules/unit/inventory-provisioning';
 import {
   ASSET_SUBS,
@@ -131,6 +132,7 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     autoEnable: true, // on for every company so the Recipe Master screen appears
     menu: { name: 'Production', icon: 'factory' },
     subs: PRODUCTION_SUBS,
+    seedData: seedProductionDefaults,
   },
   {
     code: 'ASSET',

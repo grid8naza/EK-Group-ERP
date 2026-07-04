@@ -40,6 +40,60 @@ export const PRODUCTION_SUBS = [
   },
 ];
 
+// Lookup code the Recipe Master's Process combo reads (kept in sync with the
+// frontend PRODUCTION_PROCESS_LOOKUP_CODE constant). Module-scoped so admins
+// manage the process list from Production → Lookups.
+export const PRODUCTION_PROCESS_LOOKUP_CODE = 'PRODUCTION_PROCESS';
+
+// Starter production process steps so the combo is usable out of the box; admins
+// add more via Production → Lookups. Stored on the process as free text (the
+// step's name), so the list can grow without a schema change.
+const PRODUCTION_PROCESS_VALUES = [
+  'Mixing',
+  'Kneading',
+  'Fermentation',
+  'Proofing',
+  'Boiling',
+  'Baking',
+  'Frying',
+  'Cooling',
+  'Cutting',
+  'Decorating',
+  'Packing',
+];
+
+/** One-time seed for Production defaults (guarded by code; safe every boot). */
+export async function seedProductionDefaults(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  // Production Process lookup — created once, scoped to the Production module.
+  // Guarded by code so re-runs (and admin edits to the value list) are preserved.
+  const existing = await prisma.lookup.findFirst({
+    where: { code: PRODUCTION_PROCESS_LOOKUP_CODE },
+    select: { id: true },
+  });
+  if (existing) return;
+  const productionModule = await prisma.module.findUnique({
+    where: { code: 'PRODUCTION' },
+    select: { id: true },
+  });
+  await prisma.lookup.create({
+    data: {
+      code: PRODUCTION_PROCESS_LOOKUP_CODE,
+      name: 'Production Process',
+      description: 'Process / step names used in a recipe’s process flow',
+      moduleId: productionModule?.id ?? null,
+      values: {
+        create: PRODUCTION_PROCESS_VALUES.map((value, i) => ({
+          value,
+          label: value,
+          sortOrder: i,
+        })),
+      },
+    },
+  });
+}
+
 // A second main menu under the Inventory module for reports (kept separate from
 // the master-data "Inventory" menu).
 export const INVENTORY_REPORT_MENUS = [
