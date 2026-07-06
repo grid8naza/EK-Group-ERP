@@ -29,6 +29,9 @@ import { ProductModule } from './modules/product/product.module';
 import { AssetCategoryModule } from './modules/asset-category/asset-category.module';
 import { AssetGroupModule } from './modules/asset-group/asset-group.module';
 import { AssetModule } from './modules/asset/asset.module';
+import { HrCategoryModule } from './modules/hr-category/hr-category.module';
+import { HrGroupModule } from './modules/hr-group/hr-group.module';
+import { HrDesignationModule } from './modules/hr-designation/hr-designation.module';
 import { LoginScreenModule } from './modules/login-screen/login-screen.module';
 import { ScaffoldModule } from './scaffold/scaffold.module';
 
@@ -62,6 +65,9 @@ import { ScaffoldModule } from './scaffold/scaffold.module';
     AssetCategoryModule,
     AssetGroupModule,
     AssetModule,
+    HrCategoryModule,
+    HrGroupModule,
+    HrDesignationModule,
     LoginScreenModule,
     ScaffoldModule,
   ],

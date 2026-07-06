@@ -686,6 +686,13 @@ export type ProcessTimeUnit = 'MIN' | 'HR';
 /// One step of a product's production process flow: an ordered stage with the
 /// time it takes and the machine (Asset) it runs on. `machineId` is a plain
 /// Asset id (production-line machine).
+export interface ProcessManpower {
+  id?: number;
+  /** Plain HR Designation id (rate/hour read from the designation master). */
+  designationId: number;
+  workerCount: number;
+}
+
 export interface ProductProcess {
   id?: number;
   sequence?: number;
@@ -694,6 +701,8 @@ export interface ProductProcess {
   timeValue: number;
   timeUnit: ProcessTimeUnit;
   machineId?: number | null;
+  /** Manpower assigned to this step (designation + worker count). */
+  manpower?: ProcessManpower[];
 }
 
 export interface Product {
@@ -801,6 +810,58 @@ export interface AssetBooking {
   timeFrom: string; // "HH:mm"
   timeTo: string; // "HH:mm"
   status: AssetBookingStatus;
+}
+
+// ---- HR: Manpower Category Master (top level: Staff, Workers) ----
+export interface HrCategory {
+  id: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  /** true = available to every company; otherwise companyIds applies. */
+  allCompanies: boolean;
+  companyIds: number[];
+  isActive: boolean;
+  isLocked?: boolean;
+}
+
+// ---- HR: Manpower Group Master (multilayer sub-level under an HR Category) ----
+export interface HrGroup {
+  id: number;
+  categoryId: number;
+  category?: { id: number; code: string; name: string } | null;
+  /** null = primary group (level 1); otherwise the parent group it sits under. */
+  parentGroupId?: number | null;
+  parent?: { id: number; code: string; name: string } | null;
+  /** 1 = primary group … up to 5. */
+  level: number;
+  /** true = container that holds sub-groups and cannot hold designations. */
+  subGroupApplicable: boolean;
+  code: string;
+  name: string;
+  description?: string | null;
+  allCompanies: boolean;
+  companyIds: number[];
+  isActive: boolean;
+  isLocked?: boolean;
+}
+
+// ---- HR: Designation Master (leaf; carries the manpower rate/hour) ----
+export interface HrDesignation {
+  id: number;
+  code: string;
+  categoryId: number;
+  category?: { id: number; code: string; name: string } | null;
+  groupId: number;
+  group?: { id: number; code: string; name: string } | null;
+  name: string;
+  description?: string | null;
+  /** Manpower cost rate per hour (used in recipe process costing). */
+  ratePerHour?: number | null;
+  allCompanies: boolean;
+  companyIds: number[];
+  isActive: boolean;
+  isLocked?: boolean;
 }
 
 // ---- Backup & Restore ----

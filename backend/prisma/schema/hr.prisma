@@ -1,0 +1,130 @@
+// HR domain — Manpower classification masters: Category → Group → Designation.
+// Mirrors the Asset domain (multi-company availability, system-generated
+// positional hierarchy codes, multilayer groups) but the leaf carries a
+// `ratePerHour` (used for manpower cost in a recipe's process flow) instead of
+// asset-specific fields. Category/Group/Designation are also intended to feed a
+// future Employee Master as lookups.
+//
+// Cross-domain rule: company links are plain `companyId` columns (no @relation to
+// the Cpanel Company); every real @relation stays inside this domain file.
+
+/// Manpower Category master — top level of the manpower classification (e.g.
+/// Staff, Workers). Available to all companies or a chosen set (via
+/// HrCategoryCompany links). Code is a system-generated 2-digit category segment.
+model HrCategory {
+  id           Int      @id @default(autoincrement())
+  code         String   @unique
+  name         String
+  description  String?
+  allCompanies Boolean  @default(false) // true = available to every company
+  isActive     Boolean  @default(true)
+  isLocked     Boolean  @default(false) // when locked, must be unlocked before edit/delete
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  companies    HrCategoryCompany[]
+  groups       HrGroup[]
+  designations HrDesignation[]
+
+  @@map("hr_categories")
+}
+
+/// Links an HR category to a company it is available in (when not
+/// `allCompanies`). companyId is a plain id → Cpanel Company (no cross-domain FK).
+model HrCategoryCompany {
+  id         Int @id @default(autoincrement())
+  categoryId Int
+  companyId  Int // -> Cpanel Company, by id (no cross-domain FK)
+
+  category HrCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, companyId])
+  @@index([companyId])
+  @@map("hr_category_companies")
+}
+
+/// Manpower Group master — a multilayer sub-level under an HR Category (≤5
+/// levels, e.g. Skilled Worker / Unskilled Worker), with system-generated
+/// positional codes. A "primary" group has no parent (level 1); a sub-group's
+/// parent is another group in the SAME category whose `subGroupApplicable` is
+/// true. Deleting a category is blocked while it still has groups (Restrict).
+model HrGroup {
+  id                 Int     @id @default(autoincrement())
+  categoryId         Int
+  parentGroupId      Int?
+  level              Int     @default(1) // 1 = primary group … up to 5
+  subGroupApplicable Boolean @default(false) // true = container: holds sub-groups
+  code               String  @unique // system-generated positional hierarchy code
+  name               String
+  description        String?
+  allCompanies       Boolean @default(false) // true = available to every company
+  isActive           Boolean @default(true)
+  isLocked           Boolean @default(false) // when locked, must be unlocked before edit/delete
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  category     HrCategory       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  parent       HrGroup?         @relation("HrGroupHierarchy", fields: [parentGroupId], references: [id], onDelete: Restrict)
+  children     HrGroup[]        @relation("HrGroupHierarchy")
+  companies    HrGroupCompany[]
+  designations HrDesignation[]
+
+  @@index([categoryId])
+  @@index([parentGroupId])
+  @@map("hr_groups")
+}
+
+/// Links an HR group to a company it is available in (when not `allCompanies`).
+model HrGroupCompany {
+  id        Int @id @default(autoincrement())
+  groupId   Int
+  companyId Int // -> Cpanel Company, by id (no cross-domain FK)
+
+  group HrGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, companyId])
+  @@index([companyId])
+  @@map("hr_group_companies")
+}
+
+/// Designation Master — an individual worker designation (e.g. Skilled Baker,
+/// Helper), classified under a leaf HR Group (whose parent chain gives the
+/// Group/Category). Its code is a system-generated positional code under that
+/// leaf group. `ratePerHour` is the manpower cost rate used in recipe process
+/// costing. Availability mirrors the other masters.
+model HrDesignation {
+  id           Int      @id @default(autoincrement())
+  code         String   @unique // system-generated (leaf-group positional code)
+  categoryId   Int
+  groupId      Int // leaf HR group this designation belongs to
+  name         String
+  description  String?
+  // Manpower cost rate per hour; feeds the manpower cost in a recipe's process flow.
+  ratePerHour  Float    @default(0)
+  allCompanies Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  isLocked     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  category  HrCategory            @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  group     HrGroup               @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  companies HrDesignationCompany[]
+
+  @@index([categoryId])
+  @@index([groupId])
+  @@map("hr_designations")
+}
+
+/// Links a designation to a company it is available in (when not `allCompanies`).
+model HrDesignationCompany {
+  id            Int @id @default(autoincrement())
+  designationId Int
+  companyId     Int // -> Cpanel Company, by id (no cross-domain FK)
+
+  designation HrDesignation @relation(fields: [designationId], references: [id], onDelete: Cascade)
+
+  @@unique([designationId, companyId])
+  @@index([companyId])
+  @@map("hr_designation_companies")
+}

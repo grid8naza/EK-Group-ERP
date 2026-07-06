@@ -29,7 +29,20 @@ export class BomLineInput {
   unitId!: number;
 }
 
-/** One production process step: an ordered stage with its time and machine. */
+/** One manpower assignment on a process step: `workerCount` workers of a
+ * designation. `designationId` is a plain cross-domain id → HR Designation. */
+export class ManpowerInput {
+  @IsInt()
+  @Min(1)
+  designationId!: number;
+
+  @IsInt()
+  @Min(1)
+  workerCount!: number;
+}
+
+/** One production process step: an ordered stage with its time, machine and
+ * assigned manpower. */
 export class ProcessInput {
   @IsString()
   @MinLength(1)
@@ -54,6 +67,13 @@ export class ProcessInput {
   @IsOptional()
   @IsInt()
   machineId?: number | null;
+
+  /** Manpower assigned to this step (designation + worker count). */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ManpowerInput)
+  manpower?: ManpowerInput[];
 }
 
 export class CreateProductDto {

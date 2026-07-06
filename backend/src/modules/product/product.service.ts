@@ -37,7 +37,10 @@ const withRelations = {
       unit: { select: { id: true, code: true, name: true } },
     },
   },
-  processes: { orderBy: { sequence: 'asc' } },
+  processes: {
+    orderBy: { sequence: 'asc' },
+    include: { manpower: true },
+  },
 } satisfies Prisma.ProductInclude;
 
 type ProductRow = Prisma.ProductGetPayload<{ include: typeof withRelations }>;
@@ -365,6 +368,12 @@ export class ProductService {
       timeValue: p.timeValue ?? 0,
       timeUnit: p.timeUnit ?? 'MIN',
       machineId: p.machineId ?? null,
+      manpower: {
+        create: (p.manpower ?? []).map((m) => ({
+          designationId: m.designationId,
+          workerCount: m.workerCount,
+        })),
+      },
     }));
   }
 

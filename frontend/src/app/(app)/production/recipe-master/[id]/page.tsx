@@ -23,6 +23,7 @@ import type {
   Item,
   Unit,
   Asset,
+  HrDesignation,
   ProcessTimeUnit,
   Lookup,
   LookupValue,
@@ -35,11 +36,13 @@ const ROUTE = '/production/recipe-master';
 const PRODUCTION_PROCESS_LOOKUP_CODE = 'PRODUCTION_PROCESS';
 
 type Line = { itemId: string; quantity: string; unitId: string };
+type ManpowerRow = { designationId: string; count: string };
 type Proc = {
   name: string;
   timeValue: string;
   timeUnit: ProcessTimeUnit;
   machineId: string;
+  manpower: ManpowerRow[];
 };
 
 const toLines = (rows: Product['recipe']): Line[] =>
@@ -55,12 +58,21 @@ const money = (v: number) =>
     maximumFractionDigits: 2,
   });
 
+// Normalise an editable numeric string to a fixed 2-decimal display. Blank or
+// non-numeric input passes through unchanged so typing stays natural.
+const to2 = (s: string) => {
+  const n = Number(s);
+  return s.trim() !== '' && Number.isFinite(n) ? n.toFixed(2) : s;
+};
+
 const BLANK_LINE: Line = { itemId: '', quantity: '', unitId: '' };
+const BLANK_MANPOWER: ManpowerRow = { designationId: '', count: '1' };
 const BLANK_PROC: Proc = {
   name: '',
   timeValue: '0',
   timeUnit: 'MIN',
   machineId: '',
+  manpower: [],
 };
 
 export default function RecipeMasterEditorPage() {
@@ -77,6 +89,7 @@ export default function RecipeMasterEditorPage() {
   const { data: items } = useFetch<Item[]>('/items');
   const { data: units } = useFetch<Unit[]>('/units');
   const { data: assets } = useFetch<Asset[]>('/assets');
+  const { data: designations } = useFetch<HrDesignation[]>('/hr-designations');
   const { data: lookups } = useFetch<Lookup[]>('/lookups');
 
   // Production Process lookup values for the process-name combo: find the lookup
@@ -112,6 +125,12 @@ export default function RecipeMasterEditorPage() {
     () => (assets ?? []).filter((a) => a.isProductionLine && a.status === 'ACTIVE'),
     [assets],
   );
+  // Manpower comes from the HR Designation master; only active designations can
+  // be assigned. Any already-referenced designation still resolves for display.
+  const designationList = useMemo(
+    () => (designations ?? []).filter((d) => d.isActive),
+    [designations],
+  );
   // Process step names come from the Production Process lookup; the process
   // stores the chosen name (label) as free text. Active values only.
   const processChoices = processValues
@@ -124,12 +143,15 @@ export default function RecipeMasterEditorPage() {
     () => new Map((assets ?? []).map((a) => [a.id, a])),
     [assets],
   );
+  const designationById = useMemo(
+    () => new Map((designations ?? []).map((d) => [d.id, d])),
+    [designations],
+  );
 
   // --- editable state ---
   const [yieldQty, setYieldQty] = useState('1');
   const [recipe, setRecipe] = useState<Line[]>([]);
   const [processes, setProcesses] = useState<Proc[]>([]);
-  const [labourCost, setLabourCost] = useState('0');
   const [fuelCost, setFuelCost] = useState('0');
   const [overheadCost, setOverheadCost] = useState('0');
   const [bomMarginPct, setBomMarginPct] = useState('0');
@@ -149,7 +171,7 @@ export default function RecipeMasterEditorPage() {
   // Hydrate once the product loads.
   useEffect(() => {
     if (!product) return;
-    setYieldQty(String(product.yieldQty ?? 1));
+    setYieldQty(to2(String(product.yieldQty ?? 1)));
     setRecipe(toLines(product.recipe ?? []));
     setProcesses(
       (product.processes ?? []).map((p) => ({
@@ -157,12 +179,15 @@ export default function RecipeMasterEditorPage() {
         timeValue: String(p.timeValue ?? 0),
         timeUnit: p.timeUnit,
         machineId: p.machineId != null ? String(p.machineId) : '',
+        manpower: (p.manpower ?? []).map((m) => ({
+          designationId: String(m.designationId),
+          count: String(m.workerCount ?? 1),
+        })),
       })),
     );
-    setLabourCost(String(product.labourCost ?? 0));
-    setFuelCost(String(product.fuelCost ?? 0));
-    setOverheadCost(String(product.overheadCost ?? 0));
-    setBomMarginPct(String(product.bomMarginPct ?? 0));
+    setFuelCost(to2(String(product.fuelCost ?? 0)));
+    setOverheadCost(to2(String(product.overheadCost ?? 0)));
+    setBomMarginPct(to2(String(product.bomMarginPct ?? 0)));
   }, [product]);
 
   // --- rate / amount (with unit conversion) ---
@@ -216,10 +241,22 @@ export default function RecipeMasterEditorPage() {
     (s, p) => s + (assetById.get(Number(p.machineId))?.costPerHour ?? 0) * hoursOf(p),
     0,
   );
+  // Manpower cost: for each process step, sum over its manpower rows the
+  // designation's rate/hour × the step's time in hours × the worker count.
+  const manpowerOf = (p: Proc) =>
+    p.manpower.reduce(
+      (s, m) =>
+        s +
+        (designationById.get(Number(m.designationId))?.ratePerHour ?? 0) *
+          hoursOf(p) *
+          (Number(m.count) || 0),
+      0,
+    );
+  const manpowerCost = processes.reduce((s, p) => s + manpowerOf(p), 0);
   const costPrice =
     materialCost +
     equipmentCost +
-    num(labourCost) +
+    manpowerCost +
     num(fuelCost) +
     num(overheadCost);
   const salesPrice = costPrice * (1 + num(bomMarginPct) / 100);
@@ -234,6 +271,52 @@ export default function RecipeMasterEditorPage() {
     unitById.get(Number(unitId))?.code ?? '';
   const machineName = (idStr: string) =>
     idStr ? (assetById.get(Number(idStr))?.name ?? `#${idStr}`) : '—';
+  const designationName = (idStr: string) =>
+    idStr ? (designationById.get(Number(idStr))?.name ?? `#${idStr}`) : '';
+  // Short "2 workers · 2 types" style summary for a process's manpower rows.
+  const manpowerSummary = (p: Proc) => {
+    const rows = p.manpower.filter((m) => m.designationId);
+    if (rows.length === 0) return '—';
+    const workers = rows.reduce((s, m) => s + (Number(m.count) || 0), 0);
+    return rows
+      .map(
+        (m) =>
+          `${designationName(m.designationId)}${
+            Number(m.count) > 1 ? ` ×${Number(m.count)}` : ''
+          }`,
+      )
+      .join(', ') || `${workers}`;
+  };
+
+  // Per-process breakdown rows powering the hover tooltips on the two computed
+  // cost fields, so the detail is visible without opening a process for edit.
+  const fmtHours = (h: number) => `${Math.round(h * 100) / 100}h`;
+  const equipmentBreakdown = processes
+    .filter((p) => p.machineId)
+    .map((p) => {
+      const rate = assetById.get(Number(p.machineId))?.costPerHour ?? 0;
+      const hrs = hoursOf(p);
+      return {
+        label: p.name || 'Process',
+        detail: `${machineName(p.machineId)} · ${money(rate)}/hr × ${fmtHours(hrs)}`,
+        amount: rate * hrs,
+      };
+    });
+  const manpowerBreakdown = processes.flatMap((p) => {
+    const hrs = hoursOf(p);
+    return p.manpower
+      .filter((m) => m.designationId)
+      .map((m) => {
+        const rate =
+          designationById.get(Number(m.designationId))?.ratePerHour ?? 0;
+        const count = Number(m.count) || 0;
+        return {
+          label: `${p.name || 'Process'} · ${designationName(m.designationId)}`,
+          detail: `${money(rate)}/hr × ${fmtHours(hrs)} × ${count}`,
+          amount: rate * hrs * count,
+        };
+      });
+  });
   const yieldUnitCode = unitCode(product?.boxUnitId ?? product?.unitId);
 
   // --- ingredient overlay ---
@@ -297,6 +380,30 @@ export default function RecipeMasterEditorPage() {
     }
   };
 
+  // --- manpower rows within the process draft ---
+  const setDraftManpower = (fn: (rows: ManpowerRow[]) => ManpowerRow[]) =>
+    setProcForm((f) =>
+      f ? { ...f, draft: { ...f.draft, manpower: fn(f.draft.manpower) } } : f,
+    );
+  const addManpower = () =>
+    setDraftManpower((rows) => [...rows, { ...BLANK_MANPOWER }]);
+  const updateManpower = (idx: number, patch: Partial<ManpowerRow>) =>
+    setDraftManpower((rows) =>
+      rows.map((m, i) => (i === idx ? { ...m, ...patch } : m)),
+    );
+  const removeManpower = (idx: number) =>
+    setDraftManpower((rows) => rows.filter((_, i) => i !== idx));
+  // Rate/hr × step-hours × count for a single draft manpower row.
+  const manpowerRowCost = (draft: Proc, m: ManpowerRow) => {
+    const hours =
+      draft.timeUnit === 'HR' ? num(draft.timeValue) : num(draft.timeValue) / 60;
+    return (
+      (designationById.get(Number(m.designationId))?.ratePerHour ?? 0) *
+      hours *
+      (Number(m.count) || 0)
+    );
+  };
+
   const save = async (close: boolean) => {
     if (!product) return;
     const payload = {
@@ -316,8 +423,13 @@ export default function RecipeMasterEditorPage() {
           timeValue: num(p.timeValue),
           timeUnit: p.timeUnit,
           machineId: p.machineId ? Number(p.machineId) : null,
+          manpower: p.manpower
+            .filter((m) => m.designationId && Number(m.count) >= 1)
+            .map((m) => ({
+              designationId: Number(m.designationId),
+              workerCount: Number(m.count),
+            })),
         })),
-      labourCost: num(labourCost),
       fuelCost: num(fuelCost),
       overheadCost: num(overheadCost),
       bomMarginPct: num(bomMarginPct),
@@ -404,24 +516,28 @@ export default function RecipeMasterEditorPage() {
       />
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-4">
-        {/* Header — identity + yield */}
-        <div className="card grid grid-cols-2 gap-4 border-[#e7ddcb] bg-[#fbf9f4] p-4 dark:border-slate-800 dark:bg-slate-900 sm:grid-cols-4">
+        {/* Header — identity + yield. Frozen at the top of the scroll area with a
+            distinct tan tint + shadow so it stays recognisable while scrolling. */}
+        <div className="card sticky top-0 z-20 grid grid-cols-2 gap-4 border-[#d8c6a3] bg-[#f3e8d3] p-4 shadow-md dark:border-slate-700 dark:bg-slate-800 sm:grid-cols-4">
           <ReadField label="Category" value={product.category?.name ?? '-'} bold />
           <ReadField label="Group" value={product.group?.name ?? '-'} bold />
           <ReadField label="Product" value={product.name} bold />
           <div className="flex items-end gap-2">
-            <ReadOnlyFieldset readOnly={view}>
-              <Input
-                label="Yield"
-                type="number"
-                min={0}
-                step="any"
-                value={yieldQty}
-                onChange={(e) => setYieldQty(e.target.value)}
-                wrapClassName="flex-1"
-                className="text-right font-semibold tabular-nums"
-              />
-            </ReadOnlyFieldset>
+            <div className="min-w-0 flex-1">
+              <ReadOnlyFieldset readOnly={view}>
+                <Input
+                  label="Yield"
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={yieldQty}
+                  onChange={(e) => setYieldQty(e.target.value)}
+                  onBlur={() => setYieldQty((v) => to2(v))}
+                  wrapClassName="w-full"
+                  className="text-right font-semibold tabular-nums"
+                />
+              </ReadOnlyFieldset>
+            </div>
             <span className="pb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
               {yieldUnitCode}
             </span>
@@ -473,7 +589,7 @@ export default function RecipeMasterEditorPage() {
                         {itemName(line.itemId)}
                       </td>
                       <td className="px-1 text-right tabular-nums">
-                        {Number(line.quantity) || 0}
+                        {money(Number(line.quantity) || 0)}
                       </td>
                       <td className="px-1">{unitCode(line.unitId)}</td>
                       <td className="px-1 text-right tabular-nums text-slate-600 dark:text-slate-300">
@@ -525,6 +641,7 @@ export default function RecipeMasterEditorPage() {
                   <th className="py-2 pr-2">Process</th>
                   <th className="w-24 py-2 px-1">Time</th>
                   <th className="py-2 px-1">Machine</th>
+                  <th className="py-2 px-1">Manpower</th>
                   {!view && <th className="w-16 py-2 pl-1 text-center">Actions</th>}
                 </tr>
               </thead>
@@ -532,7 +649,7 @@ export default function RecipeMasterEditorPage() {
                 {processes.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={view ? 4 : 5}
+                      colSpan={view ? 5 : 6}
                       className="py-6 text-center text-xs text-slate-400"
                     >
                       No processes yet.
@@ -555,6 +672,9 @@ export default function RecipeMasterEditorPage() {
                       </td>
                       <td className="px-1 text-slate-600 dark:text-slate-300">
                         {machineName(p.machineId)}
+                      </td>
+                      <td className="px-1 text-slate-600 dark:text-slate-300">
+                        {manpowerSummary(p)}
                       </td>
                       {!view && (
                         <td className="pl-1">
@@ -589,14 +709,31 @@ export default function RecipeMasterEditorPage() {
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
               <div className="space-y-2">
                 <ReadField label="Material Cost (from recipe)" value={money(materialCost)} numeric />
-                <ReadField label="Equipment Cost (from process)" value={money(equipmentCost)} numeric />
-                <Input
-                  label="Labour Cost"
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={labourCost}
-                  onChange={(e) => setLabourCost(e.target.value)}
+                <ReadField
+                  label="Equipment Cost (from process)"
+                  value={money(equipmentCost)}
+                  numeric
+                  tooltip={
+                    <CostBreakdown
+                      title="Equipment cost by process"
+                      rows={equipmentBreakdown}
+                      total={equipmentCost}
+                      empty="No machine assigned to any process."
+                    />
+                  }
+                />
+                <ReadField
+                  label="Manpower Cost (from process)"
+                  value={money(manpowerCost)}
+                  numeric
+                  tooltip={
+                    <CostBreakdown
+                      title="Manpower cost by process"
+                      rows={manpowerBreakdown}
+                      total={manpowerCost}
+                      empty="No manpower added to any process."
+                    />
+                  }
                 />
                 <Input
                   label="Fuel Cost"
@@ -605,6 +742,8 @@ export default function RecipeMasterEditorPage() {
                   step="any"
                   value={fuelCost}
                   onChange={(e) => setFuelCost(e.target.value)}
+                  onBlur={() => setFuelCost((v) => to2(v))}
+                  className="text-right tabular-nums"
                 />
                 <Input
                   label="Overheads"
@@ -613,6 +752,8 @@ export default function RecipeMasterEditorPage() {
                   step="any"
                   value={overheadCost}
                   onChange={(e) => setOverheadCost(e.target.value)}
+                  onBlur={() => setOverheadCost((v) => to2(v))}
+                  className="text-right tabular-nums"
                 />
               </div>
               <div className="space-y-2">
@@ -622,6 +763,8 @@ export default function RecipeMasterEditorPage() {
                   step="any"
                   value={bomMarginPct}
                   onChange={(e) => setBomMarginPct(e.target.value)}
+                  onBlur={() => setBomMarginPct((v) => to2(v))}
+                  className="text-right tabular-nums"
                 />
                 <ReadField label="Cost Price" value={money(costPrice)} numeric />
                 <ReadField label="Sales Price" value={money(salesPrice)} numeric />
@@ -736,7 +879,7 @@ export default function RecipeMasterEditorPage() {
         open={!!procForm}
         onClose={() => setProcForm(null)}
         title={procForm?.index == null ? 'Add Process' : 'Edit Process'}
-        subtitle="Step, processing time and machine"
+        subtitle="Step, time, machine and manpower"
         icon={<Cog className="h-5 w-5" />}
         width="sm"
         footer={
@@ -837,6 +980,85 @@ export default function RecipeMasterEditorPage() {
                 label: m.name,
               }))}
             />
+
+            {/* Manpower — one or more designations, each with a worker count.
+                The rate/hour is read-only (from the HR Designation master); the
+                cost per row = rate × step-time × count. */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="label !mb-0">Manpower</span>
+                <button
+                  type="button"
+                  className="btn-secondary text-xs"
+                  onClick={addManpower}
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add manpower
+                </button>
+              </div>
+              {procForm.draft.manpower.length === 0 ? (
+                <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-400 dark:bg-slate-800/50">
+                  {designationList.length === 0
+                    ? 'No designations yet — add them in HR → Designation Master.'
+                    : 'No manpower added. Click “Add manpower” to assign workers.'}
+                </p>
+              ) : (
+                procForm.draft.manpower.map((m, idx) => {
+                  const rate =
+                    designationById.get(Number(m.designationId))?.ratePerHour ?? 0;
+                  return (
+                    <div
+                      key={idx}
+                      className="rounded-lg border border-slate-200 p-2 dark:border-slate-700"
+                    >
+                      <div className="flex items-end gap-2">
+                        <div className="flex-1">
+                          <Select
+                            label="Designation"
+                            value={m.designationId}
+                            onChange={(e) =>
+                              updateManpower(idx, { designationId: e.target.value })
+                            }
+                            placeholder="— Select designation —"
+                            options={designationList.map((d) => ({
+                              value: d.id,
+                              label: d.name,
+                            }))}
+                          />
+                        </div>
+                        <div className="w-20">
+                          <Input
+                            label="Count"
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={m.count}
+                            onChange={(e) =>
+                              updateManpower(idx, { count: e.target.value })
+                            }
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          className="mb-1 rounded p-2 text-slate-400 hover:bg-slate-100 hover:text-red-600 dark:hover:bg-slate-800"
+                          onClick={() => removeManpower(idx)}
+                          aria-label="Remove manpower"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="mt-1.5 flex items-center justify-between px-1 text-xs text-slate-500 dark:text-slate-400">
+                        <span>
+                          Rate {money(rate)}/hr × {Number(m.count) || 0}
+                        </span>
+                        <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200">
+                          {money(manpowerRowCost(procForm.draft, m))}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
             {procForm.index == null && (
               <p className="text-xs text-slate-400">
                 Enter moves to the next field; from the last field it lands on
@@ -917,22 +1139,81 @@ function ReadField({
   value,
   numeric,
   bold,
+  tooltip,
 }: {
   label: string;
   value: string;
   numeric?: boolean;
   bold?: boolean;
+  /** Optional hover popover (e.g. a cost breakdown) shown below the field. */
+  tooltip?: React.ReactNode;
 }) {
   return (
-    <div>
+    <div className="group relative">
       <span className="label !mb-0.5 block">{label}</span>
       <div
         className={`rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-200 ${
           numeric ? 'text-right tabular-nums' : ''
-        } ${bold ? 'font-semibold text-slate-900 dark:text-white' : ''}`}
+        } ${bold ? 'font-semibold text-slate-900 dark:text-white' : ''} ${
+          tooltip ? 'cursor-help' : ''
+        }`}
       >
         {value}
       </div>
+      {tooltip && (
+        <div className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-max max-w-md rounded-lg border border-slate-200 bg-white p-3 text-xs shadow-xl group-hover:block dark:border-slate-700 dark:bg-slate-800">
+          {tooltip}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A small "process → amount" table used inside a ReadField hover tooltip. */
+function CostBreakdown({
+  title,
+  rows,
+  total,
+  empty,
+}: {
+  title: string;
+  rows: { label: string; detail: string; amount: number }[];
+  total: number;
+  empty: string;
+}) {
+  if (rows.length === 0) {
+    return <span className="text-slate-400">{empty}</span>;
+  }
+  return (
+    <div className="min-w-[15rem]">
+      <div className="mb-1.5 font-semibold text-slate-700 dark:text-slate-200">
+        {title}
+      </div>
+      <table className="w-full">
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="align-top">
+              <td className="py-0.5 pr-4">
+                <div className="text-slate-700 dark:text-slate-200">{r.label}</div>
+                <div className="text-slate-400">{r.detail}</div>
+              </td>
+              <td className="whitespace-nowrap py-0.5 text-right font-medium tabular-nums text-slate-700 dark:text-slate-200">
+                {money(r.amount)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t border-slate-200 dark:border-slate-700">
+            <td className="pt-1 font-semibold text-slate-700 dark:text-slate-200">
+              Total
+            </td>
+            <td className="pt-1 text-right font-bold tabular-nums text-slate-900 dark:text-white">
+              {money(total)}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
     </div>
   );
 }

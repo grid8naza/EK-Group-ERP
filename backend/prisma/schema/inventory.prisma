@@ -337,10 +337,28 @@ model ProductProcess {
   timeUnit    ProcessTimeUnit @default(MIN)
   machineId   Int? // -> Asset (production-line machine), plain id (no cross-domain FK)
 
-  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product  Product                  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  manpower ProductProcessManpower[]
 
   @@index([productId])
   @@map("product_processes")
+}
+
+/// Manpower assigned to a production process step: `workerCount` workers of a
+/// given HR designation. `designationId` points at the HR Designation master by
+/// plain id — cross-domain, so no @relation (mirrors ProductProcess.machineId).
+/// The rate/hour is read from that designation at costing time; only the
+/// designation + count are stored here. Cost = rate × step-hours × workerCount.
+model ProductProcessManpower {
+  id            Int @id @default(autoincrement())
+  processId     Int
+  designationId Int // -> HR Designation (plain id, no cross-domain FK)
+  workerCount   Int @default(1)
+
+  process ProductProcess @relation(fields: [processId], references: [id], onDelete: Cascade)
+
+  @@index([processId])
+  @@map("product_process_manpower")
 }
 
 /// One line of a Product's RECIPE or PACKING bill of materials: `quantity` of

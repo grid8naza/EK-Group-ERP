@@ -15,6 +15,7 @@ import {
   ASSET_REPORT_MENUS,
   seedAssetDefaults,
 } from '../modules/asset-category/asset-provisioning';
+import { HR_SUBS } from '../modules/hr-category/hr-provisioning';
 
 /**
  * Single source of truth for every module and the menus/screens it ships with.
@@ -121,7 +122,10 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     name: 'Human Resources',
     icon: 'id-card',
     sortOrder: 5,
-    description: 'HR & employees.',
+    description: 'HR & employees — manpower category, group & designation masters.',
+    autoEnable: true, // on for every company so the manpower masters appear
+    menu: { name: 'Human Resources', icon: 'id-card' },
+    subs: HR_SUBS,
   },
   {
     code: 'PRODUCTION',
