@@ -16,7 +16,7 @@ import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/u
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import type { Product, Category, Group, Unit, HsnCode, Company } from '@/lib/types';
+import type { Product, Group, Unit, HsnCode, Company } from '@/lib/types';
 
 const ROUTE = '/inventory/products';
 
@@ -76,7 +76,6 @@ export default function ProductsPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<Product[]>('/products');
-  const { data: categories } = useFetch<Category[]>('/categories');
   const { data: groups } = useFetch<Group[]>('/groups');
   const { data: units } = useFetch<Unit[]>('/units');
   const { data: hsnCodes } = useFetch<HsnCode[]>('/hsn-codes');
@@ -94,10 +93,14 @@ export default function ProductsPage() {
   const [view, setView] = useState(false);
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
-  const [categoryFilter, setCategoryFilter] = useState('');
+  // Drawer group cascade: primary group → parent group → leaf group (the saved
+  // `groupId`). Category is fixed to Products, so it is not shown.
+  const [drawerPrimary, setDrawerPrimary] = useState('');
+  const [drawerParent, setDrawerParent] = useState('');
   const [primaryFilter, setPrimaryFilter] = useState('');
   const [parentFilter, setParentFilter] = useState('');
-  const [applies, setApplies] = useState(''); // '' | 'item' | 'product'
+  const [formFactor, setFormFactor] = useState(''); // '' | 'packed' | 'unpacked'
+  const [sellFilter, setSellFilter] = useState(''); // '' | 'yes' | 'no'
   const [status, setStatus] = useState(''); // '' | 'active' | 'inactive'
   const codeRef = useRef<HTMLInputElement>(null);
 
@@ -108,17 +111,8 @@ export default function ProductsPage() {
 
   const companyList = companies ?? [];
   const unitList = units ?? [];
-  // Products use product categories/groups only.
-  const productCategories = (categories ?? []).filter((c) => c.forProduct);
+  // Products use product groups only.
   const productGroups = (groups ?? []).filter((g) => g.forProduct);
-  // Form: products attach to LEAF groups only (no sub-groups), restricted to
-  // the chosen category.
-  const groupOptions = productGroups.filter(
-    (g) =>
-      !g.subGroupApplicable &&
-      g.isActive &&
-      (!form.categoryId || String(g.categoryId) === form.categoryId),
-  );
 
   // Group lookups for the primary/parent list filters (each product attaches to
   // a leaf group via r.groupId; resolve it to apply the same subtree/child
@@ -138,6 +132,45 @@ export default function ProductsPage() {
   const primaryGroupCode = primaryFilter
     ? productGroups.find((g) => String(g.id) === primaryFilter)?.code
     : undefined;
+
+  // Drawer cascade: the CC+L1 code prefix (2+2 digits) of the chosen primary
+  // group scopes the parent + leaf options to that primary's subtree.
+  const primaryPrefixOf = (id: string) =>
+    primaryGroups.find((p) => String(p.id) === id)?.code.slice(0, 4);
+  const drawerParentOptions = parentCandidates.filter((g) => {
+    const pref = primaryPrefixOf(drawerPrimary);
+    return !pref || g.code.startsWith(pref);
+  });
+  // Products attach to LEAF groups only (no sub-groups), scoped by the chosen
+  // parent (or, failing that, the chosen primary's subtree).
+  const drawerLeafOptions = productGroups.filter((g) => {
+    if (g.subGroupApplicable || !g.isActive) return false;
+    if (drawerParent) return String(g.parentGroupId) === drawerParent;
+    const pref = primaryPrefixOf(drawerPrimary);
+    return pref ? g.code.startsWith(pref) : true;
+  });
+  // Resolve a leaf group's primary (level-1) + immediate parent names, for the
+  // read-only classification shown when editing.
+  const groupAncestry = (leafId: number | null | undefined) => {
+    const leaf = leafId != null ? groupById.get(leafId) : undefined;
+    if (!leaf) return { primary: '-', parent: '-', leaf: '-' };
+    const parent = leaf.parentGroupId
+      ? groupById.get(leaf.parentGroupId)
+      : undefined;
+    let node = leaf;
+    while (node.level > 1 && node.parentGroupId) {
+      const up = groupById.get(node.parentGroupId);
+      if (!up) break;
+      node = up;
+    }
+    return {
+      primary: node.level === 1 ? node.name : '-',
+      parent: parent?.name ?? '-',
+      leaf: leaf.name,
+    };
+  };
+
+  const editAncestry = editing ? groupAncestry(editing.groupId) : null;
 
   const closeDrawer = () => {
     setOpen(false);
@@ -183,6 +216,8 @@ export default function ProductsPage() {
     setEditing(null);
     setView(false);
     setForm({ ...empty });
+    setDrawerPrimary('');
+    setDrawerParent('');
     setOpen(true);
   };
   const openEdit = (p: Product) => {
@@ -329,8 +364,6 @@ export default function ProductsPage() {
 
   const visibleRows = useMemo(() => {
     let rows = [...(data ?? [])];
-    if (categoryFilter)
-      rows = rows.filter((r) => String(r.categoryId) === categoryFilter);
     if (primaryFilter) {
       const primary = (groups ?? []).find((g) => String(g.id) === primaryFilter);
       if (primary) {
@@ -339,18 +372,18 @@ export default function ProductsPage() {
       }
     }
     if (parentFilter) {
-      rows = rows.filter(
-        (r) => String(groupById.get(r.groupId ?? -1)?.parentGroupId ?? '') === parentFilter,
-      );
+      // The parent-group filter lists leaf groups (what products attach to), so
+      // match the product's own leaf group.
+      rows = rows.filter((r) => String(r.groupId ?? '') === parentFilter);
     }
-    if (applies === 'item')
-      rows = rows.filter((r) => groupById.get(r.groupId ?? -1)?.forItem);
-    else if (applies === 'product')
-      rows = rows.filter((r) => groupById.get(r.groupId ?? -1)?.forProduct);
+    if (formFactor === 'packed') rows = rows.filter((r) => r.packed);
+    else if (formFactor === 'unpacked') rows = rows.filter((r) => r.unpacked);
+    if (sellFilter === 'yes') rows = rows.filter((r) => r.canSell);
+    else if (sellFilter === 'no') rows = rows.filter((r) => !r.canSell);
     if (status === 'active') rows = rows.filter((r) => r.isActive);
     else if (status === 'inactive') rows = rows.filter((r) => !r.isActive);
     return rows.sort((a, b) => a.code.localeCompare(b.code));
-  }, [data, categoryFilter, applies, status, primaryFilter, parentFilter, groups, groupById]);
+  }, [data, formFactor, sellFilter, status, primaryFilter, parentFilter, groups, groupById]);
 
   const columns: Column<Product>[] = [
     { key: 'code', header: 'Code', accessor: (r) => r.code },
@@ -422,68 +455,60 @@ export default function ProductsPage() {
         columns={columns}
         rows={visibleRows}
         defaultSort={{ key: 'code', dir: 'asc' }}
-        key={`${categoryFilter}|${primaryFilter}|${parentFilter}|${applies}|${status}`}
+        key={`${primaryFilter}|${parentFilter}|${formFactor}|${sellFilter}|${status}`}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
         onRefresh={refetch}
         searchPlaceholder="Search products..."
         toolbar={
-          <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={categoryFilter}
-              onChange={(e) => {
-                setCategoryFilter(e.target.value);
-                setPrimaryFilter('');
-                setParentFilter('');
-              }}
-              wrapClassName="w-40"
-              placeholder="All categories"
-              options={productCategories.map((c) => ({
-                value: String(c.id),
-                label: c.name,
-              }))}
-            />
+          <div className="flex flex-nowrap items-center gap-2">
             <Select
               value={primaryFilter}
               onChange={(e) => {
                 setPrimaryFilter(e.target.value);
                 setParentFilter('');
               }}
-              wrapClassName="w-40"
+              wrapClassName="w-36"
               placeholder="All primary groups"
-              options={primaryGroups
-                .filter(
-                  (g) => !categoryFilter || String(g.categoryId) === categoryFilter,
-                )
-                .map((g) => ({ value: String(g.id), label: g.name }))}
+              options={primaryGroups.map((g) => ({
+                value: String(g.id),
+                label: g.name,
+              }))}
             />
             <Select
               value={parentFilter}
               onChange={(e) => setParentFilter(e.target.value)}
-              wrapClassName="w-40"
+              wrapClassName="w-36"
               placeholder="Any parent group"
-              options={parentCandidates
+              options={productGroups
                 .filter(
                   (g) =>
-                    (!categoryFilter ||
-                      String(g.categoryId) === categoryFilter) &&
+                    !g.subGroupApplicable &&
+                    g.isActive &&
                     (!primaryGroupCode ||
                       g.code.startsWith(primaryGroupCode.slice(0, 4))),
                 )
-                .map((g) => ({
-                  value: String(g.id),
-                  label: `${'· '.repeat(g.level - 1)}${g.name}`,
-                }))}
+                .map((g) => ({ value: String(g.id), label: g.name }))}
             />
             <Select
-              value={applies}
-              onChange={(e) => setApplies(e.target.value)}
+              value={formFactor}
+              onChange={(e) => setFormFactor(e.target.value)}
               wrapClassName="w-36"
-              placeholder="Applies to: All"
+              placeholder="Packed / Unpacked"
               options={[
-                { value: 'item', label: 'Item-wise' },
-                { value: 'product', label: 'Product-wise' },
+                { value: 'packed', label: 'Packed' },
+                { value: 'unpacked', label: 'Unpacked' },
+              ]}
+            />
+            <Select
+              value={sellFilter}
+              onChange={(e) => setSellFilter(e.target.value)}
+              wrapClassName="w-32"
+              placeholder="Can sell: All"
+              options={[
+                { value: 'yes', label: 'Can sell' },
+                { value: 'no', label: 'Cannot sell' },
               ]}
             />
             <Select
@@ -573,40 +598,62 @@ export default function ProductsPage() {
             {editing ? (
               <>
                 <Input
-                  label="Category"
-                  value={editing.category?.name ?? '-'}
+                  label="Primary Group"
+                  value={editAncestry?.primary ?? '-'}
+                  disabled
+                />
+                <Input
+                  label="Parent Group"
+                  value={editAncestry?.parent ?? '-'}
                   disabled
                 />
                 <Input
                   label="Group"
-                  value={editing.group?.name ?? '-'}
+                  value={editing.group?.name ?? editAncestry?.leaf ?? '-'}
                   disabled
+                  wrapClassName="sm:col-span-2"
                 />
               </>
             ) : (
+              // Category is always "Products" for this master, so it's hidden.
+              // Drill down primary → parent → leaf group; the server derives the
+              // category from the chosen leaf group.
               <>
                 <Select
-                  label="Category"
-                  value={form.categoryId}
-                  onChange={(e) =>
-                    setForm({ ...form, categoryId: e.target.value, groupId: '' })
-                  }
+                  label="Primary Group"
+                  value={drawerPrimary}
+                  onChange={(e) => {
+                    setDrawerPrimary(e.target.value);
+                    setDrawerParent('');
+                    setForm({ ...form, groupId: '' });
+                  }}
+                  placeholder="— Select —"
+                  options={primaryGroups.map((g) => ({
+                    value: String(g.id),
+                    label: g.name,
+                  }))}
+                />
+                <Select
+                  label="Parent Group"
+                  value={drawerParent}
+                  onChange={(e) => {
+                    setDrawerParent(e.target.value);
+                    setForm({ ...form, groupId: '' });
+                  }}
                   placeholder="— None —"
-                  options={productCategories
-                    .filter((c) => c.isActive)
-                    .map((c) => ({ value: c.id, label: c.name }))}
+                  options={drawerParentOptions.map((g) => ({
+                    value: String(g.id),
+                    label: `${'· '.repeat(g.level - 1)}${g.name}`,
+                  }))}
                 />
                 <Select
                   label="Group"
                   required
                   value={form.groupId}
                   onChange={(e) => setForm({ ...form, groupId: e.target.value })}
-                  placeholder={
-                    form.categoryId
-                      ? 'Select a leaf group'
-                      : 'Pick a category first'
-                  }
-                  options={groupOptions.map((g) => ({
+                  placeholder="Select a leaf group"
+                  wrapClassName="sm:col-span-2"
+                  options={drawerLeafOptions.map((g) => ({
                     value: g.id,
                     label: g.name,
                   }))}

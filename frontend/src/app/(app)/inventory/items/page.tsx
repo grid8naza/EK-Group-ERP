@@ -70,7 +70,6 @@ export default function ItemsPage() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [primaryFilter, setPrimaryFilter] = useState('');
   const [parentFilter, setParentFilter] = useState('');
-  const [applies, setApplies] = useState(''); // '' | 'item' | 'product'
   const [status, setStatus] = useState(''); // '' | 'active' | 'inactive'
   const codeRef = useRef<HTMLInputElement>(null);
 
@@ -267,12 +266,9 @@ export default function ItemsPage() {
     () => new Map((groups ?? []).map((g) => [g.id, g])),
     [groups],
   );
+  // This master is items-only, so the group filters list item groups only.
   const primaryGroups = useMemo(
-    () => (groups ?? []).filter((g) => g.level === 1),
-    [groups],
-  );
-  const parentCandidates = useMemo(
-    () => (groups ?? []).filter((g) => g.subGroupApplicable && g.level < 5),
+    () => (groups ?? []).filter((g) => g.level === 1 && g.forItem),
     [groups],
   );
   const primaryGroupCode = primaryFilter
@@ -293,18 +289,14 @@ export default function ItemsPage() {
       }
     }
     if (parentFilter) {
-      rows = rows.filter(
-        (r) => String(groupById.get(r.groupId ?? -1)?.parentGroupId ?? '') === parentFilter,
-      );
+      // The parent-group filter lists leaf groups (what items attach to), so
+      // match the item's own leaf group.
+      rows = rows.filter((r) => String(r.groupId ?? '') === parentFilter);
     }
-    if (applies === 'item')
-      rows = rows.filter((r) => groupById.get(r.groupId ?? -1)?.forItem);
-    else if (applies === 'product')
-      rows = rows.filter((r) => groupById.get(r.groupId ?? -1)?.forProduct);
     if (status === 'active') rows = rows.filter((r) => r.isActive);
     else if (status === 'inactive') rows = rows.filter((r) => !r.isActive);
     return rows;
-  }, [data, categoryFilter, applies, status, primaryFilter, parentFilter, groups, groupById]);
+  }, [data, categoryFilter, status, primaryFilter, parentFilter, groups, groupById]);
 
   const availabilityText = (i: Item) =>
     i.companyIds.map((id) => companyNameById.get(id) ?? `#${id}`).join(', ');
@@ -396,14 +388,14 @@ export default function ItemsPage() {
         rows={visibleRows}
         defaultSort={{ key: 'code', dir: 'asc' }}
         // Remount when the filters change so pagination jumps back to page 1.
-        key={`${categoryFilter}|${primaryFilter}|${parentFilter}|${applies}|${status}`}
+        key={`${categoryFilter}|${primaryFilter}|${parentFilter}|${status}`}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
         onRefresh={refetch}
         searchPlaceholder="Search items..."
         toolbar={
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-nowrap items-center gap-2">
             <Select
               value={categoryFilter}
               onChange={(e) => {
@@ -426,7 +418,7 @@ export default function ItemsPage() {
                 setPrimaryFilter(e.target.value);
                 setParentFilter('');
               }}
-              wrapClassName="w-40"
+              wrapClassName="w-36"
               placeholder="All primary groups"
               options={primaryGroups
                 .filter(
@@ -437,30 +429,20 @@ export default function ItemsPage() {
             <Select
               value={parentFilter}
               onChange={(e) => setParentFilter(e.target.value)}
-              wrapClassName="w-40"
+              wrapClassName="w-36"
               placeholder="Any parent group"
-              options={parentCandidates
+              options={(groups ?? [])
                 .filter(
                   (g) =>
+                    !g.subGroupApplicable &&
+                    g.isActive &&
+                    g.forItem &&
                     (!categoryFilter ||
                       String(g.categoryId) === categoryFilter) &&
                     (!primaryGroupCode ||
                       g.code.startsWith(primaryGroupCode.slice(0, 4))),
                 )
-                .map((g) => ({
-                  value: String(g.id),
-                  label: `${'· '.repeat(g.level - 1)}${g.name}`,
-                }))}
-            />
-            <Select
-              value={applies}
-              onChange={(e) => setApplies(e.target.value)}
-              wrapClassName="w-36"
-              placeholder="Applies to: All"
-              options={[
-                { value: 'item', label: 'Item-wise' },
-                { value: 'product', label: 'Product-wise' },
-              ]}
+                .map((g) => ({ value: String(g.id), label: g.name }))}
             />
             <Select
               value={status}
