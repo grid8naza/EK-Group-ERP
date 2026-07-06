@@ -416,9 +416,22 @@ export default function ProductsPage() {
       header: 'Product',
       sortAccessor: (r) => r.name,
       render: (r) => (
-        <span className="font-medium text-slate-800 dark:text-slate-100">
-          {r.name}
-        </span>
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50">
+            {r.imageUrl ? (
+              <img
+                src={mediaUrl(r.imageUrl)}
+                alt=""
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <ImageIcon className="h-4 w-4 text-slate-300" />
+            )}
+          </span>
+          <span className="font-medium text-slate-800 dark:text-slate-100">
+            {r.name}
+          </span>
+        </div>
       ),
     },
     { key: 'unit', header: 'Unit', accessor: (r) => r.unit?.code ?? '-' },
