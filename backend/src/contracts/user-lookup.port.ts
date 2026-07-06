@@ -32,6 +32,16 @@ export interface UserLookupPort {
   /** Minimal user record by id, or null if no such user. */
   findById(id: number): Promise<UserSummary | null>;
 
+  /** Minimal user records for the given ids (active + inactive), any order. */
+  findByIds(ids: number[]): Promise<UserSummary[]>;
+
   /** True if the user exists and is allowed to access the given company. */
   canAccessCompany(userId: number, companyId: number): Promise<boolean>;
+
+  /**
+   * Active user ids assigned to the given user group. Used by the workflow engine
+   * to resolve a step's approvers when no explicit users are named. (User groups
+   * are company-scoped, so this is already limited to that group's company.)
+   */
+  usersInGroup(userGroupId: number): Promise<number[]>;
 }

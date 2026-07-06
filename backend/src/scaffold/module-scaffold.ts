@@ -16,6 +16,7 @@ import {
   seedAssetDefaults,
 } from '../modules/asset-category/asset-provisioning';
 import { HR_SUBS } from '../modules/hr-category/hr-provisioning';
+import { WORKFLOW_SUBS } from '../modules/workflow/workflow-provisioning';
 
 /**
  * Single source of truth for every module and the menus/screens it ships with.
@@ -149,5 +150,15 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     subs: ASSET_SUBS,
     extraMenus: ASSET_REPORT_MENUS,
     seedData: seedAssetDefaults,
+  },
+  {
+    code: 'WORKFLOW',
+    name: 'Workflow',
+    icon: 'git-branch',
+    sortOrder: 8,
+    description: 'Document approval routing — the approver inbox (setup is in Cpanel).',
+    autoEnable: true, // on for every company so approvers see their inbox
+    menu: { name: 'Workflow', icon: 'git-branch' },
+    subs: WORKFLOW_SUBS,
   },
 ];

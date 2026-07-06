@@ -869,6 +869,109 @@ export interface HrDesignation {
   isLocked?: boolean;
 }
 
+// ---- Workflow Engine ----
+export type WorkflowActionType =
+  | 'CREATE_APPROVE'
+  | 'CREATE_FORWARD'
+  | 'APPROVE'
+  | 'APPROVE_FORWARD'
+  | 'CREATE_REFERENCE'
+  | 'REFERENCE'
+  | 'REVIEW_FORWARD';
+export type WorkflowApprovalMode = 'FORM' | 'FIELD';
+export type WorkflowInstanceStatus =
+  | 'IN_PROGRESS'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CANCELLED';
+
+/** One approval level of a workflow definition (Tab 2). */
+export interface WorkflowStep {
+  id?: number;
+  sequence: number;
+  userGroupId?: number | null;
+  userIds: number[];
+  targetCompanyId?: number | null;
+  targetBranchId?: number | null;
+  targetModuleId?: number | null;
+  action: WorkflowActionType;
+  buttonText: string;
+  approvalMode: WorkflowApprovalMode;
+  fieldName?: string | null;
+  valueFrom?: number | null;
+  valueTo?: number | null;
+  canCancel: boolean;
+  canReject: boolean;
+  canEdit: boolean;
+  notifyInApp: boolean;
+  slaHours?: number | null;
+}
+
+/** A workflow definition (Tab 1) bound to a document type. */
+export interface WorkflowDefinition {
+  id: number;
+  name: string;
+  companyId: number;
+  branchId?: number | null;
+  moduleId: number;
+  objectId: number;
+  isActive: boolean;
+  isLocked?: boolean;
+  steps: WorkflowStep[];
+}
+
+/** A pending approval in the current user's inbox (My Approvals). */
+export interface WorkflowTaskItem {
+  taskId: number;
+  instanceId: number;
+  sequence: number;
+  canApprove: boolean;
+  createdAt: string;
+  workflowName: string;
+  documentRef?: string | null;
+  documentId: number;
+  moduleId: number;
+  objectId: number;
+  amount?: number | null;
+  action?: WorkflowActionType;
+  buttonText: string;
+  canCancel: boolean;
+  canReject: boolean;
+  canEdit: boolean;
+}
+
+export interface WorkflowTimelineEntry {
+  id: number;
+  sequence: number;
+  action: string;
+  comment?: string | null;
+  userId: number;
+  userName: string;
+  createdAt: string;
+}
+
+export interface WorkflowInstanceDetail {
+  id: number;
+  status: WorkflowInstanceStatus;
+  currentSequence: number;
+  documentRef?: string | null;
+  documentId: number;
+  amount?: number | null;
+  startedByName: string;
+  timeline: WorkflowTimelineEntry[];
+}
+
+export interface WorkflowNotification {
+  id: number;
+  userId: number;
+  instanceId: number;
+  taskId?: number | null;
+  title: string;
+  body: string;
+  isRead: boolean;
+  createdAt: string;
+}
+
 // ---- Backup & Restore ----
 export interface Backup {
   fileName: string;

@@ -14,12 +14,15 @@ import {
   Building2,
   GitBranch,
   Check,
+  Bell,
 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { resolveIcon } from '@/lib/icons';
-import { initials, cn } from '@/lib/utils';
+import { initials, cn, formatDate } from '@/lib/utils';
 import { moduleLandingRoute } from '@/lib/nav';
+import { api } from '@/lib/api';
+import type { WorkflowNotification } from '@/lib/types';
 
 interface TopbarProps {
   onToggleSidebar: () => void;
@@ -50,10 +53,64 @@ export function Topbar({
   const [modOpen, setModOpen] = useState(false);
   const [coOpen, setCoOpen] = useState(false);
   const [brOpen, setBrOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const modRef = useRef<HTMLDivElement>(null);
   const coRef = useRef<HTMLDivElement>(null);
   const brRef = useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  // Workflow notifications: unread count polls every 30s; the list is loaded
+  // lazily when the bell dropdown is opened.
+  const [unread, setUnread] = useState(0);
+  const [notifs, setNotifs] = useState<WorkflowNotification[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const res = await api.get<{ count: number }>(
+          '/workflow/notifications/unread-count',
+        );
+        if (alive) setUnread(res.count);
+      } catch {
+        // ignore — transient/unauthorized fetches shouldn't disrupt the topbar
+      }
+    };
+    void load();
+    const id = setInterval(load, 30000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, []);
+
+  const openNotifications = async () => {
+    const next = !notifOpen;
+    setNotifOpen(next);
+    if (!next) return;
+    try {
+      const list = await api.get<WorkflowNotification[]>(
+        '/workflow/notifications',
+      );
+      setNotifs(list);
+    } catch {
+      // ignore
+    }
+  };
+
+  const openNotification = async (n: WorkflowNotification) => {
+    setNotifOpen(false);
+    if (!n.isRead) {
+      try {
+        await api.post(`/workflow/notifications/${n.id}/read`);
+        setUnread((c) => Math.max(0, c - 1));
+      } catch {
+        // ignore
+      }
+    }
+    router.push('/workflow/approvals');
+  };
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -68,6 +125,9 @@ export function Topbar({
       }
       if (brRef.current && !brRef.current.contains(e.target as Node)) {
         setBrOpen(false);
+      }
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
       }
     };
     document.addEventListener('mousedown', onClick);
@@ -300,6 +360,82 @@ export function Topbar({
             )}
           </div>
         )}
+
+        {/* Notification bell — workflow approvals awaiting the user */}
+        <div className="relative" ref={notifRef}>
+          <button
+            onClick={openNotifications}
+            className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+            title="Notifications"
+            aria-label="Notifications"
+          >
+            <Bell className="h-5 w-5" />
+            {unread > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold leading-none text-white">
+                {unread > 99 ? '99+' : unread}
+              </span>
+            )}
+          </button>
+
+          {notifOpen && (
+            <div className="absolute right-0 mt-2 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900">
+              <p className="border-b border-slate-100 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-slate-800">
+                Notifications
+              </p>
+              <div className="max-h-80 overflow-y-auto py-1">
+                {notifs.length === 0 ? (
+                  <p className="px-4 py-6 text-center text-sm text-slate-400">
+                    No notifications.
+                  </p>
+                ) : (
+                  notifs.map((n) => (
+                    <button
+                      key={n.id}
+                      onClick={() => openNotification(n)}
+                      className={cn(
+                        'flex w-full flex-col gap-0.5 px-4 py-2.5 text-left transition hover:bg-slate-100 dark:hover:bg-slate-800',
+                        !n.isRead && 'bg-brand-50/60 dark:bg-brand-950/40',
+                      )}
+                    >
+                      <span className="flex items-center gap-2">
+                        {!n.isRead && (
+                          <span className="h-1.5 w-1.5 flex-none rounded-full bg-brand-500" />
+                        )}
+                        <span
+                          className={cn(
+                            'flex-1 truncate text-sm',
+                            n.isRead
+                              ? 'text-slate-600 dark:text-slate-300'
+                              : 'font-medium text-slate-800 dark:text-slate-100',
+                          )}
+                        >
+                          {n.title}
+                        </span>
+                      </span>
+                      {n.body && (
+                        <span className="line-clamp-2 text-xs text-slate-500 dark:text-slate-400">
+                          {n.body}
+                        </span>
+                      )}
+                      <span className="text-[11px] text-slate-400">
+                        {formatDate(n.createdAt)}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+              <button
+                onClick={() => {
+                  setNotifOpen(false);
+                  router.push('/workflow/approvals');
+                }}
+                className="block w-full border-t border-slate-100 px-4 py-2.5 text-center text-sm font-medium text-brand-600 hover:bg-slate-50 dark:border-slate-800 dark:text-brand-400 dark:hover:bg-slate-800"
+              >
+                View all approvals
+              </button>
+            </div>
+          )}
+        </div>
 
         <ThemeToggle />
 

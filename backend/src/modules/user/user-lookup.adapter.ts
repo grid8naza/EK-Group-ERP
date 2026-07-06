@@ -20,18 +20,36 @@ import {
 export class UserLookupAdapter implements UserLookupPort {
   constructor(private readonly prisma: PrismaService) {}
 
+  private readonly summarySelect = {
+    id: true,
+    userCode: true,
+    username: true,
+    name: true,
+    email: true,
+    isActive: true,
+  } as const;
+
   findById(id: number): Promise<UserSummary | null> {
     return this.prisma.user.findUnique({
       where: { id },
-      select: {
-        id: true,
-        userCode: true,
-        username: true,
-        name: true,
-        email: true,
-        isActive: true,
-      },
+      select: this.summarySelect,
     });
+  }
+
+  findByIds(ids: number[]): Promise<UserSummary[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.prisma.user.findMany({
+      where: { id: { in: ids } },
+      select: this.summarySelect,
+    });
+  }
+
+  async usersInGroup(userGroupId: number): Promise<number[]> {
+    const rows = await this.prisma.userGroupAssignment.findMany({
+      where: { userGroupId, user: { isActive: true } },
+      select: { userId: true },
+    });
+    return rows.map((r) => r.userId);
   }
 
   async canAccessCompany(userId: number, companyId: number): Promise<boolean> {

@@ -1,0 +1,200 @@
+// Workflow domain — a configurable document-approval engine.
+//
+// Admins define, per document type (company + branch + module + form), an ordered
+// chain of approval steps (WorkflowStep). At runtime a document travels through a
+// WorkflowInstance: each step raises WorkflowTasks (the approver inbox), every
+// action is written to WorkflowActionLog, and in-app WorkflowNotifications alert
+// assignees. Steps can route ACROSS company / branch / module boundaries via their
+// target* overrides.
+//
+// Cross-domain rule: every reference to a Cpanel row (company, branch, module,
+// object, user, user group) is a plain `Int` id with NO @relation — real relations
+// stay inside this domain file. (Enforced by npm run lint:boundaries.)
+
+/// What the approver at a step may do, and how the document proceeds.
+enum WorkflowActionType {
+  CREATE_APPROVE // create + self-approve; end of workflow
+  CREATE_FORWARD // create + forward to next level for approval
+  APPROVE // approve; end of workflow
+  APPROVE_FORWARD // approve + forward to next level for further approval
+  CREATE_REFERENCE // create + send to next level for reference only (no action there)
+  REFERENCE // view only; end of workflow
+  REVIEW_FORWARD // no action, forward to next level
+}
+
+/// Whole-form approval, or approval gated by a numeric field's limit.
+enum WorkflowApprovalMode {
+  FORM
+  FIELD
+}
+
+enum WorkflowInstanceStatus {
+  IN_PROGRESS
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum WorkflowTaskStatus {
+  PENDING
+  DONE
+  SKIPPED
+}
+
+/// A workflow definition (Tab 1) — bound to the document type it governs. When a
+/// document of (companyId [+ branchId], moduleId, objectId=FORM) is submitted, the
+/// matching active definition drives its approval chain.
+model WorkflowDefinition {
+  id        Int     @id @default(autoincrement())
+  name      String
+  companyId Int // origin company
+  branchId  Int? // origin branch / profit-center (null = any branch)
+  moduleId  Int // -> Module (origin module)
+  objectId  Int // -> ObjectMaster (the FORM this workflow is for)
+  isActive  Boolean @default(true)
+  isLocked  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  steps WorkflowStep[]
+
+  @@index([companyId, moduleId, objectId])
+  @@map("workflow_definitions")
+}
+
+/// One level of a workflow (Tab 2), ordered by `sequence` (1..n). The approver is
+/// the selected `users` (all get the task) or, if none, everyone in `userGroupId`.
+/// target* columns route this level to a different company / branch / module than
+/// the definition's origin (null = same as the definition).
+model WorkflowStep {
+  id           Int @id @default(autoincrement())
+  definitionId Int
+  sequence     Int // 1 = first level, then in order
+
+  userGroupId     Int? // -> UserGroup (approver group)
+  targetCompanyId Int? // -> Company (null = definition.companyId)
+  targetBranchId  Int? // -> Branch  (null = definition.branchId)
+  targetModuleId  Int? // -> Module  (null = definition.moduleId) — module-to-module routing
+
+  action     WorkflowActionType
+  buttonText String // label shown on the action button (e.g. "Approve", "Fwd to Accounts")
+
+  approvalMode WorkflowApprovalMode @default(FORM)
+  fieldName    String? // field checked when approvalMode = FIELD
+  valueFrom    Float? // inclusive lower limit
+  valueTo      Float? // inclusive upper limit
+
+  canCancel   Boolean @default(false) // Cancel button visible
+  canReject   Boolean @default(false) // Reject button visible
+  canEdit     Boolean @default(false) // this approver may edit the record
+  notifyInApp Boolean @default(true) // raise an in-app alert on assignment
+  slaHours    Int? // optional SLA for future escalation
+
+  definition WorkflowDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+  users      WorkflowStepUser[]
+
+  @@index([definitionId])
+  @@map("workflow_steps")
+}
+
+/// A user explicitly assigned to a step (the document is available to every
+/// selected user; the first to act completes the level).
+model WorkflowStepUser {
+  id     Int @id @default(autoincrement())
+  stepId Int
+  userId Int // -> User
+
+  step WorkflowStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+
+  @@unique([stepId, userId])
+  @@index([userId])
+  @@map("workflow_step_users")
+}
+
+/// A running approval for one document. `amount` is the value a FIELD-approval step
+/// tests against its [valueFrom, valueTo] limit.
+model WorkflowInstance {
+  id           Int  @id @default(autoincrement())
+  definitionId Int
+  companyId    Int
+  branchId     Int?
+  moduleId     Int
+  objectId     Int
+
+  documentId  Int // the business record id (plain, cross-domain)
+  documentRef String? // human-readable snapshot (e.g. a code) for display
+  amount      Float? // value tested by FIELD-approval limits
+
+  currentSequence Int                    @default(1)
+  status          WorkflowInstanceStatus @default(IN_PROGRESS)
+  startedByUserId Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tasks   WorkflowTask[]
+  actions WorkflowActionLog[]
+
+  @@index([moduleId, objectId, documentId])
+  @@index([status])
+  @@map("workflow_instances")
+}
+
+/// An actionable item at the current level for one assignee (the inbox row).
+model WorkflowTask {
+  id         Int @id @default(autoincrement())
+  instanceId Int
+  stepId     Int
+  sequence   Int
+
+  assignedUserId Int
+  // false when approvalMode = FIELD and the instance amount is beyond this step's
+  // limit → the approver may only review-and-forward, not approve.
+  canApprove     Boolean            @default(true)
+  status         WorkflowTaskStatus @default(PENDING)
+  actedAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  instance WorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@index([assignedUserId, status])
+  @@index([instanceId])
+  @@map("workflow_tasks")
+}
+
+/// Immutable audit trail — one row per action taken on an instance.
+model WorkflowActionLog {
+  id         Int     @id @default(autoincrement())
+  instanceId Int
+  stepId     Int?
+  sequence   Int
+  userId     Int
+  action     String // CREATE / APPROVE / FORWARD / REJECT / CANCEL / REFERENCE
+  comment    String?
+
+  createdAt DateTime @default(now())
+
+  instance WorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+
+  @@index([instanceId])
+  @@map("workflow_action_logs")
+}
+
+/// In-app notification for an assignee (the bell + My Approvals feed).
+model WorkflowNotification {
+  id         Int     @id @default(autoincrement())
+  userId     Int
+  instanceId Int
+  taskId     Int?
+  title      String
+  body       String
+  isRead     Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+  @@map("workflow_notifications")
+}

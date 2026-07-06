@@ -32,6 +32,7 @@ import { AssetModule } from './modules/asset/asset.module';
 import { HrCategoryModule } from './modules/hr-category/hr-category.module';
 import { HrGroupModule } from './modules/hr-group/hr-group.module';
 import { HrDesignationModule } from './modules/hr-designation/hr-designation.module';
+import { WorkflowModule } from './modules/workflow/workflow.module';
 import { LoginScreenModule } from './modules/login-screen/login-screen.module';
 import { ScaffoldModule } from './scaffold/scaffold.module';
 
@@ -68,6 +69,7 @@ import { ScaffoldModule } from './scaffold/scaffold.module';
     HrCategoryModule,
     HrGroupModule,
     HrDesignationModule,
+    WorkflowModule,
     LoginScreenModule,
     ScaffoldModule,
   ],
