@@ -262,6 +262,7 @@ model Product {
   code         String   @unique
   name         String
   description  String?
+  imageUrl     String? // product picture (sellable products), served at /uploads/products
   categoryId   Int?
   groupId      Int?
   unitId       Int // selling / output unit

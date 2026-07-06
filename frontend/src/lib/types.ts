@@ -710,6 +710,8 @@ export interface Product {
   code: string;
   name: string;
   description?: string | null;
+  /** Product picture URL (sellable products), served under /uploads. */
+  imageUrl?: string | null;
   categoryId?: number | null;
   category?: MasterRef | null;
   groupId?: number | null;

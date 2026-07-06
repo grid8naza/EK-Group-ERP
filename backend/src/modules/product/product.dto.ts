@@ -54,6 +54,12 @@ export class ProcessInput {
   @MaxLength(300)
   description?: string;
 
+  /** Product picture URL (from POST /products/image). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  imageUrl?: string;
+
   @IsOptional()
   @IsNumber()
   @Min(0)
@@ -92,6 +98,12 @@ export class CreateProductDto {
   @IsString()
   @MaxLength(300)
   description?: string;
+
+  /** Product picture URL (from POST /products/image). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  imageUrl?: string;
 
   // Category is derived from the group; ignored if sent.
   @IsOptional()
@@ -277,6 +289,12 @@ export class UpdateProductDto {
   @IsString()
   @MaxLength(300)
   description?: string;
+
+  /** Product picture URL (from POST /products/image). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  imageUrl?: string;
 
   @IsOptional()
   @IsInt()

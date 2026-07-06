@@ -13,12 +13,23 @@ import {
   lowestFree,
   MAX_ITEM_SEQ,
 } from '../../common/hierarchy-code';
+import { extname } from 'path';
+import { rename as renameFile } from 'fs/promises';
+import { randomBytes } from 'crypto';
+import { join } from 'path';
 import {
   BomLineInput,
   CreateProductDto,
   ProcessInput,
   UpdateProductDto,
 } from './product.dto';
+import { PRODUCT_UPLOAD_DIR, PRODUCT_URL_PREFIX } from './product.constants';
+
+interface UploadedFile {
+  path: string;
+  originalname: string;
+  mimetype: string;
+}
 
 // Products are returned with their masters + company links flattened + the two
 // BOMs split out of the single bomLines table.
@@ -48,6 +59,20 @@ type ProductRow = Prisma.ProductGetPayload<{ include: typeof withRelations }>;
 @Injectable()
 export class ProductService {
   constructor(private prisma: PrismaService) {}
+
+  /** Store an uploaded product picture and return its public URL. */
+  async uploadImage(file: UploadedFile): Promise<{ url: string }> {
+    const extMap: Record<string, string> = {
+      'image/png': '.png',
+      'image/jpeg': '.jpg',
+      'image/webp': '.webp',
+      'image/gif': '.gif',
+    };
+    const ext = extname(file.originalname) || extMap[file.mimetype] || '';
+    const name = `${Date.now()}-${randomBytes(6).toString('hex')}${ext}`;
+    await renameFile(file.path, join(PRODUCT_UPLOAD_DIR, name));
+    return { url: `${PRODUCT_URL_PREFIX}/${name}` };
+  }
 
   async findAll(companyId: number | undefined, search?: string) {
     const scopeFilter: Prisma.ProductWhereInput = companyId
@@ -99,6 +124,7 @@ export class ProductService {
           code: itemCode(group.code, seq),
           name: dto.name.trim(),
           description: dto.description?.trim() || null,
+          imageUrl: dto.imageUrl?.trim() || null,
           categoryId: group.categoryId,
           groupId: dto.groupId,
           unitId: dto.unitId,
@@ -239,6 +265,8 @@ export class ProductService {
             dto.description !== undefined
               ? dto.description?.trim() || null
               : undefined,
+          imageUrl:
+            dto.imageUrl !== undefined ? dto.imageUrl?.trim() || null : undefined,
           unitId: dto.unitId,
           unpacked: dto.unpacked,
           packed: dto.packed,

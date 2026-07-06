@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, PackageOpen } from 'lucide-react';
+import { Plus, PackageOpen, Upload, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
+import { mediaUrl } from '@/lib/login-screen';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -24,6 +25,7 @@ const empty = {
   code: '',
   name: '',
   description: '',
+  imageUrl: '',
   categoryId: '',
   groupId: '',
   unitId: '',
@@ -97,6 +99,23 @@ export default function ProductsPage() {
   // `groupId`). Category is fixed to Products, so it is not shown.
   const [drawerPrimary, setDrawerPrimary] = useState('');
   const [drawerParent, setDrawerParent] = useState('');
+  const imageInput = useRef<HTMLInputElement>(null);
+  const [imageUploading, setImageUploading] = useState(false);
+
+  const uploadImage = async (file: File) => {
+    setImageUploading(true);
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const res = await api.post<{ url: string }>('/products/image', fd);
+      setForm((f) => ({ ...f, imageUrl: res.url }));
+      toast.success('Picture uploaded.');
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Upload failed.');
+    } finally {
+      setImageUploading(false);
+    }
+  };
   const [primaryFilter, setPrimaryFilter] = useState('');
   const [parentFilter, setParentFilter] = useState('');
   const [formFactor, setFormFactor] = useState(''); // '' | 'packed' | 'unpacked'
@@ -181,6 +200,7 @@ export default function ProductsPage() {
     code: p.code,
     name: p.name,
     description: p.description ?? '',
+    imageUrl: p.imageUrl ?? '',
     categoryId: p.categoryId != null ? String(p.categoryId) : '',
     groupId: p.groupId != null ? String(p.groupId) : '',
     unitId: String(p.unitId),
@@ -279,6 +299,8 @@ export default function ProductsPage() {
       // code + category are derived server-side from the group.
       name: form.name.trim(),
       description: form.description.trim() || undefined,
+      // Picture is a sellable-product attribute; cleared when not sellable.
+      imageUrl: form.canSell ? form.imageUrl || null : null,
       groupId: Number(form.groupId),
       unitId: Number(form.unitId),
       unpacked: form.unpacked,
@@ -738,6 +760,7 @@ export default function ProductsPage() {
                       : {
                           ...f,
                           canSell,
+                          imageUrl: '',
                           intercompanyPrice: '',
                           intercompanyProfitPct: '',
                           wholesalePrice: '',
@@ -751,6 +774,62 @@ export default function ProductsPage() {
                 }}
               />
             </div>
+
+            {/* Product picture — only for sellable products. */}
+            {form.canSell && (
+              <div className="sm:col-span-2">
+                <span className="label !mb-1 block">Product Picture</span>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-20 w-20 flex-none items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50">
+                    {form.imageUrl ? (
+                      <img
+                        src={mediaUrl(form.imageUrl)}
+                        alt="Product"
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <ImageIcon className="h-6 w-6 text-slate-300" />
+                    )}
+                  </div>
+                  {!view && (
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="btn-secondary inline-flex items-center gap-2"
+                        onClick={() => imageInput.current?.click()}
+                        disabled={imageUploading}
+                      >
+                        <Upload className="h-4 w-4" />
+                        {imageUploading ? 'Uploading…' : 'Upload'}
+                      </button>
+                      {form.imageUrl && (
+                        <button
+                          type="button"
+                          className="btn-secondary inline-flex items-center gap-2 text-rose-600"
+                          onClick={() => setForm({ ...form, imageUrl: '' })}
+                        >
+                          <Trash2 className="h-4 w-4" /> Remove
+                        </button>
+                      )}
+                      <input
+                        ref={imageInput}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) void uploadImage(f);
+                          e.target.value = '';
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-slate-400">
+                  PNG, JPG, WEBP or GIF — up to 5 MB.
+                </p>
+              </div>
+            )}
 
             <Input
               label="Intercompany Price"
