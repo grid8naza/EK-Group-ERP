@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ListTree, Plus } from 'lucide-react';
+import { ListTree, Plus, Printer } from 'lucide-react';
+import { api } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useAuth } from '@/providers/AuthProvider';
@@ -13,7 +14,16 @@ import { LockButton } from '@/components/ui/LockButton';
 import { Drawer } from '@/components/ui/Drawer';
 import { Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import type { Product, Category, Group } from '@/lib/types';
+import { buildRecipeHtml, writeRecipeToWindow } from '@/lib/recipePrint';
+import type {
+  Product,
+  Category,
+  Group,
+  Item,
+  Unit,
+  Asset,
+  HrDesignation,
+} from '@/lib/types';
 
 const ROUTE = '/production/recipe-master';
 
@@ -24,6 +34,40 @@ export default function RecipeMasterPage() {
   const { data, loading, refetch } = useFetch<Product[]>('/products');
   const { data: categories } = useFetch<Category[]>('/categories');
   const { data: groups } = useFetch<Group[]>('/groups');
+  // Reference data needed to resolve names + compute costing for the printout.
+  const { data: items } = useFetch<Item[]>('/items');
+  const { data: units } = useFetch<Unit[]>('/units');
+  const { data: assets } = useFetch<Asset[]>('/assets');
+  const { data: designations } = useFetch<HrDesignation[]>('/hr-designations');
+
+  // Print a recipe: open the print window synchronously (inside the click, so
+  // the popup isn't blocked), then fetch the full product (recipe / processes /
+  // manpower + costs) and render it in.
+  const printRow = async (p: Product) => {
+    const w = window.open('', '_blank', 'width=980,height=1100');
+    if (!w) {
+      toast.error('Allow pop-ups to print the recipe.');
+      return;
+    }
+    w.document.write(
+      '<p style="font-family:sans-serif;padding:24px;color:#555">Preparing recipe…</p>',
+    );
+    try {
+      const full = await api.get<Product>(`/products/${p.id}`);
+      writeRecipeToWindow(
+        w,
+        buildRecipeHtml(full, {
+          items: items ?? [],
+          units: units ?? [],
+          assets: assets ?? [],
+          designations: designations ?? [],
+        }),
+      );
+    } catch {
+      w.close();
+      toast.error('Could not load the recipe for printing.');
+    }
+  };
 
   const [categoryFilter, setCategoryFilter] = useState('');
   const [groupFilter, setGroupFilter] = useState('');
@@ -202,6 +246,17 @@ export default function RecipeMasterPage() {
             />
           </div>
         }
+        rowActions={(r) => (
+          <button
+            type="button"
+            title="Print recipe"
+            aria-label="Print recipe"
+            className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800"
+            onClick={() => printRow(r)}
+          >
+            <Printer className="h-4 w-4" />
+          </button>
+        )}
         onView={canView ? (r) => openRecipe(r, true) : undefined}
         onEdit={canEdit ? (r) => guardEdit(r, () => editRecipe(r)) : undefined}
         canView={canView}

@@ -743,6 +743,11 @@ export interface Product {
   fuelCost: number;
   overheadCost: number;
   bomMarginPct: number;
+  /** Per-yield-unit actual prices set from the recipe editor. Cost is populated
+   * from the estimated cost/unit (used in Packing); sales is user-entered (used
+   * for the sales invoice). */
+  actualCostPrice: number;
+  actualSalesPrice: number;
   /** A production (recipe) BOM can be created for this product. */
   hasRecipe: boolean;
   /** A packing BOM can be created for this product. */

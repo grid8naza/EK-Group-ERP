@@ -9,7 +9,10 @@ import {
   Pencil,
   ArrowLeft,
   Cog,
+  Info,
+  Printer,
 } from 'lucide-react';
+import { printRecipe } from '@/lib/recipePrint';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
@@ -64,6 +67,19 @@ const to2 = (s: string) => {
   const n = Number(s);
   return s.trim() !== '' && Number.isFinite(n) ? n.toFixed(2) : s;
 };
+
+// Per-unit prices: values are rounded to 1 decimal but shown with 2 decimals
+// (e.g. 12.6 → "12.60"). `toPrice` normalises an editable string the same way.
+const round1 = (v: number) => Math.round(v * 10) / 10;
+const toPrice = (s: string) => {
+  const n = Number(s);
+  return s.trim() !== '' && Number.isFinite(n) ? round1(n).toFixed(2) : s;
+};
+const money1 = (v: number) =>
+  round1(v).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 const BLANK_LINE: Line = { itemId: '', quantity: '', unitId: '' };
 const BLANK_MANPOWER: ManpowerRow = { designationId: '', count: '1' };
@@ -155,6 +171,8 @@ export default function RecipeMasterEditorPage() {
   const [fuelCost, setFuelCost] = useState('0');
   const [overheadCost, setOverheadCost] = useState('0');
   const [bomMarginPct, setBomMarginPct] = useState('0');
+  // Actual sales price per yield unit — user-entered (feeds the sales invoice).
+  const [actualSalesPrice, setActualSalesPrice] = useState('0');
   const [saving, setSaving] = useState(false);
 
   // Overlay data-entry forms. The `*Seq` counters bump after each add so the
@@ -188,6 +206,7 @@ export default function RecipeMasterEditorPage() {
     setFuelCost(to2(String(product.fuelCost ?? 0)));
     setOverheadCost(to2(String(product.overheadCost ?? 0)));
     setBomMarginPct(to2(String(product.bomMarginPct ?? 0)));
+    setActualSalesPrice(toPrice(String(product.actualSalesPrice ?? 0)));
   }, [product]);
 
   // --- rate / amount (with unit conversion) ---
@@ -262,8 +281,19 @@ export default function RecipeMasterEditorPage() {
   const salesPrice = costPrice * (1 + num(bomMarginPct) / 100);
   const grossProfit = salesPrice - costPrice;
   const yQty = num(yieldQty) || 1;
+  // --- price per yield unit: Estimated vs Actual (all rounded to 1 decimal) ---
   const estCostPerUnit = costPrice / yQty;
   const estSalesPerUnit = salesPrice / yQty;
+  const estProfitPerUnit = estSalesPerUnit - estCostPerUnit;
+  // Actual cost/unit is populated from the estimated cost/unit (used in Packing).
+  const actualCostPerUnit = round1(estCostPerUnit);
+  // Actual profit = actual (entered) sales price − actual cost price.
+  const actualProfitPerUnit = num(actualSalesPrice) - actualCostPerUnit;
+  // Profit % = profit ÷ cost × 100 (estimated equals the applied margin).
+  const estProfitPct = estCostPerUnit ? (estProfitPerUnit / estCostPerUnit) * 100 : 0;
+  const actualProfitPct = actualCostPerUnit
+    ? (actualProfitPerUnit / actualCostPerUnit) * 100
+    : 0;
 
   // --- display resolvers ---
   const itemName = (idStr: string) => itemById.get(Number(idStr))?.name ?? '—';
@@ -286,6 +316,20 @@ export default function RecipeMasterEditorPage() {
           }`,
       )
       .join(', ') || `${workers}`;
+  };
+
+  // Total processing time across all steps, normalised to minutes and shown as
+  // a human-friendly "Xh Ym" (or "Y min" under an hour).
+  const totalProcMinutes = processes.reduce(
+    (s, p) => s + (p.timeUnit === 'HR' ? num(p.timeValue) * 60 : num(p.timeValue)),
+    0,
+  );
+  const fmtDuration = (mins: number) => {
+    const m = Math.round(mins);
+    if (m < 60) return `${m} min`;
+    const h = Math.floor(m / 60);
+    const r = m % 60;
+    return r ? `${h}h ${r}m` : `${h}h`;
   };
 
   // Per-process breakdown rows powering the hover tooltips on the two computed
@@ -433,6 +477,10 @@ export default function RecipeMasterEditorPage() {
       fuelCost: num(fuelCost),
       overheadCost: num(overheadCost),
       bomMarginPct: num(bomMarginPct),
+      // Per-unit actual prices (1 decimal). Cost is the estimated cost/unit;
+      // sales is the user-entered value.
+      actualCostPrice: actualCostPerUnit,
+      actualSalesPrice: round1(num(actualSalesPrice)),
     };
     setSaving(true);
     try {
@@ -444,6 +492,53 @@ export default function RecipeMasterEditorPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  // Print the recipe from the CURRENT on-screen state (so unsaved edits show).
+  const doPrint = () => {
+    if (!product) return;
+    printRecipe(
+      {
+        code: product.code,
+        name: product.name,
+        category: product.category ?? null,
+        group: product.group ?? null,
+        yieldQty: num(yieldQty) || 1,
+        unitId: product.unitId,
+        boxUnitId: product.boxUnitId,
+        recipe: recipe
+          .filter((l) => l.itemId && Number(l.quantity) > 0 && l.unitId)
+          .map((l) => ({
+            itemId: Number(l.itemId),
+            quantity: Number(l.quantity),
+            unitId: Number(l.unitId),
+          })),
+        processes: processes
+          .filter((p) => p.name.trim())
+          .map((p) => ({
+            name: p.name.trim(),
+            timeValue: num(p.timeValue),
+            timeUnit: p.timeUnit,
+            machineId: p.machineId ? Number(p.machineId) : null,
+            manpower: p.manpower
+              .filter((m) => m.designationId && Number(m.count) >= 1)
+              .map((m) => ({
+                designationId: Number(m.designationId),
+                workerCount: Number(m.count),
+              })),
+          })),
+        fuelCost: num(fuelCost),
+        overheadCost: num(overheadCost),
+        bomMarginPct: num(bomMarginPct),
+        actualSalesPrice: round1(num(actualSalesPrice)),
+      },
+      {
+        items: items ?? [],
+        units: units ?? [],
+        assets: assets ?? [],
+        designations: designations ?? [],
+      },
+    );
   };
 
   // Keep the latest save closure for the keyboard shortcut (avoids stale state).
@@ -492,6 +587,9 @@ export default function RecipeMasterEditorPage() {
           <div className="flex items-center gap-2">
             <button className="btn-secondary" onClick={() => router.push(ROUTE)}>
               <ArrowLeft className="h-4 w-4" /> Back
+            </button>
+            <button className="btn-secondary" onClick={doPrint}>
+              <Printer className="h-4 w-4" /> Print
             </button>
             {!view && (
               <>
@@ -690,6 +788,21 @@ export default function RecipeMasterEditorPage() {
                   ))
                 )}
               </tbody>
+              {processes.length > 0 && (
+                <tfoot>
+                  <tr className="border-t-2 border-slate-200 dark:border-slate-700">
+                    <td colSpan={2} className="py-2 text-right text-sm font-semibold">
+                      Total Processing Time
+                    </td>
+                    <td
+                      colSpan={view ? 3 : 4}
+                      className="py-2 px-1 text-sm font-bold tabular-nums text-slate-900 dark:text-white"
+                    >
+                      {fmtDuration(totalProcMinutes)}
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
             {machineList.length === 0 && !view && (
               <p className="mt-3 flex items-center gap-1 text-xs text-amber-600">
@@ -701,85 +814,195 @@ export default function RecipeMasterEditorPage() {
         </div>
 
         {/* Costing */}
-        <div className="card border-[#e7ddcb] bg-[#fbf9f4] p-4 dark:border-slate-800 dark:bg-slate-900">
-          <div className="-mx-4 -mt-4 mb-4 rounded-t-2xl bg-[#5b544c] px-4 py-2.5 dark:bg-slate-800">
-            <h2 className="text-sm font-semibold text-white">Costing</h2>
+        <div className="card rounded-3xl border-[#e7ddcb] bg-[#fbf9f4] p-4 dark:border-slate-800 dark:bg-slate-900">
+          <div className="-mx-4 -mt-4 mb-4 rounded-t-3xl bg-[#8a7d6c] px-4 py-2.5 dark:bg-slate-700">
+            <h2 className="text-center text-sm font-semibold uppercase tracking-wide text-white">
+              Costing
+            </h2>
           </div>
           <ReadOnlyFieldset readOnly={view}>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-              <div className="space-y-2">
-                <ReadField label="Material Cost (from recipe)" value={money(materialCost)} numeric />
-                <ReadField
-                  label="Equipment Cost (from process)"
-                  value={money(equipmentCost)}
-                  numeric
-                  tooltip={
-                    <CostBreakdown
-                      title="Equipment cost by process"
-                      rows={equipmentBreakdown}
-                      total={equipmentCost}
-                      empty="No machine assigned to any process."
-                    />
-                  }
-                />
-                <ReadField
-                  label="Manpower Cost (from process)"
-                  value={money(manpowerCost)}
-                  numeric
-                  tooltip={
-                    <CostBreakdown
-                      title="Manpower cost by process"
-                      rows={manpowerBreakdown}
-                      total={manpowerCost}
-                      empty="No manpower added to any process."
-                    />
-                  }
-                />
-                <Input
-                  label="Fuel Cost"
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={fuelCost}
-                  onChange={(e) => setFuelCost(e.target.value)}
-                  onBlur={() => setFuelCost((v) => to2(v))}
-                  className="text-right tabular-nums"
-                />
-                <Input
-                  label="Overheads"
-                  type="number"
-                  min={0}
-                  step="any"
-                  value={overheadCost}
-                  onChange={(e) => setOverheadCost(e.target.value)}
-                  onBlur={() => setOverheadCost((v) => to2(v))}
-                  className="text-right tabular-nums"
-                />
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div>
+                <table className="w-full border-collapse border border-slate-300 text-sm dark:border-slate-600">
+                  <colgroup>
+                    <col />
+                    <col className="w-44" />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th
+                        colSpan={2}
+                        className="border border-slate-300 bg-[#5b544c] px-3 py-2 text-center text-sm font-semibold text-white dark:border-slate-600 dark:bg-slate-800"
+                      >
+                        Price per {Number(yieldQty) || 1} {yieldUnitCode || 'unit'}
+                      </th>
+                    </tr>
+                    <tr className="bg-[#f3ece0] dark:bg-slate-800/60">
+                      <th className="border border-slate-200 px-3 py-1.5 text-left font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-100">
+                        Description
+                      </th>
+                      <th className="border border-slate-200 px-3 py-1.5 text-right font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-100">
+                        Amount
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <CostLabelRow label="Material Cost (from recipe)">
+                      {money(materialCost)}
+                    </CostLabelRow>
+                    <CostLabelRow
+                      label="Equipment Cost (from process)"
+                      tip={
+                        <CostBreakdown
+                          title="Equipment cost by process"
+                          rows={equipmentBreakdown}
+                          total={equipmentCost}
+                          empty="No machine assigned to any process."
+                        />
+                      }
+                    >
+                      {money(equipmentCost)}
+                    </CostLabelRow>
+                    <CostLabelRow
+                      label="Manpower Cost (from process)"
+                      tip={
+                        <CostBreakdown
+                          title="Manpower cost by process"
+                          rows={manpowerBreakdown}
+                          total={manpowerCost}
+                          empty="No manpower added to any process."
+                        />
+                      }
+                    >
+                      {money(manpowerCost)}
+                    </CostLabelRow>
+                    <CostInputRow label="Fuel Cost">
+                      <input
+                        className="cell-input no-spinner text-right tabular-nums"
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={fuelCost}
+                        onChange={(e) => setFuelCost(e.target.value)}
+                        onBlur={() => setFuelCost((v) => to2(v))}
+                      />
+                    </CostInputRow>
+                    <CostInputRow label="Overheads">
+                      <input
+                        className="cell-input no-spinner text-right tabular-nums"
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={overheadCost}
+                        onChange={(e) => setOverheadCost(e.target.value)}
+                        onBlur={() => setOverheadCost((v) => to2(v))}
+                      />
+                    </CostInputRow>
+                    <CostLabelRow label="Cost Price" strong>
+                      {money(costPrice)}
+                    </CostLabelRow>
+                    <CostInputRow label="Profit Margin %">
+                      <input
+                        className="cell-input no-spinner text-right tabular-nums"
+                        type="number"
+                        step="any"
+                        value={bomMarginPct}
+                        onChange={(e) => setBomMarginPct(e.target.value)}
+                        onBlur={() => setBomMarginPct((v) => to2(v))}
+                      />
+                    </CostInputRow>
+                    <CostLabelRow label="Sales Price" strong>
+                      {money(salesPrice)}
+                    </CostLabelRow>
+                    <CostLabelRow label="Gross Profit" stronger>
+                      {money(grossProfit)}
+                    </CostLabelRow>
+                  </tbody>
+                </table>
               </div>
-              <div className="space-y-2">
-                <Input
-                  label="Profit Margin %"
-                  type="number"
-                  step="any"
-                  value={bomMarginPct}
-                  onChange={(e) => setBomMarginPct(e.target.value)}
-                  onBlur={() => setBomMarginPct((v) => to2(v))}
-                  className="text-right tabular-nums"
-                />
-                <ReadField label="Cost Price" value={money(costPrice)} numeric />
-                <ReadField label="Sales Price" value={money(salesPrice)} numeric />
-                <ReadField label="Gross Profit" value={money(grossProfit)} numeric />
-              </div>
-              <div className="rounded-lg border border-[#e7ddcb] bg-[#faf6ee] p-3 dark:border-slate-800 dark:bg-slate-900/50">
-                <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-[#6d6258] dark:text-slate-400">
-                  Price per {yieldUnitCode || 'unit'}
-                </p>
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                  <PerUnit label="Est. Cost Price" value={estCostPerUnit} />
-                  <PerUnit label="Est. Sales Price" value={estSalesPerUnit} />
-                  <PerUnit label="Cost Price" value={product.costPrice ?? 0} />
-                  <PerUnit label="Sales Price" value={product.retailPrice ?? 0} />
-                </div>
+              <div className="self-start">
+                <table className="w-full border-collapse border border-slate-300 text-sm dark:border-slate-600">
+                  <colgroup>
+                    <col />
+                    <col className="w-28" />
+                    <col className="w-28" />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th
+                        colSpan={3}
+                        className="border border-slate-300 bg-[#5b544c] px-3 py-2 text-center text-sm font-semibold text-white dark:border-slate-600 dark:bg-slate-800"
+                      >
+                        Price per 1 {yieldUnitCode || 'unit'}
+                      </th>
+                    </tr>
+                    <tr className="bg-[#f3ece0] dark:bg-slate-800/60">
+                      <th className="border border-slate-200 px-3 py-1.5 text-left font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-100">
+                        Description
+                      </th>
+                      <th className="border border-slate-200 px-3 py-1.5 text-center font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-100">
+                        Estimated
+                      </th>
+                      <th className="border border-slate-200 px-3 py-1.5 text-center font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-100">
+                        Actual
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td className="border border-slate-200 px-3 py-2 text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                        Sales Price
+                      </td>
+                      <td className="border border-slate-200 px-3 py-2 text-right tabular-nums text-slate-800 dark:border-slate-700 dark:text-slate-100">
+                        {money1(estSalesPerUnit)}
+                      </td>
+                      <td className="border border-slate-200 p-0 dark:border-slate-700">
+                        <input
+                          className="cell-input no-spinner text-right tabular-nums"
+                          type="number"
+                          min={0}
+                          step="any"
+                          value={actualSalesPrice}
+                          onChange={(e) => setActualSalesPrice(e.target.value)}
+                          onBlur={() => setActualSalesPrice((v) => toPrice(v))}
+                        />
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="border border-slate-200 px-3 py-2 text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                        Cost Price
+                      </td>
+                      <td className="border border-slate-200 px-3 py-2 text-right tabular-nums text-slate-800 dark:border-slate-700 dark:text-slate-100">
+                        {money1(estCostPerUnit)}
+                      </td>
+                      <td className="border border-slate-200 px-3 py-2 text-right tabular-nums text-slate-800 dark:border-slate-700 dark:text-slate-100">
+                        {money1(actualCostPerUnit)}
+                      </td>
+                    </tr>
+                    <tr className="bg-[#f3ece0] dark:bg-slate-800/60">
+                      <td className="border border-slate-200 px-3 py-2 font-semibold text-slate-800 dark:border-slate-700 dark:text-slate-100">
+                        Profit
+                      </td>
+                      <td className="border border-slate-200 px-3 py-2 text-right font-bold tabular-nums text-slate-900 dark:border-slate-700 dark:text-white">
+                        {money1(estProfitPerUnit)}
+                      </td>
+                      <td className="border border-slate-200 px-3 py-2 text-right font-bold tabular-nums text-slate-900 dark:border-slate-700 dark:text-white">
+                        {money1(actualProfitPerUnit)}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="border border-slate-200 px-3 py-2 text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                        Profit Percentage
+                      </td>
+                      <td className="border border-slate-200 px-3 py-2 text-right tabular-nums text-slate-800 dark:border-slate-700 dark:text-slate-100">
+                        {money1(estProfitPct)}%
+                      </td>
+                      <td className="border border-slate-200 px-3 py-2 text-right tabular-nums text-slate-800 dark:border-slate-700 dark:text-slate-100">
+                        {money1(actualProfitPct)}%
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
           </ReadOnlyFieldset>
@@ -1087,7 +1310,10 @@ function SectionHeader({
     <div className="-mx-4 -mt-4 mb-3 flex items-center justify-between rounded-t-2xl bg-[#5b544c] px-4 py-2.5 dark:bg-slate-800">
       <h2 className="text-sm font-semibold text-white">{title}</h2>
       {onAdd && (
-        <button className="btn-secondary text-xs" onClick={onAdd}>
+        <button
+          className="btn-secondary border-[#8a7d6c] bg-[#8a7d6c] text-xs text-white hover:bg-[#7c6f5e]"
+          onClick={onAdd}
+        >
           <Plus className="h-3.5 w-3.5" /> {addLabel}
           {shortcut && <Kbd>{shortcut}</Kbd>}
         </button>
@@ -1169,6 +1395,86 @@ function ReadField({
   );
 }
 
+/** A costing table row: a label (optionally with a hover breakdown) and a value.
+ * `strong` styles it as a subtotal/total (top rule + bold). */
+function CostLabelRow({
+  label,
+  tip,
+  strong,
+  stronger,
+  children,
+}: {
+  label: string;
+  tip?: React.ReactNode;
+  strong?: boolean;
+  /** A deeper fill than `strong`, to make a headline total (e.g. Gross Profit)
+   * stand out from the subtotal rows. Implies `strong`. */
+  stronger?: boolean;
+  children: React.ReactNode;
+}) {
+  strong = strong || stronger;
+  return (
+    <tr
+      className={
+        stronger
+          ? 'bg-[#e2d0ad] dark:bg-slate-700/70'
+          : strong
+            ? 'bg-[#f3ece0] dark:bg-slate-800/60'
+            : ''
+      }
+    >
+      <td
+        className={`border border-slate-200 px-3 py-2 dark:border-slate-700 ${
+          strong
+            ? 'font-semibold text-slate-800 dark:text-slate-100'
+            : 'text-slate-600 dark:text-slate-300'
+        }`}
+      >
+        {tip ? (
+          <div className="group relative inline-flex cursor-help items-center gap-1">
+            <span>{label}</span>
+            <Info className="h-3.5 w-3.5 text-slate-400" />
+            <div className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-max max-w-md rounded-lg border border-slate-200 bg-white p-3 text-left font-normal shadow-xl group-hover:block dark:border-slate-700 dark:bg-slate-800">
+              {tip}
+            </div>
+          </div>
+        ) : (
+          label
+        )}
+      </td>
+      <td
+        className={`border border-slate-200 px-3 py-2 text-right tabular-nums dark:border-slate-700 ${
+          strong
+            ? 'font-bold text-slate-900 dark:text-white'
+            : 'text-slate-800 dark:text-slate-100'
+        }`}
+      >
+        {children}
+      </td>
+    </tr>
+  );
+}
+
+/** A costing table row whose value cell holds an editable input. */
+function CostInputRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <tr>
+      <td className="border border-slate-200 px-3 py-2 text-slate-600 dark:border-slate-700 dark:text-slate-300">
+        {label}
+      </td>
+      <td className="border border-slate-200 p-0 dark:border-slate-700">
+        {children}
+      </td>
+    </tr>
+  );
+}
+
 /** A small "process → amount" table used inside a ReadField hover tooltip. */
 function CostBreakdown({
   title,
@@ -1218,15 +1524,3 @@ function CostBreakdown({
   );
 }
 
-function PerUnit({ label, value }: { label: string; value: number }) {
-  return (
-    <div>
-      <span className="block text-xs text-slate-500 dark:text-slate-400">
-        {label}
-      </span>
-      <span className="font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-        {money(value)}
-      </span>
-    </div>
-  );
-}

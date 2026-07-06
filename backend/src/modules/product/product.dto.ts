@@ -246,6 +246,18 @@ export class CreateProductDto {
   @IsOptional()
   @IsNumber()
   bomMarginPct?: number;
+
+  /** Actual cost price per yield unit (populated from the estimated cost/unit). */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  actualCostPrice?: number;
+
+  /** Actual sales price per yield unit (user-entered; for the sales invoice). */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  actualSalesPrice?: number;
 }
 
 export class UpdateProductDto {
@@ -411,4 +423,16 @@ export class UpdateProductDto {
   @IsOptional()
   @IsNumber()
   bomMarginPct?: number;
+
+  /** Actual cost price per yield unit (populated from the estimated cost/unit). */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  actualCostPrice?: number;
+
+  /** Actual sales price per yield unit (user-entered; for the sales invoice). */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  actualSalesPrice?: number;
 }

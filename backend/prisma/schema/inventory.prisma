@@ -290,6 +290,11 @@ model Product {
   fuelCost     Float    @default(0)
   overheadCost Float    @default(0)
   bomMarginPct Float    @default(0) // profit margin % applied to the total cost
+  // Per-yield-unit "actual" prices set from the recipe editor. Actual cost price
+  // is populated from the estimated cost/unit (used later in Packing); actual
+  // sales price is entered by the user (used later for the sales invoice).
+  actualCostPrice  Float @default(0)
+  actualSalesPrice Float @default(0)
   // Capability flags: which BOMs may be created for this product, and whether
   // it can itself be an ingredient in another product's recipe.
   hasRecipe    Boolean  @default(false) // a production (recipe) BOM can be created
