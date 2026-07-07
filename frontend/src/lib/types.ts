@@ -418,6 +418,8 @@ export interface SubMenu {
 export interface UserGroup {
   id: number;
   name: string;
+  /** Owning company (user groups are company-scoped). */
+  companyId?: number;
   description?: string | null;
   isLocked?: boolean;
   /** Modules this group can manage (many-to-many). */

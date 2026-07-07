@@ -172,7 +172,28 @@ export default function WorkflowsPage() {
   const { data: modules } = useFetch<Module[]>('/modules');
   const { data: companies } = useFetch<Company[]>('/companies');
   const { data: branches } = useFetch<Branch[]>('/branches');
-  const { data: userGroups } = useFetch<UserGroup[]>('/user-groups');
+  // User groups are company-scoped, so fetch every company's groups (tagged with
+  // their company) — a cross-company step can then offer the acting company's
+  // groups, not just the definition company's.
+  const [userGroups, setUserGroups] = useState<UserGroup[]>([]);
+  useEffect(() => {
+    const list = companies ?? [];
+    if (list.length === 0) return;
+    let cancelled = false;
+    Promise.all(
+      list.map((c) =>
+        api
+          .get<UserGroup[]>(`/user-groups?companyId=${c.id}`)
+          .then((gs) => gs.map((g) => ({ ...g, companyId: c.id })))
+          .catch(() => [] as UserGroup[]),
+      ),
+    ).then((lists) => {
+      if (!cancelled) setUserGroups(lists.flat());
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [companies]);
   const { data: users } = useFetch<User[]>('/users');
   // The objects endpoint is paginated; pull every FORM object in one page and
   // filter to the chosen module client-side.
@@ -727,17 +748,13 @@ function StepCard({
     .map((b) => ({ value: b.id, label: b.name }));
 
   // Approvers come from the company this step acts in (carried forward from the
-  // previous step's routing): only that company's users, further narrowed to the
-  // selected user group's members.
-  const groupUsers = users
-    .filter(
-      (u) => !stepCompanyId || (u.companyIds ?? []).includes(stepCompanyId),
-    )
-    .filter(
-      (u) =>
-        !step.userGroupId ||
-        (u.groupIds ?? []).includes(Number(step.userGroupId)),
-    );
+  // previous step's routing). With a group chosen, list that group's members
+  // (membership is company-scoped); otherwise all users of the acting company.
+  const groupUsers = step.userGroupId
+    ? users.filter((u) => (u.groupIds ?? []).includes(Number(step.userGroupId)))
+    : users.filter(
+        (u) => !stepCompanyId || (u.companyIds ?? []).includes(stepCompanyId),
+      );
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
@@ -796,7 +813,14 @@ function StepCard({
             onChange({ userGroupId: e.target.value, userIds: [] })
           }
           placeholder="— None —"
-          options={userGroups.map((g) => ({ value: g.id, label: g.name }))}
+          options={userGroups
+            .filter(
+              (g) =>
+                !stepCompanyId ||
+                g.companyId === stepCompanyId ||
+                String(g.id) === step.userGroupId,
+            )
+            .map((g) => ({ value: g.id, label: g.name }))}
         />
         <UserMultiSelect
           label="Users"
