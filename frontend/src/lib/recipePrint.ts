@@ -89,7 +89,10 @@ export function buildRecipeHtml(
     proc.timeUnit === 'HR' ? proc.timeValue : proc.timeValue / 60;
 
   const itemName = (id: number) => itemById.get(id)?.name ?? `#${id}`;
-  const unitCode = (id?: number | null) => unitById.get(Number(id))?.code ?? '';
+  const unitCode = (id?: number | null) => {
+    const u = unitById.get(Number(id));
+    return u?.symbol ?? u?.code ?? '';
+  };
   const machineName = (id?: number | null) =>
     id ? (assetById.get(id)?.name ?? `#${id}`) : '—';
   const designationName = (id: number) => desigById.get(id)?.name ?? `#${id}`;

@@ -139,7 +139,7 @@ export default function AssetsPage() {
   const companyNameById = new Map(companyList.map((c) => [c.id, c.name]));
   // Resolve unit code/name from the /units fetch — the asset API returns unit
   // ids only, not nested unit objects.
-  const unitCodeById = new Map(unitList.map((u) => [u.id, u.code]));
+  const unitCodeById = new Map(unitList.map((u) => [u.id, u.symbol ?? u.code]));
   // Assets attach to LEAF asset groups only (no sub-groups) within the chosen
   // category — exactly like Item/Product master.
   const groupOptions = (groups ?? []).filter(

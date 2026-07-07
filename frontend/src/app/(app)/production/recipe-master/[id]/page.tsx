@@ -316,8 +316,10 @@ export default function RecipeMasterEditorPage() {
 
   // --- display resolvers ---
   const itemName = (idStr: string) => itemById.get(Number(idStr))?.name ?? '—';
-  const unitCode = (unitId?: number | string | null) =>
-    unitById.get(Number(unitId))?.code ?? '';
+  const unitCode = (unitId?: number | string | null) => {
+    const u = unitById.get(Number(unitId));
+    return u?.symbol ?? u?.code ?? '';
+  };
   const machineName = (idStr: string) =>
     idStr ? (assetById.get(Number(idStr))?.name ?? `#${idStr}`) : '—';
   const designationName = (idStr: string) =>

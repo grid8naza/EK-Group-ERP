@@ -52,7 +52,7 @@ export default function ItemsReportPage() {
     () => [
       { key: 'code', header: 'Code', weight: 9, cell: (i) => i.code },
       { key: 'name', header: 'Item', weight: 26, bold: true, cell: (i) => i.name },
-      { key: 'unit', header: 'Unit', weight: 7, cell: (i) => i.unit?.code ?? '-' },
+      { key: 'unit', header: 'Unit', weight: 7, cell: (i) => i.unit?.symbol ?? i.unit?.code ?? '-' },
       {
         key: 'lastPrice',
         header: 'Last Price',

@@ -164,7 +164,7 @@ export default function RecipeMasterPage() {
       key: 'productQty',
       header: 'Product Qty',
       accessor: (r) =>
-        `${(r.yieldQty ?? 1).toLocaleString()} ${r.unit?.code ?? ''}`.trim(),
+        `${(r.yieldQty ?? 1).toLocaleString()} ${r.unit?.symbol ?? r.unit?.code ?? ''}`.trim(),
     },
     {
       key: 'recipe',

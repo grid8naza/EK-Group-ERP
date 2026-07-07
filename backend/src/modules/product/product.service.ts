@@ -36,16 +36,16 @@ interface UploadedFile {
 const withRelations = {
   category: { select: { id: true, code: true, name: true } },
   group: { select: { id: true, code: true, name: true } },
-  unit: { select: { id: true, code: true, name: true } },
-  boxUnit: { select: { id: true, code: true, name: true } },
-  yieldUnit: { select: { id: true, code: true, name: true } },
+  unit: { select: { id: true, code: true, name: true, symbol: true } },
+  boxUnit: { select: { id: true, code: true, name: true, symbol: true } },
+  yieldUnit: { select: { id: true, code: true, name: true, symbol: true } },
   hsnCode: { select: { id: true, code: true, description: true } },
   companies: { select: { companyId: true } },
   bomLines: {
     orderBy: { sequence: 'asc' },
     include: {
       item: { select: { id: true, code: true, name: true } },
-      unit: { select: { id: true, code: true, name: true } },
+      unit: { select: { id: true, code: true, name: true, symbol: true } },
     },
   },
   processes: {

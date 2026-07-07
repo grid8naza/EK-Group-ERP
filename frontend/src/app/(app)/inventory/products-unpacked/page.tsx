@@ -423,7 +423,7 @@ export default function ProductsPage() {
         </span>
       ),
     },
-    { key: 'unit', header: 'Unit', accessor: (r) => r.unit?.code ?? '-' },
+    { key: 'unit', header: 'Unit', accessor: (r) => r.unit?.symbol ?? r.unit?.code ?? '-' },
     {
       key: 'intercompanyPrice',
       header: 'Inter-Co',

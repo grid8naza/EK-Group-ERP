@@ -522,7 +522,7 @@ export interface UnitChainLink {
   sequence: number;
   quantity: number;
   linkUnitId: number;
-  linkUnit?: { id: number; code: string; name: string } | null;
+  linkUnit?: { id: number; code: string; name: string; symbol?: string | null } | null;
 }
 
 export interface Unit {
@@ -537,7 +537,7 @@ export interface Unit {
    * (product of all rung quantities).
    */
   baseUnitId?: number | null;
-  baseUnit?: { id: number; code: string; name: string } | null;
+  baseUnit?: { id: number; code: string; name: string; symbol?: string | null } | null;
   conversionFactor?: number | null;
   /** CHAINING only: the ordered ladder of rungs. */
   chainLinks?: UnitChainLink[];
@@ -637,6 +637,7 @@ interface MasterRef {
   id: number;
   code: string;
   name: string;
+  symbol?: string | null;
 }
 
 export interface Item {

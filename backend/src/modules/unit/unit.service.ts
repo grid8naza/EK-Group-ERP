@@ -12,10 +12,12 @@ import { CreateUnitDto, ChainLinkInput, UpdateUnitDto } from './unit.dto';
 // Shared shape: the base unit summary plus the resolved chaining ladder (rungs
 // ordered top → bottom, each with its referenced unit's summary).
 const UNIT_INCLUDE = {
-  baseUnit: { select: { id: true, code: true, name: true } },
+  baseUnit: { select: { id: true, code: true, name: true, symbol: true } },
   chainLinks: {
     orderBy: { sequence: 'asc' },
-    include: { linkUnit: { select: { id: true, code: true, name: true } } },
+    include: {
+      linkUnit: { select: { id: true, code: true, name: true, symbol: true } },
+    },
   },
 } satisfies Prisma.UnitInclude;
 

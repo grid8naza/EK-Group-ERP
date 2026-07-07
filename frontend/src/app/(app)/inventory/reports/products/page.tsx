@@ -65,7 +65,7 @@ export default function ProductsReportPage() {
         numeric: true,
         cell: (p) => money(p.costPrice ?? 0),
       },
-      { key: 'unit', header: 'Unit', weight: 7, cell: (p) => p.unit?.code ?? '-' },
+      { key: 'unit', header: 'Unit', weight: 7, cell: (p) => p.unit?.symbol ?? p.unit?.code ?? '-' },
       {
         key: 'intercoPrice',
         header: 'Intercompany Price',
@@ -131,7 +131,7 @@ export default function ProductsReportPage() {
         key: 'boxUnit',
         header: 'Box Unit',
         weight: 8,
-        cell: (p) => p.boxUnit?.code ?? '-',
+        cell: (p) => p.boxUnit?.symbol ?? p.boxUnit?.code ?? '-',
       },
       {
         key: 'status',

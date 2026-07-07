@@ -32,6 +32,11 @@ const empty = {
   isActive: true,
 };
 
+// A unit is shown by its symbol (falling back to code only when a unit has no
+// symbol); unit codes are never surfaced in the UI.
+const uLabel = (u?: { symbol?: string | null; code?: string | null } | null) =>
+  u?.symbol ?? u?.code ?? '';
+
 export default function UnitsPage() {
   const { can } = useAuth();
   const toast = useToast();
@@ -277,7 +282,7 @@ export default function UnitsPage() {
       render: (r) =>
         (r.type === 'COMPOUND' || r.type === 'CHAINING') && r.baseUnit ? (
           <span className="text-slate-600 dark:text-slate-300">
-            1 {r.code} = {r.conversionFactor} {r.baseUnit.code}
+            1 {uLabel(r)} = {r.conversionFactor} {uLabel(r.baseUnit)}
           </span>
         ) : (
           <span className="text-slate-400">-</span>
@@ -428,8 +433,9 @@ export default function UnitsPage() {
                 />
                 <p className="text-xs text-slate-500 dark:text-slate-400 sm:col-span-2">
                   1 {form.name || 'unit'} = {form.conversionFactor || '…'}{' '}
-                  {simpleUnits.find((u) => String(u.id) === form.baseUnitId)
-                    ?.code || 'base unit'}
+                  {uLabel(
+                    simpleUnits.find((u) => String(u.id) === form.baseUnitId),
+                  ) || 'base unit'}
                 </p>
               </>
             )}
@@ -465,10 +471,13 @@ export default function UnitsPage() {
                       const above =
                         i === 0
                           ? form.name || 'unit'
-                          : linkUnits.find(
-                              (u) =>
-                                String(u.id) === form.chainLinks[i - 1].unitId,
-                            )?.code || 'level above';
+                          : uLabel(
+                              linkUnits.find(
+                                (u) =>
+                                  String(u.id) ===
+                                  form.chainLinks[i - 1].unitId,
+                              ),
+                            ) || 'level above';
                       return (
                         <div key={i} className="flex items-end gap-2">
                           <span className="pb-2 text-xs text-slate-500 dark:text-slate-400">
@@ -516,7 +525,7 @@ export default function UnitsPage() {
                 {form.chainLinks.length > 0 && (
                   <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
                     1 {form.name || 'unit'} = {chainFactor || '…'}{' '}
-                    {chainBase?.code || 'base unit'}
+                    {uLabel(chainBase) || 'base unit'}
                   </p>
                 )}
               </div>

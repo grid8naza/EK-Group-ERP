@@ -315,12 +315,18 @@ export default function ItemsPage() {
         </span>
       ),
     },
-    { key: 'unit', header: 'Unit', accessor: (r) => r.unit?.code ?? '-' },
+    {
+      key: 'unit',
+      header: 'Unit',
+      accessor: (r) => r.unit?.symbol ?? r.unit?.code ?? '-',
+    },
     {
       key: 'lastPurchasePrice',
       header: 'Last Purchase Price',
       accessor: (r) => (r.lastPurchasePrice ?? 0).toLocaleString(),
       sortAccessor: (r) => r.lastPurchasePrice ?? 0,
+      className: 'text-right tabular-nums',
+      headerClassName: 'text-right',
     },
     {
       key: 'lastPurchaseDate',
@@ -330,6 +336,8 @@ export default function ItemsPage() {
           ? new Date(r.lastPurchaseDate).toLocaleDateString()
           : '-',
       sortAccessor: (r) => r.lastPurchaseDate ?? '',
+      className: 'text-center',
+      headerClassName: 'text-center',
     },
     { key: 'hsn', header: 'HSN', accessor: (r) => r.hsnCode?.code ?? '-' },
     {
@@ -337,6 +345,8 @@ export default function ItemsPage() {
       header: 'Reorder',
       accessor: (r) => (r.reorderLevel ?? 0).toLocaleString(),
       sortAccessor: (r) => r.reorderLevel ?? 0,
+      className: 'text-right tabular-nums',
+      headerClassName: 'text-right',
     },
     {
       key: 'availability',

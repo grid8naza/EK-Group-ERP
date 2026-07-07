@@ -64,7 +64,7 @@ export default function AssetListReportPage() {
   // Capacity unit code lookup (the capacity's unit is a Unit-master id).
   const unitCodeById = useMemo(() => {
     const m = new Map<number, string>();
-    for (const u of units ?? []) m.set(u.id, u.code);
+    for (const u of units ?? []) m.set(u.id, u.symbol ?? u.code);
     return m;
   }, [units]);
 
