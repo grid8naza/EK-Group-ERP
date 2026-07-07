@@ -617,9 +617,24 @@ export default function RecipeMasterEditorPage() {
         {/* Header — identity + yield. Frozen at the top of the scroll area with a
             distinct tan tint + shadow so it stays recognisable while scrolling. */}
         <div className="card sticky top-0 z-20 grid grid-cols-2 gap-4 border-[#d8c6a3] bg-[#f3e8d3] p-4 shadow-md dark:border-slate-700 dark:bg-slate-800 sm:grid-cols-4">
-          <ReadField label="Category" value={product.category?.name ?? '-'} bold />
-          <ReadField label="Group" value={product.group?.name ?? '-'} bold />
-          <ReadField label="Product" value={product.name} bold />
+          <ReadField
+            label="Category"
+            value={product.category?.name ?? '-'}
+            bold
+            valueClassName="!text-red-800 dark:!text-red-400"
+          />
+          <ReadField
+            label="Group"
+            value={product.group?.name ?? '-'}
+            bold
+            valueClassName="!text-red-800 dark:!text-red-400"
+          />
+          <ReadField
+            label="Product"
+            value={product.name}
+            bold
+            valueClassName="!text-red-800 dark:!text-red-400"
+          />
           <div className="flex items-end gap-2">
             <div className="min-w-0 flex-1">
               <ReadOnlyFieldset readOnly={view}>
@@ -632,7 +647,7 @@ export default function RecipeMasterEditorPage() {
                   onChange={(e) => setYieldQty(e.target.value)}
                   onBlur={() => setYieldQty((v) => to2(v))}
                   wrapClassName="w-full"
-                  className="text-right font-semibold tabular-nums"
+                  className="text-right font-semibold tabular-nums text-red-800 dark:text-red-400"
                 />
               </ReadOnlyFieldset>
             </div>
@@ -1366,6 +1381,7 @@ function ReadField({
   numeric,
   bold,
   tooltip,
+  valueClassName,
 }: {
   label: string;
   value: string;
@@ -1373,6 +1389,8 @@ function ReadField({
   bold?: boolean;
   /** Optional hover popover (e.g. a cost breakdown) shown below the field. */
   tooltip?: React.ReactNode;
+  /** Extra classes for the value box (e.g. a custom text colour). */
+  valueClassName?: string;
 }) {
   return (
     <div className="group relative">
@@ -1382,7 +1400,7 @@ function ReadField({
           numeric ? 'text-right tabular-nums' : ''
         } ${bold ? 'font-semibold text-slate-900 dark:text-white' : ''} ${
           tooltip ? 'cursor-help' : ''
-        }`}
+        } ${valueClassName ?? ''}`}
       >
         {value}
       </div>
