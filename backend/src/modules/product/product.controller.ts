@@ -105,7 +105,9 @@ export class ProductController {
     return this.service.remove(companyId, id);
   }
 
-  @UseGuards(LockPrivilegeGuard('/inventory/products'))
+  @UseGuards(
+    LockPrivilegeGuard(['/inventory/products-unpacked', '/inventory/products-packed']),
+  )
   @Patch(':id/lock')
   setLock(
     @CompanyId() companyId: number | undefined,

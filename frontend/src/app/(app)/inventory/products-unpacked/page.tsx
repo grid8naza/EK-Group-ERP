@@ -19,7 +19,7 @@ import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import type { Product, Group, Unit, HsnCode, Company } from '@/lib/types';
 
-const ROUTE = '/inventory/products';
+const ROUTE = '/inventory/products-unpacked';
 
 const empty = {
   code: '',
@@ -29,7 +29,8 @@ const empty = {
   categoryId: '',
   groupId: '',
   unitId: '',
-  unpacked: false,
+  // Unpacked screen: every product here is unpacked and never packed.
+  unpacked: true,
   packed: false,
   canSell: true,
   costPrice: '0',
@@ -43,7 +44,8 @@ const empty = {
   boxUnitId: '',
   hsnCodeId: '',
   shelfLife: '0',
-  hasRecipe: false,
+  // Unpacked products are always made from a recipe and never packed here.
+  hasRecipe: true,
   hasPacking: false,
   isIngredient: false,
   allCompanies: true,
@@ -118,7 +120,6 @@ export default function ProductsPage() {
   };
   const [primaryFilter, setPrimaryFilter] = useState('');
   const [parentFilter, setParentFilter] = useState('');
-  const [formFactor, setFormFactor] = useState(''); // '' | 'packed' | 'unpacked'
   const [sellFilter, setSellFilter] = useState(''); // '' | 'yes' | 'no'
   const [status, setStatus] = useState(''); // '' | 'active' | 'inactive'
   const codeRef = useRef<HTMLInputElement>(null);
@@ -204,8 +205,9 @@ export default function ProductsPage() {
     categoryId: p.categoryId != null ? String(p.categoryId) : '',
     groupId: p.groupId != null ? String(p.groupId) : '',
     unitId: String(p.unitId),
-    unpacked: p.unpacked ?? false,
-    packed: p.packed ?? false,
+    // Forced invariants for the Unpacked screen (see `empty`).
+    unpacked: true,
+    packed: false,
     canSell: p.canSell ?? true,
     costPrice: String(p.costPrice ?? 0),
     wholesalePrice: String(p.wholesalePrice ?? 0),
@@ -224,8 +226,8 @@ export default function ProductsPage() {
     boxUnitId: p.boxUnitId != null ? String(p.boxUnitId) : '',
     hsnCodeId: p.hsnCodeId != null ? String(p.hsnCodeId) : '',
     shelfLife: String(p.shelfLife ?? 0),
-    hasRecipe: p.hasRecipe ?? false,
-    hasPacking: p.hasPacking ?? false,
+    hasRecipe: true,
+    hasPacking: false,
     isIngredient: p.isIngredient ?? false,
     allCompanies: p.allCompanies,
     companyIds: p.companyIds ?? [],
@@ -398,14 +400,14 @@ export default function ProductsPage() {
       // match the product's own leaf group.
       rows = rows.filter((r) => String(r.groupId ?? '') === parentFilter);
     }
-    if (formFactor === 'packed') rows = rows.filter((r) => r.packed);
-    else if (formFactor === 'unpacked') rows = rows.filter((r) => r.unpacked);
+    // This screen lists unpacked products only.
+    rows = rows.filter((r) => r.unpacked);
     if (sellFilter === 'yes') rows = rows.filter((r) => r.canSell);
     else if (sellFilter === 'no') rows = rows.filter((r) => !r.canSell);
     if (status === 'active') rows = rows.filter((r) => r.isActive);
     else if (status === 'inactive') rows = rows.filter((r) => !r.isActive);
     return rows.sort((a, b) => a.code.localeCompare(b.code));
-  }, [data, formFactor, sellFilter, status, primaryFilter, parentFilter, groups, groupById]);
+  }, [data, sellFilter, status, primaryFilter, parentFilter, groups, groupById]);
 
   const columns: Column<Product>[] = [
     { key: 'code', header: 'Code', accessor: (r) => r.code },
@@ -416,22 +418,9 @@ export default function ProductsPage() {
       header: 'Product',
       sortAccessor: (r) => r.name,
       render: (r) => (
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-9 w-9 flex-none items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50">
-            {r.imageUrl ? (
-              <img
-                src={mediaUrl(r.imageUrl)}
-                alt=""
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <ImageIcon className="h-4 w-4 text-slate-300" />
-            )}
-          </span>
-          <span className="font-medium text-slate-800 dark:text-slate-100">
-            {r.name}
-          </span>
-        </div>
+        <span className="font-medium text-slate-800 dark:text-slate-100">
+          {r.name}
+        </span>
       ),
     },
     { key: 'unit', header: 'Unit', accessor: (r) => r.unit?.code ?? '-' },
@@ -471,7 +460,7 @@ export default function ProductsPage() {
   return (
     <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
-        title="Product Master"
+        title="Products - Unpacked"
         description="Finished products — recipe & packing are set under Production → Recipe Master"
         icon={<PackageOpen className="h-5 w-5" />}
         actions={
@@ -490,7 +479,7 @@ export default function ProductsPage() {
         columns={columns}
         rows={visibleRows}
         defaultSort={{ key: 'code', dir: 'asc' }}
-        key={`${primaryFilter}|${parentFilter}|${formFactor}|${sellFilter}|${status}`}
+        key={`${primaryFilter}|${parentFilter}|${sellFilter}|${status}`}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
@@ -525,16 +514,6 @@ export default function ProductsPage() {
                       g.code.startsWith(primaryGroupCode.slice(0, 4))),
                 )
                 .map((g) => ({ value: String(g.id), label: g.name }))}
-            />
-            <Select
-              value={formFactor}
-              onChange={(e) => setFormFactor(e.target.value)}
-              wrapClassName="w-36"
-              placeholder="Packed / Unpacked"
-              options={[
-                { value: 'packed', label: 'Packed' },
-                { value: 'unpacked', label: 'Unpacked' },
-              ]}
             />
             <Select
               value={sellFilter}
@@ -743,21 +722,9 @@ export default function ProductsPage() {
               }
             />
 
-            {/* Form factor — unpacked and/or packed. */}
-            <div className="flex items-center gap-8 sm:col-span-2">
-              <Checkbox
-                label="Unpacked"
-                checked={form.unpacked}
-                onChange={(e) =>
-                  setForm({ ...form, unpacked: e.target.checked })
-                }
-              />
-              <Checkbox
-                label="Packed"
-                checked={form.packed}
-                onChange={(e) => setForm({ ...form, packed: e.target.checked })}
-              />
-            </div>
+            {/* Form factor is fixed on the Unpacked screen (always unpacked,
+                never packed), so the toggles are hidden and forced — see
+                `empty` / `formFrom`. */}
 
             {/* Can Sell — gates the selling prices, profit %, and packing. */}
             <div className="sm:col-span-2">
@@ -1015,21 +982,9 @@ export default function ProductsPage() {
                 whether it can serve as an ingredient in another product. */}
             <div className="flex flex-col gap-2 sm:col-span-2">
               <span className="label !mb-0">Capabilities</span>
+              {/* Unpacked products always require a recipe and are never packed
+                  here, so those toggles are hidden and forced (see `empty`). */}
               <div className="flex flex-wrap gap-x-8 gap-y-2">
-                <Checkbox
-                  label="Require Recipe"
-                  checked={form.hasRecipe}
-                  onChange={(e) =>
-                    setForm({ ...form, hasRecipe: e.target.checked })
-                  }
-                />
-                <Checkbox
-                  label="Require Packing"
-                  checked={form.hasPacking}
-                  onChange={(e) =>
-                    setForm({ ...form, hasPacking: e.target.checked })
-                  }
-                />
                 <Checkbox
                   label="Can be Ingredient"
                   checked={form.isIngredient}

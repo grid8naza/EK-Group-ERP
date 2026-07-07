@@ -16,14 +16,21 @@ import { AuthUser } from './current-user.decorator';
  *
  * `route` is the screen route stored on the SubMenu (e.g. '/inventory/units') —
  * the same route the frontend's useLock() checks via can(route, 'lock'|'unlock'),
- * so backend enforcement and the button's visibility stay in lockstep.
+ * so backend enforcement and the button's visibility stay in lockstep. Pass an
+ * array when a single lock endpoint is shared by several screens (e.g. the
+ * packed and unpacked Product screens): the privilege is granted when ANY of
+ * the listed routes allows it.
  *
  * Returns a fresh mixin guard per route so it can be applied inline:
  *   @UseGuards(LockPrivilegeGuard('/inventory/units'))
  *
  * Runs after the global JwtAuthGuard, so `request.user` is already populated.
  */
-export function LockPrivilegeGuard(route: string): Type<CanActivate> {
+export function LockPrivilegeGuard(
+  route: string | string[],
+): Type<CanActivate> {
+  const routes = Array.isArray(route) ? route : [route];
+
   @Injectable()
   class LockPrivilegeMixin implements CanActivate {
     constructor(readonly prisma: PrismaService) {}
@@ -54,7 +61,7 @@ export function LockPrivilegeGuard(route: string): Type<CanActivate> {
       // login profile uses to build permissions[route].
       const privs = await this.prisma.groupSubMenuPrivilege.findMany({
         where: {
-          subMenu: { route },
+          subMenu: { route: { in: routes } },
           userGroup: {
             companyId,
             userAssignments: { some: { userId: user.id } },

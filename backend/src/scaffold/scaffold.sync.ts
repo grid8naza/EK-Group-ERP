@@ -2,6 +2,27 @@ import { ObjectType, Prisma } from '@prisma/client';
 import { MODULE_SCAFFOLDS, type ModuleScaffold } from './module-scaffold';
 
 /**
+ * Screen routes that were renamed or removed. The additive sync below never
+ * deletes on its own, so a renamed screen's old SubMenu / ObjectMaster (and the
+ * privileges hanging off them) would linger in every developer's DB. List the
+ * dead routes here to have them cleaned up idempotently on the next boot.
+ * Deleting the SubMenu cascades to its GroupSubMenuPrivilege rows.
+ */
+const RETIRED_ROUTES: string[] = [
+  '/inventory/products', // split into products-unpacked + products-packed
+];
+
+async function cleanupRetiredRoutes(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  if (RETIRED_ROUTES.length === 0) return;
+  await prisma.subMenu.deleteMany({ where: { route: { in: RETIRED_ROUTES } } });
+  await prisma.objectMaster.deleteMany({
+    where: { route: { in: RETIRED_ROUTES } },
+  });
+}
+
+/**
  * Idempotent, additive sync of the module/menu scaffold declared in
  * MODULE_SCAFFOLDS. Run once on every app start so a pulled codebase brings each
  * developer's database up to date without manual SQL or a reseed.
@@ -18,6 +39,10 @@ import { MODULE_SCAFFOLDS, type ModuleScaffold } from './module-scaffold';
 export async function syncScaffold(
   prisma: Prisma.TransactionClient,
 ): Promise<void> {
+  // 0) Retire routes that were renamed/removed. The steps below never delete,
+  //    so a renamed screen's old menu/object would otherwise linger.
+  await cleanupRetiredRoutes(prisma);
+
   // 1) Module catalog — register/update. Never flips an existing module's global
   //    isActive (preserves an admin's enable/disable choice).
   for (const m of MODULE_SCAFFOLDS) {

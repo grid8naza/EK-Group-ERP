@@ -15,13 +15,16 @@ export const INVENTORY_SUBS = [
   { name: 'Group Master', route: '/inventory/groups', icon: 'layers', order: 3 },
   { name: 'HSN Code Master', route: '/inventory/hsn-codes', icon: 'percent', order: 4 },
   { name: 'Item Master', route: '/inventory/items', icon: 'box', order: 5 },
-  { name: 'Product Master', route: '/inventory/products', icon: 'package-2', order: 6 },
+  // Products are split across two screens that share the /products backend and
+  // are told apart by the packed/unpacked flags on each product.
+  { name: 'Products - Unpacked', route: '/inventory/products-unpacked', icon: 'package-2', order: 6 },
+  { name: 'Products - Packed', route: '/inventory/products-packed', icon: 'package', order: 7 },
   // Per-module reference data. Super-admin-only; isolated from other modules.
   {
     name: 'Lookups',
     route: '/inventory/lookups',
     icon: 'list',
-    order: 7,
+    order: 8,
     superAdminOnly: true,
   },
 ];

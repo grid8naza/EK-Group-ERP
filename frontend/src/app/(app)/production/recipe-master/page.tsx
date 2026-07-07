@@ -80,7 +80,9 @@ export default function RecipeMasterPage() {
   );
 
   const visibleRows = useMemo(() => {
-    let rows = data ?? [];
+    // Recipes are built for unpacked products only (packed products carry no
+    // recipe); see [Products - Unpacked].
+    let rows = (data ?? []).filter((p) => p.unpacked);
     if (categoryFilter)
       rows = rows.filter((p) => String(p.categoryId) === categoryFilter);
     if (groupFilter)
@@ -94,11 +96,11 @@ export default function RecipeMasterPage() {
   const canAdd = can(ROUTE, 'add');
   const canEdit = can(ROUTE, 'edit');
   const canView = can(ROUTE, 'view');
-  // The recipe lock is the product's lock (governed by the Product Master screen),
-  // so locking here also blocks editing the product under Inventory.
+  // The recipe lock is the product's lock (governed by the Products - Unpacked
+  // screen), so locking here also blocks editing the product under Inventory.
   const { canLock, canUnlock, toggleLock, guardEdit, bulkLock } = useLock<Product>({
     endpoint: '/products',
-    route: '/inventory/products',
+    route: '/inventory/products-unpacked',
     noun: 'Recipe',
     nameOf: (p) => p.name,
     reload: refetch,
