@@ -10,21 +10,29 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Input, Select, Textarea } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import type { Company, Product, SalesOrder, SalesOrderStatus } from '@/lib/types';
+import type {
+  Company,
+  Product,
+  PurchaseOrder,
+  PurchaseOrderStatus,
+} from '@/lib/types';
 
-const ROUTE = '/crm/place-order';
+const ROUTE = '/crm/purchase-orders-ic';
 
 type DraftLine = { productId: string; quantity: string };
 
-const statusColor = (s: SalesOrderStatus) =>
+const statusColor = (s: PurchaseOrderStatus) =>
   s === 'APPROVED' ? 'green' : s === 'REJECTED' ? 'red' : s === 'CANCELLED' ? 'slate' : 'amber';
 
-export default function PlaceOrderPage() {
+const fmtDelivery = (iso?: string | null) =>
+  iso ? new Date(iso).toLocaleString() : '-';
+
+export default function PurchaseOrderIcPage() {
   const { can, activeCompanyId } = useAuth();
   const toast = useToast();
   const { data: companies } = useFetch<Company[]>('/companies');
-  const { data: placed, loading, refetch } = useFetch<SalesOrder[]>(
-    '/sales-orders?scope=placed',
+  const { data: placed, loading, refetch } = useFetch<PurchaseOrder[]>(
+    '/purchase-orders?scope=placed',
   );
 
   const canAdd = can(ROUTE, 'add');
@@ -37,6 +45,7 @@ export default function PlaceOrderPage() {
     (companies ?? []).find((c) => c.id === id)?.name ?? `#${id}`;
 
   const [supplierId, setSupplierId] = useState('');
+  const [deliveryAt, setDeliveryAt] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [notes, setNotes] = useState('');
@@ -71,6 +80,7 @@ export default function PlaceOrderPage() {
 
   const reset = () => {
     setSupplierId('');
+    setDeliveryAt('');
     setLines([]);
     setNotes('');
   };
@@ -87,6 +97,7 @@ export default function PlaceOrderPage() {
     }
     const payload = {
       supplierCompanyId: Number(supplierId),
+      deliveryAt: deliveryAt ? new Date(deliveryAt).toISOString() : undefined,
       notes: notes.trim() || undefined,
       lines: clean.map((l) => ({
         productId: Number(l.productId),
@@ -96,18 +107,18 @@ export default function PlaceOrderPage() {
     };
     setSaving(true);
     try {
-      await api.post('/sales-orders', payload);
-      toast.success('Order placed.');
+      await api.post('/purchase-orders', payload);
+      toast.success('Purchase order raised.');
       reset();
       refetch();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Failed to place order.');
+      toast.error(e instanceof ApiError ? e.message : 'Failed to raise order.');
     } finally {
       setSaving(false);
     }
   };
 
-  const columns: Column<SalesOrder>[] = [
+  const columns: Column<PurchaseOrder>[] = [
     { key: 'orderNo', header: 'Order No', accessor: (r) => r.orderNo },
     { key: 'supplier', header: 'Supplier', accessor: (r) => companyName(r.companyId) },
     {
@@ -116,6 +127,13 @@ export default function PlaceOrderPage() {
       accessor: (r) => r.lines.length,
       className: 'text-right tabular-nums',
       headerClassName: 'text-right',
+    },
+    {
+      key: 'delivery',
+      header: 'Delivery',
+      accessor: (r) => fmtDelivery(r.deliveryAt),
+      className: 'text-center',
+      headerClassName: 'text-center',
     },
     {
       key: 'date',
@@ -134,8 +152,8 @@ export default function PlaceOrderPage() {
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col gap-4 overflow-y-auto pb-4">
       <PageHeader
-        title="Place Order"
-        description="Place a sales order on a supplier company"
+        title="Purchase Order - IC"
+        description="Raise an inter-company purchase order on a supplier company"
         icon={<ShoppingCart className="h-5 w-5" />}
       />
 
@@ -155,6 +173,12 @@ export default function PlaceOrderPage() {
                 value: c.id,
                 label: `${c.name} (${c.code})`,
               }))}
+            />
+            <Input
+              label="Delivery date & time"
+              type="datetime-local"
+              value={deliveryAt}
+              onChange={(e) => setDeliveryAt(e.target.value)}
             />
           </div>
 
@@ -255,7 +279,7 @@ export default function PlaceOrderPage() {
                   onClick={submit}
                   disabled={saving}
                 >
-                  Place Order
+                  Raise Order
                 </button>
               </div>
             </>
@@ -271,7 +295,7 @@ export default function PlaceOrderPage() {
         fillHeight={false}
         onRefresh={refetch}
         searchPlaceholder="Search orders..."
-        emptyMessage="No orders placed yet"
+        emptyMessage="No purchase orders raised yet"
       />
     </div>
   );

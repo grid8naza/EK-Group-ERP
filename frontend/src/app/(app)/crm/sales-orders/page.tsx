@@ -11,16 +11,19 @@ import type {
   Company,
   Product,
   Unit,
-  SalesOrder,
-  SalesOrderStatus,
+  PurchaseOrder,
+  PurchaseOrderStatus,
 } from '@/lib/types';
 
-const statusColor = (s: SalesOrderStatus) =>
+const statusColor = (s: PurchaseOrderStatus) =>
   s === 'APPROVED' ? 'green' : s === 'REJECTED' ? 'red' : s === 'CANCELLED' ? 'slate' : 'amber';
 
+const fmtDelivery = (iso?: string | null) =>
+  iso ? new Date(iso).toLocaleString() : '-';
+
 export default function SalesOrdersPage() {
-  const { data, loading, refetch } = useFetch<SalesOrder[]>(
-    '/sales-orders?scope=incoming',
+  const { data, loading, refetch } = useFetch<PurchaseOrder[]>(
+    '/purchase-orders?scope=incoming',
   );
   const { data: companies } = useFetch<Company[]>('/companies');
   const { data: products } = useFetch<Product[]>('/products');
@@ -35,9 +38,9 @@ export default function SalesOrdersPage() {
     return u?.symbol ?? u?.code ?? '';
   };
 
-  const [view, setView] = useState<SalesOrder | null>(null);
+  const [view, setView] = useState<PurchaseOrder | null>(null);
 
-  const columns: Column<SalesOrder>[] = [
+  const columns: Column<PurchaseOrder>[] = [
     { key: 'orderNo', header: 'Order No', accessor: (r) => r.orderNo },
     {
       key: 'from',
@@ -60,6 +63,13 @@ export default function SalesOrdersPage() {
       headerClassName: 'text-right',
     },
     {
+      key: 'delivery',
+      header: 'Delivery',
+      accessor: (r) => fmtDelivery(r.deliveryAt),
+      className: 'text-center',
+      headerClassName: 'text-center',
+    },
+    {
       key: 'date',
       header: 'Received',
       accessor: (r) => new Date(r.createdAt).toLocaleDateString(),
@@ -77,7 +87,7 @@ export default function SalesOrdersPage() {
     <div className="mx-auto flex h-full max-w-6xl flex-col">
       <PageHeader
         title="Sales Orders"
-        description="Incoming orders received from requesters"
+        description="Inter-company purchase orders received — review and convert to sales orders"
         icon={<ClipboardList className="h-5 w-5" />}
       />
       <DataTable
@@ -114,6 +124,7 @@ export default function SalesOrdersPage() {
                 label="Received"
                 value={new Date(view.createdAt).toLocaleString()}
               />
+              <Info label="Delivery" value={fmtDelivery(view.deliveryAt)} />
             </div>
             <table className="w-full text-sm">
               <thead>

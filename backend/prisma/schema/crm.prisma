@@ -1,46 +1,48 @@
-// CRM domain — sales orders.
+// CRM domain — inter-company Purchase Orders (Purchase Order - IC).
 //
-// A requester (an intercompany branch, e.g. a branch of EK Bake House) places a
-// sales order on a SUPPLIER company (EK Food Products / Regency Bakers). The
-// order is OWNED by the supplier (companyId) and processed by that company's CRM
-// staff via the workflow engine. Per the schema-ownership rule (schema.prisma),
+// A requester (an intercompany branch, e.g. a branch of EK Bake House) raises a
+// Purchase Order - IC on a SUPPLIER company (EK Food Products / Regency Bakers).
+// The order is OWNED by the supplier (companyId) and reviewed by that company's
+// CRM staff via the workflow engine, who later convert it into a Sales Order (a
+// separate document, added in a later phase). Per the schema-ownership rule,
 // every cross-domain reference (company, branch, user, product, unit, workflow)
 // is a plain Int id with NO @relation.
 
-/// Lifecycle of a sales order.
-enum SalesOrderStatus {
-  PLACED // submitted; awaiting CRM-staff action (in the workflow)
+/// Lifecycle of a Purchase Order - IC.
+enum PurchaseOrderStatus {
+  PLACED // submitted; awaiting CRM-staff review (in the workflow)
   APPROVED // accepted by the supplier's CRM staff
   REJECTED
   CANCELLED
 }
 
-model SalesOrder {
-  id                 Int              @id @default(autoincrement())
+model PurchaseOrder {
+  id                 Int                 @id @default(autoincrement())
   companyId          Int // supplier company that owns / receives this order
-  orderNo            String // per-supplier sequential number
-  orderDate          DateTime         @default(now())
-  // Requester (who placed it) — an intercompany branch today.
+  orderNo            String // per-supplier sequential number (PO-#####)
+  orderDate          DateTime            @default(now())
+  deliveryAt         DateTime? // requested delivery date & time (carried to the sales order)
+  // Requester (who raised it) — an intercompany branch today.
   orderingCompanyId  Int // -> Company (e.g. EK Bake House)
   orderingBranchId   Int? // -> Branch of the requester
   placedByUserId     Int // -> User (the branch manager)
-  status             SalesOrderStatus @default(PLACED)
+  status             PurchaseOrderStatus @default(PLACED)
   notes              String?
   workflowInstanceId Int? // -> WorkflowInstance (approval routing)
-  isLocked           Boolean          @default(false)
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
+  isLocked           Boolean             @default(false)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
 
-  lines SalesOrderLine[]
+  lines PurchaseOrderLine[]
 
   @@unique([companyId, orderNo])
   @@index([companyId, status])
   @@index([orderingCompanyId])
-  @@map("sales_orders")
+  @@map("purchase_orders")
 }
 
-/// One line of a sales order: `quantity` of a `product` (measured in `unit`).
-model SalesOrderLine {
+/// One line of a Purchase Order - IC: `quantity` of a `product` (in `unit`).
+model PurchaseOrderLine {
   id        Int   @id @default(autoincrement())
   orderId   Int
   sequence  Int   @default(0)
@@ -48,8 +50,8 @@ model SalesOrderLine {
   quantity  Float
   unitId    Int // -> Unit (plain cross-domain id)
 
-  order SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
-  @@map("sales_order_lines")
+  @@map("purchase_order_lines")
 }

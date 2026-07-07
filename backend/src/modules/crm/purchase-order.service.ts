@@ -7,30 +7,30 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WORKFLOW, WorkflowPort } from '../../contracts/workflow.port';
-import { CreateSalesOrderDto } from './sales-order.dto';
+import { CreatePurchaseOrderDto } from './purchase-order.dto';
 
 const CRM_MODULE_CODE = 'CRM';
-// The order is received in the supplier's CRM; a workflow binds to this screen.
-const SALES_ORDER_ROUTE = '/crm/sales-orders';
+// The PO is received in the supplier's CRM; a workflow binds to this screen.
+const PO_IC_ROUTE = '/crm/purchase-orders-ic';
 
 @Injectable()
-export class SalesOrderService {
+export class PurchaseOrderService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(WORKFLOW) private readonly workflow: WorkflowPort,
   ) {}
 
   /**
-   * Place a sales order: the requester (active company/branch) creates it under
-   * the chosen SUPPLIER company, then it is submitted to the supplier's approval
-   * workflow (routing it to the supplier's CRM staff). If no workflow is
-   * configured for the supplier, it is simply left PLACED for the CRM staff list.
+   * Raise a Purchase Order - IC: the requester (active company/branch) creates it
+   * under the chosen SUPPLIER company, then it is submitted to the supplier's
+   * approval workflow (routing it to the supplier's CRM staff). If no workflow is
+   * configured, it is simply left PLACED for the CRM staff list.
    */
   async create(
     userId: number,
     orderingCompanyId: number,
     orderingBranchId: number | undefined,
-    dto: CreateSalesOrderDto,
+    dto: CreatePurchaseOrderDto,
   ) {
     if (!orderingCompanyId) {
       throw new BadRequestException('No active company for the requester.');
@@ -42,10 +42,11 @@ export class SalesOrderService {
     }
 
     const order = await this.withOrderNoRetry(dto.supplierCompanyId, (orderNo) =>
-      this.prisma.salesOrder.create({
+      this.prisma.purchaseOrder.create({
         data: {
           companyId: dto.supplierCompanyId,
           orderNo,
+          deliveryAt: dto.deliveryAt ? new Date(dto.deliveryAt) : null,
           orderingCompanyId,
           orderingBranchId: orderingBranchId ?? null,
           placedByUserId: userId,
@@ -70,7 +71,7 @@ export class SalesOrderService {
         select: { id: true },
       }),
       this.prisma.objectMaster.findFirst({
-        where: { route: SALES_ORDER_ROUTE },
+        where: { route: PO_IC_ROUTE },
         select: { id: true },
       }),
     ]);
@@ -86,7 +87,7 @@ export class SalesOrderService {
         amount: totalQty,
       });
       if (res) {
-        await this.prisma.salesOrder.update({
+        await this.prisma.purchaseOrder.update({
           where: { id: order.id },
           data: { workflowInstanceId: res.instanceId },
         });
@@ -96,16 +97,14 @@ export class SalesOrderService {
   }
 
   /**
-   * List sales orders for the active company: `incoming` = orders this company
-   * receives as the supplier (CRM staff view); `placed` = orders this company
-   * placed as the requester.
+   * List Purchase Orders - IC for the active company: `incoming` = orders this
+   * company receives as the supplier (CRM staff view); `placed` = orders this
+   * company raised as the requester.
    */
   findAll(companyId: number, scope: 'incoming' | 'placed') {
     const where =
-      scope === 'placed'
-        ? { orderingCompanyId: companyId }
-        : { companyId };
-    return this.prisma.salesOrder.findMany({
+      scope === 'placed' ? { orderingCompanyId: companyId } : { companyId };
+    return this.prisma.purchaseOrder.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       include: { lines: { orderBy: { sequence: 'asc' } } },
@@ -113,11 +112,11 @@ export class SalesOrderService {
   }
 
   async findOne(id: number) {
-    const order = await this.prisma.salesOrder.findUnique({
+    const order = await this.prisma.purchaseOrder.findUnique({
       where: { id },
       include: { lines: { orderBy: { sequence: 'asc' } } },
     });
-    if (!order) throw new NotFoundException('Sales order not found.');
+    if (!order) throw new NotFoundException('Purchase order not found.');
     return order;
   }
 
@@ -128,8 +127,8 @@ export class SalesOrderService {
     attempts = 5,
   ): Promise<T> {
     for (let i = 0; ; i++) {
-      const n = await this.prisma.salesOrder.count({ where: { companyId } });
-      const orderNo = `SO-${String(n + 1 + i).padStart(5, '0')}`;
+      const n = await this.prisma.purchaseOrder.count({ where: { companyId } });
+      const orderNo = `PO-${String(n + 1 + i).padStart(5, '0')}`;
       try {
         return await fn(orderNo);
       } catch (e) {

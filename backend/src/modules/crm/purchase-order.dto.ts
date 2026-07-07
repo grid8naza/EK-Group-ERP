@@ -3,6 +3,7 @@ import {
   ArrayNotEmpty,
   IsArray,
   IsInt,
+  IsISO8601,
   IsNumber,
   IsOptional,
   IsPositive,
@@ -12,7 +13,7 @@ import {
 } from 'class-validator';
 
 /** One order line — `quantity` of `productId`, measured in `unitId`. */
-export class SalesOrderLineInput {
+export class PurchaseOrderLineInput {
   @IsInt()
   productId!: number;
 
@@ -24,11 +25,16 @@ export class SalesOrderLineInput {
   unitId!: number;
 }
 
-/** Place a sales order on a supplier company. */
-export class CreateSalesOrderDto {
+/** Raise a Purchase Order - IC on a supplier company. */
+export class CreatePurchaseOrderDto {
   /** Supplier company the order is placed on (owns / receives the order). */
   @IsInt()
   supplierCompanyId!: number;
+
+  /** Requested delivery date & time (ISO). Carried to the sales order later. */
+  @IsOptional()
+  @IsISO8601()
+  deliveryAt?: string;
 
   @IsOptional()
   @IsString()
@@ -38,6 +44,6 @@ export class CreateSalesOrderDto {
   @IsArray()
   @ArrayNotEmpty()
   @ValidateNested({ each: true })
-  @Type(() => SalesOrderLineInput)
-  lines!: SalesOrderLineInput[];
+  @Type(() => PurchaseOrderLineInput)
+  lines!: PurchaseOrderLineInput[];
 }

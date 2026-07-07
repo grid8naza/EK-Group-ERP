@@ -10,6 +10,7 @@ import { MODULE_SCAFFOLDS, type ModuleScaffold } from './module-scaffold';
  */
 const RETIRED_ROUTES: string[] = [
   '/inventory/products', // split into products-unpacked + products-packed
+  '/crm/place-order', // renamed to /crm/purchase-orders-ic
 ];
 
 async function cleanupRetiredRoutes(

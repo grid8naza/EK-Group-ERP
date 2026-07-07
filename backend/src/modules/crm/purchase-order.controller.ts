@@ -11,25 +11,26 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CompanyId } from '../../auth/company.decorator';
 import { BranchId } from '../../auth/branch.decorator';
 import { AuthUser, CurrentUser } from '../../auth/current-user.decorator';
-import { SalesOrderService } from './sales-order.service';
-import { CreateSalesOrderDto } from './sales-order.dto';
+import { PurchaseOrderService } from './purchase-order.service';
+import { CreatePurchaseOrderDto } from './purchase-order.dto';
 
 /**
- * Sales orders. Placed by a requester (active company/branch) on a supplier
- * company; received & processed by the supplier's CRM staff via the workflow.
+ * Purchase Orders - IC. Raised by a requester (active company/branch) on a
+ * supplier company; received & reviewed by the supplier's CRM staff via the
+ * workflow, who later convert them to sales orders.
  */
-@ApiTags('sales-orders')
+@ApiTags('purchase-orders')
 @ApiBearerAuth()
-@Controller('sales-orders')
-export class SalesOrderController {
-  constructor(private readonly service: SalesOrderService) {}
+@Controller('purchase-orders')
+export class PurchaseOrderController {
+  constructor(private readonly service: PurchaseOrderService) {}
 
   @Post()
   create(
     @CurrentUser() user: AuthUser,
     @CompanyId() companyId: number | undefined,
     @BranchId() branchId: number | undefined,
-    @Body() dto: CreateSalesOrderDto,
+    @Body() dto: CreatePurchaseOrderDto,
   ) {
     return this.service.create(user.id, companyId ?? 0, branchId, dto);
   }

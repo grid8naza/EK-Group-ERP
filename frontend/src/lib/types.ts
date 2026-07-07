@@ -784,28 +784,30 @@ export interface Product {
   processes: ProductProcess[];
 }
 
-// ---- CRM: Sales Orders ----
-export type SalesOrderStatus = 'PLACED' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
-export interface SalesOrderLine {
+// ---- CRM: Purchase Orders - IC (inter-company) ----
+export type PurchaseOrderStatus = 'PLACED' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+export interface PurchaseOrderLine {
   id: number;
   sequence: number;
   productId: number;
   quantity: number;
   unitId: number;
 }
-export interface SalesOrder {
+export interface PurchaseOrder {
   id: number;
   companyId: number; // supplier company that owns the order
   orderNo: string;
   orderDate: string;
+  /** Requested delivery date & time (ISO); carried to the sales order later. */
+  deliveryAt?: string | null;
   orderingCompanyId: number; // requester company
   orderingBranchId?: number | null;
   placedByUserId: number;
-  status: SalesOrderStatus;
+  status: PurchaseOrderStatus;
   notes?: string | null;
   workflowInstanceId?: number | null;
   createdAt: string;
-  lines: SalesOrderLine[];
+  lines: PurchaseOrderLine[];
 }
 
 // ---- Asset: Asset Master (individual assets/machines) ----
