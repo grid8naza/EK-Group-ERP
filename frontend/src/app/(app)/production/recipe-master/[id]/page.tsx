@@ -68,6 +68,14 @@ const to2 = (s: string) => {
   return s.trim() !== '' && Number.isFinite(n) ? n.toFixed(2) : s;
 };
 
+// Normalise an editable numeric string to `d` decimal places (blank or
+// non-numeric passes through). Used for the yield quantity, whose precision
+// follows the yield unit's decimal places from the Unit master.
+const toDecimals = (s: string, d: number) => {
+  const n = Number(s);
+  return s.trim() !== '' && Number.isFinite(n) ? n.toFixed(Math.max(0, d)) : s;
+};
+
 // Per-unit prices: values are rounded to 1 decimal but shown with 2 decimals
 // (e.g. 12.6 → "12.60"). `toPrice` normalises an editable string the same way.
 const round1 = (v: number) => Math.round(v * 10) / 10;
@@ -155,6 +163,11 @@ export default function RecipeMasterEditorPage() {
 
   const itemById = useMemo(() => new Map(itemList.map((i) => [i.id, i])), [itemList]);
   const unitById = useMemo(() => new Map(unitList.map((u) => [u.id, u])), [unitList]);
+  // Yield precision follows the yield unit's decimal places (Unit master). The
+  // yield unit is the box unit when set, else the product's stock unit.
+  const yieldDecimals =
+    unitById.get(Number(product?.boxUnitId ?? product?.unitId))?.decimalPlaces ??
+    2;
   const assetById = useMemo(
     () => new Map((assets ?? []).map((a) => [a.id, a])),
     [assets],
@@ -189,7 +202,7 @@ export default function RecipeMasterEditorPage() {
   // Hydrate once the product loads.
   useEffect(() => {
     if (!product) return;
-    setYieldQty(to2(String(product.yieldQty ?? 1)));
+    setYieldQty(toDecimals(String(product.yieldQty ?? 1), yieldDecimals));
     setRecipe(toLines(product.recipe ?? []));
     setProcesses(
       (product.processes ?? []).map((p) => ({
@@ -208,6 +221,12 @@ export default function RecipeMasterEditorPage() {
     setBomMarginPct(to2(String(product.bomMarginPct ?? 0)));
     setActualSalesPrice(toPrice(String(product.actualSalesPrice ?? 0)));
   }, [product]);
+
+  // Re-format the yield to the unit's decimal places once the Unit master loads
+  // (or the yield unit changes), without disturbing the entered value.
+  useEffect(() => {
+    setYieldQty((v) => toDecimals(v, yieldDecimals));
+  }, [yieldDecimals]);
 
   // --- rate / amount (with unit conversion) ---
   const baseOf = (u?: Unit) => (u ? (u.baseUnitId ?? u.id) : undefined);
@@ -645,13 +664,13 @@ export default function RecipeMasterEditorPage() {
                   step="any"
                   value={yieldQty}
                   onChange={(e) => setYieldQty(e.target.value)}
-                  onBlur={() => setYieldQty((v) => to2(v))}
+                  onBlur={() => setYieldQty((v) => toDecimals(v, yieldDecimals))}
                   wrapClassName="w-full"
                   className="text-right font-semibold tabular-nums text-red-800 dark:text-red-400"
                 />
               </ReadOnlyFieldset>
             </div>
-            <span className="pb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <span className="pb-2 text-sm font-semibold text-red-800 dark:text-red-400">
               {yieldUnitCode}
             </span>
           </div>
