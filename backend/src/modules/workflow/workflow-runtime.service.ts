@@ -57,6 +57,25 @@ export class WorkflowRuntimeService {
     return this.getInstance(instance.id);
   }
 
+  /** Cancel any in-progress workflow(s) attached to a document. */
+  async cancelForDocument(
+    moduleId: number,
+    objectId: number,
+    documentId: number,
+  ): Promise<void> {
+    const instances = await this.prisma.workflowInstance.findMany({
+      where: { moduleId, objectId, documentId, status: 'IN_PROGRESS' },
+      select: { id: true },
+    });
+    for (const inst of instances) {
+      await this.prisma.workflowTask.updateMany({
+        where: { instanceId: inst.id, status: 'PENDING' },
+        data: { status: 'SKIPPED' },
+      });
+      await this.finish(inst.id, 'CANCELLED');
+    }
+  }
+
   /** Pending tasks assigned to a user, enriched for the inbox. */
   async myTasks(userId: number) {
     const tasks = await this.prisma.workflowTask.findMany({

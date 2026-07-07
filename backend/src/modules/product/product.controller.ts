@@ -51,8 +51,12 @@ export class ProductController {
   findAll(
     @CompanyId() companyId: number | undefined,
     @Query('search') search?: string,
+    // Browse another company's catalogue (e.g. a requester picking a supplier's
+    // products when placing a CRM order). Falls back to the active company.
+    @Query('forCompanyId') forCompanyId?: string,
   ) {
-    return this.service.findAll(companyId, search);
+    const scoped = forCompanyId ? Number(forCompanyId) : companyId;
+    return this.service.findAll(scoped, search);
   }
 
   @Get(':id')

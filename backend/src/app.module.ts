@@ -33,6 +33,7 @@ import { HrCategoryModule } from './modules/hr-category/hr-category.module';
 import { HrGroupModule } from './modules/hr-group/hr-group.module';
 import { HrDesignationModule } from './modules/hr-designation/hr-designation.module';
 import { WorkflowModule } from './modules/workflow/workflow.module';
+import { CrmModule } from './modules/crm/crm.module';
 import { LoginScreenModule } from './modules/login-screen/login-screen.module';
 import { ScaffoldModule } from './scaffold/scaffold.module';
 
@@ -70,6 +71,7 @@ import { ScaffoldModule } from './scaffold/scaffold.module';
     HrGroupModule,
     HrDesignationModule,
     WorkflowModule,
+    CrmModule,
     LoginScreenModule,
     ScaffoldModule,
   ],

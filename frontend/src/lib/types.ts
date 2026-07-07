@@ -5,6 +5,8 @@ export interface User {
   name: string;
   email: string;
   isSuperAdmin: boolean;
+  /** User groups this user belongs to (returned by GET /users). */
+  groupIds?: number[];
   defaultModuleId?: number | null;
 }
 
@@ -776,6 +778,30 @@ export interface Product {
   packing: ProductBomLine[];
   /** Production process flow (ordered steps with time + machine). */
   processes: ProductProcess[];
+}
+
+// ---- CRM: Sales Orders ----
+export type SalesOrderStatus = 'PLACED' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+export interface SalesOrderLine {
+  id: number;
+  sequence: number;
+  productId: number;
+  quantity: number;
+  unitId: number;
+}
+export interface SalesOrder {
+  id: number;
+  companyId: number; // supplier company that owns the order
+  orderNo: string;
+  orderDate: string;
+  orderingCompanyId: number; // requester company
+  orderingBranchId?: number | null;
+  placedByUserId: number;
+  status: SalesOrderStatus;
+  notes?: string | null;
+  workflowInstanceId?: number | null;
+  createdAt: string;
+  lines: SalesOrderLine[];
 }
 
 // ---- Asset: Asset Master (individual assets/machines) ----

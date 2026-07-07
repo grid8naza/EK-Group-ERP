@@ -642,6 +642,7 @@ export default function WorkflowsPage() {
                     companies={companies ?? []}
                     branches={branches ?? []}
                     modules={modules ?? []}
+                    defaultCompanyId={def.companyId ? Number(def.companyId) : undefined}
                     groupName={groupName}
                     userName={userName}
                     onChange={(patch) => updateStep(i, patch)}
@@ -673,6 +674,7 @@ function StepCard({
   companies,
   branches,
   modules,
+  defaultCompanyId,
   groupName,
   userName,
   onChange,
@@ -688,6 +690,7 @@ function StepCard({
   companies: Company[];
   branches: Branch[];
   modules: Module[];
+  defaultCompanyId?: number;
   groupName: (id?: number | null) => string;
   userName: (id: number) => string;
   onChange: (patch: Partial<StepDraft>) => void;
@@ -702,6 +705,22 @@ function StepCard({
       parts.push(step.userIds.map((id) => userName(id)).join(', '));
     return parts.length ? parts.join(' · ') : 'No approver';
   };
+
+  // Target branch cascades from the chosen target company (or the definition's
+  // own company when no target company is set), so only that company's branches
+  // are offered.
+  const branchCompanyId = step.targetCompanyId
+    ? Number(step.targetCompanyId)
+    : defaultCompanyId;
+  const targetBranchOptions = branches
+    .filter((b) => !branchCompanyId || b.companyId === branchCompanyId)
+    .map((b) => ({ value: b.id, label: b.name }));
+
+  // Users cascade from the selected user group — only that group's members are
+  // offered as specific approvers (all users when no group is chosen).
+  const groupUsers = step.userGroupId
+    ? users.filter((u) => (u.groupIds ?? []).includes(Number(step.userGroupId)))
+    : users;
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
@@ -756,13 +775,15 @@ function StepCard({
         <Select
           label="User group"
           value={step.userGroupId}
-          onChange={(e) => onChange({ userGroupId: e.target.value })}
+          onChange={(e) =>
+            onChange({ userGroupId: e.target.value, userIds: [] })
+          }
           placeholder="— None —"
           options={userGroups.map((g) => ({ value: g.id, label: g.name }))}
         />
         <UserMultiSelect
           label="Users"
-          users={users}
+          users={groupUsers}
           value={step.userIds}
           onChange={(userIds) => onChange({ userIds })}
         />
@@ -870,7 +891,9 @@ function StepCard({
               <Select
                 label="Target company"
                 value={step.targetCompanyId}
-                onChange={(e) => onChange({ targetCompanyId: e.target.value })}
+                onChange={(e) =>
+                  onChange({ targetCompanyId: e.target.value, targetBranchId: '' })
+                }
                 placeholder="— Same —"
                 options={companies.map((c) => ({ value: c.id, label: c.name }))}
               />
@@ -879,7 +902,7 @@ function StepCard({
                 value={step.targetBranchId}
                 onChange={(e) => onChange({ targetBranchId: e.target.value })}
                 placeholder="— Same —"
-                options={branches.map((b) => ({ value: b.id, label: b.name }))}
+                options={targetBranchOptions}
               />
               <Select
                 label="Target module"

@@ -1,6 +1,9 @@
 import { Global, Module } from '@nestjs/common';
 import { USER_LOOKUP } from './user-lookup.port';
 import { UserLookupAdapter } from '../modules/user/user-lookup.adapter';
+import { WORKFLOW } from './workflow.port';
+import { WorkflowRuntimeAdapter } from '../modules/workflow/workflow-runtime.adapter';
+import { WorkflowRuntimeService } from '../modules/workflow/workflow-runtime.service';
 import { METRIC_PROVIDER } from './metric-provider.port';
 import { CpanelMetricsAdapter } from '../modules/company/cpanel-metrics.adapter';
 import { ProductionMetricsAdapter } from '../modules/production/production-metrics.adapter';
@@ -32,6 +35,12 @@ import { InventoryMetricsAdapter } from '../modules/item/inventory-metrics.adapt
 @Module({
   providers: [
     { provide: USER_LOOKUP, useClass: UserLookupAdapter },
+    // Workflow runtime bound here (with its service) so any business module can
+    // start/cancel an approval via the WORKFLOW port without importing the
+    // Workflow module. Its own instance for the port; the REST controller keeps
+    // WorkflowModule's instance (both stateless).
+    WorkflowRuntimeService,
+    { provide: WORKFLOW, useClass: WorkflowRuntimeAdapter },
     CpanelMetricsAdapter,
     ProductionMetricsAdapter,
     InventoryMetricsAdapter,
@@ -49,6 +58,6 @@ import { InventoryMetricsAdapter } from '../modules/item/inventory-metrics.adapt
       ],
     },
   ],
-  exports: [USER_LOOKUP, METRIC_PROVIDER],
+  exports: [USER_LOOKUP, METRIC_PROVIDER, WORKFLOW],
 })
 export class ContractsModule {}

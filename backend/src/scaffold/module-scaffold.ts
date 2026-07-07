@@ -17,6 +17,7 @@ import {
 } from '../modules/asset-category/asset-provisioning';
 import { HR_SUBS } from '../modules/hr-category/hr-provisioning';
 import { WORKFLOW_SUBS } from '../modules/workflow/workflow-provisioning';
+import { CRM_SUBS } from '../modules/crm/crm-provisioning';
 
 /**
  * Single source of truth for every module and the menus/screens it ships with.
@@ -98,6 +99,9 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     icon: 'users',
     sortOrder: 2,
     description: 'Customer relationship management.',
+    autoEnable: true, // on for every company (requesters place, suppliers receive)
+    menu: { name: 'CRM', icon: 'users' },
+    subs: CRM_SUBS,
   },
   {
     code: 'ACCOUNTS',
