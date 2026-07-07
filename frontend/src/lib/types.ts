@@ -7,6 +7,8 @@ export interface User {
   isSuperAdmin: boolean;
   /** User groups this user belongs to (returned by GET /users). */
   groupIds?: number[];
+  /** Companies this user belongs to (returned by GET /users). */
+  companyIds?: number[];
   defaultModuleId?: number | null;
 }
 

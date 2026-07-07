@@ -295,6 +295,16 @@ export default function WorkflowsPage() {
       return next;
     });
 
+  // The company a step ACTS IN: the target company carried forward from the most
+  // recent prior step (cross-boundary routing), else the definition's own
+  // company. A step's approvers (user group / users) come from this company.
+  const effectiveStepCompanyId = (i: number): number | undefined => {
+    for (let j = i - 1; j >= 0; j--) {
+      if (steps[j].targetCompanyId) return Number(steps[j].targetCompanyId);
+    }
+    return def.companyId ? Number(def.companyId) : undefined;
+  };
+
   // ---- save ----
   const buildSteps = (): StepInput[] =>
     steps.map((d, i) => ({
@@ -642,7 +652,7 @@ export default function WorkflowsPage() {
                     companies={companies ?? []}
                     branches={branches ?? []}
                     modules={modules ?? []}
-                    defaultCompanyId={def.companyId ? Number(def.companyId) : undefined}
+                    stepCompanyId={effectiveStepCompanyId(i)}
                     groupName={groupName}
                     userName={userName}
                     onChange={(patch) => updateStep(i, patch)}
@@ -674,7 +684,7 @@ function StepCard({
   companies,
   branches,
   modules,
-  defaultCompanyId,
+  stepCompanyId,
   groupName,
   userName,
   onChange,
@@ -690,7 +700,7 @@ function StepCard({
   companies: Company[];
   branches: Branch[];
   modules: Module[];
-  defaultCompanyId?: number;
+  stepCompanyId?: number;
   groupName: (id?: number | null) => string;
   userName: (id: number) => string;
   onChange: (patch: Partial<StepDraft>) => void;
@@ -711,16 +721,23 @@ function StepCard({
   // are offered.
   const branchCompanyId = step.targetCompanyId
     ? Number(step.targetCompanyId)
-    : defaultCompanyId;
+    : stepCompanyId;
   const targetBranchOptions = branches
     .filter((b) => !branchCompanyId || b.companyId === branchCompanyId)
     .map((b) => ({ value: b.id, label: b.name }));
 
-  // Users cascade from the selected user group — only that group's members are
-  // offered as specific approvers (all users when no group is chosen).
-  const groupUsers = step.userGroupId
-    ? users.filter((u) => (u.groupIds ?? []).includes(Number(step.userGroupId)))
-    : users;
+  // Approvers come from the company this step acts in (carried forward from the
+  // previous step's routing): only that company's users, further narrowed to the
+  // selected user group's members.
+  const groupUsers = users
+    .filter(
+      (u) => !stepCompanyId || (u.companyIds ?? []).includes(stepCompanyId),
+    )
+    .filter(
+      (u) =>
+        !step.userGroupId ||
+        (u.groupIds ?? []).includes(Number(step.userGroupId)),
+    );
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
