@@ -28,6 +28,7 @@ const empty = {
   companyIds: [] as number[],
   forItem: true,
   forProduct: false,
+  forPacking: false,
   isActive: true,
 };
 
@@ -74,6 +75,7 @@ export default function CategoriesPage() {
     companyIds: c.companyIds ?? [],
     forItem: c.forItem,
     forProduct: c.forProduct,
+    forPacking: c.forPacking ?? false,
     isActive: c.isActive,
   });
 
@@ -141,6 +143,7 @@ export default function CategoriesPage() {
       companyIds: form.allCompanies ? [] : form.companyIds,
       forItem: form.forItem,
       forProduct: form.forProduct,
+      forPacking: form.forPacking,
       isActive: form.isActive,
     };
 
@@ -412,6 +415,13 @@ export default function CategoriesPage() {
                   checked={form.forProduct}
                   onChange={(e) =>
                     setForm({ ...form, forProduct: e.target.checked })
+                  }
+                />
+                <Checkbox
+                  label="Packing material"
+                  checked={form.forPacking}
+                  onChange={(e) =>
+                    setForm({ ...form, forPacking: e.target.checked })
                   }
                 />
               </div>

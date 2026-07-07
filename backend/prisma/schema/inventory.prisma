@@ -95,6 +95,7 @@ model Category {
   allCompanies Boolean  @default(false) // true = available to every company
   forItem      Boolean  @default(true)
   forProduct   Boolean  @default(false)
+  forPacking   Boolean  @default(false) // items here are packing materials (a kind of item)
   isActive     Boolean  @default(true)
   isLocked     Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt    DateTime @default(now())
@@ -317,10 +318,30 @@ model Product {
   companies ProductCompany[]
   bomLines  ProductBomLine[]
   processes ProductProcess[]
+  packSources  ProductPackSource[] @relation("PackSources")  // unpacked products this pack is made from
+  packSourceOf ProductPackSource[] @relation("PackSourceOf") // packs that use this product as a source
 
   @@index([categoryId])
   @@index([groupId])
   @@map("products")
+}
+
+/// One source line of a PACKED product's packing: `quantity` of an unpacked
+/// `sourceProduct` that goes into one packing batch. The per-unit cost used for
+/// the packing "Product Cost" is read from the source product's `costPrice`.
+model ProductPackSource {
+  id              Int   @id @default(autoincrement())
+  productId       Int // the packed product
+  sourceProductId Int // an unpacked product it is packed from
+  sequence        Int   @default(0)
+  quantity        Float
+
+  product       Product @relation("PackSources", fields: [productId], references: [id], onDelete: Cascade)
+  sourceProduct Product @relation("PackSourceOf", fields: [sourceProductId], references: [id], onDelete: Restrict)
+
+  @@index([productId])
+  @@index([sourceProductId])
+  @@map("product_pack_sources")
 }
 
 /// Time unit for a production process step.

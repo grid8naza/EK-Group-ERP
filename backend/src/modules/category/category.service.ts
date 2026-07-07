@@ -74,6 +74,7 @@ export class CategoryService {
     const companyIds = this.resolveCompanies(allCompanies, dto.companyIds);
     const forItem = dto.forItem ?? true;
     const forProduct = dto.forProduct ?? false;
+    const forPacking = dto.forPacking ?? false;
     this.assertAppliesToSomething(forItem, forProduct);
 
     // The code is system-generated (2-digit category segment); manual codes are
@@ -89,6 +90,7 @@ export class CategoryService {
           allCompanies,
           forItem,
           forProduct,
+          forPacking,
           isActive: dto.isActive ?? true,
           companies: { create: companyIds.map((companyId) => ({ companyId })) },
         },
@@ -146,6 +148,7 @@ export class CategoryService {
 
     const forItem = dto.forItem ?? existing.forItem;
     const forProduct = dto.forProduct ?? existing.forProduct;
+    const forPacking = dto.forPacking ?? existing.forPacking;
     this.assertAppliesToSomething(forItem, forProduct);
 
     try {
@@ -161,6 +164,7 @@ export class CategoryService {
           allCompanies,
           forItem,
           forProduct,
+          forPacking,
           isActive: dto.isActive,
           // Replace the link set when availability changed.
           ...(companyIds

@@ -558,6 +558,8 @@ export interface Category {
   companyIds: number[];
   forItem: boolean;
   forProduct: boolean;
+  /** Items in this category are packing materials (a kind of item). */
+  forPacking?: boolean;
   isActive: boolean;
   isLocked?: boolean;
 }
@@ -741,6 +743,14 @@ export interface Product {
   yieldQty: number;
   yieldUnitId?: number | null;
   yieldUnit?: MasterRef | null;
+  /** Packed product: the unpacked source products it is packed from (each with a
+   *  quantity); per-unit cost is the source product's costPrice. */
+  packSources?: {
+    id?: number;
+    sourceProductId: number;
+    quantity: number;
+    sequence?: number;
+  }[];
   // BOM costing inputs (material cost is computed from the recipe).
   labourCost: number;
   fuelCost: number;

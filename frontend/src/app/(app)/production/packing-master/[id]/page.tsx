@@ -10,9 +10,7 @@ import {
   ArrowLeft,
   Cog,
   Info,
-  Printer,
 } from 'lucide-react';
-import { printRecipe } from '@/lib/recipePrint';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
@@ -23,6 +21,7 @@ import { Drawer } from '@/components/ui/Drawer';
 import { Input, Select } from '@/components/ui/Field';
 import type {
   Product,
+  Category,
   Item,
   Unit,
   Asset,
@@ -32,7 +31,7 @@ import type {
   LookupValue,
 } from '@/lib/types';
 
-const ROUTE = '/production/recipe-master';
+const ROUTE = '/production/packing-master';
 
 // Lookup code the Process combo reads (kept in sync with the backend
 // PRODUCTION_PROCESS_LOOKUP_CODE). Values are managed in Production → Lookups.
@@ -47,8 +46,9 @@ type Proc = {
   machineId: string;
   manpower: ManpowerRow[];
 };
+type Src = { productId: string; quantity: string };
 
-const toLines = (rows: Product['recipe']): Line[] =>
+const toLines = (rows: Product['packing']): Line[] =>
   rows.map((l) => ({
     itemId: String(l.itemId),
     quantity: String(l.quantity),
@@ -90,6 +90,7 @@ const money1 = (v: number) =>
   });
 
 const BLANK_LINE: Line = { itemId: '', quantity: '', unitId: '' };
+const BLANK_SRC: Src = { productId: '', quantity: '' };
 const BLANK_MANPOWER: ManpowerRow = { designationId: '', count: '1' };
 const BLANK_PROC: Proc = {
   name: '',
@@ -99,7 +100,7 @@ const BLANK_PROC: Proc = {
   manpower: [],
 };
 
-export default function RecipeMasterEditorPage() {
+export default function PackingMasterEditorPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -115,6 +116,11 @@ export default function RecipeMasterEditorPage() {
   const { data: assets } = useFetch<Asset[]>('/assets');
   const { data: designations } = useFetch<HrDesignation[]>('/hr-designations');
   const { data: lookups } = useFetch<Lookup[]>('/lookups');
+  // All products — to pick the source (unpacked) products and read each one's
+  // product-master cost price for the packing "Product Cost".
+  const { data: allProducts } = useFetch<Product[]>('/products');
+  // Categories — to list only packing-material items in the material picker.
+  const { data: categories } = useFetch<Category[]>('/categories');
 
   // Production Process lookup values for the process-name combo: find the lookup
   // by code, then fetch its values (mirrors the Asset Brand pattern).
@@ -163,11 +169,9 @@ export default function RecipeMasterEditorPage() {
 
   const itemById = useMemo(() => new Map(itemList.map((i) => [i.id, i])), [itemList]);
   const unitById = useMemo(() => new Map(unitList.map((u) => [u.id, u])), [unitList]);
-  // Yield precision follows the yield unit's decimal places (Unit master). The
-  // yield unit is the box unit when set, else the product's stock unit.
+  // Yield precision follows the product's own unit (from Product Master).
   const yieldDecimals =
-    unitById.get(Number(product?.boxUnitId ?? product?.unitId))?.decimalPlaces ??
-    2;
+    unitById.get(Number(product?.unitId))?.decimalPlaces ?? 2;
   const assetById = useMemo(
     () => new Map((assets ?? []).map((a) => [a.id, a])),
     [assets],
@@ -176,16 +180,42 @@ export default function RecipeMasterEditorPage() {
     () => new Map((designations ?? []).map((d) => [d.id, d])),
     [designations],
   );
+  const productById = useMemo(
+    () => new Map((allProducts ?? []).map((p) => [p.id, p])),
+    [allProducts],
+  );
+  // A pack is made from an unpacked product, so the source list is the unpacked ones.
+  const unpackedProducts = useMemo(
+    () => (allProducts ?? []).filter((p) => p.unpacked),
+    [allProducts],
+  );
+  // The material picker lists only items in packing-material categories (those
+  // flagged forPacking). Falls back to all items when no category is flagged yet.
+  const packingCatIds = useMemo(
+    () => new Set((categories ?? []).filter((c) => c.forPacking).map((c) => c.id)),
+    [categories],
+  );
+  const packingItems = useMemo(
+    () =>
+      packingCatIds.size === 0
+        ? itemList
+        : itemList.filter(
+            (it) => it.categoryId != null && packingCatIds.has(it.categoryId),
+          ),
+    [itemList, packingCatIds],
+  );
 
   // --- editable state ---
   const [yieldQty, setYieldQty] = useState('1');
-  const [recipe, setRecipe] = useState<Line[]>([]);
+  const [packing, setPacking] = useState<Line[]>([]);
   const [processes, setProcesses] = useState<Proc[]>([]);
   const [fuelCost, setFuelCost] = useState('0');
   const [overheadCost, setOverheadCost] = useState('0');
   const [bomMarginPct, setBomMarginPct] = useState('0');
   // Actual sales price per yield unit — user-entered (feeds the sales invoice).
   const [actualSalesPrice, setActualSalesPrice] = useState('0');
+  // Source (unpacked) products this pack is made from, each with a quantity.
+  const [packSources, setPackSources] = useState<Src[]>([]);
   const [saving, setSaving] = useState(false);
 
   // Overlay data-entry forms. The `*Seq` counters bump after each add so the
@@ -198,12 +228,17 @@ export default function RecipeMasterEditorPage() {
   );
   const [ingSeq, setIngSeq] = useState(0);
   const [procSeq, setProcSeq] = useState(0);
+  const [srcForm, setSrcForm] = useState<{
+    index: number | null;
+    draft: Src;
+  } | null>(null);
+  const [srcSeq, setSrcSeq] = useState(0);
 
   // Hydrate once the product loads.
   useEffect(() => {
     if (!product) return;
     setYieldQty(toDecimals(String(product.yieldQty ?? 1), yieldDecimals));
-    setRecipe(toLines(product.recipe ?? []));
+    setPacking(toLines(product.packing ?? []));
     setProcesses(
       (product.processes ?? []).map((p) => ({
         name: p.name,
@@ -220,6 +255,12 @@ export default function RecipeMasterEditorPage() {
     setOverheadCost(to2(String(product.overheadCost ?? 0)));
     setBomMarginPct(to2(String(product.bomMarginPct ?? 0)));
     setActualSalesPrice(toPrice(String(product.actualSalesPrice ?? 0)));
+    setPackSources(
+      (product.packSources ?? []).map((s) => ({
+        productId: String(s.sourceProductId),
+        quantity: String(s.quantity),
+      })),
+    );
   }, [product]);
 
   // Re-format the yield to the unit's decimal places once the Unit master loads
@@ -232,7 +273,7 @@ export default function RecipeMasterEditorPage() {
   const baseOf = (u?: Unit) => (u ? (u.baseUnitId ?? u.id) : undefined);
   const factorOf = (u?: Unit) => u?.conversionFactor ?? 1;
   // The item's last purchase price is per its stock unit; convert it into the
-  // recipe line's unit (e.g. 210/KG → 0.21/GM). Fallback: same unit or no shared base.
+  // packing line's unit (e.g. 210/KG → 0.21/GM). Fallback: same unit or no shared base.
   const rateOf = (l: Line) => {
     const item = itemById.get(Number(l.itemId));
     if (!item) return 0;
@@ -244,7 +285,7 @@ export default function RecipeMasterEditorPage() {
     return (price * factorOf(lu)) / factorOf(iu);
   };
   const amountOf = (l: Line) => (Number(l.quantity) || 0) * rateOf(l);
-  const materialCost = recipe.reduce((s, l) => s + amountOf(l), 0);
+  const materialCost = packing.reduce((s, l) => s + amountOf(l), 0);
 
   // Units an ingredient may be entered in: every unit in the SAME measurement
   // family as the item's stock unit (e.g. an item stocked in Kg → Tonne, Kg and
@@ -291,7 +332,14 @@ export default function RecipeMasterEditorPage() {
       0,
     );
   const manpowerCost = processes.reduce((s, p) => s + manpowerOf(p), 0);
+  // Product cost: for each source (unpacked) product, its product-master cost
+  // price × the quantity consumed per pack, summed across all sources.
+  const srcRate = (s: Src) =>
+    productById.get(Number(s.productId))?.costPrice ?? 0;
+  const srcAmount = (s: Src) => (Number(s.quantity) || 0) * srcRate(s);
+  const productCost = packSources.reduce((sum, s) => sum + srcAmount(s), 0);
   const costPrice =
+    productCost +
     materialCost +
     equipmentCost +
     manpowerCost +
@@ -382,12 +430,12 @@ export default function RecipeMasterEditorPage() {
         };
       });
   });
-  const yieldUnitCode = unitCode(product?.boxUnitId ?? product?.unitId);
+  const yieldUnitCode = unitCode(product?.unitId);
 
   // --- ingredient overlay ---
   const openAddIng = () => setIngForm({ index: null, draft: { ...BLANK_LINE } });
   const openEditIng = (i: number) =>
-    setIngForm({ index: i, draft: { ...recipe[i] } });
+    setIngForm({ index: i, draft: { ...packing[i] } });
   const onPickIngItem = (itemId: string) =>
     setIngForm((f) => {
       if (!f) return f;
@@ -411,13 +459,34 @@ export default function RecipeMasterEditorPage() {
     if (ingForm.index == null) {
       // Adding: keep the drawer open with a fresh row so more can be added;
       // the user closes with Cancel when done.
-      setRecipe((rows) => [...rows, d]);
+      setPacking((rows) => [...rows, d]);
       toast.success(`${itemName(d.itemId)} added.`);
       setIngForm({ index: null, draft: { ...BLANK_LINE } });
       setIngSeq((s) => s + 1); // remount → item combo re-opens for the next entry
     } else {
-      setRecipe((rows) => rows.map((r, i) => (i === ingForm.index ? d : r)));
+      setPacking((rows) => rows.map((r, i) => (i === ingForm.index ? d : r)));
       setIngForm(null);
+    }
+  };
+
+  // --- source-product overlay ---
+  const openAddSrc = () => setSrcForm({ index: null, draft: { ...BLANK_SRC } });
+  const openEditSrc = (i: number) =>
+    setSrcForm({ index: i, draft: { ...packSources[i] } });
+  const saveSrc = () => {
+    if (!srcForm) return;
+    const d = srcForm.draft;
+    if (!d.productId || !(Number(d.quantity) > 0)) {
+      toast.error('Pick a product and a positive quantity.');
+      return;
+    }
+    if (srcForm.index == null) {
+      setPackSources((rows) => [...rows, d]);
+      setSrcForm({ index: null, draft: { ...BLANK_SRC } });
+      setSrcSeq((s) => s + 1);
+    } else {
+      setPackSources((rows) => rows.map((r, i) => (i === srcForm.index ? d : r)));
+      setSrcForm(null);
     }
   };
 
@@ -473,8 +542,14 @@ export default function RecipeMasterEditorPage() {
     if (!product) return;
     const payload = {
       yieldQty: num(yieldQty) || 1,
-      yieldUnitId: product.boxUnitId ?? product.unitId,
-      recipe: recipe
+      yieldUnitId: product.unitId,
+      packSources: packSources
+        .filter((s) => s.productId && Number(s.quantity) > 0)
+        .map((s) => ({
+          sourceProductId: Number(s.productId),
+          quantity: Number(s.quantity),
+        })),
+      packing: packing
         .filter((l) => l.itemId && Number(l.quantity) > 0 && l.unitId)
         .map((l) => ({
           itemId: Number(l.itemId),
@@ -506,60 +581,13 @@ export default function RecipeMasterEditorPage() {
     setSaving(true);
     try {
       await api.patch(`/products/${product.id}`, payload);
-      toast.success('Recipe saved.');
+      toast.success('Packing saved.');
       if (close) router.push(ROUTE);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Failed to save recipe.');
+      toast.error(e instanceof ApiError ? e.message : 'Failed to save packing.');
     } finally {
       setSaving(false);
     }
-  };
-
-  // Print the recipe from the CURRENT on-screen state (so unsaved edits show).
-  const doPrint = () => {
-    if (!product) return;
-    printRecipe(
-      {
-        code: product.code,
-        name: product.name,
-        category: product.category ?? null,
-        group: product.group ?? null,
-        yieldQty: num(yieldQty) || 1,
-        unitId: product.unitId,
-        boxUnitId: product.boxUnitId,
-        recipe: recipe
-          .filter((l) => l.itemId && Number(l.quantity) > 0 && l.unitId)
-          .map((l) => ({
-            itemId: Number(l.itemId),
-            quantity: Number(l.quantity),
-            unitId: Number(l.unitId),
-          })),
-        processes: processes
-          .filter((p) => p.name.trim())
-          .map((p) => ({
-            name: p.name.trim(),
-            timeValue: num(p.timeValue),
-            timeUnit: p.timeUnit,
-            machineId: p.machineId ? Number(p.machineId) : null,
-            manpower: p.manpower
-              .filter((m) => m.designationId && Number(m.count) >= 1)
-              .map((m) => ({
-                designationId: Number(m.designationId),
-                workerCount: Number(m.count),
-              })),
-          })),
-        fuelCost: num(fuelCost),
-        overheadCost: num(overheadCost),
-        bomMarginPct: num(bomMarginPct),
-        actualSalesPrice: round1(num(actualSalesPrice)),
-      },
-      {
-        items: items ?? [],
-        units: units ?? [],
-        assets: assets ?? [],
-        designations: designations ?? [],
-      },
-    );
   };
 
   // Keep the latest save closure for the keyboard shortcut (avoids stale state).
@@ -591,7 +619,7 @@ export default function RecipeMasterEditorPage() {
   if (loading || !product) {
     return (
       <div className="mx-auto flex h-full max-w-[1400px] flex-col">
-        <p className="py-16 text-center text-slate-400">Loading recipe…</p>
+        <p className="py-16 text-center text-slate-400">Loading packing…</p>
       </div>
     );
   }
@@ -601,16 +629,13 @@ export default function RecipeMasterEditorPage() {
   return (
     <div className="mx-auto flex h-full max-w-[1400px] flex-col">
       <PageHeader
-        title={`${view ? 'Recipe' : 'Edit Recipe'} — ${product.name}`}
-        description={`Product code ${product.code} · ingredients, process flow & costing`}
+        title={`${view ? 'Packing' : 'Edit Packing'} — ${product.name}`}
+        description={`Product code ${product.code} · packing materials, process flow & costing`}
         icon={<ListTree className="h-5 w-5" />}
         actions={
           <div className="flex items-center gap-2">
             <button className="btn-secondary" onClick={() => router.push(ROUTE)}>
               <ArrowLeft className="h-4 w-4" /> Back
-            </button>
-            <button className="btn-secondary" onClick={doPrint}>
-              <Printer className="h-4 w-4" /> Print
             </button>
             {!view && (
               <>
@@ -678,14 +703,100 @@ export default function RecipeMasterEditorPage() {
           </div>
         </div>
 
-        {/* Ingredients + Process Flow side by side */}
+        {/* Packed From — the unpacked source products this pack is made from. */}
+        <div className="card flex flex-col border-[#e7ddcb] bg-[#fbf9f4] p-4 dark:border-slate-800 dark:bg-slate-900">
+          <SectionHeader
+            title="Packed From (Unpacked Products)"
+            onAdd={!view ? openAddSrc : undefined}
+            addLabel="Add product"
+          />
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700">
+                <th className="w-8 py-2 pr-1 text-center">#</th>
+                <th className="py-2 pr-2">Unpacked Product</th>
+                <th className="w-24 py-2 px-1 text-right">Qty</th>
+                <th className="w-14 py-2 px-1">Unit</th>
+                <th className="w-28 py-2 px-1 text-right">Cost Price</th>
+                <th className="w-28 py-2 px-1 text-right">Amount</th>
+                {!view && <th className="w-16 py-2 pl-1 text-center">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {packSources.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={view ? 6 : 7}
+                    className="py-6 text-center text-xs text-slate-400"
+                  >
+                    No source products yet.
+                  </td>
+                </tr>
+              ) : (
+                packSources.map((s, i) => {
+                  const sp = productById.get(Number(s.productId));
+                  return (
+                    <tr
+                      key={i}
+                      className="border-b border-slate-100 dark:border-slate-800/60"
+                    >
+                      <td className="py-2 pr-1 text-center tabular-nums text-slate-500">
+                        {i + 1}
+                      </td>
+                      <td className="py-2 pr-2 font-medium text-slate-800 dark:text-slate-100">
+                        {sp?.name ?? '—'}
+                      </td>
+                      <td className="px-1 text-right tabular-nums">
+                        {money(Number(s.quantity) || 0)}
+                      </td>
+                      <td className="px-1">
+                        {sp ? unitCode(sp.unitId) : ''}
+                      </td>
+                      <td className="px-1 text-right tabular-nums text-slate-600 dark:text-slate-300">
+                        {money(srcRate(s))}
+                      </td>
+                      <td className="px-1 text-right font-medium tabular-nums text-slate-800 dark:text-slate-100">
+                        {money(srcAmount(s))}
+                      </td>
+                      {!view && (
+                        <td className="pl-1">
+                          <RowActions
+                            onEdit={() => openEditSrc(i)}
+                            onDelete={() =>
+                              setPackSources(
+                                packSources.filter((_, idx) => idx !== i),
+                              )
+                            }
+                          />
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-slate-200 dark:border-slate-700">
+                <td colSpan={5} className="py-2 text-right text-sm font-semibold">
+                  Product Cost
+                </td>
+                <td className="py-2 px-1 text-right text-sm font-bold tabular-nums text-slate-900 dark:text-white">
+                  {money(productCost)}
+                </td>
+                {!view && <td />}
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        {/* Packing materials + Process Flow side by side */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {/* Ingredients */}
           <div className="card flex flex-col border-[#e7ddcb] bg-[#fbf9f4] p-4 dark:border-slate-800 dark:bg-slate-900">
             <SectionHeader
-              title="Ingredients"
+              title="Packing Materials"
               onAdd={!view ? openAddIng : undefined}
-              addLabel="Add item"
+              addLabel="Add material"
               shortcut="Alt+I"
             />
             <table className="w-full text-sm">
@@ -701,17 +812,17 @@ export default function RecipeMasterEditorPage() {
                 </tr>
               </thead>
               <tbody>
-                {recipe.length === 0 ? (
+                {packing.length === 0 ? (
                   <tr>
                     <td
                       colSpan={view ? 6 : 7}
                       className="py-6 text-center text-xs text-slate-400"
                     >
-                      No ingredients yet.
+                      No packing materials yet.
                     </td>
                   </tr>
                 ) : (
-                  recipe.map((line, i) => (
+                  packing.map((line, i) => (
                     <tr
                       key={i}
                       className="border-b border-slate-100 dark:border-slate-800/60"
@@ -737,7 +848,7 @@ export default function RecipeMasterEditorPage() {
                           <RowActions
                             onEdit={() => openEditIng(i)}
                             onDelete={() =>
-                              setRecipe(recipe.filter((_, idx) => idx !== i))
+                              setPacking(packing.filter((_, idx) => idx !== i))
                             }
                           />
                         </td>
@@ -883,7 +994,10 @@ export default function RecipeMasterEditorPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    <CostLabelRow label="Material Cost (from recipe)">
+                    <CostLabelRow label="Product Cost (from source)">
+                      {money(productCost)}
+                    </CostLabelRow>
+                    <CostLabelRow label="Material Cost (from packing)">
                       {money(materialCost)}
                     </CostLabelRow>
                     <CostLabelRow
@@ -1049,7 +1163,7 @@ export default function RecipeMasterEditorPage() {
       <Drawer
         open={!!ingForm}
         onClose={() => setIngForm(null)}
-        title={ingForm?.index == null ? 'Add Ingredient' : 'Edit Ingredient'}
+        title={ingForm?.index == null ? 'Add Material' : 'Edit Material'}
         subtitle="Item, quantity and unit"
         icon={<ListTree className="h-5 w-5" />}
         width="sm"
@@ -1076,10 +1190,10 @@ export default function RecipeMasterEditorPage() {
               value={ingForm.draft.itemId}
               onChange={(e) => onPickIngItem(e.target.value)}
               placeholder="Select item"
-              options={itemList
+              options={packingItems
                 .filter(
                   (it) =>
-                    !recipe.some((l) => Number(l.itemId) === it.id) ||
+                    !packing.some((l) => Number(l.itemId) === it.id) ||
                     String(it.id) === ingForm.draft.itemId,
                 )
                 .map((it) => ({ value: it.id, label: it.name }))}
@@ -1336,6 +1450,80 @@ export default function RecipeMasterEditorPage() {
                 Add. Esc closes.
               </p>
             )}
+          </div>
+        )}
+      </Drawer>
+
+      {/* Source-product data-entry overlay */}
+      <Drawer
+        open={!!srcForm}
+        onClose={() => setSrcForm(null)}
+        title={srcForm?.index == null ? 'Add Source Product' : 'Edit Source Product'}
+        subtitle="Unpacked product and quantity"
+        icon={<ListTree className="h-5 w-5" />}
+        width="sm"
+        footer={
+          <div className="flex justify-end gap-2">
+            <button className="btn-secondary" onClick={() => setSrcForm(null)}>
+              Cancel <Kbd>Esc</Kbd>
+            </button>
+            <button id="src-add" className="btn-primary" onClick={saveSrc}>
+              {srcForm?.index == null ? 'Add' : 'Update'} <Kbd>↵</Kbd>
+            </button>
+          </div>
+        }
+      >
+        {srcForm && (
+          <div key={srcSeq} className="space-y-4">
+            <Select
+              label="Unpacked Product"
+              required
+              id="src-product"
+              autoFocus={srcForm.index == null}
+              openOnFocus
+              advanceToId="src-qty"
+              value={srcForm.draft.productId}
+              onChange={(e) =>
+                setSrcForm((f) =>
+                  f ? { ...f, draft: { ...f.draft, productId: e.target.value } } : f,
+                )
+              }
+              placeholder="Select unpacked product"
+              options={unpackedProducts
+                .filter(
+                  (p) =>
+                    !packSources.some((s) => Number(s.productId) === p.id) ||
+                    String(p.id) === srcForm.draft.productId,
+                )
+                .map((p) => ({
+                  value: p.id,
+                  label: `${p.name} (${p.code})`,
+                }))}
+            />
+            <Input
+              label="Quantity"
+              required
+              id="src-qty"
+              type="number"
+              min={0}
+              step="any"
+              value={srcForm.draft.quantity}
+              onKeyDown={enterTo('src-add')}
+              onChange={(e) =>
+                setSrcForm((f) =>
+                  f ? { ...f, draft: { ...f.draft, quantity: e.target.value } } : f,
+                )
+              }
+            />
+            <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/50">
+              <span className="text-slate-500 dark:text-slate-400">
+                Cost {money(srcRate(srcForm.draft))} ×{' '}
+                {Number(srcForm.draft.quantity) || 0}
+              </span>
+              <span className="font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                {money(srcAmount(srcForm.draft))}
+              </span>
+            </div>
           </div>
         )}
       </Drawer>

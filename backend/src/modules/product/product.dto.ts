@@ -16,6 +16,16 @@ import {
 import { Type } from 'class-transformer';
 import { ProcessTimeUnit } from '@prisma/client';
 
+/** One packing source line — `quantity` of an unpacked `sourceProductId`. */
+export class PackSourceInput {
+  @IsInt()
+  sourceProductId!: number;
+
+  @IsNumber()
+  @IsPositive()
+  quantity!: number;
+}
+
 /** One BOM line — `quantity` of `itemId`, measured in `unitId`. */
 export class BomLineInput {
   @IsInt()
@@ -189,6 +199,14 @@ export class CreateProductDto {
   @IsOptional()
   @IsInt()
   yieldUnitId?: number | null;
+
+  /** Packed product: the unpacked source products it is packed from, each with a
+   *  quantity. Per-unit cost is read from the source product's costPrice. */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PackSourceInput)
+  packSources?: PackSourceInput[];
 
   /** A production (recipe) BOM can be created for this product. */
   @IsOptional()
@@ -378,6 +396,14 @@ export class UpdateProductDto {
   @IsOptional()
   @IsInt()
   yieldUnitId?: number | null;
+
+  /** Packed product: the unpacked source products it is packed from, each with a
+   *  quantity. Per-unit cost is read from the source product's costPrice. */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PackSourceInput)
+  packSources?: PackSourceInput[];
 
   @IsOptional()
   @IsBoolean()

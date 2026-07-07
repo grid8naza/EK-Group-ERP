@@ -33,12 +33,13 @@ export const INVENTORY_SUBS = [
 // is edited here, while the product's master data lives under Inventory.
 export const PRODUCTION_SUBS = [
   { name: 'Recipe Master', route: '/production/recipe-master', icon: 'list-tree', order: 1 },
+  { name: 'Packing Master', route: '/production/packing-master', icon: 'package-check', order: 2 },
   // Per-module reference data. Super-admin-only; isolated from other modules.
   {
     name: 'Lookups',
     route: '/production/lookups',
     icon: 'list',
-    order: 2,
+    order: 3,
     superAdminOnly: true,
   },
 ];

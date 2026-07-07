@@ -20,6 +20,7 @@ import { join } from 'path';
 import {
   BomLineInput,
   CreateProductDto,
+  PackSourceInput,
   ProcessInput,
   UpdateProductDto,
 } from './product.dto';
@@ -41,6 +42,10 @@ const withRelations = {
   yieldUnit: { select: { id: true, code: true, name: true, symbol: true } },
   hsnCode: { select: { id: true, code: true, description: true } },
   companies: { select: { companyId: true } },
+  packSources: {
+    orderBy: { sequence: 'asc' },
+    select: { id: true, sourceProductId: true, quantity: true, sequence: true },
+  },
   bomLines: {
     orderBy: { sequence: 'asc' },
     include: {
@@ -158,6 +163,7 @@ export class ProductService {
           companies: { create: companyIds.map((companyId) => ({ companyId })) },
           bomLines: { create: this.bomCreate(dto.recipe, dto.packing) },
           processes: { create: this.processCreate(dto.processes) },
+          packSources: { create: this.packSourceCreate(dto.packSources) },
         },
         include: withRelations,
       });
@@ -319,6 +325,14 @@ export class ProductService {
                 },
               }
             : {}),
+          ...(dto.packSources !== undefined
+            ? {
+                packSources: {
+                  deleteMany: {},
+                  create: this.packSourceCreate(dto.packSources),
+                },
+              }
+            : {}),
         },
         include: withRelations,
       });
@@ -387,6 +401,17 @@ export class ProductService {
       ...rows(recipe, BomKind.RECIPE),
       ...rows(packing, BomKind.PACKING),
     ];
+  }
+
+  /** Build ProductPackSource create rows from the packing sources array. */
+  private packSourceCreate(
+    sources: PackSourceInput[] | undefined,
+  ): Prisma.ProductPackSourceUncheckedCreateWithoutProductInput[] {
+    return (sources ?? []).map((s, i) => ({
+      sequence: i,
+      sourceProductId: s.sourceProductId,
+      quantity: s.quantity,
+    }));
   }
 
   /** Build ProductProcess create rows from the process-flow array. */

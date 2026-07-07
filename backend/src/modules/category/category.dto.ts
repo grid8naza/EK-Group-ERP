@@ -48,6 +48,10 @@ export class CreateCategoryDto {
 
   @IsOptional()
   @IsBoolean()
+  forPacking?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   isActive?: boolean;
 }
 
@@ -86,6 +90,10 @@ export class UpdateCategoryDto {
   @IsOptional()
   @IsBoolean()
   forProduct?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  forPacking?: boolean;
 
   @IsOptional()
   @IsBoolean()
