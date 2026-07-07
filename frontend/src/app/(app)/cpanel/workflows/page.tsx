@@ -258,12 +258,20 @@ export default function WorkflowsPage() {
     setOpen(true);
   };
 
-  // Load a definition (and its steps) into both tabs for edit / view.
-  const hydrate = async (w: WorkflowDefinition, viewMode: boolean) => {
+  // Load a definition (and its steps) into both tabs for edit / view. `reopen`
+  // resets the tab + opens the drawer (opening); pass false to just reload data
+  // after a Save so the current tab (e.g. Approval steps) is preserved.
+  const hydrate = async (
+    w: WorkflowDefinition,
+    viewMode: boolean,
+    reopen = true,
+  ) => {
     setEditing(w);
     setView(viewMode);
-    setTab('def');
-    setOpen(true);
+    if (reopen) {
+      setTab('def');
+      setOpen(true);
+    }
     try {
       const full = await api.get<WorkflowDefinition>(`/workflows/${w.id}`);
       setDef({
@@ -402,8 +410,9 @@ export default function WorkflowsPage() {
         setEditing(null);
         resetForm();
       } else if (mode === 'save') {
-        // Reload the just-saved record so both tabs reflect persisted state.
-        hydrate(saved, false);
+        // Reload the just-saved record so both tabs reflect persisted state,
+        // staying on the current tab (don't jump back to Definition).
+        hydrate(saved, false, false);
       } else setOpen(false);
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
