@@ -71,6 +71,8 @@ export default function ProductsReportPage() {
         header: 'Intercompany Price',
         weight: 10,
         numeric: true,
+        group: 'Intercompany',
+        subHeader: 'Price',
         cell: (p) => money(p.intercompanyPrice ?? 0),
       },
       {
@@ -78,6 +80,8 @@ export default function ProductsReportPage() {
         header: 'Intercompany Profit %',
         weight: 10,
         numeric: true,
+        group: 'Intercompany',
+        subHeader: '%',
         cell: (p) => money(p.intercompanyProfitPct ?? 0),
       },
       {
@@ -85,6 +89,8 @@ export default function ProductsReportPage() {
         header: 'Wholesale Price',
         weight: 10,
         numeric: true,
+        group: 'Wholesale',
+        subHeader: 'Price',
         cell: (p) => money(p.wholesalePrice ?? 0),
       },
       {
@@ -92,6 +98,8 @@ export default function ProductsReportPage() {
         header: 'Wholesale Profit %',
         weight: 10,
         numeric: true,
+        group: 'Wholesale',
+        subHeader: '%',
         cell: (p) => money(p.wholesaleProfitPct ?? 0),
       },
       {
@@ -99,6 +107,8 @@ export default function ProductsReportPage() {
         header: 'Retail Price',
         weight: 10,
         numeric: true,
+        group: 'Retail',
+        subHeader: 'Price',
         cell: (p) => money(p.retailPrice ?? 0),
       },
       {
@@ -106,6 +116,8 @@ export default function ProductsReportPage() {
         header: 'Retail Profit %',
         weight: 10,
         numeric: true,
+        group: 'Retail',
+        subHeader: '%',
         cell: (p) => money(p.retailProfitPct ?? 0),
       },
       {
@@ -200,6 +212,8 @@ export default function ProductsReportPage() {
     serial: true,
     summary,
     numericCols: selected.numericCols,
+    groups: selected.groups,
+    subHeaders: selected.subHeaders,
   };
 
   const has = total > 0;
@@ -296,6 +310,8 @@ export default function ProductsReportPage() {
             statusCol={selected.statusCol}
             boldCol={selected.boldCol}
             numericCols={selected.numericCols}
+            groups={selected.groups}
+            subHeaders={selected.subHeaders}
             serial
             summary={summary}
             emptyText="No products match the current filters."

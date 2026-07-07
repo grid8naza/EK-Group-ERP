@@ -8,6 +8,7 @@ import {
   colPercent,
   reportColumns,
   selectColumns,
+  headerPlan,
   type Cell,
   type ReportBlock,
   type ReportColumn,
@@ -76,10 +77,21 @@ interface ReportViewProps {
   /** Column indices to right-align. Columns whose cells are raw numbers are
    *  right-aligned automatically regardless. */
   numericCols?: number[];
+  /** Optional two-tier header: group label + lower-row sub-header per visible
+   *  column, parallel to `columns`. */
+  groups?: (string | undefined)[];
+  subHeaders?: (string | undefined)[];
   emptyText?: string;
 }
 
 const fmt = (v: Cell) => (typeof v === 'number' ? v.toLocaleString() : String(v));
+
+const HEAD_ROW_CLASS =
+  'border-b border-[#efe7db] bg-[#fcfbf8] text-xs font-semibold uppercase tracking-wide text-[#6d6258] shadow-[0_1px_0_#efe7db] dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400';
+
+// Vertical column separator (left border) — applied to every internal column
+// boundary so the on-screen table shows a full grid, matching print / PDF.
+const V_BORDER = 'border-l border-[#efe7db] dark:border-slate-800';
 
 /** On-screen grouped report: centered block headings, left sub-headings, and
  *  fixed-width tables with centered column headers — matching the exports. */
@@ -93,6 +105,8 @@ export function ReportView({
   serial,
   summary,
   numericCols,
+  groups,
+  subHeaders,
   emptyText = 'No records found.',
 }: ReportViewProps) {
   const total = blocks.reduce(
@@ -108,6 +122,9 @@ export function ReportView({
   // Effective columns/weights + shifted status/bold indices when a serial
   // column is prepended.
   const eff = reportColumns({ columns, weights, serial });
+  // Two-tier header (group labels above Price/% sub-columns) when the report
+  // declares column groups; otherwise a single header row.
+  const plan = headerPlan(columns, groups, subHeaders, serial);
   const shift = serial ? 1 : 0;
   const statusColX = statusCol == null ? undefined : statusCol + shift;
   const boldColX = boldCol == null ? undefined : boldCol + shift;
@@ -140,13 +157,40 @@ export function ReportView({
         {/* Column header sits just below the sticky block heading (h-10) when
             the block has one, otherwise pins to the top. */}
         <thead className={cn('sticky z-10', hasHeading ? 'top-10' : 'top-0')}>
-          <tr className="border-b border-[#efe7db] bg-[#fcfbf8] text-xs font-semibold uppercase tracking-wide text-[#6d6258] shadow-[0_1px_0_#efe7db] dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-            {eff.columns.map((col) => (
-              <th key={col} className="px-3 py-2 text-center">
-                {col}
-              </th>
-            ))}
-          </tr>
+          {plan ? (
+            <>
+              <tr className={HEAD_ROW_CLASS}>
+                {plan.top.map((c, i) => (
+                  <th
+                    key={i}
+                    colSpan={c.colspan}
+                    rowSpan={c.rowspan}
+                    className={cn('px-3 py-2 text-center', i > 0 && V_BORDER)}
+                  >
+                    {c.label}
+                  </th>
+                ))}
+              </tr>
+              <tr className={HEAD_ROW_CLASS}>
+                {plan.bottom.map((s, i) => (
+                  <th key={i} className={cn('px-3 py-2 text-center', V_BORDER)}>
+                    {s}
+                  </th>
+                ))}
+              </tr>
+            </>
+          ) : (
+            <tr className={HEAD_ROW_CLASS}>
+              {eff.columns.map((col, i) => (
+                <th
+                  key={col}
+                  className={cn('px-3 py-2 text-center', i > 0 && V_BORDER)}
+                >
+                  {col}
+                </th>
+              ))}
+            </tr>
+          )}
         </thead>
         <tbody>
           {t.rows.map((row, ri) => (
@@ -166,7 +210,7 @@ export function ReportView({
                     {ri + 1}
                   </td>
                 ) : ci === statusColX ? (
-                  <td key={ci} className="px-3 py-2">
+                  <td key={ci} className={cn('px-3 py-2', ci > 0 && V_BORDER)}>
                     <Badge color={String(v) === 'Active' ? 'green' : 'slate'}>
                       {String(v)}
                     </Badge>
@@ -176,6 +220,7 @@ export function ReportView({
                     key={ci}
                     className={cn(
                       'break-words px-3 py-2',
+                      ci > 0 && V_BORDER,
                       numericColX.has(ci) && 'text-right tabular-nums',
                       ci === boldColX
                         ? 'font-medium text-slate-800 dark:text-slate-100'

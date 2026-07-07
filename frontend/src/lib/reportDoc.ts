@@ -41,6 +41,11 @@ export interface ReportSpec {
   /** Indices (into `columns`) of numeric columns to right-align. Columns whose
    *  cells are raw numbers are right-aligned automatically regardless. */
   numericCols?: readonly number[];
+  /** Optional two-tier header: the group label per column and the lower-row
+   *  sub-header per column (both parallel to `columns`, no serial). Leave
+   *  undefined for the usual single-row header. */
+  groups?: readonly (string | undefined)[];
+  subHeaders?: readonly (string | undefined)[];
 }
 
 /**
@@ -92,6 +97,15 @@ export interface ReportColumn<T> {
    * raw `number` are detected and right-aligned automatically.
    */
   numeric?: boolean;
+  /**
+   * Two-tier header: columns sharing the same `group` collapse into one spanning
+   * group label on the top header row, with `subHeader` (falling back to
+   * `header`) shown on the row beneath. Columns with no `group` span both rows.
+   * Only takes effect when the report forwards `groups`/`subHeaders` to the
+   * ReportView / ReportSpec.
+   */
+  group?: string;
+  subHeader?: string;
 }
 
 export interface SelectedColumns<T> {
@@ -103,6 +117,11 @@ export interface SelectedColumns<T> {
   numericCols: number[];
   /** Build a row's cells for the visible columns, in order. */
   cells: (row: T) => Cell[];
+  /** Per-visible-column group label (parallel to `columns`); undefined when the
+   *  report declares no grouped headers. */
+  groups?: (string | undefined)[];
+  /** Per-visible-column lower-row sub-header (parallel to `columns`). */
+  subHeaders?: (string | undefined)[];
 }
 
 /**
@@ -116,6 +135,7 @@ export function selectColumns<T>(
   const visible = all.filter((c) => !hidden.has(c.key));
   const statusIdx = visible.findIndex((c) => c.status);
   const boldIdx = visible.findIndex((c) => c.bold);
+  const grouped = visible.some((c) => c.group);
   return {
     columns: visible.map((c) => c.header),
     weights: visible.map((c) => c.weight),
@@ -125,6 +145,10 @@ export function selectColumns<T>(
       .map((c, i) => (c.numeric ? i : -1))
       .filter((i) => i >= 0),
     cells: (row: T) => visible.map((c) => c.cell(row)),
+    groups: grouped ? visible.map((c) => c.group) : undefined,
+    subHeaders: grouped
+      ? visible.map((c) => c.subHeader ?? c.header)
+      : undefined,
   };
 }
 
@@ -152,6 +176,47 @@ export function reportColumns(spec: Pick<ReportSpec, 'columns' | 'weights' | 'se
         weights: [SERIAL_WEIGHT, ...spec.weights],
       }
     : { columns: spec.columns, weights: spec.weights };
+}
+
+export interface HeaderPlan {
+  /** Top header row: each cell spans `colspan` columns and `rowspan` rows. */
+  top: { label: string; colspan: number; rowspan: number }[];
+  /** Lower header row: sub-labels for the grouped columns only, left → right. */
+  bottom: string[];
+}
+
+/**
+ * Build a two-tier header from the visible columns and their per-column group
+ * labels. Consecutive columns sharing a group collapse into one spanning cell;
+ * ungrouped columns span both rows. Returns null when there are no groups (the
+ * caller then renders the usual single header row). `serial` prepends a Sl. No
+ * cell spanning both rows. All inputs are the no-serial visible columns.
+ */
+export function headerPlan(
+  columns: readonly string[],
+  groups: readonly (string | undefined)[] | undefined,
+  subHeaders: readonly (string | undefined)[] | undefined,
+  serial?: boolean,
+): HeaderPlan | null {
+  if (!groups || !groups.some(Boolean)) return null;
+  const top: HeaderPlan['top'] = [];
+  const bottom: string[] = [];
+  if (serial) top.push({ label: SERIAL_HEAD, colspan: 1, rowspan: 2 });
+  let i = 0;
+  while (i < columns.length) {
+    const g = groups[i];
+    if (!g) {
+      top.push({ label: columns[i], colspan: 1, rowspan: 2 });
+      i += 1;
+      continue;
+    }
+    let j = i;
+    while (j < columns.length && groups[j] === g) j += 1;
+    top.push({ label: g, colspan: j - i, rowspan: 1 });
+    for (let k = i; k < j; k += 1) bottom.push(subHeaders?.[k] ?? columns[k]);
+    i = j;
+  }
+  return { top, bottom };
 }
 
 export const reportStamp = () => new Date().toISOString().slice(0, 10);
@@ -200,9 +265,21 @@ export function printReport(
   const colgroup = `<colgroup>${columns
     .map((_, i) => `<col style="width:${colPercent(weights, i)}">`)
     .join('')}</colgroup>`;
-  const head = `<thead><tr>${columns
-    .map((c) => `<th>${esc(c)}</th>`)
-    .join('')}</tr></thead>`;
+  const plan = headerPlan(spec.columns, spec.groups, spec.subHeaders, spec.serial);
+  const head = plan
+    ? `<thead><tr>${plan.top
+        .map(
+          (c) =>
+            `<th${c.colspan > 1 ? ` colspan="${c.colspan}"` : ''}${
+              c.rowspan > 1 ? ` rowspan="${c.rowspan}"` : ''
+            }>${esc(c.label)}</th>`,
+        )
+        .join('')}</tr><tr>${plan.bottom
+        .map((s) => `<th>${esc(s)}</th>`)
+        .join('')}</tr></thead>`
+    : `<thead><tr>${columns
+        .map((c) => `<th>${esc(c)}</th>`)
+        .join('')}</tr></thead>`;
   const tableFor = (t: ReportTable) =>
     `<table>${colgroup}${head}<tbody>${t.rows
       .map((r, i) => {
@@ -324,6 +401,20 @@ export function pdfReport(spec: ReportSpec): void {
   // (via didParseCell) so headers keep the centered headStyles alignment.
   if (spec.serial) columnStyles[0].halign = 'center';
 
+  // Two-tier header (group labels spanning Price/% sub-columns) when the spec
+  // declares column groups; otherwise a single header row.
+  const plan = headerPlan(spec.columns, spec.groups, spec.subHeaders, spec.serial);
+  const pdfHead = plan
+    ? [
+        plan.top.map((c) => ({
+          content: c.label,
+          colSpan: c.colspan,
+          rowSpan: c.rowspan,
+        })),
+        plan.bottom.map((s) => ({ content: s })),
+      ]
+    : [columns as unknown as string[]];
+
   for (const b of spec.blocks) {
     if (b.heading) {
       ensure(12);
@@ -351,12 +442,28 @@ export function pdfReport(spec: ReportSpec): void {
       }
       autoTable(doc, {
         startY: y,
-        head: [columns as unknown as string[]],
+        head: pdfHead as unknown as string[][],
         body: t.rows.map((r, i) =>
           (spec.serial ? [i + 1, ...r] : r).map(fmt),
         ),
-        styles: { fontSize: 8, cellPadding: 1.5, overflow: 'linebreak' },
-        headStyles: { fillColor: [120, 98, 72], halign: 'center' },
+        // Match the HTML report: light beige header, dark slate text, thin tan
+        // grid lines, and vertically-centered spanning header cells.
+        styles: {
+          fontSize: 8,
+          cellPadding: 1.5,
+          overflow: 'linebreak',
+          textColor: [30, 41, 59],
+          lineColor: [216, 210, 198],
+          lineWidth: 0.1,
+        },
+        headStyles: {
+          fillColor: [243, 236, 224],
+          textColor: [30, 41, 59],
+          halign: 'center',
+          valign: 'middle',
+          lineColor: [216, 210, 198],
+          lineWidth: 0.1,
+        },
         columnStyles,
         margin: { left: 16, right: 14 },
         theme: 'grid',
@@ -411,11 +518,17 @@ export function excelReport(
   grouping?: { headingLabel?: string; subheadingLabel?: string },
 ): void {
   const { headingLabel, subheadingLabel } = grouping ?? {};
+  // Grouped headers are flattened into single descriptive labels (e.g.
+  // "Intercompany Price") so the sheet stays flat, as documented above.
+  const colLabels = spec.columns.map((c, i) => {
+    const g = spec.groups?.[i];
+    return g ? `${g} ${spec.subHeaders?.[i] ?? c}` : c;
+  });
   const header = [
     ...(spec.serial ? ['Sl. No'] : []),
     ...(headingLabel ? [headingLabel] : []),
     ...(subheadingLabel ? [subheadingLabel] : []),
-    ...spec.columns,
+    ...colLabels,
   ];
   const rows: Cell[][] = [];
   for (const b of spec.blocks)
