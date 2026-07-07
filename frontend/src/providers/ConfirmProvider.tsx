@@ -9,6 +9,9 @@ interface ConfirmOptions {
   confirmText?: string;
   cancelText?: string;
   danger?: boolean;
+  /** Focus the cancel button by default (so Enter cancels) — for prompts where
+   *  the safe choice should be the default, e.g. discarding unsaved changes. */
+  defaultCancel?: boolean;
 }
 
 type ConfirmFn = (opts: ConfirmOptions) => Promise<boolean>;
@@ -63,7 +66,11 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             <div className="mt-6 flex justify-end gap-2">
-              <button className="btn-secondary" onClick={() => close(false)}>
+              <button
+                className="btn-secondary"
+                autoFocus={opts.defaultCancel}
+                onClick={() => close(false)}
+              >
                 {opts.cancelText || 'Cancel'}
               </button>
               <button

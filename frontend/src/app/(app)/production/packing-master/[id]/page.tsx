@@ -14,6 +14,7 @@ import {
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
+import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
@@ -106,6 +107,7 @@ export default function PackingMasterEditorPage() {
   const router = useRouter();
   const { can } = useAuth();
   const toast = useToast();
+  const confirm = useConfirm();
 
   const id = String(params.id);
   const view = searchParams.get('view') === '1' || !can(ROUTE, 'edit');
@@ -217,6 +219,8 @@ export default function PackingMasterEditorPage() {
   // Source (unpacked) products this pack is made from, each with a quantity.
   const [packSources, setPackSources] = useState<Src[]>([]);
   const [saving, setSaving] = useState(false);
+  // Baseline snapshot of the loaded values, to warn on leaving with edits.
+  const baselineRef = useRef('');
 
   // Overlay data-entry forms. The `*Seq` counters bump after each add so the
   // form remounts and the first field re-focuses, ready for the next entry.
@@ -261,6 +265,32 @@ export default function PackingMasterEditorPage() {
         quantity: String(s.quantity),
       })),
     );
+    baselineRef.current = JSON.stringify({
+      yieldQty: Number(product.yieldQty ?? 1) || 0,
+      fuelCost: Number(product.fuelCost ?? 0) || 0,
+      overheadCost: Number(product.overheadCost ?? 0) || 0,
+      bomMarginPct: Number(product.bomMarginPct ?? 0) || 0,
+      actualSalesPrice: Number(product.actualSalesPrice ?? 0) || 0,
+      packSources: (product.packSources ?? []).map((s) => ({
+        p: s.sourceProductId,
+        q: s.quantity,
+      })),
+      packing: (product.packing ?? []).map((l) => ({
+        i: l.itemId,
+        q: l.quantity,
+        u: l.unitId,
+      })),
+      processes: (product.processes ?? []).map((p) => ({
+        n: p.name.trim(),
+        t: Number(p.timeValue) || 0,
+        tu: p.timeUnit,
+        m: Number(p.machineId) || 0,
+        mp: (p.manpower ?? []).map((m) => ({
+          d: m.designationId,
+          c: m.workerCount,
+        })),
+      })),
+    });
   }, [product]);
 
   // Re-format the yield to the unit's decimal places once the Unit master loads
@@ -538,6 +568,53 @@ export default function PackingMasterEditorPage() {
     );
   };
 
+  // Format-independent snapshot of the editable state; compared to the baseline
+  // to detect unsaved changes.
+  const snapshot = () =>
+    JSON.stringify({
+      yieldQty: num(yieldQty),
+      fuelCost: num(fuelCost),
+      overheadCost: num(overheadCost),
+      bomMarginPct: num(bomMarginPct),
+      actualSalesPrice: num(actualSalesPrice),
+      packSources: packSources.map((s) => ({
+        p: Number(s.productId) || 0,
+        q: Number(s.quantity) || 0,
+      })),
+      packing: packing.map((l) => ({
+        i: Number(l.itemId) || 0,
+        q: Number(l.quantity) || 0,
+        u: Number(l.unitId) || 0,
+      })),
+      processes: processes.map((p) => ({
+        n: p.name.trim(),
+        t: num(p.timeValue),
+        tu: p.timeUnit,
+        m: Number(p.machineId) || 0,
+        mp: p.manpower.map((m) => ({
+          d: Number(m.designationId) || 0,
+          c: Number(m.count) || 0,
+        })),
+      })),
+    });
+
+  // Warn before leaving with unsaved edits (the Back button).
+  const onBack = async () => {
+    if (snapshot() !== baselineRef.current) {
+      const ok = await confirm({
+        title: 'Unsaved changes',
+        message:
+          'There are unsaved changes. If you leave this page, they will be lost. Continue?',
+        danger: true,
+        confirmText: 'Yes',
+        cancelText: 'No',
+        defaultCancel: true,
+      });
+      if (!ok) return;
+    }
+    router.push(ROUTE);
+  };
+
   const save = async (close: boolean) => {
     if (!product) return;
     const payload = {
@@ -581,6 +658,7 @@ export default function PackingMasterEditorPage() {
     setSaving(true);
     try {
       await api.patch(`/products/${product.id}`, payload);
+      baselineRef.current = snapshot();
       toast.success('Packing saved.');
       if (close) router.push(ROUTE);
     } catch (e) {
@@ -634,7 +712,7 @@ export default function PackingMasterEditorPage() {
         icon={<ListTree className="h-5 w-5" />}
         actions={
           <div className="flex items-center gap-2">
-            <button className="btn-secondary" onClick={() => router.push(ROUTE)}>
+            <button className="btn-secondary" onClick={onBack}>
               <ArrowLeft className="h-4 w-4" /> Back
             </button>
             {!view && (
