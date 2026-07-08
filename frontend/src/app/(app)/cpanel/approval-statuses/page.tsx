@@ -19,11 +19,25 @@ import { Input, Checkbox } from '@/components/ui/Field';
 import { IconPicker } from '@/components/ui/IconPicker';
 import { Badge } from '@/components/ui/Badge';
 import { resolveIcon } from '@/lib/icons';
+import { cn } from '@/lib/utils';
 import type { WorkflowStatus } from '@/lib/types';
 
 const ROUTE = '/cpanel/approval-statuses';
 
-const empty = { name: '', icon: '', sortOrder: '', isActive: true };
+const empty = { name: '', icon: '', color: '', sortOrder: '', isActive: true };
+
+// Preset colours that read well in both light and dark themes.
+const COLOR_PRESETS = [
+  { name: 'Slate', hex: '#64748b' },
+  { name: 'Green', hex: '#16a34a' },
+  { name: 'Red', hex: '#dc2626' },
+  { name: 'Amber', hex: '#d97706' },
+  { name: 'Blue', hex: '#2563eb' },
+  { name: 'Violet', hex: '#7c3aed' },
+  { name: 'Teal', hex: '#0d9488' },
+  { name: 'Pink', hex: '#db2777' },
+  { name: 'Orange', hex: '#ea580c' },
+];
 
 export default function ApprovalStatusesPage() {
   const { can } = useAuth();
@@ -60,6 +74,7 @@ export default function ApprovalStatusesPage() {
     setForm({
       name: s.name,
       icon: s.icon ?? '',
+      color: s.color ?? '',
       sortOrder: String(s.sortOrder ?? 0),
       isActive: s.isActive,
     });
@@ -91,6 +106,7 @@ export default function ApprovalStatusesPage() {
     const payload = {
       name: form.name.trim(),
       icon: form.icon || null,
+      color: form.color || null,
       sortOrder: form.sortOrder === '' ? 0 : Number(form.sortOrder),
       isActive: form.isActive,
     };
@@ -127,7 +143,10 @@ export default function ApprovalStatusesPage() {
         const Icon = resolveIcon(r.icon);
         return (
           <span title={r.name} className="inline-flex">
-            <Icon className="h-5 w-5 text-slate-600 dark:text-slate-300" />
+            <Icon
+              className="h-5 w-5"
+              style={{ color: r.color || undefined }}
+            />
           </span>
         );
       },
@@ -212,6 +231,58 @@ export default function ApprovalStatusesPage() {
             value={form.icon}
             onChange={(icon) => setForm({ ...form, icon })}
           />
+
+          {/* Colour: presets + a custom picker; the chosen icon previews live. */}
+          <div>
+            <span className="label !mb-1 block">Icon colour</span>
+            <div className="flex flex-wrap items-center gap-2">
+              {(() => {
+                const Preview = resolveIcon(form.icon);
+                return (
+                  <span className="mr-1 inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700">
+                    <Preview
+                      className="h-5 w-5"
+                      style={{ color: form.color || undefined }}
+                    />
+                  </span>
+                );
+              })()}
+              {COLOR_PRESETS.map((c) => (
+                <button
+                  key={c.hex}
+                  type="button"
+                  title={c.name}
+                  disabled={view}
+                  onClick={() => setForm({ ...form, color: c.hex })}
+                  className={cn(
+                    'h-7 w-7 rounded-full border-2 transition',
+                    form.color === c.hex
+                      ? 'border-slate-800 dark:border-white'
+                      : 'border-transparent hover:scale-110',
+                  )}
+                  style={{ backgroundColor: c.hex }}
+                />
+              ))}
+              <input
+                type="color"
+                disabled={view}
+                value={form.color || '#64748b'}
+                onChange={(e) => setForm({ ...form, color: e.target.value })}
+                className="h-7 w-9 cursor-pointer rounded border border-slate-200 bg-transparent dark:border-slate-700"
+                title="Custom colour"
+              />
+              {form.color && !view && (
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, color: '' })}
+                  className="text-xs text-slate-400 hover:text-slate-600"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+
           <Input
             label="Sort order"
             type="number"

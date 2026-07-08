@@ -31,6 +31,7 @@ export class WorkflowStatusService {
       data: {
         name: dto.name.trim(),
         icon: dto.icon?.trim() || null,
+        color: dto.color?.trim() || null,
         sortOrder: dto.sortOrder ?? 0,
         isActive: dto.isActive ?? true,
       },
@@ -44,6 +45,7 @@ export class WorkflowStatusService {
       data: {
         name: dto.name?.trim(),
         icon: dto.icon !== undefined ? dto.icon?.trim() || null : undefined,
+        color: dto.color !== undefined ? dto.color?.trim() || null : undefined,
         sortOrder: dto.sortOrder,
         isActive: dto.isActive,
       },

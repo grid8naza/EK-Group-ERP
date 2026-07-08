@@ -975,11 +975,12 @@ export type WorkflowInstanceStatus =
   | 'CANCELLED';
 
 /** One approval level of a workflow definition (Tab 2). */
-/** A reusable document status (name + icon), managed by super admins. */
+/** A reusable document status (name + icon + colour), managed by super admins. */
 export interface WorkflowStatus {
   id: number;
   name: string;
   icon?: string | null;
+  color?: string | null;
   sortOrder: number;
   isActive: boolean;
 }

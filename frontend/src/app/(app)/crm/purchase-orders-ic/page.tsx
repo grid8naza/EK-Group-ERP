@@ -64,10 +64,10 @@ export default function PurchaseOrderIcPage() {
 
   const { data: companies } = useFetch<Company[]>('/companies');
   const { data: units } = useFetch<Unit[]>('/units');
-  // Status vocabulary — to show each order's status as its configured icon.
+  // Status vocabulary — to show each order's status as its configured icon/colour.
   const { data: statuses } = useFetch<WorkflowStatus[]>('/workflow-statuses');
-  const statusIcon = useMemo(
-    () => new Map((statuses ?? []).map((s) => [s.name, s.icon])),
+  const statusByName = useMemo(
+    () => new Map((statuses ?? []).map((s) => [s.name, s])),
     [statuses],
   );
   // Unified list: orders the user raised AND orders the workflow has routed to
@@ -338,15 +338,15 @@ export default function PurchaseOrderIcPage() {
       // plain draft/rejected/etc. statuses fall back to a text badge.
       render: (r) => {
         const label = r.workflowStatus ?? r.status;
-        const icon = r.workflowStatus ? statusIcon.get(r.workflowStatus) : null;
-        if (r.workflowStatus && icon) {
-          const Icon = resolveIcon(icon);
+        const st = r.workflowStatus ? statusByName.get(r.workflowStatus) : null;
+        if (st?.icon) {
+          const Icon = resolveIcon(st.icon);
           return (
             <span
               title={label}
               className="inline-flex justify-center text-slate-600 dark:text-slate-300"
             >
-              <Icon className="h-5 w-5" />
+              <Icon className="h-5 w-5" style={{ color: st.color || undefined }} />
             </span>
           );
         }

@@ -22,6 +22,12 @@ export class CreateWorkflowStatusDto {
   @MaxLength(60)
   icon?: string | null;
 
+  /** Hex colour for the icon (e.g. #16a34a). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  color?: string | null;
+
   @IsOptional()
   @IsInt()
   @Min(0)

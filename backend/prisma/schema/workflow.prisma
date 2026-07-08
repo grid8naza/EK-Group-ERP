@@ -48,6 +48,7 @@ model WorkflowStatus {
   id        Int      @id @default(autoincrement())
   name      String   @unique
   icon      String? // lucide icon name (see frontend lib/icons)
+  color     String? // hex colour for the icon (e.g. #16a34a)
   sortOrder Int      @default(0)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
