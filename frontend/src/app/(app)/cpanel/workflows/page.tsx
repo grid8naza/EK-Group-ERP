@@ -7,7 +7,6 @@ import {
   Trash2,
   ChevronUp,
   ChevronDown,
-  ArrowLeftRight,
   Users,
   Check,
   Search,
@@ -83,7 +82,7 @@ type StepInput = {
 };
 
 // Editable draft for one step row. Ids are kept as strings for the Select
-// widgets; `showRouting` is UI-only (reveals the cross-boundary block).
+// widgets.
 type StepDraft = {
   userGroupId: string;
   userIds: number[];
@@ -101,7 +100,6 @@ type StepDraft = {
   canEdit: boolean;
   notifyInApp: boolean;
   slaHours: string;
-  showRouting: boolean;
 };
 
 const blankStep = (): StepDraft => ({
@@ -121,7 +119,6 @@ const blankStep = (): StepDraft => ({
   canEdit: false,
   notifyInApp: true,
   slaHours: '',
-  showRouting: false,
 });
 
 const stepFrom = (s: WorkflowStep): StepDraft => ({
@@ -141,11 +138,6 @@ const stepFrom = (s: WorkflowStep): StepDraft => ({
   canEdit: !!s.canEdit,
   notifyInApp: !!s.notifyInApp,
   slaHours: s.slaHours != null ? String(s.slaHours) : '',
-  // Reveal the routing block if any cross-boundary target is set.
-  showRouting:
-    s.targetCompanyId != null ||
-    s.targetBranchId != null ||
-    s.targetModuleId != null,
 });
 
 const emptyDef = {
@@ -347,6 +339,16 @@ export default function WorkflowsPage() {
       if (steps[j].targetBranchId) return Number(steps[j].targetBranchId);
     }
     return def.branchId ? Number(def.branchId) : undefined;
+  };
+
+  // The module a step ACTS IN: the module carried forward from prior routing,
+  // else the definition's own module. User groups (which manage modules) are
+  // listed for this module.
+  const effectiveStepModuleId = (i: number): number | undefined => {
+    for (let j = i - 1; j >= 0; j--) {
+      if (steps[j].targetModuleId) return Number(steps[j].targetModuleId);
+    }
+    return def.moduleId ? Number(def.moduleId) : undefined;
   };
 
   // ---- save ----
@@ -703,6 +705,7 @@ export default function WorkflowsPage() {
                     modules={modules ?? []}
                     stepCompanyId={effectiveStepCompanyId(i)}
                     stepBranchId={effectiveStepBranchId(i)}
+                    stepModuleId={effectiveStepModuleId(i)}
                     groupName={groupName}
                     userName={userName}
                     onChange={(patch) => updateStep(i, patch)}
@@ -736,6 +739,7 @@ function StepCard({
   modules,
   stepCompanyId,
   stepBranchId,
+  stepModuleId,
   groupName,
   userName,
   onChange,
@@ -753,6 +757,7 @@ function StepCard({
   modules: Module[];
   stepCompanyId?: number;
   stepBranchId?: number;
+  stepModuleId?: number;
   groupName: (id?: number | null) => string;
   userName: (id: number) => string;
   onChange: (patch: Partial<StepDraft>) => void;
@@ -783,6 +788,24 @@ function StepCard({
       ? undefined
       : stepBranchId;
 
+  // The module this step acts in (its own routing override, else carried forward
+  // / the definition's module).
+  const actingModuleId = step.targetModuleId
+    ? Number(step.targetModuleId)
+    : stepModuleId;
+
+  // A user "has" the acting module if it's in their per-company module assignment
+  // for the acting company — OR they have no assignment there (in which case they
+  // inherit their group's modules). Mirrors how effective access is computed.
+  const userHasModule = (u: User) => {
+    if (!actingModuleId) return true;
+    const a = (u.moduleAssignments ?? []).find(
+      (m) => m.companyId === actingCompanyId,
+    );
+    if (!a || !a.moduleIds.length) return true;
+    return a.moduleIds.includes(actingModuleId);
+  };
+
   // Target branch offers only the acting company's branches.
   const targetBranchOptions = branches
     .filter((b) => !actingCompanyId || b.companyId === actingCompanyId)
@@ -790,16 +813,71 @@ function StepCard({
 
   // Approvers come from the company this step acts in. With a group chosen, list
   // that group's members (membership is company-scoped); otherwise all users of
-  // the acting company. When a Target branch is set, the list is further narrowed
-  // to users assigned to that branch — so a step can name a creator/approver from
-  // a specific company AND branch.
+  // the acting company. The list is further narrowed to the acting branch (users
+  // assigned to it) and the acting module (their own module assignment) — so a
+  // step names an approver by company, branch AND module.
   const groupUsers = (
     step.userGroupId
       ? users.filter((u) => (u.groupIds ?? []).includes(Number(step.userGroupId)))
       : users.filter(
           (u) => !actingCompanyId || (u.companyIds ?? []).includes(actingCompanyId),
         )
-  ).filter((u) => !actingBranchId || (u.branchIds ?? []).includes(actingBranchId));
+  )
+    .filter((u) => !actingBranchId || (u.branchIds ?? []).includes(actingBranchId))
+    .filter(userHasModule);
+
+  // User groups cascade with the acting company AND module — groups are company-
+  // scoped and manage a set of modules. The current selection stays visible.
+  const groupOptions = userGroups
+    .filter((g) => {
+      if (step.userGroupId && String(g.id) === String(step.userGroupId)) return true;
+      const companyOk = !actingCompanyId || g.companyId === actingCompanyId;
+      const moduleOk =
+        !actingModuleId || (g.modules ?? []).some((m) => m.id === actingModuleId);
+      return companyOk && moduleOk;
+    })
+    .map((g) => ({ value: g.id, label: g.name }));
+
+  // Cross-boundary routing fields. Changing a target re-cascades the group +
+  // users so the approver always matches the routed company / branch / module.
+  const routingFields = (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <Select
+        label="Target company"
+        value={step.targetCompanyId}
+        onChange={(e) =>
+          onChange({
+            targetCompanyId: e.target.value,
+            targetBranchId: '',
+            userGroupId: '',
+            userIds: [],
+          })
+        }
+        placeholder="— Same —"
+        options={companies.map((c) => ({ value: c.id, label: c.name }))}
+      />
+      <Select
+        label="Target branch"
+        value={step.targetBranchId}
+        onChange={(e) => onChange({ targetBranchId: e.target.value, userIds: [] })}
+        placeholder="— Same —"
+        options={targetBranchOptions}
+      />
+      <Select
+        label="Target module"
+        value={step.targetModuleId}
+        onChange={(e) =>
+          onChange({
+            targetModuleId: e.target.value,
+            userGroupId: '',
+            userIds: [],
+          })
+        }
+        placeholder="— Same —"
+        options={modules.map((m) => ({ value: m.id, label: m.name }))}
+      />
+    </div>
+  );
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
@@ -849,8 +927,24 @@ function StepCard({
         )}
       </div>
 
+      {/* Steps after the first act on a routed document — choose WHERE it goes
+          first, then the group + users below cascade from that context. */}
+      {index >= 1 && (
+        <div className="mb-3 rounded-lg border border-brand-100 bg-brand-50/60 p-3 dark:border-slate-700 dark:bg-slate-800/40">
+          <p className="mb-1 text-xs font-semibold text-brand-700 dark:text-brand-300">
+            Where this step acts
+          </p>
+          <p className="mb-2 text-xs text-slate-400">
+            Select the company / branch / module first — the group and users
+            below list only that context. Leave blank to stay with the previous
+            step&apos;s context.
+          </p>
+          {routingFields}
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {/* Approver: group and/or explicit users */}
+        {/* Approver: group and/or explicit users (cascaded from the context) */}
         <Select
           label="User group"
           value={step.userGroupId}
@@ -858,14 +952,7 @@ function StepCard({
             onChange({ userGroupId: e.target.value, userIds: [] })
           }
           placeholder="— None —"
-          options={userGroups
-            .filter(
-              (g) =>
-                !stepCompanyId ||
-                g.companyId === stepCompanyId ||
-                String(g.id) === step.userGroupId,
-            )
-            .map((g) => ({ value: g.id, label: g.name }))}
+          options={groupOptions}
         />
         <UserMultiSelect
           label="Users"
@@ -957,50 +1044,8 @@ function StepCard({
         />
       </div>
 
-      {/* Cross-boundary routing — collapsed by default. */}
-      <div className="mt-3 border-t border-slate-100 pt-3 dark:border-slate-800">
-        <button
-          type="button"
-          onClick={() => onChange({ showRouting: !step.showRouting })}
-          className="flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:underline"
-        >
-          <ArrowLeftRight className="h-3.5 w-3.5" />
-          {step.showRouting ? 'Hide' : 'Show'} cross-boundary routing
-        </button>
-        {step.showRouting && (
-          <div className="mt-3">
-            <p className="mb-2 text-xs text-slate-400">
-              Leave blank to keep the document in the same company / branch /
-              module.
-            </p>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <Select
-                label="Target company"
-                value={step.targetCompanyId}
-                onChange={(e) =>
-                  onChange({ targetCompanyId: e.target.value, targetBranchId: '' })
-                }
-                placeholder="— Same —"
-                options={companies.map((c) => ({ value: c.id, label: c.name }))}
-              />
-              <Select
-                label="Target branch"
-                value={step.targetBranchId}
-                onChange={(e) => onChange({ targetBranchId: e.target.value })}
-                placeholder="— Same —"
-                options={targetBranchOptions}
-              />
-              <Select
-                label="Target module"
-                value={step.targetModuleId}
-                onChange={(e) => onChange({ targetModuleId: e.target.value })}
-                placeholder="— Same —"
-                options={modules.map((m) => ({ value: m.id, label: m.name }))}
-              />
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Step 1 is the origin — the creator sits in the definition's own
+          company / branch, so no cross-boundary routing is offered here. */}
     </div>
   );
 }

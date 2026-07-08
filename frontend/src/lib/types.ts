@@ -11,6 +11,8 @@ export interface User {
   companyIds?: number[];
   /** Branches this user may access (returned by GET /users). */
   branchIds?: number[];
+  /** Per-company module assignment (returned by GET /users). */
+  moduleAssignments?: { companyId: number; moduleIds: number[] }[];
   defaultModuleId?: number | null;
 }
 
