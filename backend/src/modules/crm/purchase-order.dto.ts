@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
   IsArray,
+  IsEnum,
   IsInt,
   IsISO8601,
   IsNumber,
@@ -46,4 +47,35 @@ export class CreatePurchaseOrderDto {
   @ValidateNested({ each: true })
   @Type(() => PurchaseOrderLineInput)
   lines!: PurchaseOrderLineInput[];
+}
+
+/** Edit a draft (or an in-workflow order when the step allows editing). */
+export class UpdatePurchaseOrderDto {
+  @IsOptional()
+  @IsISO8601()
+  deliveryAt?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notes?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @ValidateNested({ each: true })
+  @Type(() => PurchaseOrderLineInput)
+  lines?: PurchaseOrderLineInput[];
+}
+
+/** Act on an order's workflow task: forward / approve / reject / cancel. */
+export class ActPurchaseOrderDto {
+  @IsString()
+  @IsEnum(['APPROVE', 'FORWARD', 'REJECT', 'CANCEL', 'REFERENCE'])
+  action!: 'APPROVE' | 'FORWARD' | 'REJECT' | 'CANCEL' | 'REFERENCE';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  comment?: string;
 }

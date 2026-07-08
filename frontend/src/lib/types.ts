@@ -785,7 +785,12 @@ export interface Product {
 }
 
 // ---- CRM: Purchase Orders - IC (inter-company) ----
-export type PurchaseOrderStatus = 'PLACED' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+export type PurchaseOrderStatus =
+  | 'DRAFT'
+  | 'PLACED'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CANCELLED';
 export interface PurchaseOrderLine {
   id: number;
   sequence: number;
@@ -793,6 +798,35 @@ export interface PurchaseOrderLine {
   quantity: number;
   unitId: number;
 }
+
+/** The viewer's pending action on a document (from the workflow step). */
+export interface WorkflowViewerTask {
+  taskId: number;
+  sequence: number;
+  buttonText: string; // label configured on the step — drives the form button
+  actionType: string;
+  canApprove: boolean; // false = value beyond limit → may only review+forward
+  canReject: boolean;
+  canCancel: boolean;
+  canEdit: boolean;
+}
+/** A document's workflow state for the viewer. */
+export interface PurchaseOrderWorkflow {
+  instanceId: number | null;
+  status: 'IN_PROGRESS' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | null;
+  currentSequence: number;
+  myTask: WorkflowViewerTask | null;
+  timeline: WorkflowTimelineEntry[];
+}
+/** What the viewer may do with the order (draft actions). */
+export interface PurchaseOrderViewer {
+  isCreator: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  canSubmit: boolean;
+  submitButtonText: string | null;
+}
+
 export interface PurchaseOrder {
   id: number;
   companyId: number; // supplier company that owns the order
@@ -807,7 +841,11 @@ export interface PurchaseOrder {
   notes?: string | null;
   workflowInstanceId?: number | null;
   createdAt: string;
+  updatedAt?: string;
   lines: PurchaseOrderLine[];
+  // Present on the single-order response (GET /purchase-orders/:id).
+  workflow?: PurchaseOrderWorkflow;
+  viewer?: PurchaseOrderViewer;
 }
 
 // ---- Asset: Asset Master (individual assets/machines) ----

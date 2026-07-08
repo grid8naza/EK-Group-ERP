@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { StartWorkflowInput, WorkflowPort } from '../../contracts/workflow.port';
+import {
+  DocumentRef,
+  StartWorkflowInput,
+  WorkflowPort,
+} from '../../contracts/workflow.port';
 import { WorkflowRuntimeService } from './workflow-runtime.service';
 
 /**
@@ -28,5 +32,35 @@ export class WorkflowRuntimeAdapter implements WorkflowPort {
 
   cancelForDocument(moduleId: number, objectId: number, documentId: number) {
     return this.runtime.cancelForDocument(moduleId, objectId, documentId);
+  }
+
+  submitAsCreator(input: StartWorkflowInput) {
+    return this.runtime.submitAsCreator(input);
+  }
+
+  actOnDocument(
+    userId: number,
+    ref: DocumentRef,
+    action: 'APPROVE' | 'FORWARD' | 'REJECT' | 'CANCEL' | 'REFERENCE',
+    comment?: string,
+  ) {
+    return this.runtime.actOnDocument(userId, ref, action, comment);
+  }
+
+  docState(userId: number, ref: DocumentRef) {
+    return this.runtime.docState(userId, ref);
+  }
+
+  firstStep(
+    companyId: number,
+    branchId: number | null,
+    moduleId: number,
+    objectId: number,
+  ) {
+    return this.runtime.firstStep(companyId, branchId, moduleId, objectId);
+  }
+
+  visibleDocumentIds(userId: number, moduleId: number, objectId: number) {
+    return this.runtime.visibleDocumentIds(userId, moduleId, objectId);
   }
 }

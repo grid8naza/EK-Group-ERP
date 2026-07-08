@@ -23,6 +23,58 @@ export interface StartWorkflowInput {
   amount?: number;
 }
 
+/** Identifies one business document across a module + form. */
+export interface DocumentRef {
+  moduleId: number;
+  objectId: number;
+  documentId: number;
+}
+
+/** The instance status after a workflow operation (maps to the doc's status). */
+export type WorkflowStatus =
+  | 'IN_PROGRESS'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CANCELLED';
+
+/** The viewer's pending action on a document (null = nothing to do). */
+export interface WorkflowViewerTask {
+  taskId: number;
+  sequence: number;
+  buttonText: string; // the label configured on the step (drives the form button)
+  actionType: string; // WorkflowActionType of the step
+  canApprove: boolean; // false = value beyond limit → may only review+forward
+  canReject: boolean;
+  canCancel: boolean;
+  canEdit: boolean;
+}
+
+/** One entry in a document's approval trail. */
+export interface WorkflowTimelineEntry {
+  id: number;
+  sequence: number;
+  action: string;
+  comment: string | null;
+  userId: number;
+  userName: string;
+  createdAt: Date;
+}
+
+/** A document's workflow state for the viewer (drives the document's buttons). */
+export interface WorkflowDocState {
+  instanceId: number | null;
+  status: WorkflowStatus | null; // null when no workflow has started (draft)
+  currentSequence: number;
+  myTask: WorkflowViewerTask | null;
+  timeline: WorkflowTimelineEntry[];
+}
+
+/** Preview of the first configured step (labels the creator's forward button). */
+export interface WorkflowFirstStep {
+  buttonText: string;
+  actionType: string;
+}
+
 export interface WorkflowPort {
   /**
    * Start an approval for a document. Returns the new instance id, or null when
@@ -37,4 +89,51 @@ export interface WorkflowPort {
     objectId: number,
     documentId: number,
   ): Promise<void>;
+
+  /**
+   * Submit a freshly-created document into its workflow AS the creator: starts
+   * the instance and, when the creator is the first step's approver, immediately
+   * acts on that step (create+forward) so it lands at the next level. Returns
+   * the instance id + resulting status, or null when no workflow is configured.
+   */
+  submitAsCreator(
+    input: StartWorkflowInput,
+  ): Promise<{ instanceId: number; status: WorkflowStatus } | null>;
+
+  /**
+   * Act on the current user's pending task for a document (approve / forward /
+   * reject / cancel). Returns the resulting instance status so the caller can
+   * sync its document status.
+   */
+  actOnDocument(
+    userId: number,
+    ref: DocumentRef,
+    action: 'APPROVE' | 'FORWARD' | 'REJECT' | 'CANCEL' | 'REFERENCE',
+    comment?: string,
+  ): Promise<{ status: WorkflowStatus }>;
+
+  /** The document's workflow state for the viewer (buttons + approval trail). */
+  docState(userId: number, ref: DocumentRef): Promise<WorkflowDocState>;
+
+  /**
+   * Preview the first configured step for a document type, to label a draft's
+   * forward button before the workflow has started. Null when none configured.
+   */
+  firstStep(
+    companyId: number,
+    branchId: number | null,
+    moduleId: number,
+    objectId: number,
+  ): Promise<WorkflowFirstStep | null>;
+
+  /**
+   * Document ids (within a module + form) the user is involved in — i.e. the
+   * workflow has reached their level (they hold a task of any status). Used to
+   * scope an approver's listing so future levels can't see a document early.
+   */
+  visibleDocumentIds(
+    userId: number,
+    moduleId: number,
+    objectId: number,
+  ): Promise<number[]>;
 }

@@ -10,8 +10,9 @@
 
 /// Lifecycle of a Purchase Order - IC.
 enum PurchaseOrderStatus {
-  PLACED // submitted; awaiting CRM-staff review (in the workflow)
-  APPROVED // accepted by the supplier's CRM staff
+  DRAFT // created by the requester, not yet submitted into the approval workflow
+  PLACED // submitted; travelling through the approval workflow
+  APPROVED // accepted by the supplier's CRM staff (workflow complete)
   REJECTED
   CANCELLED
 }
@@ -26,7 +27,7 @@ model PurchaseOrder {
   orderingCompanyId  Int // -> Company (e.g. EK Bake House)
   orderingBranchId   Int? // -> Branch of the requester
   placedByUserId     Int // -> User (the branch manager)
-  status             PurchaseOrderStatus @default(PLACED)
+  status             PurchaseOrderStatus @default(DRAFT)
   notes              String?
   workflowInstanceId Int? // -> WorkflowInstance (approval routing)
   isLocked           Boolean             @default(false)

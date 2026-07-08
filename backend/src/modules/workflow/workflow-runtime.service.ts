@@ -12,6 +12,14 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { USER_LOOKUP, UserLookupPort } from '../../contracts/user-lookup.port';
+import {
+  DocumentRef,
+  StartWorkflowInput,
+  WorkflowDocState,
+  WorkflowFirstStep,
+  WorkflowStatus,
+  WorkflowViewerTask,
+} from '../../contracts/workflow.port';
 import { ActOnTaskDto, StartWorkflowDto } from './workflow.dto';
 
 // Actions whose level ENDS the workflow when approved (no onward routing).
@@ -268,6 +276,168 @@ export class WorkflowRuntimeService {
     return { count };
   }
 
+  // --- document integration (WorkflowPort) ---
+
+  /**
+   * Submit a freshly-created document AS its creator: start the instance, then —
+   * when the creator is the first level's approver (step 1 = the creator's own
+   * CREATE_FORWARD level) — immediately act on that task so it lands at level 2.
+   * If the creator isn't a first-level approver, the workflow simply waits at
+   * level 1 for whoever is.
+   */
+  async submitAsCreator(
+    input: StartWorkflowInput,
+  ): Promise<{ instanceId: number; status: WorkflowStatus } | null> {
+    const instance = await this.start(input.startedByUserId, {
+      companyId: input.companyId,
+      branchId: input.branchId ?? null,
+      moduleId: input.moduleId,
+      objectId: input.objectId,
+      documentId: input.documentId,
+      documentRef: input.documentRef,
+      amount: input.amount,
+    });
+    if (!instance) return null;
+
+    let status = instance.status as WorkflowStatus;
+    const myTask = instance.tasks.find(
+      (t) => t.assignedUserId === input.startedByUserId && t.status === 'PENDING',
+    );
+    if (myTask) {
+      const after = await this.act(input.startedByUserId, myTask.id, {
+        action: 'FORWARD',
+      });
+      status = after.status as WorkflowStatus;
+    }
+    return { instanceId: instance.id, status };
+  }
+
+  /** Act on the current user's pending task for a document. */
+  async actOnDocument(
+    userId: number,
+    ref: DocumentRef,
+    action: ActOnTaskDto['action'],
+    comment?: string,
+  ): Promise<{ status: WorkflowStatus }> {
+    const instance = await this.currentInstance(ref);
+    if (!instance || instance.status !== 'IN_PROGRESS') {
+      throw new BadRequestException('This document has no active workflow.');
+    }
+    const task = await this.prisma.workflowTask.findFirst({
+      where: {
+        instanceId: instance.id,
+        assignedUserId: userId,
+        status: 'PENDING',
+      },
+    });
+    if (!task) {
+      throw new ForbiddenException('You have no pending action on this document.');
+    }
+    const after = await this.act(userId, task.id, { action, comment });
+    return { status: after.status as WorkflowStatus };
+  }
+
+  /** The document's workflow state for the viewer (buttons + approval trail). */
+  async docState(userId: number, ref: DocumentRef): Promise<WorkflowDocState> {
+    const instance = await this.currentInstance(ref);
+    if (!instance) {
+      return {
+        instanceId: null,
+        status: null,
+        currentSequence: 0,
+        myTask: null,
+        timeline: [],
+      };
+    }
+    const full = await this.getInstance(instance.id);
+    const pending = await this.prisma.workflowTask.findFirst({
+      where: {
+        instanceId: instance.id,
+        assignedUserId: userId,
+        status: 'PENDING',
+      },
+    });
+    let myTask: WorkflowViewerTask | null = null;
+    if (pending) {
+      const step = await this.prisma.workflowStep.findUnique({
+        where: { id: pending.stepId },
+      });
+      myTask = {
+        taskId: pending.id,
+        sequence: pending.sequence,
+        buttonText: step?.buttonText ?? 'Approve',
+        actionType: step?.action ?? 'APPROVE',
+        canApprove: pending.canApprove,
+        canReject: step?.canReject ?? false,
+        canCancel: step?.canCancel ?? false,
+        canEdit: step?.canEdit ?? false,
+      };
+    }
+    return {
+      instanceId: instance.id,
+      status: instance.status as WorkflowStatus,
+      currentSequence: instance.currentSequence,
+      myTask,
+      timeline: full.timeline.map((t) => ({
+        id: t.id,
+        sequence: t.sequence,
+        action: t.action,
+        comment: t.comment,
+        userId: t.userId,
+        userName: t.userName,
+        createdAt: t.createdAt,
+      })),
+    };
+  }
+
+  /** Preview the first configured step, to label a draft's forward button. */
+  async firstStep(
+    companyId: number,
+    branchId: number | null,
+    moduleId: number,
+    objectId: number,
+  ): Promise<WorkflowFirstStep | null> {
+    const def = await this.matchDefinition({
+      companyId,
+      branchId: branchId ?? undefined,
+      moduleId,
+      objectId,
+    });
+    if (!def) return null;
+    const step = await this.prisma.workflowStep.findFirst({
+      where: { definitionId: def.id },
+      orderBy: { sequence: 'asc' },
+    });
+    if (!step) return null;
+    return { buttonText: step.buttonText, actionType: step.action };
+  }
+
+  /** Document ids (within a module + form) the user holds a task on. */
+  async visibleDocumentIds(
+    userId: number,
+    moduleId: number,
+    objectId: number,
+  ): Promise<number[]> {
+    const tasks = await this.prisma.workflowTask.findMany({
+      where: { assignedUserId: userId, instance: { moduleId, objectId } },
+      select: { instance: { select: { documentId: true } } },
+    });
+    return [...new Set(tasks.map((t) => t.instance.documentId))];
+  }
+
+  /** The in-progress instance for a document, else the most recent one. */
+  private async currentInstance(ref: DocumentRef) {
+    const active = await this.prisma.workflowInstance.findFirst({
+      where: { ...ref, status: 'IN_PROGRESS' },
+      orderBy: { id: 'desc' },
+    });
+    if (active) return active;
+    return this.prisma.workflowInstance.findFirst({
+      where: { ...ref },
+      orderBy: { id: 'desc' },
+    });
+  }
+
   // --- engine internals ---
 
   /** Advance the instance to the next step after `afterSequence` (or step 1). */
@@ -356,7 +526,12 @@ export class WorkflowRuntimeService {
     return true;
   }
 
-  private async matchDefinition(dto: StartWorkflowDto) {
+  private async matchDefinition(dto: {
+    companyId: number;
+    branchId?: number | null;
+    moduleId: number;
+    objectId: number;
+  }) {
     const where: Prisma.WorkflowDefinitionWhereInput = {
       companyId: dto.companyId,
       moduleId: dto.moduleId,
