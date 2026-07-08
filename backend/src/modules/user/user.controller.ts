@@ -13,11 +13,17 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
+import { SuperAdminGuard } from '../../auth/super-admin.guard';
 import { LockDto } from '../../common/lock.dto';
 import { CreateUserDto, UpdateUserDto } from './user.dto';
 
+// Managing users (and their group/company/branch/module access) is a
+// super-admin-only operation, matching the Cpanel navigation which only
+// surfaces this screen to super admins. Enforced server-side so the endpoints
+// can't be reached directly by a non-super-admin who has a valid token.
 @ApiTags('users')
 @ApiBearerAuth()
+@UseGuards(SuperAdminGuard)
 @Controller('users')
 export class UserController {
   constructor(private readonly service: UserService) {}

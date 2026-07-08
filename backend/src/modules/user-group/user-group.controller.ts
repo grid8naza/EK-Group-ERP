@@ -16,6 +16,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserGroupService } from './user-group.service';
 import { CompanyId } from '../../auth/company.decorator';
 import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
+import { SuperAdminGuard } from '../../auth/super-admin.guard';
 import { LockDto } from '../../common/lock.dto';
 import {
   CreateUserGroupDto,
@@ -28,8 +29,13 @@ function requireCompany(companyId?: number): number {
   return companyId;
 }
 
+// User groups and their privilege matrices are super-admin-only, matching the
+// Cpanel navigation (this screen is only surfaced to super admins). Enforced
+// server-side so a non-super-admin with a valid token can't grant themselves
+// privileges by calling these endpoints directly.
 @ApiTags('user-groups')
 @ApiBearerAuth()
+@UseGuards(SuperAdminGuard)
 @Controller('user-groups')
 export class UserGroupController {
   constructor(private readonly service: UserGroupService) {}
