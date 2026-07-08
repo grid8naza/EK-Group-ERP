@@ -842,6 +842,8 @@ export interface PurchaseOrder {
   orderingBranchId?: number | null;
   placedByUserId: number;
   status: PurchaseOrderStatus;
+  /** Human-readable status from the workflow step that last acted (if any). */
+  workflowStatus?: string | null;
   notes?: string | null;
   workflowInstanceId?: number | null;
   createdAt: string;
@@ -973,6 +975,15 @@ export type WorkflowInstanceStatus =
   | 'CANCELLED';
 
 /** One approval level of a workflow definition (Tab 2). */
+/** A reusable document status (name + icon), managed by super admins. */
+export interface WorkflowStatus {
+  id: number;
+  name: string;
+  icon?: string | null;
+  sortOrder: number;
+  isActive: boolean;
+}
+
 export interface WorkflowStep {
   id?: number;
   sequence: number;
@@ -983,6 +994,7 @@ export interface WorkflowStep {
   targetModuleId?: number | null;
   action: WorkflowActionType;
   buttonText: string;
+  statusLabel?: string | null;
   approvalMode: WorkflowApprovalMode;
   fieldName?: string | null;
   valueFrom?: number | null;

@@ -54,6 +54,12 @@ export class WorkflowStepInput {
   @MaxLength(60)
   buttonText!: string;
 
+  /** Document status shown in the listing once this step acts. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  statusLabel?: string | null;
+
   @IsOptional()
   @IsEnum(WorkflowApprovalMode)
   approvalMode?: WorkflowApprovalMode;

@@ -108,7 +108,11 @@ export interface WorkflowPort {
    */
   submitAsCreator(
     input: StartWorkflowInput,
-  ): Promise<{ instanceId: number; status: WorkflowStatus } | null>;
+  ): Promise<{
+    instanceId: number;
+    status: WorkflowStatus;
+    statusLabel: string | null;
+  } | null>;
 
   /**
    * Act on the current user's pending task for a document (approve / forward /
@@ -120,7 +124,7 @@ export interface WorkflowPort {
     ref: DocumentRef,
     action: 'APPROVE' | 'FORWARD' | 'REJECT' | 'CANCEL' | 'REFERENCE',
     comment?: string,
-  ): Promise<{ status: WorkflowStatus }>;
+  ): Promise<{ status: WorkflowStatus; statusLabel: string | null }>;
 
   /** The document's workflow state for the viewer (buttons + approval trail). */
   docState(userId: number, ref: DocumentRef): Promise<WorkflowDocState>;

@@ -21,6 +21,7 @@ export const CPANEL_SUBS = [
   { name: 'Backup & Restore', route: '/cpanel/backup', icon: 'database-backup', order: 11 },
   { name: 'Login Screen Setup', route: '/cpanel/login-screen', icon: 'image', order: 12 },
   { name: 'Workflow Setup', route: '/cpanel/workflows', icon: 'git-branch', order: 13 },
+  { name: 'Approval Statuses', route: '/cpanel/approval-statuses', icon: 'shieldcheck', order: 14 },
 ];
 
 export interface ProvisionResult {

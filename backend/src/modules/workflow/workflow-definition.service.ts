@@ -163,6 +163,7 @@ export class WorkflowDefinitionService {
         targetModuleId: s.targetModuleId ?? null,
         action: s.action,
         buttonText: s.buttonText.trim(),
+        statusLabel: s.statusLabel?.trim() || null,
         approvalMode: s.approvalMode ?? 'FORM',
         fieldName: s.fieldName?.trim() || null,
         valueFrom: s.valueFrom ?? null,

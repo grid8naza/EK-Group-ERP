@@ -28,6 +28,7 @@ model PurchaseOrder {
   orderingBranchId   Int? // -> Branch of the requester
   placedByUserId     Int // -> User (the branch manager)
   status             PurchaseOrderStatus @default(DRAFT)
+  workflowStatus     String? // human-readable status from the workflow step that last acted
   notes              String?
   workflowInstanceId Int? // -> WorkflowInstance (approval routing)
   isLocked           Boolean             @default(false)

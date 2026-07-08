@@ -53,12 +53,13 @@ export class PurchaseOrderController {
     @CompanyId() companyId: number | undefined,
     @Query('scope') scope?: string,
   ) {
-    return this.service.findAll(
-      user.id,
-      companyId ?? 0,
-      scope === 'placed' ? 'placed' : 'incoming',
-      !!user.isSuperAdmin,
-    );
+    const s =
+      scope === 'placed'
+        ? 'placed'
+        : scope === 'incoming'
+          ? 'incoming'
+          : 'involved';
+    return this.service.findAll(user.id, companyId ?? 0, s, !!user.isSuperAdmin);
   }
 
   /** Whether the current user may raise a new order (workflow-governed). */

@@ -1,7 +1,16 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ShoppingCart, Plus, Trash2, ArrowLeft, Send } from 'lucide-react';
+import {
+  ShoppingCart,
+  Plus,
+  Trash2,
+  ArrowLeft,
+  Send,
+  Check,
+  X,
+  Ban,
+} from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
@@ -12,12 +21,14 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Input, Select, Textarea } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import { PurchaseOrderDoc } from '@/components/crm/PurchaseOrderDoc';
+import { resolveIcon } from '@/lib/icons';
 import type {
   Company,
   Product,
   Unit,
   PurchaseOrder,
   PurchaseOrderStatus,
+  WorkflowStatus,
 } from '@/lib/types';
 
 const ROUTE = '/crm/purchase-orders-ic';
@@ -53,8 +64,16 @@ export default function PurchaseOrderIcPage() {
 
   const { data: companies } = useFetch<Company[]>('/companies');
   const { data: units } = useFetch<Unit[]>('/units');
+  // Status vocabulary — to show each order's status as its configured icon.
+  const { data: statuses } = useFetch<WorkflowStatus[]>('/workflow-statuses');
+  const statusIcon = useMemo(
+    () => new Map((statuses ?? []).map((s) => [s.name, s.icon])),
+    [statuses],
+  );
+  // Unified list: orders the user raised AND orders the workflow has routed to
+  // them for action (approvers see them here, not in Sales Orders).
   const { data: placed, loading, refetch } = useFetch<PurchaseOrder[]>(
-    '/purchase-orders?scope=placed',
+    '/purchase-orders?scope=involved',
   );
   // When a workflow governs the PO form, it supersedes the Add privilege: only
   // the workflow's designated creator may raise an order.
@@ -84,6 +103,10 @@ export default function PurchaseOrderIcPage() {
   const [mode, setMode] = useState<Mode>('list');
   const [current, setCurrent] = useState<PurchaseOrder | null>(null);
   const [saving, setSaving] = useState(false);
+  // Approver action state (when the open order has a pending task for this user).
+  const [comment, setComment] = useState('');
+  const [acting, setActing] = useState(false);
+  const myTask = current?.workflow?.myTask ?? null;
 
   // ---- editable draft form ----
   const [supplierId, setSupplierId] = useState('');
@@ -133,6 +156,7 @@ export default function PurchaseOrderIcPage() {
   const loadOrder = async (id: number) => {
     const full = await api.get<PurchaseOrder>(`/purchase-orders/${id}`);
     setCurrent(full);
+    setComment('');
     setSupplierId(String(full.companyId));
     setDeliveryAt(toLocalInput(full.deliveryAt));
     setLines(
@@ -252,6 +276,34 @@ export default function PurchaseOrderIcPage() {
     }
   };
 
+  // Approver action on a routed order (forward / approve / reject / cancel).
+  const doAct = async (action: 'FORWARD' | 'REJECT' | 'CANCEL') => {
+    if (!current) return;
+    if (action === 'REJECT' && !comment.trim()) {
+      toast.error('A reason is required to reject.');
+      return;
+    }
+    setActing(true);
+    try {
+      await api.post(`/purchase-orders/${current.id}/act`, {
+        action,
+        comment: comment.trim() || undefined,
+      });
+      toast.success(
+        action === 'REJECT'
+          ? 'Order rejected.'
+          : action === 'CANCEL'
+            ? 'Order cancelled.'
+            : 'Done — moved to the next level.',
+      );
+      backToList();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Action failed.');
+    } finally {
+      setActing(false);
+    }
+  };
+
   // ---- list columns ----
   const columns: Column<PurchaseOrder>[] = [
     { key: 'orderNo', header: 'Order No', accessor: (r) => r.orderNo },
@@ -280,7 +332,26 @@ export default function PurchaseOrderIcPage() {
     {
       key: 'status',
       header: 'Status',
-      render: (r) => <Badge color={statusColor(r.status)}>{r.status}</Badge>,
+      className: 'text-center',
+      headerClassName: 'text-center',
+      // Workflow statuses show as their configured icon (hover shows the text);
+      // plain draft/rejected/etc. statuses fall back to a text badge.
+      render: (r) => {
+        const label = r.workflowStatus ?? r.status;
+        const icon = r.workflowStatus ? statusIcon.get(r.workflowStatus) : null;
+        if (r.workflowStatus && icon) {
+          const Icon = resolveIcon(icon);
+          return (
+            <span
+              title={label}
+              className="inline-flex justify-center text-slate-600 dark:text-slate-300"
+            >
+              <Icon className="h-5 w-5" />
+            </span>
+          );
+        }
+        return <Badge color={statusColor(r.status)}>{label}</Badge>;
+      },
     },
   ];
 
@@ -295,7 +366,7 @@ export default function PurchaseOrderIcPage() {
           <button className="btn-ghost" onClick={backToList}>
             <ArrowLeft className="h-4 w-4" /> Back to list
           </button>
-          {isEditing && (
+          {isEditing ? (
             <div className="flex flex-wrap gap-2">
               {current && canDeletePriv && (
                 <button
@@ -328,7 +399,35 @@ export default function PurchaseOrderIcPage() {
                 <Send className="h-4 w-4" /> {submitLabel}
               </button>
             </div>
-          )}
+          ) : myTask ? (
+            <div className="flex flex-wrap gap-2">
+              {myTask.canCancel && (
+                <button
+                  className="btn-ghost text-slate-600"
+                  onClick={() => doAct('CANCEL')}
+                  disabled={acting}
+                >
+                  <Ban className="h-4 w-4" /> Cancel
+                </button>
+              )}
+              {myTask.canReject && (
+                <button
+                  className="btn-ghost text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                  onClick={() => doAct('REJECT')}
+                  disabled={acting}
+                >
+                  <X className="h-4 w-4" /> Reject
+                </button>
+              )}
+              <button
+                className="btn-primary"
+                onClick={() => doAct('FORWARD')}
+                disabled={acting}
+              >
+                <Check className="h-4 w-4" /> {myTask.buttonText}
+              </button>
+            </div>
+          ) : null}
         </div>
 
         {isEditing ? (
@@ -354,12 +453,28 @@ export default function PurchaseOrderIcPage() {
           />
         ) : (
           current && (
-            <PurchaseOrderDoc
-              order={current}
-              companyName={companyName}
-              productName={productName}
-              unitLabel={unitLabel}
-            />
+            <>
+              <PurchaseOrderDoc
+                order={current}
+                companyName={companyName}
+                productName={productName}
+                unitLabel={unitLabel}
+              />
+              {myTask && (
+                <div className="mx-auto w-full max-w-3xl">
+                  <Textarea
+                    label={
+                      myTask.canReject
+                        ? 'Comment (required to reject)'
+                        : 'Comment (optional)'
+                    }
+                    value={comment}
+                    onChange={(e) => setComment(e.target.value)}
+                    placeholder="Add a note for the approval trail…"
+                  />
+                </div>
+              )}
+            </>
           )
         )}
       </div>

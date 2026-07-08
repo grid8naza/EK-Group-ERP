@@ -211,6 +211,7 @@ export class PurchaseOrderService {
       data: {
         status: res ? STATUS_MAP[res.status] : 'PLACED',
         workflowInstanceId: res?.instanceId ?? order.workflowInstanceId,
+        workflowStatus: res?.statusLabel ?? null,
       },
     });
     return this.findOne(userId, id, isSuperAdmin);
@@ -228,7 +229,12 @@ export class PurchaseOrderService {
     );
     await this.prisma.purchaseOrder.update({
       where: { id },
-      data: { status: STATUS_MAP[res.status] },
+      data: {
+        status: STATUS_MAP[res.status],
+        // A positive step stamps its status label; reject/cancel clear it so the
+        // listing falls back to the plain Rejected / Cancelled status.
+        workflowStatus: res.statusLabel ?? null,
+      },
     });
     return this.findOne(userId, id, true);
   }
@@ -244,7 +250,7 @@ export class PurchaseOrderService {
   async findAll(
     userId: number,
     companyId: number,
-    scope: 'incoming' | 'placed',
+    scope: 'incoming' | 'placed' | 'involved',
     isSuperAdmin: boolean,
   ) {
     let where: Prisma.PurchaseOrderWhereInput;
@@ -253,7 +259,28 @@ export class PurchaseOrderService {
         orderingCompanyId: companyId,
         ...(isSuperAdmin ? {} : { placedByUserId: userId }),
       };
+    } else if (scope === 'involved') {
+      // The unified Purchase Order screen: every order the user is part of —
+      // ones they raised (incl. drafts) OR that the workflow has reached them.
+      // Super admins see all.
+      if (isSuperAdmin) {
+        where = {};
+      } else {
+        const { moduleId, objectId } = await this.docType();
+        const ids = await this.workflow.visibleDocumentIds(
+          userId,
+          moduleId,
+          objectId,
+        );
+        where = {
+          OR: [
+            { placedByUserId: userId },
+            { id: { in: ids.length ? ids : [-1] } },
+          ],
+        };
+      }
     } else {
+      // incoming (supplier side) — reserved for the future sales-order view.
       where = { companyId, status: { not: 'DRAFT' } };
       if (!isSuperAdmin) {
         const { moduleId, objectId } = await this.docType();

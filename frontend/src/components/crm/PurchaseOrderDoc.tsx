@@ -53,7 +53,9 @@ export function PurchaseOrderDoc({
           </p>
         </div>
         <div className="text-right">
-          <Badge color={statusColor(order.status)}>{order.status}</Badge>
+          <Badge color={statusColor(order.status)}>
+            {order.workflowStatus ?? order.status}
+          </Badge>
           <p className="mt-2 text-xs text-slate-500">
             Order date: {fmtDate(order.orderDate ?? order.createdAt)}
           </p>

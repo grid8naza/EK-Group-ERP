@@ -41,6 +41,21 @@ enum WorkflowTaskStatus {
   SKIPPED
 }
 
+/// Reusable document-status vocabulary (super-admin managed). A workflow step's
+/// `statusLabel` is chosen from these names; the paired icon is what the document
+/// listing shows (with the name as a hover tooltip).
+model WorkflowStatus {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  icon      String? // lucide icon name (see frontend lib/icons)
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("workflow_statuses")
+}
+
 /// A workflow definition (Tab 1) — bound to the document type it governs. When a
 /// document of (companyId [+ branchId], moduleId, objectId=FORM) is submitted, the
 /// matching active definition drives its approval chain.
@@ -79,6 +94,7 @@ model WorkflowStep {
 
   action     WorkflowActionType
   buttonText String // label shown on the action button (e.g. "Approve", "Fwd to Accounts")
+  statusLabel String? // document status shown once this step acts (e.g. "Forwarded to CRM")
 
   approvalMode WorkflowApprovalMode @default(FORM)
   fieldName    String? // field checked when approvalMode = FIELD

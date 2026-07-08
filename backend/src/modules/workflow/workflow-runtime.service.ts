@@ -202,13 +202,9 @@ export class WorkflowRuntimeService {
       await this.skipSiblings(instance.id, task.sequence);
       await this.log(instance.id, step.id, task.sequence, userId, 'REJECT', dto.comment);
       await this.finish(instance.id, 'REJECTED');
-      await this.notify(
-        instance.startedByUserId,
-        instance.id,
-        null,
-        'Document rejected',
-        `${instance.documentRef ?? 'Document'} was rejected.`,
-      );
+      // Alerts are for receivers (the next approver), not the sender — a rejection
+      // ends the flow with no receiver, so no notification is raised here. The
+      // requester tracks the outcome via the document's status.
       return this.getInstance(instance.id);
     }
     if (dto.action === 'CANCEL') {
@@ -287,7 +283,11 @@ export class WorkflowRuntimeService {
    */
   async submitAsCreator(
     input: StartWorkflowInput,
-  ): Promise<{ instanceId: number; status: WorkflowStatus } | null> {
+  ): Promise<{
+    instanceId: number;
+    status: WorkflowStatus;
+    statusLabel: string | null;
+  } | null> {
     const instance = await this.start(input.startedByUserId, {
       companyId: input.companyId,
       branchId: input.branchId ?? null,
@@ -300,16 +300,27 @@ export class WorkflowRuntimeService {
     if (!instance) return null;
 
     let status = instance.status as WorkflowStatus;
+    let statusLabel: string | null = null;
     const myTask = instance.tasks.find(
       (t) => t.assignedUserId === input.startedByUserId && t.status === 'PENDING',
     );
     if (myTask) {
+      const step = await this.prisma.workflowStep.findUnique({
+        where: { id: myTask.stepId },
+        select: { statusLabel: true },
+      });
       const after = await this.act(input.startedByUserId, myTask.id, {
         action: 'FORWARD',
       });
       status = after.status as WorkflowStatus;
+      statusLabel = step?.statusLabel ?? null;
+      // The creator immediately forwards their own first level, so drop the
+      // self-notification raised when it activated — alerts are for receivers.
+      await this.prisma.workflowNotification.deleteMany({
+        where: { instanceId: instance.id, userId: input.startedByUserId },
+      });
     }
-    return { instanceId: instance.id, status };
+    return { instanceId: instance.id, status, statusLabel };
   }
 
   /** Act on the current user's pending task for a document. */
@@ -318,7 +329,7 @@ export class WorkflowRuntimeService {
     ref: DocumentRef,
     action: ActOnTaskDto['action'],
     comment?: string,
-  ): Promise<{ status: WorkflowStatus }> {
+  ): Promise<{ status: WorkflowStatus; statusLabel: string | null }> {
     const instance = await this.currentInstance(ref);
     if (!instance || instance.status !== 'IN_PROGRESS') {
       throw new BadRequestException('This document has no active workflow.');
@@ -333,8 +344,18 @@ export class WorkflowRuntimeService {
     if (!task) {
       throw new ForbiddenException('You have no pending action on this document.');
     }
+    const step = await this.prisma.workflowStep.findUnique({
+      where: { id: task.stepId },
+      select: { statusLabel: true },
+    });
     const after = await this.act(userId, task.id, { action, comment });
-    return { status: after.status as WorkflowStatus };
+    // The status a positive step stamps onto the document; reject/cancel fall back
+    // to the enum status the caller derives from `status`.
+    const statusLabel =
+      action === 'REJECT' || action === 'CANCEL'
+        ? null
+        : (step?.statusLabel ?? null);
+    return { status: after.status as WorkflowStatus, statusLabel };
   }
 
   /** The document's workflow state for the viewer (buttons + approval trail). */

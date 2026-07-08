@@ -29,6 +29,7 @@ import { cn } from '@/lib/utils';
 import type {
   WorkflowDefinition,
   WorkflowStep,
+  WorkflowStatus,
   WorkflowActionType,
   WorkflowApprovalMode,
   Company,
@@ -70,6 +71,7 @@ type StepInput = {
   targetModuleId?: number | null;
   action: WorkflowActionType;
   buttonText: string;
+  statusLabel?: string | null;
   approvalMode?: WorkflowApprovalMode;
   fieldName?: string | null;
   valueFrom?: number | null;
@@ -91,6 +93,7 @@ type StepDraft = {
   targetModuleId: string;
   action: WorkflowActionType;
   buttonText: string;
+  statusLabel: string;
   approvalMode: WorkflowApprovalMode;
   fieldName: string;
   valueFrom: string;
@@ -110,6 +113,7 @@ const blankStep = (): StepDraft => ({
   targetModuleId: '',
   action: 'APPROVE',
   buttonText: '',
+  statusLabel: '',
   approvalMode: 'FORM',
   fieldName: '',
   valueFrom: '',
@@ -129,6 +133,7 @@ const stepFrom = (s: WorkflowStep): StepDraft => ({
   targetModuleId: s.targetModuleId != null ? String(s.targetModuleId) : '',
   action: s.action,
   buttonText: s.buttonText ?? '',
+  statusLabel: s.statusLabel ?? '',
   approvalMode: s.approvalMode ?? 'FORM',
   fieldName: s.fieldName ?? '',
   valueFrom: s.valueFrom != null ? String(s.valueFrom) : '',
@@ -164,6 +169,10 @@ export default function WorkflowsPage() {
   const { data: modules } = useFetch<Module[]>('/modules');
   const { data: companies } = useFetch<Company[]>('/companies');
   const { data: branches } = useFetch<Branch[]>('/branches');
+  // The document-status vocabulary (super-admin managed) for the step status combo.
+  const { data: statuses } = useFetch<WorkflowStatus[]>(
+    '/workflow-statuses?activeOnly=true',
+  );
   // User groups are company-scoped, so fetch every company's groups (tagged with
   // their company) — a cross-company step can then offer the acting company's
   // groups, not just the definition company's.
@@ -362,6 +371,7 @@ export default function WorkflowsPage() {
       targetModuleId: d.targetModuleId ? Number(d.targetModuleId) : null,
       action: d.action,
       buttonText: d.buttonText.trim(),
+      statusLabel: d.statusLabel.trim() || null,
       approvalMode: d.approvalMode,
       fieldName: d.approvalMode === 'FIELD' ? d.fieldName.trim() || null : null,
       valueFrom:
@@ -706,6 +716,7 @@ export default function WorkflowsPage() {
                     stepCompanyId={effectiveStepCompanyId(i)}
                     stepBranchId={effectiveStepBranchId(i)}
                     stepModuleId={effectiveStepModuleId(i)}
+                    statuses={statuses ?? []}
                     groupName={groupName}
                     userName={userName}
                     onChange={(patch) => updateStep(i, patch)}
@@ -737,6 +748,7 @@ function StepCard({
   companies,
   branches,
   modules,
+  statuses,
   stepCompanyId,
   stepBranchId,
   stepModuleId,
@@ -755,6 +767,7 @@ function StepCard({
   companies: Company[];
   branches: Branch[];
   modules: Module[];
+  statuses: WorkflowStatus[];
   stepCompanyId?: number;
   stepBranchId?: number;
   stepModuleId?: number;
@@ -975,6 +988,15 @@ function StepCard({
           value={step.buttonText}
           onChange={(e) => onChange({ buttonText: e.target.value })}
           placeholder="e.g. Approve, Fwd to Accounts"
+        />
+
+        <Select
+          label="Status (shown in the order list once this step acts)"
+          wrapClassName="sm:col-span-2"
+          value={step.statusLabel}
+          onChange={(e) => onChange({ statusLabel: e.target.value })}
+          placeholder="— None —"
+          options={statuses.map((s) => ({ value: s.name, label: s.name }))}
         />
 
         <Select
