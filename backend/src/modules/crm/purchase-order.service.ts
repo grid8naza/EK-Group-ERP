@@ -53,6 +53,7 @@ export class PurchaseOrderService {
     orderingCompanyId: number,
     orderingBranchId: number | undefined,
     dto: CreatePurchaseOrderDto,
+    isSuperAdmin = false,
   ) {
     if (!orderingCompanyId) {
       throw new BadRequestException('No active company for the requester.');
@@ -60,6 +61,24 @@ export class PurchaseOrderService {
     if (dto.supplierCompanyId === orderingCompanyId) {
       throw new BadRequestException(
         'Choose a supplier company other than your own.',
+      );
+    }
+
+    // When a PO workflow governs this form, it SUPERSEDES the Add privilege:
+    // only a user on a Create-action step may raise the order. The workflow is
+    // matched at the document's ORIGIN — the requester's company + branch — so a
+    // different branch can have its own workflow / creator.
+    const { moduleId, objectId } = await this.docType();
+    const gate = await this.workflow.creatorGate(
+      userId,
+      moduleId,
+      objectId,
+      orderingCompanyId,
+      orderingBranchId ?? null,
+    );
+    if (gate.governed && !gate.allowed && !isSuperAdmin) {
+      throw new ForbiddenException(
+        'This order is governed by an approval workflow — only its designated creator can raise it.',
       );
     }
 
@@ -87,6 +106,21 @@ export class PurchaseOrderService {
       }),
     );
     return this.findOne(userId, order.id, true);
+  }
+
+  /**
+   * Whether the current user may raise a new order. When a workflow governs the
+   * PO form, only its designated creator(s) may — this supersedes the Add
+   * privilege. When no workflow exists, creation falls back to the screen
+   * privilege (enforced in the UI), so `canCreate` is true here.
+   */
+  async createAccess(userId: number, isSuperAdmin: boolean) {
+    const { moduleId, objectId } = await this.docType();
+    const gate = await this.workflow.creatorGate(userId, moduleId, objectId);
+    return {
+      workflowGoverned: gate.governed,
+      canCreate: isSuperAdmin || gate.allowed,
+    };
   }
 
   /** Edit a draft (creator) or an in-workflow order whose step allows editing. */
@@ -160,8 +194,11 @@ export class PurchaseOrderService {
     const totalQty = order.lines.reduce((s, l) => s + l.quantity, 0);
     const res = await this.workflow.submitAsCreator({
       startedByUserId: userId,
-      companyId: order.companyId, // supplier owns / routes the workflow
-      branchId: null, // supplier receives company-wide
+      // Match at the ORIGIN: the requester's company + branch. This lets each
+      // branch run its own workflow (e.g. a per-branch creator); the approval
+      // steps then route to the supplier via their cross-boundary targets.
+      companyId: order.orderingCompanyId,
+      branchId: order.orderingBranchId,
       moduleId,
       objectId,
       documentId: order.id,
@@ -255,8 +292,8 @@ export class PurchaseOrderService {
     let submitButtonText: string | null = null;
     if (canEditDraft) {
       const first = await this.workflow.firstStep(
-        order.companyId,
-        null,
+        order.orderingCompanyId,
+        order.orderingBranchId,
         ref.moduleId,
         ref.objectId,
       );

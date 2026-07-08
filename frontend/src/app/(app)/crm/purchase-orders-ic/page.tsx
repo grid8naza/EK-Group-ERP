@@ -56,9 +56,18 @@ export default function PurchaseOrderIcPage() {
   const { data: placed, loading, refetch } = useFetch<PurchaseOrder[]>(
     '/purchase-orders?scope=placed',
   );
+  // When a workflow governs the PO form, it supersedes the Add privilege: only
+  // the workflow's designated creator may raise an order.
+  const { data: createAccess } = useFetch<{
+    workflowGoverned: boolean;
+    canCreate: boolean;
+  }>('/purchase-orders/create-access');
 
   const canAdd = can(ROUTE, 'add');
   const canDeletePriv = can(ROUTE, 'delete');
+  // Show "New" only when the screen privilege allows AND the workflow (if any)
+  // designates this user a creator.
+  const canCreate = canAdd && (createAccess?.canCreate ?? false);
 
   const suppliers = useMemo(
     () => (companies ?? []).filter((c) => c.id !== activeCompanyId),
@@ -365,7 +374,7 @@ export default function PurchaseOrderIcPage() {
         description="Raise inter-company purchase orders on a supplier company"
         icon={<ShoppingCart className="h-5 w-5" />}
         actions={
-          canAdd ? (
+          canCreate ? (
             <button className="btn-primary" onClick={openNew}>
               <Plus className="h-4 w-4" /> New Purchase Order
             </button>

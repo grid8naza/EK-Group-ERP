@@ -334,6 +334,21 @@ export default function WorkflowsPage() {
     return def.companyId ? Number(def.companyId) : undefined;
   };
 
+  // The branch a step ACTS IN: the branch carried forward from prior routing,
+  // else the definition's own branch. When a prior step routed to a different
+  // company, the branch resets to that step's target branch (if any). Approvers
+  // are then listed for this company + branch.
+  const effectiveStepBranchId = (i: number): number | undefined => {
+    for (let j = i - 1; j >= 0; j--) {
+      if (steps[j].targetCompanyId)
+        return steps[j].targetBranchId
+          ? Number(steps[j].targetBranchId)
+          : undefined;
+      if (steps[j].targetBranchId) return Number(steps[j].targetBranchId);
+    }
+    return def.branchId ? Number(def.branchId) : undefined;
+  };
+
   // ---- save ----
   const buildSteps = (): StepInput[] =>
     steps.map((d, i) => ({
@@ -687,6 +702,7 @@ export default function WorkflowsPage() {
                     branches={branches ?? []}
                     modules={modules ?? []}
                     stepCompanyId={effectiveStepCompanyId(i)}
+                    stepBranchId={effectiveStepBranchId(i)}
                     groupName={groupName}
                     userName={userName}
                     onChange={(patch) => updateStep(i, patch)}
@@ -719,6 +735,7 @@ function StepCard({
   branches,
   modules,
   stepCompanyId,
+  stepBranchId,
   groupName,
   userName,
   onChange,
@@ -735,6 +752,7 @@ function StepCard({
   branches: Branch[];
   modules: Module[];
   stepCompanyId?: number;
+  stepBranchId?: number;
   groupName: (id?: number | null) => string;
   userName: (id: number) => string;
   onChange: (patch: Partial<StepDraft>) => void;
@@ -750,24 +768,38 @@ function StepCard({
     return parts.length ? parts.join(' · ') : 'No approver';
   };
 
-  // Target branch cascades from the chosen target company (or the definition's
-  // own company when no target company is set), so only that company's branches
-  // are offered.
-  const branchCompanyId = step.targetCompanyId
+  // The company this step acts in: its own cross-boundary routing wins, else the
+  // context carried forward from earlier steps / the definition. The branch is
+  // the step's own target branch (only meaningful once a company is chosen).
+  const actingCompanyId = step.targetCompanyId
     ? Number(step.targetCompanyId)
     : stepCompanyId;
+  // Branch this step acts in: its own routing override, else — when it hasn't
+  // been re-routed to a different company — the branch carried from the
+  // definition / prior steps.
+  const actingBranchId = step.targetBranchId
+    ? Number(step.targetBranchId)
+    : step.targetCompanyId
+      ? undefined
+      : stepBranchId;
+
+  // Target branch offers only the acting company's branches.
   const targetBranchOptions = branches
-    .filter((b) => !branchCompanyId || b.companyId === branchCompanyId)
+    .filter((b) => !actingCompanyId || b.companyId === actingCompanyId)
     .map((b) => ({ value: b.id, label: b.name }));
 
-  // Approvers come from the company this step acts in (carried forward from the
-  // previous step's routing). With a group chosen, list that group's members
-  // (membership is company-scoped); otherwise all users of the acting company.
-  const groupUsers = step.userGroupId
-    ? users.filter((u) => (u.groupIds ?? []).includes(Number(step.userGroupId)))
-    : users.filter(
-        (u) => !stepCompanyId || (u.companyIds ?? []).includes(stepCompanyId),
-      );
+  // Approvers come from the company this step acts in. With a group chosen, list
+  // that group's members (membership is company-scoped); otherwise all users of
+  // the acting company. When a Target branch is set, the list is further narrowed
+  // to users assigned to that branch — so a step can name a creator/approver from
+  // a specific company AND branch.
+  const groupUsers = (
+    step.userGroupId
+      ? users.filter((u) => (u.groupIds ?? []).includes(Number(step.userGroupId)))
+      : users.filter(
+          (u) => !actingCompanyId || (u.companyIds ?? []).includes(actingCompanyId),
+        )
+  ).filter((u) => !actingBranchId || (u.branchIds ?? []).includes(actingBranchId));
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">

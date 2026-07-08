@@ -38,7 +38,13 @@ export class PurchaseOrderController {
     @BranchId() branchId: number | undefined,
     @Body() dto: CreatePurchaseOrderDto,
   ) {
-    return this.service.create(user.id, companyId ?? 0, branchId, dto);
+    return this.service.create(
+      user.id,
+      companyId ?? 0,
+      branchId,
+      dto,
+      !!user.isSuperAdmin,
+    );
   }
 
   @Get()
@@ -53,6 +59,12 @@ export class PurchaseOrderController {
       scope === 'placed' ? 'placed' : 'incoming',
       !!user.isSuperAdmin,
     );
+  }
+
+  /** Whether the current user may raise a new order (workflow-governed). */
+  @Get('create-access')
+  createAccess(@CurrentUser() user: AuthUser) {
+    return this.service.createAccess(user.id, !!user.isSuperAdmin);
   }
 
   @Get(':id')

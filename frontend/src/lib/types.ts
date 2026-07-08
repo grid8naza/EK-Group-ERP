@@ -9,6 +9,8 @@ export interface User {
   groupIds?: number[];
   /** Companies this user belongs to (returned by GET /users). */
   companyIds?: number[];
+  /** Branches this user may access (returned by GET /users). */
+  branchIds?: number[];
   defaultModuleId?: number | null;
 }
 

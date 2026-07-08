@@ -425,6 +425,60 @@ export class WorkflowRuntimeService {
     return [...new Set(tasks.map((t) => t.instance.documentId))];
   }
 
+  /**
+   * Whether a workflow governs creating this document type and whether the user
+   * may create it (is on a Create-action step). With a companyId, tests that
+   * company's workflow; without, tests every active workflow for the form.
+   */
+  async creatorGate(
+    userId: number,
+    moduleId: number,
+    objectId: number,
+    companyId?: number | null,
+    branchId?: number | null,
+  ): Promise<{ governed: boolean; allowed: boolean }> {
+    if (companyId) {
+      const def = await this.matchDefinition({
+        companyId,
+        branchId: branchId ?? undefined,
+        moduleId,
+        objectId,
+      });
+      if (!def) return { governed: false, allowed: true };
+      return { governed: true, allowed: await this.userInCreateStep(userId, def.id) };
+    }
+    const defs = await this.prisma.workflowDefinition.findMany({
+      where: { moduleId, objectId, isActive: true },
+      select: { id: true },
+    });
+    if (!defs.length) return { governed: false, allowed: true };
+    for (const d of defs) {
+      if (await this.userInCreateStep(userId, d.id)) {
+        return { governed: true, allowed: true };
+      }
+    }
+    return { governed: true, allowed: false };
+  }
+
+  /** Whether the user is an assignee of a Create-action step of a definition. */
+  private async userInCreateStep(
+    userId: number,
+    definitionId: number,
+  ): Promise<boolean> {
+    const steps = await this.prisma.workflowStep.findMany({
+      where: {
+        definitionId,
+        action: { in: ['CREATE_FORWARD', 'CREATE_APPROVE', 'CREATE_REFERENCE'] },
+      },
+      include: { users: { select: { userId: true } } },
+    });
+    for (const s of steps) {
+      const assignees = await this.resolveAssignees(s);
+      if (assignees.includes(userId)) return true;
+    }
+    return false;
+  }
+
   /** The in-progress instance for a document, else the most recent one. */
   private async currentInstance(ref: DocumentRef) {
     const active = await this.prisma.workflowInstance.findFirst({

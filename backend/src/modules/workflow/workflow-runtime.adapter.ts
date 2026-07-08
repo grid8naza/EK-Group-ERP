@@ -63,4 +63,14 @@ export class WorkflowRuntimeAdapter implements WorkflowPort {
   visibleDocumentIds(userId: number, moduleId: number, objectId: number) {
     return this.runtime.visibleDocumentIds(userId, moduleId, objectId);
   }
+
+  creatorGate(
+    userId: number,
+    moduleId: number,
+    objectId: number,
+    companyId?: number | null,
+    branchId?: number | null,
+  ) {
+    return this.runtime.creatorGate(userId, moduleId, objectId, companyId, branchId);
+  }
 }

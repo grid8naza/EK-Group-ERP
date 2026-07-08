@@ -75,6 +75,16 @@ export interface WorkflowFirstStep {
   actionType: string;
 }
 
+/**
+ * Whether a workflow governs creating a document type, and whether the user may.
+ * When `governed` is true the workflow SUPERSEDES the screen's Add privilege:
+ * only users on a Create-action step (`allowed`) may create the document.
+ */
+export interface CreateGate {
+  governed: boolean;
+  allowed: boolean;
+}
+
 export interface WorkflowPort {
   /**
    * Start an approval for a document. Returns the new instance id, or null when
@@ -136,4 +146,20 @@ export interface WorkflowPort {
     moduleId: number,
     objectId: number,
   ): Promise<number[]>;
+
+  /**
+   * Whether creating this document type is governed by a workflow, and whether
+   * the user is a designated creator (assignee of a Create-action step). Pass a
+   * `companyId` to test one company's workflow (the document's owner); omit it to
+   * test whether the user is a creator in ANY active workflow for the form (used
+   * to decide if the "New" button shows). When `governed` is true the workflow
+   * supersedes the Add privilege.
+   */
+  creatorGate(
+    userId: number,
+    moduleId: number,
+    objectId: number,
+    companyId?: number | null,
+    branchId?: number | null,
+  ): Promise<CreateGate>;
 }
