@@ -57,7 +57,11 @@ export class WorkflowDefinitionService {
   }
 
   async create(companyId: number | undefined, dto: CreateWorkflowDto) {
-    const cid = dto.companyId ?? companyId;
+    // The origin company is the ACTIVE company (X-Company-Id). Reads (list +
+    // post-save reload) are scoped to it, so honouring a different dto.companyId
+    // would silently create a record the caller can't see. Prefer the header;
+    // fall back to the body only when no active company is set.
+    const cid = companyId ?? dto.companyId;
     if (!cid) throw new BadRequestException('A company is required.');
     this.assertStepsValid(dto.steps);
     const created = await this.prisma.workflowDefinition.create({

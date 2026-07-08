@@ -578,8 +578,12 @@ export default function WorkflowsPage() {
               <Select
                 label="Company"
                 required
-                disabled={!!editing}
-                title={editing ? 'Company cannot change after creation' : undefined}
+                // Locked to the active company. The listing and the post-save
+                // reload are scoped to X-Company-Id, so a workflow raised under a
+                // different company would be invisible here and 404 on reload.
+                // Switch companies from the top bar to configure another company.
+                disabled
+                title="Workflows belong to your active company. Switch companies from the top bar to configure another."
                 value={def.companyId}
                 onChange={(e) =>
                   // Changing the company invalidates the chosen branch.
