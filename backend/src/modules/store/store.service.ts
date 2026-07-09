@@ -12,10 +12,17 @@ import { CreateStoreDto, UpdateStoreDto } from './store.dto';
 export class StoreService {
   constructor(private prisma: PrismaService) {}
 
-  findAll(companyId: number | undefined, search?: string) {
+  findAll(
+    companyId: number | undefined,
+    branchId: number | undefined,
+    search?: string,
+  ) {
     return this.prisma.store.findMany({
+      // Stores are company- AND branch-scoped: with an active branch, only that
+      // branch's stores are listed (companies without branches send no branch).
       where: {
         ...(companyId ? { companyId } : {}),
+        ...(branchId ? { branchId } : {}),
         ...(search
           ? {
               OR: [
@@ -35,10 +42,17 @@ export class StoreService {
     return store;
   }
 
-  async create(companyId: number | undefined, dto: CreateStoreDto) {
+  async create(
+    companyId: number | undefined,
+    branchId: number | undefined,
+    dto: CreateStoreDto,
+  ) {
     if (!companyId) {
       throw new BadRequestException('Select a company before adding a store.');
     }
+    // The store belongs to the active branch (falls back to an explicit one, or
+    // none for companies without branches).
+    const storeBranchId = branchId ?? dto.branchId ?? null;
     // ST-#### per company, retrying on a unique clash.
     for (let i = 0; ; i++) {
       const n = await this.prisma.store.count({ where: { companyId } });
@@ -49,7 +63,7 @@ export class StoreService {
             companyId,
             code,
             name: dto.name.trim(),
-            branchId: dto.branchId ?? null,
+            branchId: storeBranchId,
             address: dto.address?.trim() || null,
             isActive: dto.isActive ?? true,
           },

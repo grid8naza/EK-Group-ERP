@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Warehouse } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
@@ -13,7 +13,7 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
-import { Input, Select, Checkbox, Textarea } from '@/components/ui/Field';
+import { Input, Checkbox, Textarea } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import type { Store, Branch } from '@/lib/types';
 
@@ -21,7 +21,6 @@ const ROUTE = '/inventory/stores';
 
 const empty = {
   name: '',
-  branchId: '',
   address: '',
   isActive: true,
 };
@@ -54,10 +53,6 @@ export default function StoresPage() {
 
   const branchName = (id?: number | null) =>
     id ? (branches ?? []).find((b) => b.id === id)?.name ?? `#${id}` : '—';
-  const branchOptions = useMemo(
-    () => (branches ?? []).map((b) => ({ value: b.id, label: b.name })),
-    [branches],
-  );
 
   const closeDrawer = () => {
     setOpen(false);
@@ -66,7 +61,6 @@ export default function StoresPage() {
 
   const formFrom = (s: Store) => ({
     name: s.name,
-    branchId: s.branchId ? String(s.branchId) : '',
     address: s.address ?? '',
     isActive: s.isActive,
   });
@@ -109,7 +103,6 @@ export default function StoresPage() {
     }
     const payload = {
       name: form.name.trim(),
-      branchId: form.branchId ? Number(form.branchId) : null,
       address: form.address.trim() || null,
       isActive: form.isActive,
     };
@@ -187,7 +180,7 @@ export default function StoresPage() {
     <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="Store Master"
-        description="Stock locations (stores / warehouses) for the active company"
+        description="Stock locations (stores / warehouses) for the active company & branch"
         icon={<Warehouse className="h-5 w-5" />}
         actions={
           canAdd && (
@@ -257,13 +250,7 @@ export default function StoresPage() {
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="e.g. Main Warehouse"
-            />
-            <Select
-              label="Branch"
-              value={form.branchId}
-              onChange={(e) => setForm({ ...form, branchId: e.target.value })}
-              placeholder="— None —"
-              options={branchOptions}
+              wrapClassName="sm:col-span-2"
             />
             <Textarea
               label="Address"

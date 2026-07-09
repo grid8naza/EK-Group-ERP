@@ -13,6 +13,7 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { StoreService } from './store.service';
 import { CompanyId } from '../../auth/company.decorator';
+import { BranchId } from '../../auth/branch.decorator';
 import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
 import { LockDto } from '../../common/lock.dto';
 import { CreateStoreDto, UpdateStoreDto } from './store.dto';
@@ -27,9 +28,10 @@ export class StoreController {
   @Get()
   findAll(
     @CompanyId() companyId: number | undefined,
+    @BranchId() branchId: number | undefined,
     @Query('search') search?: string,
   ) {
-    return this.service.findAll(companyId, search);
+    return this.service.findAll(companyId, branchId, search);
   }
 
   @Get(':id')
@@ -40,9 +42,10 @@ export class StoreController {
   @Post()
   create(
     @CompanyId() companyId: number | undefined,
+    @BranchId() branchId: number | undefined,
     @Body() dto: CreateStoreDto,
   ) {
-    return this.service.create(companyId, dto);
+    return this.service.create(companyId, branchId, dto);
   }
 
   @Patch(':id')
