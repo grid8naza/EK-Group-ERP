@@ -56,6 +56,7 @@ export interface CompanyLite {
   code: string;
   name: string;
   shortName?: string | null;
+  legalName?: string | null;
   logo?: string | null;
   isDefault?: boolean;
 }

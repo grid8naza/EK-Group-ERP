@@ -66,15 +66,13 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
 
   const content = (
     <div className="flex h-full flex-col">
-      {/* Brand — software logo + name; click to view software information. */}
+      {/* Brand — software logo with its name centered underneath; click to view
+          software information. */}
       <button
         type="button"
         onClick={() => setInfoOpen(true)}
         title="Software information"
-        className={cn(
-          'flex h-16 flex-none items-center gap-2.5 border-b border-[#efe7db] px-4 text-left transition hover:bg-[#f6eee3] dark:border-slate-800 dark:hover:bg-slate-800',
-          collapsed && 'justify-center',
-        )}
+        className="flex min-h-[4rem] flex-none flex-col items-center justify-start gap-0.5 border-b border-[#efe7db] px-3 pb-2 pt-2 text-center transition hover:bg-[#f6eee3] dark:border-slate-800 dark:hover:bg-slate-800"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -85,7 +83,7 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
           className="flex-none rounded-lg object-contain"
         />
         {!collapsed && (
-          <span className="truncate text-base font-bold leading-tight tracking-tight text-slate-900 dark:text-white">
+          <span className="max-w-full truncate text-xs font-semibold leading-tight tracking-tight text-slate-700 dark:text-slate-200">
             {softwareName}
           </span>
         )}

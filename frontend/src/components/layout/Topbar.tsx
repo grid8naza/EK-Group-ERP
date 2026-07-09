@@ -199,12 +199,12 @@ export function Topbar({
                 <Building2 className="h-5 w-5" />
               </span>
             )}
-            <span className="hidden min-w-0 flex-col justify-center sm:flex">
+            <span className="hidden flex-col justify-center sm:flex">
               <span className="text-[9px] font-semibold uppercase leading-none tracking-wider text-[#a79b8c]">
                 Company
               </span>
-              <span className="mt-0.5 max-w-[18rem] truncate text-sm font-bold leading-tight text-[#2f2a26] dark:text-slate-100">
-                {activeCompany.name}
+              <span className="mt-0.5 text-sm font-bold leading-tight text-[#2f2a26] dark:text-slate-100">
+                {activeCompany.legalName || activeCompany.name}
               </span>
             </span>
           </>

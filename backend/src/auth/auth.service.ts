@@ -88,6 +88,7 @@ export class AuthService {
         code: uc.company.code,
         name: uc.company.name,
         shortName: uc.company.shortName,
+        legalName: uc.company.legalName,
         logo: uc.company.logo,
         isDefault: uc.isDefault,
       }));
