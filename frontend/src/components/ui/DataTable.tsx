@@ -129,6 +129,8 @@ interface DataTableProps<T> {
    * a bounded height (e.g. an `h-full` flex column).
    */
   fillHeight?: boolean;
+  /** Draw horizontal AND vertical gridlines on every cell (full-page grid). */
+  bordered?: boolean;
 }
 
 export function DataTable<T>({
@@ -166,7 +168,9 @@ export function DataTable<T>({
   // table a bounded height (an `h-full` flex column); without one it degrades to
   // a normally-scrolling table. Pass `fillHeight={false}` to opt out.
   fillHeight = true,
+  bordered = false,
 }: DataTableProps<T>) {
+  const cellBorder = bordered ? 'border border-[#e7ddcb] dark:border-slate-800' : '';
   const [internalSearch, setInternalSearch] = useState('');
   const [page, setPage] = useState(1);
   const [sortState, setSortState] = useState<SortState | null>(
@@ -438,6 +442,7 @@ export function DataTable<T>({
                     }
                     className={cn(
                       'group px-4 py-3',
+                      cellBorder,
                       fillHeight &&
                         'sticky top-0 z-10 bg-[#fcfbf8] dark:bg-slate-900',
                       canReorder &&
@@ -501,6 +506,7 @@ export function DataTable<T>({
                 <th
                   className={cn(
                     'px-4 py-3 text-right',
+                    cellBorder,
                     fillHeight &&
                       'sticky top-0 z-10 bg-[#fcfbf8] dark:bg-slate-900',
                   )}
@@ -547,6 +553,7 @@ export function DataTable<T>({
                       key={c.key}
                       className={cn(
                         'px-4 py-3 text-slate-700 dark:text-slate-300',
+                        cellBorder,
                         c.className,
                       )}
                     >
@@ -558,7 +565,7 @@ export function DataTable<T>({
                     </td>
                   ))}
                   {hasActions && (
-                    <td className="px-4 py-3">
+                    <td className={cn('px-4 py-3', cellBorder)}>
                       <div
                         className="flex items-center justify-end gap-1"
                         onClick={(e) => e.stopPropagation()}

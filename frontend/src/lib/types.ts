@@ -1157,3 +1157,32 @@ export interface OpeningStock {
   totalQty?: number;
   lines?: OpeningStockLine[];
 }
+
+/** One enriched opening-stock line for the line-grid listing. */
+export interface OpeningStockLineRow {
+  id: number; // ledger id
+  documentId: number;
+  docNo: string;
+  docDate: string;
+  storeId: number;
+  storeName: string;
+  itemId?: number | null;
+  productId?: number | null;
+  name: string;
+  categoryId?: number | null;
+  categoryName?: string | null;
+  primaryGroupId?: number | null;
+  primaryGroupName?: string | null;
+  parentGroupId?: number | null;
+  parentGroupName?: string | null;
+  batchNo1?: string | null;
+  batchNo2?: string | null;
+  expiryDate?: string | null;
+  qtyIn: number;
+  unitId: number;
+  unitSymbol?: string | null;
+  unitPrice: number;
+  isLocked: boolean;
+}
+
+export type OpeningStockType = 'ITEM' | 'PRODUCT_PACKED' | 'PRODUCT_UNPACKED';

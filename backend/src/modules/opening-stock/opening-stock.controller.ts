@@ -7,6 +7,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
@@ -33,6 +34,18 @@ export class OpeningStockController {
   @Get()
   findAll(@CompanyId() companyId: number | undefined) {
     return this.service.findAll(companyId);
+  }
+
+  /** Flat enriched lines for the line-grid listing (by stockable type). */
+  @Get('lines')
+  lines(
+    @CompanyId() companyId: number | undefined,
+    @BranchId() branchId: number | undefined,
+    @Query('type') type?: string,
+  ) {
+    const t =
+      type === 'PRODUCT_PACKED' || type === 'PRODUCT_UNPACKED' ? type : 'ITEM';
+    return this.service.lines(companyId, branchId, t);
   }
 
   @Get(':id')
@@ -64,7 +77,7 @@ export class OpeningStockController {
     return this.service.remove(id);
   }
 
-  @UseGuards(LockPrivilegeGuard('/inventory/opening-stock'))
+  @UseGuards(LockPrivilegeGuard('/inventory/opening-stock-items'))
   @Patch(':id/lock')
   setLock(@Param('id', ParseIntPipe) id: number, @Body() dto: LockDto) {
     return this.service.setLock(id, dto.locked);

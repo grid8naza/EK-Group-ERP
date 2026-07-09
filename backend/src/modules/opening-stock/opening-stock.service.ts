@@ -64,6 +64,120 @@ export class OpeningStockService {
     return { ...header, lines };
   }
 
+  /**
+   * Flat, enriched opening-stock LINES for a stockable type, for the line-grid
+   * listing. type: ITEM | PRODUCT_PACKED | PRODUCT_UNPACKED.
+   */
+  async lines(
+    companyId: number | undefined,
+    branchId: number | undefined,
+    type: 'ITEM' | 'PRODUCT_PACKED' | 'PRODUCT_UNPACKED',
+  ) {
+    const rows = await this.prisma.stockLedger.findMany({
+      where: {
+        transactionType: 'OPENING_STOCK',
+        ...(companyId ? { companyId } : {}),
+        ...(branchId ? { branchId } : {}),
+      },
+      orderBy: { id: 'desc' },
+    });
+
+    let filtered = rows;
+    if (type === 'ITEM') {
+      filtered = rows.filter((r) => r.itemId != null);
+    } else {
+      const pids = [
+        ...new Set(rows.filter((r) => r.productId != null).map((r) => r.productId!)),
+      ];
+      const prods = pids.length
+        ? await this.prisma.product.findMany({
+            where: { id: { in: pids } },
+            select: { id: true, packed: true, unpacked: true },
+          })
+        : [];
+      const wantPacked = type === 'PRODUCT_PACKED';
+      const ok = new Set(
+        prods.filter((p) => (wantPacked ? p.packed : p.unpacked)).map((p) => p.id),
+      );
+      filtered = rows.filter((r) => r.productId != null && ok.has(r.productId));
+    }
+
+    const uniq = <T>(xs: (T | null | undefined)[]) =>
+      [...new Set(xs.filter((x): x is T => x != null))];
+    const itemIds = uniq(filtered.map((r) => r.itemId));
+    const productIds = uniq(filtered.map((r) => r.productId));
+    const catIds = uniq(filtered.map((r) => r.categoryId));
+    const groupIds = uniq([
+      ...filtered.map((r) => r.primaryGroupId),
+      ...filtered.map((r) => r.parentGroupId),
+    ]);
+    const unitIds = uniq(filtered.map((r) => r.unitId));
+    const storeIds = uniq(filtered.map((r) => r.storeId));
+    const docIds = uniq(filtered.map((r) => r.documentId));
+
+    const [its, prs, cats, grps, uns, sts, docs] = await Promise.all([
+      itemIds.length
+        ? this.prisma.item.findMany({ where: { id: { in: itemIds } }, select: { id: true, name: true } })
+        : [],
+      productIds.length
+        ? this.prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, name: true } })
+        : [],
+      catIds.length
+        ? this.prisma.category.findMany({ where: { id: { in: catIds } }, select: { id: true, name: true } })
+        : [],
+      groupIds.length
+        ? this.prisma.group.findMany({ where: { id: { in: groupIds } }, select: { id: true, name: true } })
+        : [],
+      unitIds.length
+        ? this.prisma.unit.findMany({ where: { id: { in: unitIds } }, select: { id: true, symbol: true, code: true } })
+        : [],
+      storeIds.length
+        ? this.prisma.store.findMany({ where: { id: { in: storeIds } }, select: { id: true, name: true } })
+        : [],
+      docIds.length
+        ? this.prisma.openingStock.findMany({ where: { id: { in: docIds } }, select: { id: true, isLocked: true } })
+        : [],
+    ]);
+
+    const itemMap = new Map(its.map((x) => [x.id, x.name] as const));
+    const prodMap = new Map(prs.map((x) => [x.id, x.name] as const));
+    const catMap = new Map(cats.map((x) => [x.id, x.name] as const));
+    const grpMap = new Map(grps.map((x) => [x.id, x.name] as const));
+    const unitMap = new Map(uns.map((x) => [x.id, x.symbol ?? x.code] as const));
+    const storeMap = new Map(sts.map((x) => [x.id, x.name] as const));
+    const lockMap = new Map(docs.map((x) => [x.id, x.isLocked] as const));
+
+    return filtered.map((r) => ({
+      id: r.id,
+      documentId: r.documentId,
+      docNo: r.documentNo,
+      docDate: r.date,
+      storeId: r.storeId,
+      storeName: storeMap.get(r.storeId) ?? '',
+      itemId: r.itemId,
+      productId: r.productId,
+      name: r.itemId
+        ? itemMap.get(r.itemId) ?? ''
+        : r.productId
+          ? prodMap.get(r.productId) ?? ''
+          : '',
+      categoryId: r.categoryId,
+      categoryName: r.categoryId ? catMap.get(r.categoryId) ?? null : null,
+      primaryGroupId: r.primaryGroupId,
+      primaryGroupName: r.primaryGroupId ? grpMap.get(r.primaryGroupId) ?? null : null,
+      parentGroupId: r.parentGroupId,
+      parentGroupName: r.parentGroupId ? grpMap.get(r.parentGroupId) ?? null : null,
+      batchNo1: r.batchNo1,
+      batchNo2: r.batchNo2,
+      expiryDate: r.expiryDate,
+      qtyIn: r.qtyIn,
+      unitId: r.unitId,
+      unitSymbol: unitMap.get(r.unitId) ?? '',
+      unitPrice: r.unitPrice,
+      isLocked: lockMap.get(r.documentId) ?? false,
+    }));
+  }
+
   // ---- writes ----
 
   async create(
