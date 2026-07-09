@@ -23,6 +23,8 @@ export const CPANEL_SUBS = [
   { name: 'Workflow Setup', route: '/cpanel/workflows', icon: 'git-branch', order: 13 },
   { name: 'Approval Statuses', route: '/cpanel/approval-statuses', icon: 'shieldcheck', order: 14 },
   { name: 'Software Information', route: '/cpanel/software-info', icon: 'info', order: 15 },
+  { name: 'Document Master', route: '/cpanel/documents', icon: 'file-text', order: 16 },
+  { name: 'Document Numbering', route: '/cpanel/document-numbering', icon: 'hash', order: 17 },
 ];
 
 export interface ProvisionResult {

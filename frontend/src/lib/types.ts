@@ -1186,3 +1186,36 @@ export interface OpeningStockLineRow {
 }
 
 export type OpeningStockType = 'ITEM' | 'PRODUCT_PACKED' | 'PRODUCT_UNPACKED';
+
+// ---- Document master & numbering ----
+export interface DocumentMaster {
+  id: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  isSystem: boolean;
+  isActive: boolean;
+  isLocked?: boolean;
+}
+
+export type NumberingRenumber = 'NEVER' | 'MONTHLY' | 'YEARLY';
+export type NumberingPeriodPosition = 'BEFORE_SUFFIX' | 'AFTER_SUFFIX';
+
+export interface DocumentNumberingRow {
+  documentId: number;
+  documentName: string;
+  documentCode: string;
+  isSystem: boolean;
+  configured: boolean;
+  prefixEnabled: boolean;
+  prefixValue: string | null;
+  startingNo: number;
+  suffixEnabled: boolean;
+  suffixValue: string | null;
+  paddingLength: number;
+  renumber: NumberingRenumber;
+  periodPosition: NumberingPeriodPosition;
+  isLocked: boolean;
+  lastNumber: number;
+  preview: string;
+}

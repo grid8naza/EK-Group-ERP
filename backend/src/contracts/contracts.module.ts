@@ -8,6 +8,8 @@ import { METRIC_PROVIDER } from './metric-provider.port';
 import { CpanelMetricsAdapter } from '../modules/company/cpanel-metrics.adapter';
 import { ProductionMetricsAdapter } from '../modules/production/production-metrics.adapter';
 import { InventoryMetricsAdapter } from '../modules/item/inventory-metrics.adapter';
+import { NUMBERING } from './numbering.port';
+import { DocumentNumberingService } from '../modules/document-numbering/document-numbering.service';
 
 /**
  * Composition root for cross-module contracts (ports & adapters).
@@ -41,6 +43,10 @@ import { InventoryMetricsAdapter } from '../modules/item/inventory-metrics.adapt
     // WorkflowModule's instance (both stateless).
     WorkflowRuntimeService,
     { provide: WORKFLOW, useClass: WorkflowRuntimeAdapter },
+    // Central per-company document numbering, exposed so any document module can
+    // fetch its next number via the NUMBERING port (no cross-module import).
+    DocumentNumberingService,
+    { provide: NUMBERING, useExisting: DocumentNumberingService },
     CpanelMetricsAdapter,
     ProductionMetricsAdapter,
     InventoryMetricsAdapter,
@@ -58,6 +64,6 @@ import { InventoryMetricsAdapter } from '../modules/item/inventory-metrics.adapt
       ],
     },
   ],
-  exports: [USER_LOOKUP, METRIC_PROVIDER, WORKFLOW],
+  exports: [USER_LOOKUP, METRIC_PROVIDER, WORKFLOW, NUMBERING],
 })
 export class ContractsModule {}

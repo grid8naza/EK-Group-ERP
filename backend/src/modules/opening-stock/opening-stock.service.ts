@@ -1,10 +1,12 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
 import { assertUnlocked } from '../../common/assert-unlocked';
 import {
   CreateOpeningStockDto,
@@ -22,7 +24,10 @@ interface LineClass {
 
 @Injectable()
 export class OpeningStockService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(NUMBERING) private readonly numbering: NumberingPort,
+  ) {}
 
   // ---- reads ----
 
@@ -197,7 +202,7 @@ export class OpeningStockService {
     const resolved = await this.resolveLines(dto.lines);
     const docDate = new Date(dto.docDate);
     const ymd = this.ymd(dto.docDate);
-    const docNo = await this.nextDocNo(companyId);
+    const docNo = await this.nextDocNo(companyId, docDate);
 
     return this.prisma.$transaction(async (tx) => {
       const base = await tx.stockBatch.count({
@@ -480,7 +485,11 @@ export class OpeningStockService {
     return `${y.slice(2)}${m}${d}`;
   }
 
-  private async nextDocNo(companyId: number): Promise<string> {
+  private async nextDocNo(companyId: number, date: Date): Promise<string> {
+    // Use the company's configured numbering rule when present; otherwise fall
+    // back to the built-in OS-##### scheme.
+    const configured = await this.numbering.next(companyId, 'OPENING_STOCK', date);
+    if (configured) return configured;
     const n = await this.prisma.openingStock.count({ where: { companyId } });
     return `OS-${String(n + 1).padStart(5, '0')}`;
   }

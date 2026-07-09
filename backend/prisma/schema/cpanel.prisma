@@ -681,3 +681,68 @@ model SoftwareInfo {
 
   @@map("software_info")
 }
+
+// ---------------------------------------------------------------------------
+// Document numbering
+//
+// `Document` is a global master of document TYPES (Opening Stock, GRN, vouchers…).
+// Each company configures its own sequencer for a document via a
+// DocumentNumberingRule (prefix/suffix/padding/start + renumber period). The
+// rule also carries the running counter state so numbers reset per period.
+// ---------------------------------------------------------------------------
+model Document {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique // stable code services reference (e.g. OPENING_STOCK)
+  name        String
+  description String?
+  isSystem    Boolean  @default(false) // seeded, wired to a real document flow
+  isActive    Boolean  @default(true)
+  isLocked    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  numberingRules DocumentNumberingRule[]
+
+  @@map("documents")
+}
+
+/// When the sequencer resets to the starting number.
+enum NumberingRenumber {
+  NEVER
+  MONTHLY
+  YEARLY
+}
+
+/// Where the month/year period token sits relative to the configured suffix.
+enum NumberingPeriodPosition {
+  BEFORE_SUFFIX
+  AFTER_SUFFIX
+}
+
+/// A company's numbering rule + running counter for one document type.
+model DocumentNumberingRule {
+  id             Int                     @id @default(autoincrement())
+  companyId      Int // -> Cpanel Company (plain id)
+  documentId     Int
+  prefixEnabled  Boolean                 @default(true)
+  prefixValue    String?
+  startingNo     Int                     @default(1)
+  suffixEnabled  Boolean                 @default(false)
+  suffixValue    String?
+  paddingLength  Int                     @default(5)
+  renumber       NumberingRenumber       @default(NEVER)
+  periodPosition NumberingPeriodPosition @default(BEFORE_SUFFIX)
+  isLocked       Boolean                 @default(false)
+  // Running counter state: the last period generated in and its last number,
+  // so MONTHLY / YEARLY renumbering resets when the period rolls over.
+  lastPeriodKey String?
+  lastNumber    Int               @default(0)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+
+  document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, documentId])
+  @@index([companyId])
+  @@map("document_numbering_rules")
+}
