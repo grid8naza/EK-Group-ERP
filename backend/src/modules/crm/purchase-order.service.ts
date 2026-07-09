@@ -11,6 +11,7 @@ import { assertUnlocked } from '../../common/assert-unlocked';
 import {
   DocumentRef,
   WORKFLOW,
+  WorkflowFirstStep,
   WorkflowPort,
   WorkflowStatus,
 } from '../../contracts/workflow.port';
@@ -221,6 +222,35 @@ export class PurchaseOrderService {
   async act(userId: number, id: number, dto: ActPurchaseOrderDto) {
     const order = await this.ensureOrder(id);
     const ref = await this.docRef(order.id);
+
+    // Creator withdrawing their own in-progress order. Having forwarded it, the
+    // creator no longer holds a task, so this can't go through the task-based
+    // path — gate it on the create step's `canCancel` and cancel the instance.
+    if (dto.action === 'CANCEL' && order.placedByUserId === userId) {
+      const state = await this.workflow.docState(userId, ref);
+      if (!state.myTask) {
+        const first = await this.workflow.firstStep(
+          order.orderingCompanyId,
+          order.orderingBranchId,
+          ref.moduleId,
+          ref.objectId,
+        );
+        if (!first?.canCancel) {
+          throw new ForbiddenException('You cannot cancel this order.');
+        }
+        await this.workflow.cancelForDocument(
+          ref.moduleId,
+          ref.objectId,
+          ref.documentId,
+        );
+        await this.prisma.purchaseOrder.update({
+          where: { id },
+          data: { status: 'CANCELLED', workflowStatus: null },
+        });
+        return this.findOne(userId, id, true);
+      }
+    }
+
     const res = await this.workflow.actOnDocument(
       userId,
       ref,
@@ -314,18 +344,27 @@ export class PurchaseOrderService {
     const isDraft = order.status === 'DRAFT';
     const canEditDraft = isDraft && (isCreator || isSuperAdmin);
     const canActEdit = !!workflow.myTask?.canEdit;
+    const inProgress = workflow.status === 'IN_PROGRESS';
+    // Creator withdraw applies only once they've forwarded (no pending task of
+    // their own) — Cancel is an origin (step 1) action, never a downstream one.
+    const isCreatorWithdraw = isCreator && inProgress && !workflow.myTask;
 
-    // Label the creator's forward button from the configured first step.
-    let submitButtonText: string | null = null;
-    if (canEditDraft) {
-      const first = await this.workflow.firstStep(
+    // The create step both labels the creator's forward button (while a draft)
+    // and says whether the creator may withdraw the order once it's in flight.
+    let firstStep: WorkflowFirstStep | null = null;
+    if (canEditDraft || isCreatorWithdraw) {
+      firstStep = await this.workflow.firstStep(
         order.orderingCompanyId,
         order.orderingBranchId,
         ref.moduleId,
         ref.objectId,
       );
-      submitButtonText = first?.buttonText ?? 'Submit';
     }
+    const submitButtonText = canEditDraft
+      ? (firstStep?.buttonText ?? 'Submit')
+      : null;
+    // Creator withdraw: on an in-progress order whose create step allows cancel.
+    const canCancel = isCreatorWithdraw && !!firstStep?.canCancel;
 
     return {
       ...order,
@@ -335,6 +374,7 @@ export class PurchaseOrderService {
         canEdit: canEditDraft || canActEdit,
         canDelete: canEditDraft,
         canSubmit: canEditDraft,
+        canCancel,
         submitButtonText,
       },
     };

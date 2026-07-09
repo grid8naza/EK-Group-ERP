@@ -378,8 +378,9 @@ export default function WorkflowsPage() {
         d.approvalMode === 'FIELD' && d.valueFrom !== '' ? Number(d.valueFrom) : null,
       valueTo:
         d.approvalMode === 'FIELD' && d.valueTo !== '' ? Number(d.valueTo) : null,
-      canCancel: d.canCancel,
-      canReject: d.canReject,
+      // Cancel is only meaningful at the origin (step 1); reject only downstream.
+      canCancel: i === 0 ? d.canCancel : false,
+      canReject: i === 0 ? false : d.canReject,
       canEdit: d.canEdit,
       notifyInApp: d.notifyInApp,
       slaHours: d.slaHours !== '' ? Number(d.slaHours) : null,
@@ -1044,16 +1045,21 @@ function StepCard({
 
       {/* Toggles */}
       <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2">
-        <Checkbox
-          label="Can cancel"
-          checked={step.canCancel}
-          onChange={(e) => onChange({ canCancel: e.target.checked })}
-        />
-        <Checkbox
-          label="Can reject"
-          checked={step.canReject}
-          onChange={(e) => onChange({ canReject: e.target.checked })}
-        />
+        {/* Cancel belongs to the origin step only; reject only to later steps. */}
+        {index === 0 && (
+          <Checkbox
+            label="Can cancel"
+            checked={step.canCancel}
+            onChange={(e) => onChange({ canCancel: e.target.checked })}
+          />
+        )}
+        {index >= 1 && (
+          <Checkbox
+            label="Can reject"
+            checked={step.canReject}
+            onChange={(e) => onChange({ canReject: e.target.checked })}
+          />
+        )}
         <Checkbox
           label="Can edit"
           checked={step.canEdit}

@@ -22,6 +22,7 @@ const fmtDate = (iso?: string | null) =>
 export interface PoDocProps {
   order: PurchaseOrder;
   companyName: (id: number) => string;
+  branchName: (id?: number | null) => string;
   productName: (id: number) => string;
   unitLabel: (id: number) => string;
 }
@@ -34,6 +35,7 @@ export interface PoDocProps {
 export function PurchaseOrderDoc({
   order,
   companyName,
+  branchName,
   productName,
   unitLabel,
 }: PoDocProps) {
@@ -67,6 +69,7 @@ export function PurchaseOrderDoc({
         <Party
           heading="From (Requester)"
           name={companyName(order.orderingCompanyId)}
+          sub={branchName(order.orderingBranchId)}
         />
         <Party
           heading="To (Supplier)"
@@ -168,7 +171,15 @@ export function PurchaseOrderDoc({
   );
 }
 
-function Party({ heading, name }: { heading: string; name: string }) {
+function Party({
+  heading,
+  name,
+  sub,
+}: {
+  heading: string;
+  name: string;
+  sub?: string;
+}) {
   return (
     <div>
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -177,6 +188,9 @@ function Party({ heading, name }: { heading: string; name: string }) {
       <p className="mt-1 text-base font-semibold text-slate-900 dark:text-slate-100">
         {name}
       </p>
+      {sub && sub !== '—' && (
+        <p className="text-sm text-slate-500 dark:text-slate-400">{sub}</p>
+      )}
     </div>
   );
 }

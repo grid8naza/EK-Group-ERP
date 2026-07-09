@@ -9,6 +9,7 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronsUpDown,
+  GripVertical,
   Inbox,
   RefreshCw,
 } from 'lucide-react';
@@ -112,6 +113,11 @@ interface DataTableProps<T> {
   /** Show the show/hide-columns control (on by default). */
   columnToggle?: boolean;
   /**
+   * Let the user drag column headers to reorder them (on by default). The order
+   * is remembered per listing alongside the hidden-column preferences.
+   */
+  columnReorder?: boolean;
+  /**
    * Storage key for remembering hidden columns. Defaults to the current route,
    * so each listing keeps its own column preferences.
    */
@@ -154,6 +160,7 @@ export function DataTable<T>({
   emptyMessage = 'No records found',
   defaultSort,
   columnToggle = true,
+  columnReorder = true,
   tableId,
   // Frozen header is the standard for listing screens. The page should give the
   // table a bounded height (an `h-full` flex column); without one it degrades to
@@ -211,9 +218,58 @@ export function DataTable<T>({
       }
       return next;
     });
+  // Column order, remembered per listing (keyed by tableId or the route). Stored
+  // as a list of column keys; unknown/new columns fall back to their natural order.
+  const orderKey = `datatable.columnOrder.${tableId ?? pathname ?? ''}`;
+  const [colOrder, setColOrder] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(orderKey);
+      setColOrder(raw ? (JSON.parse(raw) as string[]) : []);
+    } catch {
+      setColOrder([]);
+    }
+  }, [orderKey]);
+  const orderedColumns = useMemo(() => {
+    if (!colOrder.length) return columns;
+    const rank = new Map(colOrder.map((k, i) => [k, i]));
+    // Stable sort by saved rank; columns not in the saved order keep their
+    // natural position at the end (rank = Infinity, ties preserved).
+    return columns
+      .map((c, i) => ({ c, i }))
+      .sort((a, b) => {
+        const ra = rank.get(a.c.key) ?? Infinity;
+        const rb = rank.get(b.c.key) ?? Infinity;
+        return ra === rb ? a.i - b.i : ra - rb;
+      })
+      .map((x) => x.c);
+  }, [columns, colOrder]);
+
+  const canReorder = columnReorder && columns.length > 1;
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [overKey, setOverKey] = useState<string | null>(null);
+  const persistOrder = (keys: string[]) => {
+    setColOrder(keys);
+    try {
+      localStorage.setItem(orderKey, JSON.stringify(keys));
+    } catch {
+      /* ignore */
+    }
+  };
+  const reorderColumn = (targetKey: string) => {
+    if (!dragKey || dragKey === targetKey) return;
+    const keys = orderedColumns.map((c) => c.key);
+    const from = keys.indexOf(dragKey);
+    const to = keys.indexOf(targetKey);
+    if (from === -1 || to === -1) return;
+    const [moved] = keys.splice(from, 1);
+    keys.splice(to, 0, moved);
+    persistOrder(keys);
+  };
+
   const visibleColumns = useMemo(
-    () => columns.filter((c) => !hiddenCols.has(c.key)),
-    [columns, hiddenCols],
+    () => orderedColumns.filter((c) => !hiddenCols.has(c.key)),
+    [orderedColumns, hiddenCols],
   );
   const showColumnToggle = columnToggle && columns.length > 1;
 
@@ -323,7 +379,7 @@ export function DataTable<T>({
           )}
           {showColumnToggle && (
             <ColumnToggle
-              columns={columns.map((c) => ({ key: c.key, label: c.header }))}
+              columns={orderedColumns.map((c) => ({ key: c.key, label: c.header }))}
               hidden={hiddenCols}
               onToggle={toggleColumn}
             />
@@ -358,37 +414,86 @@ export function DataTable<T>({
                 return (
                   <th
                     key={c.key}
+                    onDragOver={
+                      canReorder && dragKey
+                        ? (e) => {
+                            e.preventDefault();
+                            setOverKey(c.key);
+                          }
+                        : undefined
+                    }
+                    onDragLeave={
+                      canReorder
+                        ? () => setOverKey((k) => (k === c.key ? null : k))
+                        : undefined
+                    }
+                    onDrop={
+                      canReorder
+                        ? () => {
+                            reorderColumn(c.key);
+                            setOverKey(null);
+                            setDragKey(null);
+                          }
+                        : undefined
+                    }
                     className={cn(
-                      'px-4 py-3',
+                      'group px-4 py-3',
                       fillHeight &&
                         'sticky top-0 z-10 bg-[#fcfbf8] dark:bg-slate-900',
+                      canReorder &&
+                        dragKey &&
+                        overKey === c.key &&
+                        dragKey !== c.key &&
+                        'ring-2 ring-inset ring-brand-400',
+                      canReorder && dragKey === c.key && 'opacity-50',
                       c.headerClassName,
                     )}
                   >
-                    {sortable ? (
-                      <button
-                        type="button"
-                        onClick={() => toggleSort(c.key)}
-                        className={cn(
-                          'inline-flex items-center gap-1 transition hover:text-slate-700 dark:hover:text-slate-200',
-                          active && 'text-slate-700 dark:text-slate-200',
-                        )}
-                        title={`Sort by ${c.header}`}
-                      >
-                        {c.header}
-                        {active ? (
-                          activeSort!.dir === 'asc' ? (
-                            <ChevronUp className="h-3.5 w-3.5" />
+                    <span className="inline-flex items-center gap-1 align-middle">
+                      {canReorder && (
+                        <span
+                          draggable
+                          onDragStart={(e) => {
+                            setDragKey(c.key);
+                            e.dataTransfer.effectAllowed = 'move';
+                            e.dataTransfer.setData('text/plain', c.key);
+                          }}
+                          onDragEnd={() => {
+                            setDragKey(null);
+                            setOverKey(null);
+                          }}
+                          className="cursor-grab text-slate-300 opacity-0 transition group-hover:opacity-100 active:cursor-grabbing dark:text-slate-600"
+                          title="Drag to reorder column"
+                          aria-label="Drag to reorder column"
+                        >
+                          <GripVertical className="h-3.5 w-3.5" />
+                        </span>
+                      )}
+                      {sortable ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleSort(c.key)}
+                          className={cn(
+                            'inline-flex items-center gap-1 transition hover:text-slate-700 dark:hover:text-slate-200',
+                            active && 'text-slate-700 dark:text-slate-200',
+                          )}
+                          title={`Sort by ${c.header}`}
+                        >
+                          {c.header}
+                          {active ? (
+                            activeSort!.dir === 'asc' ? (
+                              <ChevronUp className="h-3.5 w-3.5" />
+                            ) : (
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            )
                           ) : (
-                            <ChevronDown className="h-3.5 w-3.5" />
-                          )
-                        ) : (
-                          <ChevronsUpDown className="h-3.5 w-3.5 opacity-40" />
-                        )}
-                      </button>
-                    ) : (
-                      c.header
-                    )}
+                            <ChevronsUpDown className="h-3.5 w-3.5 opacity-40" />
+                          )}
+                        </button>
+                      ) : (
+                        c.header
+                      )}
+                    </span>
                   </th>
                 );
               })}

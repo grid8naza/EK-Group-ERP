@@ -23,6 +23,7 @@ import { Badge } from '@/components/ui/Badge';
 import { PurchaseOrderDoc } from '@/components/crm/PurchaseOrderDoc';
 import { resolveIcon } from '@/lib/icons';
 import type {
+  Branch,
   Company,
   Product,
   Unit,
@@ -63,6 +64,7 @@ export default function PurchaseOrderIcPage() {
   const confirm = useConfirm();
 
   const { data: companies } = useFetch<Company[]>('/companies');
+  const { data: branches } = useFetch<Branch[]>('/branches');
   const { data: units } = useFetch<Unit[]>('/units');
   // Status vocabulary — to show each order's status as its configured icon/colour.
   const { data: statuses } = useFetch<WorkflowStatus[]>('/workflow-statuses');
@@ -94,6 +96,71 @@ export default function PurchaseOrderIcPage() {
   );
   const companyName = (id: number) =>
     (companies ?? []).find((c) => c.id === id)?.name ?? `#${id}`;
+  const branchName = (id?: number | null) =>
+    id ? ((branches ?? []).find((b) => b.id === id)?.name ?? `#${id}`) : '—';
+
+  // The unified list holds orders on both sides: ones the active company raised
+  // (it's the requester → the counterparty is the Supplier) and ones routed to
+  // it as the supplier (→ the counterparty is the Customer). Show whichever the
+  // active company is NOT, and label the header for whichever role(s) are present.
+  const activeIsSupplier = (r: PurchaseOrder) => r.companyId === activeCompanyId;
+  const counterpartyId = (r: PurchaseOrder) =>
+    activeIsSupplier(r) ? r.orderingCompanyId : r.companyId;
+  const counterpartyName = (r: PurchaseOrder) =>
+    companyName(counterpartyId(r));
+  const partyHeader = useMemo(() => {
+    const rows = placed ?? [];
+    const asSupplier = rows.some(activeIsSupplier);
+    const asRequester = rows.some((r) => !activeIsSupplier(r));
+    if (asSupplier && asRequester) return 'Supplier / Customer';
+    return asSupplier ? 'Customer' : 'Supplier';
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placed, activeCompanyId]);
+
+  // ---- filters (Company / Branch / Status) ----
+  const [fCompany, setFCompany] = useState('');
+  const [fBranch, setFBranch] = useState('');
+  const [fStatus, setFStatus] = useState('');
+
+  // Options are derived from the loaded rows, so only values actually present
+  // are offered (and they match what the list shows).
+  const companyOptions = useMemo(() => {
+    const m = new Map<number, string>();
+    (placed ?? []).forEach((r) => m.set(counterpartyId(r), counterpartyName(r)));
+    return [...m.entries()].map(([value, label]) => ({ value, label }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placed, companies, activeCompanyId]);
+  const branchOptions = useMemo(() => {
+    const m = new Map<number, string>();
+    (placed ?? []).forEach((r) => {
+      if (r.orderingBranchId) m.set(r.orderingBranchId, branchName(r.orderingBranchId));
+    });
+    return [...m.entries()].map(([value, label]) => ({ value, label }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [placed, branches]);
+  const statusOptions = useMemo(() => {
+    const s = new Set<string>();
+    (placed ?? []).forEach((r) => s.add(r.workflowStatus ?? r.status));
+    return [...s].map((v) => ({ value: v, label: v }));
+  }, [placed]);
+
+  const filteredRows = useMemo(
+    () =>
+      (placed ?? []).filter(
+        (r) =>
+          (!fCompany || String(counterpartyId(r)) === fCompany) &&
+          (!fBranch || String(r.orderingBranchId ?? '') === fBranch) &&
+          (!fStatus || (r.workflowStatus ?? r.status) === fStatus),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [placed, fCompany, fBranch, fStatus, activeCompanyId],
+  );
+  const hasFilters = !!(fCompany || fBranch || fStatus);
+  const clearFilters = () => {
+    setFCompany('');
+    setFBranch('');
+    setFStatus('');
+  };
   const unitLabel = (id: number) => {
     const u = (units ?? []).find((x) => x.id === id);
     return u?.symbol ?? u?.code ?? '';
@@ -283,6 +350,14 @@ export default function PurchaseOrderIcPage() {
       toast.error('A reason is required to reject.');
       return;
     }
+    if (action === 'CANCEL') {
+      const ok = await confirm({
+        title: 'Cancel order',
+        message: `Cancel ${current.orderNo}? This withdraws it from the approval workflow and cannot be undone.`,
+        confirmText: 'Cancel order',
+      });
+      if (!ok) return;
+    }
     setActing(true);
     try {
       await api.post(`/purchase-orders/${current.id}/act`, {
@@ -307,7 +382,16 @@ export default function PurchaseOrderIcPage() {
   // ---- list columns ----
   const columns: Column<PurchaseOrder>[] = [
     { key: 'orderNo', header: 'Order No', accessor: (r) => r.orderNo },
-    { key: 'supplier', header: 'Supplier', accessor: (r) => companyName(r.companyId) },
+    {
+      key: 'party',
+      header: partyHeader,
+      accessor: (r) => counterpartyName(r),
+    },
+    {
+      key: 'branch',
+      header: 'Branch',
+      accessor: (r) => branchName(r.orderingBranchId),
+    },
     {
       key: 'items',
       header: 'Items',
@@ -399,9 +483,11 @@ export default function PurchaseOrderIcPage() {
                 <Send className="h-4 w-4" /> {submitLabel}
               </button>
             </div>
-          ) : myTask ? (
+          ) : myTask || current?.viewer?.canCancel ? (
             <div className="flex flex-wrap gap-2">
-              {myTask.canCancel && (
+              {/* Cancel: the acting approver's step, or the creator withdrawing
+                  their own in-progress order. */}
+              {(myTask?.canCancel || current?.viewer?.canCancel) && (
                 <button
                   className="btn-ghost text-slate-600"
                   onClick={() => doAct('CANCEL')}
@@ -410,7 +496,7 @@ export default function PurchaseOrderIcPage() {
                   <Ban className="h-4 w-4" /> Cancel
                 </button>
               )}
-              {myTask.canReject && (
+              {myTask?.canReject && (
                 <button
                   className="btn-ghost text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
                   onClick={() => doAct('REJECT')}
@@ -419,13 +505,15 @@ export default function PurchaseOrderIcPage() {
                   <X className="h-4 w-4" /> Reject
                 </button>
               )}
-              <button
-                className="btn-primary"
-                onClick={() => doAct('FORWARD')}
-                disabled={acting}
-              >
-                <Check className="h-4 w-4" /> {myTask.buttonText}
-              </button>
+              {myTask && (
+                <button
+                  className="btn-primary"
+                  onClick={() => doAct('FORWARD')}
+                  disabled={acting}
+                >
+                  <Check className="h-4 w-4" /> {myTask.buttonText}
+                </button>
+              )}
             </div>
           ) : null}
         </div>
@@ -457,6 +545,7 @@ export default function PurchaseOrderIcPage() {
               <PurchaseOrderDoc
                 order={current}
                 companyName={companyName}
+                branchName={branchName}
                 productName={productName}
                 unitLabel={unitLabel}
               />
@@ -498,7 +587,7 @@ export default function PurchaseOrderIcPage() {
       />
       <DataTable
         columns={columns}
-        rows={placed ?? []}
+        rows={filteredRows}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
@@ -507,6 +596,39 @@ export default function PurchaseOrderIcPage() {
         onView={openView}
         canView
         emptyMessage="No purchase orders yet"
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={fCompany}
+              onChange={(e) => setFCompany(e.target.value)}
+              placeholder="All companies"
+              options={companyOptions}
+              wrapClassName="w-44"
+            />
+            <Select
+              value={fBranch}
+              onChange={(e) => setFBranch(e.target.value)}
+              placeholder="All branches"
+              options={branchOptions}
+              wrapClassName="w-40"
+            />
+            <Select
+              value={fStatus}
+              onChange={(e) => setFStatus(e.target.value)}
+              placeholder="All statuses"
+              options={statusOptions}
+              wrapClassName="w-44"
+            />
+            {hasFilters && (
+              <button
+                className="btn-ghost text-xs text-slate-500"
+                onClick={clearFilters}
+              >
+                <X className="h-3.5 w-3.5" /> Clear
+              </button>
+            )}
+          </div>
+        }
       />
     </div>
   );

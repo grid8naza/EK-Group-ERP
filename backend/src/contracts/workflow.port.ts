@@ -73,6 +73,7 @@ export interface WorkflowDocState {
 export interface WorkflowFirstStep {
   buttonText: string;
   actionType: string;
+  canCancel: boolean; // the create step lets the creator cancel their own order
 }
 
 /**

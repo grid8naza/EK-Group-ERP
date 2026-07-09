@@ -828,6 +828,8 @@ export interface PurchaseOrderViewer {
   canEdit: boolean;
   canDelete: boolean;
   canSubmit: boolean;
+  /** The creator may withdraw (cancel) their own in-progress order. */
+  canCancel: boolean;
   submitButtonText: string | null;
 }
 

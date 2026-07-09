@@ -105,6 +105,7 @@ export class WorkflowRuntimeService {
 
     return tasks.map((t) => {
       const step = stepById.get(t.stepId);
+      const flags = this.stepFlags(t.sequence, step);
       return {
         taskId: t.id,
         instanceId: t.instanceId,
@@ -119,8 +120,8 @@ export class WorkflowRuntimeService {
         amount: t.instance.amount,
         action: step?.action,
         buttonText: step?.buttonText ?? 'Approve',
-        canCancel: step?.canCancel ?? false,
-        canReject: step?.canReject ?? false,
+        canCancel: flags.canCancel,
+        canReject: flags.canReject,
         canEdit: step?.canEdit ?? false,
       };
     });
@@ -189,10 +190,11 @@ export class WorkflowRuntimeService {
       where: { id: task.stepId },
     });
     if (!step) throw new NotFoundException('Workflow step not found');
+    const flags = this.stepFlags(task.sequence, step);
 
     // --- terminal actions: reject / cancel ---
     if (dto.action === 'REJECT') {
-      if (!step.canReject) {
+      if (!flags.canReject) {
         throw new ForbiddenException('Reject is not allowed at this step.');
       }
       if (!dto.comment?.trim()) {
@@ -208,7 +210,7 @@ export class WorkflowRuntimeService {
       return this.getInstance(instance.id);
     }
     if (dto.action === 'CANCEL') {
-      if (!step.canCancel) {
+      if (!flags.canCancel) {
         throw new ForbiddenException('Cancel is not allowed at this step.');
       }
       await this.completeTask(task.id);
@@ -251,7 +253,10 @@ export class WorkflowRuntimeService {
 
   async notifications(userId: number) {
     return this.prisma.workflowNotification.findMany({
-      where: { userId },
+      // Only surface alerts whose task is still awaiting this user — once the task
+      // is DONE/SKIPPED (actioned, superseded, or the whole instance finished) the
+      // alert is stale. Legacy rows with no linked task are treated as stale too.
+      where: { userId, task: { is: { status: 'PENDING' } } },
       orderBy: { id: 'desc' },
       take: 50,
     });
@@ -267,7 +272,7 @@ export class WorkflowRuntimeService {
 
   async unreadCount(userId: number) {
     const count = await this.prisma.workflowNotification.count({
-      where: { userId, isRead: false },
+      where: { userId, isRead: false, task: { is: { status: 'PENDING' } } },
     });
     return { count };
   }
@@ -383,14 +388,15 @@ export class WorkflowRuntimeService {
       const step = await this.prisma.workflowStep.findUnique({
         where: { id: pending.stepId },
       });
+      const flags = this.stepFlags(pending.sequence, step);
       myTask = {
         taskId: pending.id,
         sequence: pending.sequence,
         buttonText: step?.buttonText ?? 'Approve',
         actionType: step?.action ?? 'APPROVE',
         canApprove: pending.canApprove,
-        canReject: step?.canReject ?? false,
-        canCancel: step?.canCancel ?? false,
+        canReject: flags.canReject,
+        canCancel: flags.canCancel,
         canEdit: step?.canEdit ?? false,
       };
     }
@@ -430,7 +436,11 @@ export class WorkflowRuntimeService {
       orderBy: { sequence: 'asc' },
     });
     if (!step) return null;
-    return { buttonText: step.buttonText, actionType: step.action };
+    return {
+      buttonText: step.buttonText,
+      actionType: step.action,
+      canCancel: step.canCancel,
+    };
   }
 
   /** Document ids (within a module + form) the user holds a task on. */
@@ -564,10 +574,17 @@ export class WorkflowRuntimeService {
     ]);
 
     if (next.notifyInApp) {
+      // Link each alert to the task it's about, so the bell can drop it the moment
+      // that task stops being PENDING (actioned here, or skipped when a peer acts).
+      const tasks = await this.prisma.workflowTask.findMany({
+        where: { instanceId: instance.id, stepId: next.id, sequence: next.sequence },
+        select: { id: true, assignedUserId: true },
+      });
       await this.prisma.workflowNotification.createMany({
-        data: assignees.map((userId) => ({
-          userId,
+        data: tasks.map((t) => ({
+          userId: t.assignedUserId,
           instanceId: instance.id,
+          taskId: t.id,
           title: 'Approval required',
           body: `${instance.documentRef ?? 'A document'} needs your action (${next.buttonText}).`,
         })),
@@ -587,6 +604,22 @@ export class WorkflowRuntimeService {
       return this.users.usersInGroup(step.userGroupId);
     }
     return [];
+  }
+
+  /**
+   * The actions a step really offers at its position: Cancel is an origin-only
+   * action (step 1, the creator's level) and Reject only applies to downstream
+   * approvers (step 2+). Enforced at runtime so the rule holds even for
+   * workflows saved before the step editor hid the invalid checkboxes.
+   */
+  private stepFlags(
+    sequence: number,
+    step: { canCancel?: boolean; canReject?: boolean } | null | undefined,
+  ): { canCancel: boolean; canReject: boolean } {
+    return {
+      canCancel: !!step?.canCancel && sequence <= 1,
+      canReject: !!step?.canReject && sequence > 1,
+    };
   }
 
   private withinLimit(
