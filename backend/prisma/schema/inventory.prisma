@@ -420,3 +420,120 @@ model ProductCompany {
   @@index([companyId])
   @@map("product_companies")
 }
+
+// ===========================================================================
+// Stock movement subsystem
+//
+// One flat CHILD ledger (StockLedger) records every goods in/out line for ALL
+// transaction types; each type has its own MASTER (header) table — the first
+// is OpeningStock. A line's parent document is (transactionType, documentId).
+// The ledger is intentionally a flat table of plain-id foreign keys (a ledger,
+// not a relational graph); category / primary-group / parent-group are
+// denormalized snapshots from the item at entry time for join-free reporting.
+// ===========================================================================
+
+/// The kind of stock movement (drives which master/document it belongs to).
+enum StockTxnType {
+  OPENING_STOCK // Opening Stock Journal
+  PURCHASE // Goods Receipt Note
+  SALE // Delivery Note
+  PRODUCTION // Production Receipt Note (finished goods in)
+  TRANSFER // Stock Journal (store-to-store, intra/inter-company)
+  ADJUSTMENT // Stock Adjustment (add/remove)
+}
+
+/// Stock location — a store / warehouse / godown within a company. Stock is
+/// held and transferred between stores (same company or across companies).
+/// companyId / branchId are plain cross-domain ids.
+model Store {
+  id        Int      @id @default(autoincrement())
+  companyId Int // -> Cpanel Company (plain id)
+  branchId  Int? // -> Cpanel Branch (plain id, optional)
+  code      String // ST-#### per company (system-generated)
+  name      String
+  address   String?
+  isActive  Boolean  @default(true)
+  isLocked  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@map("stores")
+}
+
+/// A stock batch / lot. `batchNo1` is our system code
+/// (CompanyCode-YYMMDD-####); `batchNo2` is the supplier's batch on the goods.
+/// Generated on stock-in (opening stock / purchase); manufactured goods reuse
+/// the product batch created during production. Item/Product refs are plain ids.
+model StockBatch {
+  id         Int       @id @default(autoincrement())
+  companyId  Int
+  batchNo1   String // system-generated
+  batchNo2   String? // supplier's batch number
+  itemId     Int?
+  productId  Int?
+  expiryDate DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@unique([companyId, batchNo1])
+  @@index([companyId, itemId])
+  @@index([companyId, productId])
+  @@map("stock_batches")
+}
+
+/// Universal goods in/out ledger — one row per movement line for every
+/// transaction type. Flat plain-id foreign keys by design.
+model StockLedger {
+  id                 Int          @id @default(autoincrement())
+  date               DateTime
+  companyId          Int
+  branchId           Int?
+  storeId            Int
+  transactionType    StockTxnType
+  transactionSubtype String?
+  documentId         Int // parent master row id (e.g. OpeningStock.id)
+  documentNo         String
+  reference          String?
+  categoryId         Int? // denormalized snapshot from the item/product
+  primaryGroupId     Int? // level-1 group in the item's group chain
+  parentGroupId      Int? // the item's leaf group
+  itemId             Int?
+  productId          Int?
+  batchId            Int?
+  batchNo1           String? // system batch number
+  batchNo2           String? // supplier batch number
+  expiryDate         DateTime?
+  qtyIn              Float        @default(0)
+  qtyOut             Float        @default(0)
+  unitId             Int
+  unitPrice          Float        @default(0)
+  createdAt          DateTime     @default(now())
+
+  @@index([companyId, storeId])
+  @@index([companyId, itemId])
+  @@index([companyId, productId])
+  @@index([transactionType, documentId])
+  @@index([batchId])
+  @@map("stock_ledger")
+}
+
+/// Opening Stock document (header). Its lines are the StockLedger rows with
+/// transactionType = OPENING_STOCK and documentId = this row's id.
+model OpeningStock {
+  id        Int      @id @default(autoincrement())
+  companyId Int
+  docNo     String // OS-##### per company
+  docDate   DateTime
+  storeId   Int
+  reference String?
+  notes     String?
+  status    String   @default("POSTED") // DRAFT | POSTED
+  isLocked  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, docNo])
+  @@index([companyId])
+  @@map("opening_stock")
+}

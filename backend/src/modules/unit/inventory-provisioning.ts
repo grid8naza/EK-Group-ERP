@@ -19,12 +19,15 @@ export const INVENTORY_SUBS = [
   // are told apart by the packed/unpacked flags on each product.
   { name: 'Products - Unpacked', route: '/inventory/products-unpacked', icon: 'package-2', order: 6 },
   { name: 'Products - Packed', route: '/inventory/products-packed', icon: 'package', order: 7 },
+  // Stock locations + the stock-movement documents.
+  { name: 'Store Master', route: '/inventory/stores', icon: 'warehouse', order: 8 },
+  { name: 'Opening Stock', route: '/inventory/opening-stock', icon: 'clipboard-list', order: 9 },
   // Per-module reference data. Super-admin-only; isolated from other modules.
   {
     name: 'Lookups',
     route: '/inventory/lookups',
     icon: 'list',
-    order: 8,
+    order: 10,
     superAdminOnly: true,
   },
 ];

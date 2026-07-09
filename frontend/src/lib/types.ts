@@ -1113,3 +1113,47 @@ export interface CompanyModule {
   enabled: boolean;
   sortOrder: number;
 }
+
+// ---- Inventory: Store & stock movements ----
+export interface Store {
+  id: number;
+  companyId: number;
+  branchId?: number | null;
+  code: string;
+  name: string;
+  address?: string | null;
+  isActive: boolean;
+  isLocked?: boolean;
+}
+
+export interface OpeningStockLine {
+  id: number;
+  itemId?: number | null;
+  productId?: number | null;
+  categoryId?: number | null;
+  primaryGroupId?: number | null;
+  parentGroupId?: number | null;
+  batchNo1?: string | null;
+  batchNo2?: string | null;
+  expiryDate?: string | null;
+  qtyIn: number;
+  qtyOut: number;
+  unitId: number;
+  unitPrice: number;
+}
+
+export interface OpeningStock {
+  id: number;
+  companyId: number;
+  docNo: string;
+  docDate: string;
+  storeId: number;
+  reference?: string | null;
+  notes?: string | null;
+  status: string;
+  isLocked?: boolean;
+  createdAt: string;
+  lineCount?: number;
+  totalQty?: number;
+  lines?: OpeningStockLine[];
+}
