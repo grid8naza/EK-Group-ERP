@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { useAuth } from '@/providers/AuthProvider';
+import { SoftwareInfoProvider } from '@/providers/SoftwareInfoProvider';
 import { API_URL } from '@/lib/api';
 import { mediaUrl } from '@/lib/login-screen';
 import { cn } from '@/lib/utils';
@@ -53,30 +54,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-      <Sidebar
-        collapsed={collapsed}
-        mobileOpen={mobileOpen}
-        onMobileClose={() => setMobileOpen(false)}
-      />
-      <div
-        className={cn(
-          'flex h-screen flex-col transition-[padding] duration-200',
-          collapsed ? 'lg:pl-[76px]' : 'lg:pl-64',
-        )}
-      >
-        <Topbar
+    <SoftwareInfoProvider>
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+        <Sidebar
           collapsed={collapsed}
-          onToggleSidebar={() => setCollapsed((v) => !v)}
-          onToggleMobile={() => setMobileOpen((v) => !v)}
+          mobileOpen={mobileOpen}
+          onMobileClose={() => setMobileOpen(false)}
         />
-        {/* Scroll container for page content. Pages that want a frozen header +
-            internally-scrolling table use an `h-full` flex column + DataTable
-            `fillHeight`; normal pages just scroll here. */}
-        <main className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
-          {children}
-        </main>
+        <div
+          className={cn(
+            'flex h-screen flex-col transition-[padding] duration-200',
+            collapsed ? 'lg:pl-[76px]' : 'lg:pl-64',
+          )}
+        >
+          <Topbar
+            collapsed={collapsed}
+            onToggleSidebar={() => setCollapsed((v) => !v)}
+            onToggleMobile={() => setMobileOpen((v) => !v)}
+          />
+          {/* Scroll container for page content. Pages that want a frozen header +
+              internally-scrolling table use an `h-full` flex column + DataTable
+              `fillHeight`; normal pages just scroll here. */}
+          <main className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </SoftwareInfoProvider>
   );
 }

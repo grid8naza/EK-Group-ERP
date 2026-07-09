@@ -658,3 +658,26 @@ model LoginMedia {
 
   @@map("login_media")
 }
+
+// ---------------------------------------------------------------------------
+// Software information (singleton, id=1). Global licence/branding details shown
+// as the app's extreme top-left brand tile (logo + software name); the full
+// panel opens when the tile is clicked.
+// ---------------------------------------------------------------------------
+model SoftwareInfo {
+  id                 Int       @id @default(1)
+  companyName        String?
+  address            String?
+  email              String?
+  contactNumber      String?
+  softwareName       String?
+  softwareVersion    String?
+  licenceKey         String?
+  subscriptionExpiry DateTime?
+  logoUrl            String?
+  logoSize           Int? // displayed brand-logo size in px (null = default)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@map("software_info")
+}

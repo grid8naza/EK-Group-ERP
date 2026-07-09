@@ -35,6 +35,7 @@ import { HrDesignationModule } from './modules/hr-designation/hr-designation.mod
 import { WorkflowModule } from './modules/workflow/workflow.module';
 import { CrmModule } from './modules/crm/crm.module';
 import { LoginScreenModule } from './modules/login-screen/login-screen.module';
+import { SoftwareInfoModule } from './modules/software-info/software-info.module';
 import { ScaffoldModule } from './scaffold/scaffold.module';
 
 @Module({
@@ -73,6 +74,7 @@ import { ScaffoldModule } from './scaffold/scaffold.module';
     WorkflowModule,
     CrmModule,
     LoginScreenModule,
+    SoftwareInfoModule,
     ScaffoldModule,
   ],
   providers: [

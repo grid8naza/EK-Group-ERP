@@ -6,7 +6,6 @@ import {
   Menu as MenuIcon,
   PanelLeftClose,
   PanelLeft,
-  Search,
   LogOut,
   ChevronDown,
   UserCircle,
@@ -19,6 +18,7 @@ import {
 import { useAuth } from '@/providers/AuthProvider';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { resolveIcon } from '@/lib/icons';
+import { mediaUrl } from '@/lib/login-screen';
 import { initials, cn, formatDate } from '@/lib/utils';
 import { moduleLandingRoute } from '@/lib/nav';
 import { api } from '@/lib/api';
@@ -54,6 +54,7 @@ export function Topbar({
   const [coOpen, setCoOpen] = useState(false);
   const [brOpen, setBrOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [coLogoBroken, setCoLogoBroken] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const modRef = useRef<HTMLDivElement>(null);
   const coRef = useRef<HTMLDivElement>(null);
@@ -84,6 +85,11 @@ export function Topbar({
       clearInterval(id);
     };
   }, []);
+
+  // Retry the company logo image whenever the active company changes.
+  useEffect(() => {
+    setCoLogoBroken(false);
+  }, [activeCompany?.logo]);
 
   const openNotifications = async () => {
     const next = !notifOpen;
@@ -176,13 +182,33 @@ export function Topbar({
         )}
       </button>
 
-      {/* Search */}
-      <div className="relative hidden flex-1 md:block">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <input
-          placeholder="Search..."
-          className="input-base w-full max-w-md border-[#e9dfd0] bg-[#fcfbf8] pl-9 dark:bg-slate-900"
-        />
+      {/* Active company brand — logo + name (replaces the old search box) */}
+      <div className="flex flex-1 items-center gap-2.5">
+        {activeCompany && (
+          <>
+            {activeCompany.logo && !coLogoBroken ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={mediaUrl(activeCompany.logo)}
+                alt=""
+                onError={() => setCoLogoBroken(true)}
+                className="h-9 w-9 flex-none rounded-lg object-contain"
+              />
+            ) : (
+              <span className="flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-brand-100 text-brand-600 dark:bg-brand-950">
+                <Building2 className="h-5 w-5" />
+              </span>
+            )}
+            <span className="hidden min-w-0 flex-col justify-center sm:flex">
+              <span className="text-[9px] font-semibold uppercase leading-none tracking-wider text-[#a79b8c]">
+                Company
+              </span>
+              <span className="mt-0.5 max-w-[18rem] truncate text-sm font-bold leading-tight text-[#2f2a26] dark:text-slate-100">
+                {activeCompany.name}
+              </span>
+            </span>
+          </>
+        )}
       </div>
 
       <div className="flex flex-1 items-center justify-end gap-1 md:flex-none">

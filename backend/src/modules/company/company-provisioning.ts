@@ -22,6 +22,7 @@ export const CPANEL_SUBS = [
   { name: 'Login Screen Setup', route: '/cpanel/login-screen', icon: 'image', order: 12 },
   { name: 'Workflow Setup', route: '/cpanel/workflows', icon: 'git-branch', order: 13 },
   { name: 'Approval Statuses', route: '/cpanel/approval-statuses', icon: 'shieldcheck', order: 14 },
+  { name: 'Software Information', route: '/cpanel/software-info', icon: 'info', order: 15 },
 ];
 
 export interface ProvisionResult {

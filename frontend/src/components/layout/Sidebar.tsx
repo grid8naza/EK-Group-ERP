@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronDown, LayoutDashboard } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
+import { useSoftwareInfo } from '@/providers/SoftwareInfoProvider';
+import { SoftwareInfoDialog } from './SoftwareInfoDialog';
+import { LOGO_SIZE_DEFAULT } from '@/lib/software-info';
 import { mediaUrl } from '@/lib/login-screen';
 import { resolveIcon } from '@/lib/icons';
 import { cn } from '@/lib/utils';
@@ -16,8 +19,10 @@ interface SidebarProps {
 }
 
 export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) {
-  const { activeModule, activeCompany } = useAuth();
+  const { activeModule } = useAuth();
+  const { info } = useSoftwareInfo();
   const pathname = usePathname();
+  const [infoOpen, setInfoOpen] = useState(false);
 
   // Every main menu starts EXPANDED so its sub-menus are visible — including a
   // menu with a single sub-menu. Recompute when the module's set of menus
@@ -39,16 +44,16 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [menuSig]);
 
-  // Brand mark = the ACTIVE company's logo + short name, so it updates when you
-  // switch companies. Falls back to the committed /brand-logo.png if the company
-  // has no logo (or the uploaded file is missing).
-  const companyLogo = activeCompany?.logo ?? null;
-  const brandName =
-    activeCompany?.shortName || activeCompany?.name || 'ERP';
+  // Brand mark = the SOFTWARE logo + name (set in Cpanel → Software Information).
+  // Clicking it opens the software-info panel. Falls back to the committed
+  // /brand-logo.png + a generic name until configured.
+  const softwareLogo = info?.logoUrl ?? null;
+  const softwareName = info?.softwareName || 'ERP';
+  const logoPx = info?.logoSize ?? LOGO_SIZE_DEFAULT;
   const [logoBroken, setLogoBroken] = useState(false);
   useEffect(() => {
-    setLogoBroken(false); // retry the image when the active company changes
-  }, [companyLogo]);
+    setLogoBroken(false); // retry the image when the logo changes
+  }, [softwareLogo]);
 
   const toggle = (key: string) => {
     setOpenMenus((prev) => {
@@ -61,21 +66,30 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
 
   const content = (
     <div className="flex h-full flex-col">
-      {/* Brand */}
-      <div className="flex h-16 flex-none items-center gap-2.5 border-b border-[#efe7db] px-4 dark:border-slate-800">
+      {/* Brand — software logo + name; click to view software information. */}
+      <button
+        type="button"
+        onClick={() => setInfoOpen(true)}
+        title="Software information"
+        className={cn(
+          'flex h-16 flex-none items-center gap-2.5 border-b border-[#efe7db] px-4 text-left transition hover:bg-[#f6eee3] dark:border-slate-800 dark:hover:bg-slate-800',
+          collapsed && 'justify-center',
+        )}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={!logoBroken && companyLogo ? mediaUrl(companyLogo) : '/brand-logo.png'}
+          src={!logoBroken && softwareLogo ? mediaUrl(softwareLogo) : '/brand-logo.png'}
           alt="Logo"
           onError={() => setLogoBroken(true)}
-          className="h-9 w-9 flex-none rounded-lg object-contain"
+          style={{ height: logoPx, width: logoPx }}
+          className="flex-none rounded-lg object-contain"
         />
         {!collapsed && (
           <span className="truncate text-base font-bold leading-tight tracking-tight text-slate-900 dark:text-white">
-            {brandName}
+            {softwareName}
           </span>
         )}
-      </div>
+      </button>
 
       {/* Nav */}
       <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
@@ -215,6 +229,12 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
 
   return (
     <>
+      <SoftwareInfoDialog
+        open={infoOpen}
+        onClose={() => setInfoOpen(false)}
+        info={info}
+      />
+
       {/* Desktop sidebar */}
       <aside
         className={cn(
