@@ -19,24 +19,32 @@ export const INVENTORY_SUBS = [
   // are told apart by the packed/unpacked flags on each product.
   { name: 'Products - Unpacked', route: '/inventory/products-unpacked', icon: 'package-2', order: 6 },
   { name: 'Products - Packed', route: '/inventory/products-packed', icon: 'package', order: 7 },
-  // Stock locations + the stock-movement documents. Opening Stock is entered
-  // separately per stockable type: raw-material items, packing-material items,
-  // unpacked products and packed products. Menu labels use the short "OS -"
-  // prefix so they stay readable in the sidebar.
+  // Stock locations. The Opening Stock entry screens live in their own main
+  // menu (OPENING_STOCK_MENU below), not under the master-data Inventory menu.
   { name: 'Store Master', route: '/inventory/stores', icon: 'warehouse', order: 8 },
-  { name: 'OS - Raw Material', route: '/inventory/opening-stock-raw-material', icon: 'clipboard-list', order: 9 },
-  { name: 'OS - Packing Material', route: '/inventory/opening-stock-packing-material', icon: 'clipboard-list', order: 10 },
-  { name: 'OS - Unpacked Products', route: '/inventory/opening-stock-unpacked-products', icon: 'clipboard-list', order: 11 },
-  { name: 'OS - Packed Products', route: '/inventory/opening-stock-packed-products', icon: 'clipboard-list', order: 12 },
   // Per-module reference data. Super-admin-only; isolated from other modules.
   {
     name: 'Lookups',
     route: '/inventory/lookups',
     icon: 'list',
-    order: 13,
+    order: 9,
     superAdminOnly: true,
   },
 ];
+
+// Opening Stock — a separate main menu (its own sidebar section) holding the
+// per-stockable-type opening-balance entry screens. Entered separately for
+// raw-material items, packing-material items, unpacked and packed products.
+export const OPENING_STOCK_MENU = {
+  name: 'Opening Stock',
+  icon: 'clipboard-list',
+  subs: [
+    { name: 'OS - Raw Material', route: '/inventory/opening-stock-raw-material', icon: 'clipboard-list', order: 1 },
+    { name: 'OS - Packing Material', route: '/inventory/opening-stock-packing-material', icon: 'clipboard-list', order: 2 },
+    { name: 'OS - Unpacked Products', route: '/inventory/opening-stock-unpacked-products', icon: 'clipboard-list', order: 3 },
+    { name: 'OS - Packed Products', route: '/inventory/opening-stock-packed-products', icon: 'clipboard-list', order: 4 },
+  ],
+};
 
 // Production module screens. The recipe (ingredients + packing) for each product
 // is edited here, while the product's master data lives under Inventory.

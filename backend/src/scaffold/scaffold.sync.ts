@@ -1,6 +1,7 @@
 import { ObjectType, Prisma } from '@prisma/client';
 import { MODULE_SCAFFOLDS, type ModuleScaffold } from './module-scaffold';
 import { CPANEL_COMPANY_SUBS } from '../modules/company/company-provisioning';
+import { OPENING_STOCK_MENU } from '../modules/unit/inventory-provisioning';
 
 /**
  * Screen routes that were renamed or removed. The additive sync below never
@@ -95,6 +96,96 @@ async function migrateCpanelMenuSplit(
 }
 
 /**
+ * One-time migration: the Opening Stock entry screens used to sit under the
+ * Inventory main menu. They now live in their own "Opening Stock" main menu.
+ * Per company: create the menu, mirror the Inventory menu's group visibility so
+ * every group that could reach these screens still can, and move the screens
+ * across (sub-menu ids unchanged, so their privileges follow). Idempotent.
+ */
+async function migrateOpeningStockMenu(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  const inv = await prisma.module.findUnique({
+    where: { code: 'INVENTORY' },
+    select: { id: true },
+  });
+  if (!inv) return; // fresh DB: nothing to migrate yet
+  const invId = inv.id;
+  const osRoutes = OPENING_STOCK_MENU.subs.map((s) => s.route);
+
+  const menus = await prisma.mainMenu.findMany({
+    where: { moduleId: invId },
+    select: { id: true, companyId: true, menuName: true, sortOrder: true },
+    orderBy: { id: 'asc' },
+  });
+  const companyIds = [...new Set(menus.map((m) => m.companyId))];
+
+  for (const companyId of companyIds) {
+    const mine = menus.filter((m) => m.companyId === companyId);
+    // The primary Inventory menu is the oldest one that isn't a known extra
+    // menu (a renamed primary like "Inventory Master" still qualifies).
+    const primary = mine.find(
+      (m) =>
+        m.menuName !== OPENING_STOCK_MENU.name &&
+        m.menuName !== 'Inventory Report',
+    );
+    if (!primary) continue;
+
+    // Keep Inventory Report below Opening Stock so the sidebar order is
+    // Inventory → Opening Stock → Inventory Report (no sortOrder tie).
+    const report = mine.find((m) => m.menuName === 'Inventory Report');
+    if (report && report.sortOrder < 3) {
+      await prisma.mainMenu.update({
+        where: { id: report.id },
+        data: { sortOrder: 3 },
+      });
+    }
+
+    // Ensure the Opening Stock main menu exists.
+    let osId = mine.find((m) => m.menuName === OPENING_STOCK_MENU.name)?.id;
+    if (!osId) {
+      const created = await prisma.mainMenu.create({
+        data: {
+          companyId,
+          moduleId: invId,
+          menuName: OPENING_STOCK_MENU.name,
+          sortOrder: 2,
+          objectType: ObjectType.FORM,
+          isUserMenu: true,
+          icon: OPENING_STOCK_MENU.icon,
+        },
+        select: { id: true },
+      });
+      osId = created.id;
+    }
+
+    // Mirror the Inventory menu's group visibility onto Opening Stock so no
+    // group loses reach (groups without OS sub-privileges just see it empty,
+    // and the nav hides empty menus for non-super-admins).
+    const invAccess = await prisma.groupMainMenuAccess.findMany({
+      where: { mainMenuId: primary.id },
+      select: { userGroupId: true, visible: true },
+    });
+    if (invAccess.length) {
+      await prisma.groupMainMenuAccess.createMany({
+        data: invAccess.map((a) => ({
+          userGroupId: a.userGroupId,
+          mainMenuId: osId!,
+          visible: a.visible,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    // Move the Opening Stock screens off the Inventory menu (no-op once moved).
+    await prisma.subMenu.updateMany({
+      where: { mainMenuId: primary.id, route: { in: osRoutes } },
+      data: { mainMenuId: osId },
+    });
+  }
+}
+
+/**
  * Idempotent, additive sync of the module/menu scaffold declared in
  * MODULE_SCAFFOLDS. Run once on every app start so a pulled codebase brings each
  * developer's database up to date without manual SQL or a reseed.
@@ -119,6 +210,10 @@ export async function syncScaffold(
   //     Setup". Must run before the additive sync so it reuses the moved subs
   //     instead of creating duplicates under the new menu.
   await migrateCpanelMenuSplit(prisma);
+
+  // 0c) Move the Opening Stock screens out of the Inventory menu into their own
+  //     "Opening Stock" main menu. Same ordering constraint as above.
+  await migrateOpeningStockMenu(prisma);
 
   // 1) Module catalog — register/update. Never flips an existing module's global
   //    isActive (preserves an admin's enable/disable choice).
