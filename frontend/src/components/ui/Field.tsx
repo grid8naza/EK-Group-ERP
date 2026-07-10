@@ -1,6 +1,7 @@
 'use client';
 
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -63,6 +64,83 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
     </FieldWrap>
   );
 });
+
+// ---- DateInput: a typed DD-MM-YYYY field that auto-formats as you type ----
+// Sidesteps the native <input type="date"> quirk where single-digit months
+// don't auto-advance to the year. `value`/`onChange` speak ISO (YYYY-MM-DD).
+
+function isoToDisplay(iso?: string | null): string {
+  const m = iso ? /^(\d{4})-(\d{2})-(\d{2})/.exec(iso) : null;
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
+}
+
+/** A DD-MM-YYYY display string → ISO YYYY-MM-DD, or '' when incomplete/invalid. */
+function displayToIso(display: string): string {
+  const digits = display.replace(/\D/g, '');
+  if (digits.length !== 8) return '';
+  const dd = +digits.slice(0, 2);
+  const mm = +digits.slice(2, 4);
+  const yyyy = +digits.slice(4, 8);
+  const d = new Date(yyyy, mm - 1, dd);
+  const valid =
+    d.getFullYear() === yyyy && d.getMonth() === mm - 1 && d.getDate() === dd;
+  return valid
+    ? `${digits.slice(4, 8)}-${digits.slice(2, 4)}-${digits.slice(0, 2)}`
+    : '';
+}
+
+interface DateInputProps {
+  value?: string | null; // ISO YYYY-MM-DD (or empty)
+  onChange: (iso: string) => void; // '' when incomplete/invalid
+  id?: string;
+  disabled?: boolean;
+  className?: string;
+  placeholder?: string;
+  onKeyDown?: (e: React.KeyboardEvent) => void;
+}
+
+export function DateInput({
+  value,
+  onChange,
+  id,
+  disabled,
+  className,
+  placeholder = 'DD-MM-YYYY',
+  onKeyDown,
+}: DateInputProps) {
+  const [text, setText] = useState(() => isoToDisplay(value));
+  // Adopt an external value change (e.g. loading a document), but never clobber
+  // an in-progress partial entry that already represents the same value.
+  useEffect(() => {
+    setText((cur) =>
+      displayToIso(cur) === (value || '') ? cur : isoToDisplay(value),
+    );
+  }, [value]);
+
+  const handle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const digits = e.target.value.replace(/\D/g, '').slice(0, 8);
+    let out = digits.slice(0, 2);
+    if (digits.length >= 3) out += '-' + digits.slice(2, 4);
+    if (digits.length >= 5) out += '-' + digits.slice(4, 8);
+    setText(out);
+    onChange(displayToIso(out));
+  };
+
+  return (
+    <input
+      id={id}
+      type="text"
+      inputMode="numeric"
+      autoComplete="off"
+      disabled={disabled}
+      value={text}
+      onChange={handle}
+      onKeyDown={onKeyDown}
+      placeholder={placeholder}
+      className={cn('input-base', className)}
+    />
+  );
+}
 
 type SelectOption = { value: string | number; label: string };
 
@@ -138,7 +216,16 @@ export function Select({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [highlight, setHighlight] = useState(0);
+  // The dropdown renders in a portal (fixed-positioned) so it escapes any
+  // overflow/scroll container it sits inside (e.g. a voucher line grid).
+  const [menuPos, setMenuPos] = useState<{
+    left: number;
+    width: number;
+    top?: number;
+    bottom?: number;
+  } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -172,16 +259,54 @@ export function Select({
     ? sorted.filter((o) => o.label.toLowerCase().includes(q))
     : sorted;
 
-  // Close on outside click.
+  // Close on outside click (the dropdown is portaled, so also check menuRef).
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      const t = e.target as Node;
+      if (
+        ref.current &&
+        !ref.current.contains(t) &&
+        (!menuRef.current || !menuRef.current.contains(t))
+      ) {
         setOpen(false);
       }
     };
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
+
+  // Position the portaled dropdown under (or above) the trigger, following it on
+  // scroll/resize while open. Flips upward when there isn't room below.
+  useEffect(() => {
+    if (!open) {
+      setMenuPos(null);
+      return;
+    }
+    const place = () => {
+      const el = ref.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const width = r.width;
+      const left = Math.max(
+        8,
+        Math.min(r.left, window.innerWidth - Math.max(width, 240) - 8),
+      );
+      const menuH = 320;
+      const spaceBelow = window.innerHeight - r.bottom;
+      if (spaceBelow < menuH && r.top > menuH) {
+        setMenuPos({ left, width, bottom: window.innerHeight - r.top + 4 });
+      } else {
+        setMenuPos({ left, width, top: r.bottom + 4 });
+      }
+    };
+    place();
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  }, [open]);
 
   // Reset transient state whenever the dropdown opens/closes; focus the search.
   useEffect(() => {
@@ -296,13 +421,24 @@ export function Select({
           />
         </button>
 
-        {open && (
-          <div className="absolute z-30 mt-1 w-full min-w-[15rem] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+        {open && menuPos &&
+          createPortal(
+          <div
+            ref={menuRef}
+            style={{
+              position: 'fixed',
+              left: menuPos.left,
+              width: menuPos.width,
+              top: menuPos.top,
+              bottom: menuPos.bottom,
+            }}
+            className="z-[60] min-w-[15rem] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
             {showSearch && (
               <div className="relative border-b border-slate-100 p-2 dark:border-slate-800">
                 <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   ref={searchRef}
+                  autoFocus
                   value={query}
                   onChange={(e) => {
                     setQuery(e.target.value);
@@ -365,7 +501,8 @@ export function Select({
                 })
               )}
             </div>
-          </div>
+          </div>,
+          document.body,
         )}
       </div>
     </FieldWrap>

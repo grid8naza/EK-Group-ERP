@@ -17,7 +17,7 @@ import {
   Kbd,
   type SaveMode,
 } from '@/components/ui/Drawer';
-import { Input, Select, Textarea } from '@/components/ui/Field';
+import { Input, Select, Textarea, DateInput } from '@/components/ui/Field';
 import type {
   StockTransaction,
   StockTransactionLineRow,
@@ -653,6 +653,7 @@ export function StockTransactionScreen({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-900">
+                    <th className="w-10 py-2 pl-3 pr-1 text-right">#</th>
                     <th className="py-2 pr-2">Item / Product</th>
                     {showClassification && <th className="py-2 px-1">Category</th>}
                     {showClassification && <th className="py-2 px-1">Parent Group</th>}
@@ -678,6 +679,9 @@ export function StockTransactionScreen({
                       const docLine = editingDoc?.lines?.[i];
                       return (
                         <tr key={i} className="border-b border-slate-100 dark:border-slate-800/60">
+                          <td className="py-1.5 pl-3 pr-1 text-right text-xs tabular-nums text-slate-400">
+                            {i + 1}
+                          </td>
                           <td className="py-1.5 pr-2 min-w-[12rem]">
                             {viewMode ? (
                               <span className="font-medium text-slate-800 dark:text-slate-100">
@@ -730,11 +734,10 @@ export function StockTransactionScreen({
                                   {l.expiry ? fmtDate(l.expiry) : '—'}
                                 </span>
                               ) : (
-                                <Input
+                                <DateInput
                                   id={`stl-${i}-expiry`}
-                                  type="date"
                                   value={l.expiry}
-                                  onChange={(e) => setLine(i, { expiry: e.target.value })}
+                                  onChange={(iso) => setLine(i, { expiry: iso })}
                                   onKeyDown={enterTo(`stl-${i}-qty`)}
                                 />
                               )}
