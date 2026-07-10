@@ -13,18 +13,52 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
-import { Input, Checkbox, Textarea } from '@/components/ui/Field';
+import { Input, Select, Checkbox, Textarea } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import type { DocumentMaster } from '@/lib/types';
+import type { DocumentMaster, Lookup, LookupValue } from '@/lib/types';
 
 const ROUTE = '/cpanel/documents';
-const empty = { name: '', description: '', isActive: true };
+const TXN_TYPE_CODE = 'INVENTORY_TXN_TYPE';
+const TXN_SUBTYPE_CODE = 'INVENTORY_TXN_SUBTYPE';
+const empty = {
+  name: '',
+  description: '',
+  transactionTypeId: '',
+  transactionSubtypeId: '',
+  isActive: true,
+};
 
 export default function DocumentsPage() {
   const { can } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<DocumentMaster[]>('/documents');
+  const { data: lookups } = useFetch<Lookup[]>('/lookups');
+
+  // Transaction Type / Subtype lookup values for the two combos (find the
+  // lookup by code, then fetch its values — mirrors the Recipe/Asset pattern).
+  const [typeValues, setTypeValues] = useState<LookupValue[]>([]);
+  const [subtypeValues, setSubtypeValues] = useState<LookupValue[]>([]);
+  useEffect(() => {
+    const load = async (code: string, set: (v: LookupValue[]) => void) => {
+      const lk = (lookups ?? []).find((l) => l.code === code);
+      if (!lk) return set([]);
+      try {
+        set((await api.get<LookupValue[]>(`/lookups/${lk.id}/values`)) ?? []);
+      } catch {
+        set([]);
+      }
+    };
+    load(TXN_TYPE_CODE, setTypeValues);
+    load(TXN_SUBTYPE_CODE, setSubtypeValues);
+  }, [lookups]);
+  const typeOptions = typeValues
+    .filter((v) => v.isActive)
+    .map((v) => ({ value: String(v.id), label: v.label }));
+  const subtypeOptions = subtypeValues
+    .filter((v) => v.isActive)
+    .map((v) => ({ value: String(v.id), label: v.label }));
+
   const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
     useLock<DocumentMaster>({
       endpoint: '/documents',
@@ -52,6 +86,8 @@ export default function DocumentsPage() {
   const formFrom = (d: DocumentMaster) => ({
     name: d.name,
     description: d.description ?? '',
+    transactionTypeId: d.transactionTypeId ? String(d.transactionTypeId) : '',
+    transactionSubtypeId: d.transactionSubtypeId ? String(d.transactionSubtypeId) : '',
     isActive: d.isActive,
   });
   const openAdd = () => {
@@ -93,6 +129,10 @@ export default function DocumentsPage() {
     const payload = {
       name: form.name.trim(),
       description: form.description.trim() || null,
+      transactionTypeId: form.transactionTypeId ? Number(form.transactionTypeId) : null,
+      transactionSubtypeId: form.transactionSubtypeId
+        ? Number(form.transactionSubtypeId)
+        : null,
       isActive: form.isActive,
     };
     setSaving(true);
@@ -154,6 +194,16 @@ export default function DocumentsPage() {
     },
     { key: 'code', header: 'Code', accessor: (r) => r.code },
     { key: 'description', header: 'Description', accessor: (r) => r.description ?? '—' },
+    {
+      key: 'transactionType',
+      header: 'Transaction Type',
+      accessor: (r) => r.transactionType?.label ?? '—',
+    },
+    {
+      key: 'transactionSubtype',
+      header: 'Transaction Subtype',
+      accessor: (r) => r.transactionSubtype?.label ?? '—',
+    },
     {
       key: 'isActive',
       header: 'Status',
@@ -240,6 +290,24 @@ export default function DocumentsPage() {
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Select
+                label="Transaction Type"
+                value={form.transactionTypeId}
+                onChange={(e) => setForm({ ...form, transactionTypeId: e.target.value })}
+                placeholder="— None —"
+                options={typeOptions}
+              />
+              <Select
+                label="Transaction Subtype"
+                value={form.transactionSubtypeId}
+                onChange={(e) =>
+                  setForm({ ...form, transactionSubtypeId: e.target.value })
+                }
+                placeholder="— None —"
+                options={subtypeOptions}
+              />
+            </div>
             <Checkbox
               label="Active"
               checked={form.isActive}

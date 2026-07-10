@@ -79,6 +79,9 @@ model LookupValue {
 
   lookup Lookup @relation(fields: [lookupId], references: [id], onDelete: Cascade)
 
+  docsAsTxnType    Document[] @relation("DocTxnType")
+  docsAsTxnSubtype Document[] @relation("DocTxnSubtype")
+
   @@unique([lookupId, value])
   @@map("lookup_values")
 }
@@ -698,10 +701,16 @@ model Document {
   isSystem    Boolean  @default(false) // seeded, wired to a real document flow
   isActive    Boolean  @default(true)
   isLocked    Boolean  @default(false)
+  // The inventory transaction type / subtype this document posts as, chosen from
+  // the "Inventory Transaction Type" / "…Subtype" lookups.
+  transactionTypeId    Int?
+  transactionSubtypeId Int?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  numberingRules DocumentNumberingRule[]
+  numberingRules     DocumentNumberingRule[]
+  transactionType    LookupValue? @relation("DocTxnType", fields: [transactionTypeId], references: [id], onDelete: SetNull)
+  transactionSubtype LookupValue? @relation("DocTxnSubtype", fields: [transactionSubtypeId], references: [id], onDelete: SetNull)
 
   @@map("documents")
 }

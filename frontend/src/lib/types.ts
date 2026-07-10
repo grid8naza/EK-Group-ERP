@@ -1266,6 +1266,10 @@ export interface DocumentMaster {
   isSystem: boolean;
   isActive: boolean;
   isLocked?: boolean;
+  transactionTypeId?: number | null;
+  transactionSubtypeId?: number | null;
+  transactionType?: { id: number; label: string } | null;
+  transactionSubtype?: { id: number; label: string } | null;
 }
 
 export type NumberingRenumber = 'NEVER' | 'MONTHLY' | 'YEARLY';

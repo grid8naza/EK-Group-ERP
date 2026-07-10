@@ -1,5 +1,6 @@
 import {
   IsBoolean,
+  IsInt,
   IsOptional,
   IsString,
   MaxLength,
@@ -24,6 +25,14 @@ export class CreateDocumentDto {
   description?: string | null;
 
   @IsOptional()
+  @IsInt()
+  transactionTypeId?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  transactionSubtypeId?: number | null;
+
+  @IsOptional()
   @IsBoolean()
   isActive?: boolean;
 }
@@ -38,6 +47,14 @@ export class UpdateDocumentDto {
   @IsString()
   @MaxLength(300)
   description?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  transactionTypeId?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  transactionSubtypeId?: number | null;
 
   @IsOptional()
   @IsBoolean()
