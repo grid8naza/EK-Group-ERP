@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plus, Warehouse } from 'lucide-react';
+import { Plus, Truck } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
@@ -15,34 +15,36 @@ import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/u
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Checkbox, Textarea } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import type { Store, Branch } from '@/lib/types';
+import type { Supplier } from '@/lib/types';
 
-const ROUTE = '/inventory/stores';
+const ROUTE = '/accounts/suppliers';
 
 const empty = {
   name: '',
+  contactPerson: '',
+  phone: '',
+  email: '',
+  gstNumber: '',
   address: '',
-  isDefault: false,
   isActive: true,
 };
 
-export default function StoresPage() {
+export default function SuppliersPage() {
   const { can } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
-  const { data, loading, refetch } = useFetch<Store[]>('/stores');
-  const { data: branches } = useFetch<Branch[]>('/branches');
+  const { data, loading, refetch } = useFetch<Supplier[]>('/suppliers');
   const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
-    useLock<Store>({
-      endpoint: '/stores',
+    useLock<Supplier>({
+      endpoint: '/suppliers',
       route: ROUTE,
-      noun: 'store',
+      noun: 'supplier',
       nameOf: (s) => s.name,
       reload: refetch,
     });
 
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<Store | null>(null);
+  const [editing, setEditing] = useState<Supplier | null>(null);
   const [view, setView] = useState(false);
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
@@ -52,18 +54,18 @@ export default function StoresPage() {
   const canDelete = can(ROUTE, 'delete');
   const canView = can(ROUTE, 'view');
 
-  const branchName = (id?: number | null) =>
-    id ? (branches ?? []).find((b) => b.id === id)?.name ?? `#${id}` : '—';
-
   const closeDrawer = () => {
     setOpen(false);
     setView(false);
   };
 
-  const formFrom = (s: Store) => ({
+  const formFrom = (s: Supplier) => ({
     name: s.name,
+    contactPerson: s.contactPerson ?? '',
+    phone: s.phone ?? '',
+    email: s.email ?? '',
+    gstNumber: s.gstNumber ?? '',
     address: s.address ?? '',
-    isDefault: s.isDefault ?? false,
     isActive: s.isActive,
   });
 
@@ -73,13 +75,13 @@ export default function StoresPage() {
     setForm({ ...empty });
     setOpen(true);
   };
-  const openEdit = (s: Store) => {
+  const openEdit = (s: Supplier) => {
     setEditing(s);
     setView(false);
     setForm(formFrom(s));
     setOpen(true);
   };
-  const openView = (s: Store) => {
+  const openView = (s: Supplier) => {
     setEditing(s);
     setView(true);
     setForm(formFrom(s));
@@ -100,24 +102,27 @@ export default function StoresPage() {
 
   const save = async (mode: SaveMode = 'saveClose') => {
     if (!form.name.trim()) {
-      toast.error('Store name is required.');
+      toast.error('Supplier name is required.');
       return;
     }
     const payload = {
       name: form.name.trim(),
+      contactPerson: form.contactPerson.trim() || null,
+      phone: form.phone.trim() || null,
+      email: form.email.trim() || null,
+      gstNumber: form.gstNumber.trim() || null,
       address: form.address.trim() || null,
-      isDefault: form.isDefault,
       isActive: form.isActive,
     };
     setSaving(true);
     try {
-      let saved: Store;
+      let saved: Supplier;
       if (editing) {
-        saved = await api.patch<Store>(`/stores/${editing.id}`, payload);
-        toast.success('Store updated.');
+        saved = await api.patch<Supplier>(`/suppliers/${editing.id}`, payload);
+        toast.success('Supplier updated.');
       } else {
-        saved = await api.post<Store>('/stores', payload);
-        toast.success('Store created.');
+        saved = await api.post<Supplier>('/suppliers', payload);
+        toast.success('Supplier created.');
       }
       await refetch();
       if (mode === 'saveNew') {
@@ -136,42 +141,39 @@ export default function StoresPage() {
     }
   };
 
-  const remove = async (s: Store) => {
+  const remove = async (s: Supplier) => {
     const ok = await confirm({
-      title: 'Delete store',
+      title: 'Delete supplier',
       message: `Delete "${s.name}"?`,
       danger: true,
       confirmText: 'Delete',
     });
     if (!ok) return;
     try {
-      await api.delete(`/stores/${s.id}`);
-      toast.success('Store deleted.');
+      await api.delete(`/suppliers/${s.id}`);
+      toast.success('Supplier deleted.');
       refetch();
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to delete.');
     }
   };
 
-  const columns: Column<Store>[] = [
+  const columns: Column<Supplier>[] = [
     { key: 'code', header: 'Code', accessor: (r) => r.code },
     {
       key: 'name',
-      header: 'Store',
+      header: 'Supplier',
+      sortable: true,
+      sortAccessor: (r) => r.name,
       render: (r) => (
         <span className="font-medium text-slate-800 dark:text-slate-100">
           {r.name}
         </span>
       ),
     },
-    { key: 'branch', header: 'Branch', accessor: (r) => branchName(r.branchId) },
-    { key: 'address', header: 'Address', accessor: (r) => r.address ?? '—' },
-    {
-      key: 'isDefault',
-      header: 'Default',
-      render: (r) =>
-        r.isDefault ? <Badge color="blue">Default</Badge> : <span className="text-slate-400">—</span>,
-    },
+    { key: 'contactPerson', header: 'Contact', accessor: (r) => r.contactPerson ?? '—' },
+    { key: 'phone', header: 'Phone', accessor: (r) => r.phone ?? '—' },
+    { key: 'gstNumber', header: 'GSTIN', accessor: (r) => r.gstNumber ?? '—' },
     {
       key: 'isActive',
       header: 'Status',
@@ -183,14 +185,14 @@ export default function StoresPage() {
     },
   ];
 
-  const title = view ? 'View Store' : editing ? 'Edit Store' : 'New Store';
+  const title = view ? 'View Supplier' : editing ? 'Edit Supplier' : 'New Supplier';
 
   return (
     <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
-        title="Store Master"
-        description="Stock locations (stores / warehouses) for the active company & branch"
-        icon={<Warehouse className="h-5 w-5" />}
+        title="Supplier Master"
+        description="Vendors goods are purchased from — used by Goods Receipt Notes"
+        icon={<Truck className="h-5 w-5" />}
         actions={
           canAdd && (
             <button className="btn-primary" onClick={openAdd}>
@@ -210,7 +212,7 @@ export default function StoresPage() {
         loading={loading}
         fillHeight
         onRefresh={refetch}
-        searchPlaceholder="Search stores..."
+        searchPlaceholder="Search suppliers..."
         onView={openView}
         onEdit={(r) => guardEdit(r, () => openEdit(r))}
         onDelete={(r) => guardDelete(r, () => remove(r))}
@@ -226,15 +228,15 @@ export default function StoresPage() {
             onToggle={() => toggleLock(r)}
           />
         )}
-        emptyMessage="No stores yet"
+        emptyMessage="No suppliers yet"
       />
 
       <Drawer
         open={open}
         onClose={closeDrawer}
         title={title}
-        subtitle="Stock location"
-        icon={<Warehouse className="h-5 w-5" />}
+        subtitle="Vendor"
+        icon={<Truck className="h-5 w-5" />}
         footer={
           view ? (
             <CloseFooter onClose={closeDrawer} />
@@ -251,15 +253,36 @@ export default function StoresPage() {
         <ReadOnlyFieldset readOnly={view}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {editing && (
-              <Input label="Code" value={editing.code} disabled wrapClassName="sm:col-span-2" />
+              <Input label="Code" value={editing.code} disabled />
             )}
             <Input
-              label="Store name"
+              label="Supplier name"
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="e.g. Main Warehouse"
-              wrapClassName="sm:col-span-2"
+              placeholder="e.g. Sunrise Flour Mills"
+              wrapClassName={editing ? undefined : 'sm:col-span-2'}
+            />
+            <Input
+              label="Contact person"
+              value={form.contactPerson}
+              onChange={(e) => setForm({ ...form, contactPerson: e.target.value })}
+            />
+            <Input
+              label="Phone"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            />
+            <Input
+              label="Email"
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
+            <Input
+              label="GSTIN"
+              value={form.gstNumber}
+              onChange={(e) => setForm({ ...form, gstNumber: e.target.value })}
             />
             <Textarea
               label="Address"
@@ -267,13 +290,6 @@ export default function StoresPage() {
               value={form.address}
               onChange={(e) => setForm({ ...form, address: e.target.value })}
             />
-            <div className="sm:col-span-2">
-              <Checkbox
-                label="Default store (auto-selected for this branch in stock forms)"
-                checked={form.isDefault}
-                onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
-              />
-            </div>
             <div className="sm:col-span-2">
               <Checkbox
                 label="Active"

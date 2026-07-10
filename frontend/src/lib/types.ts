@@ -1122,6 +1122,7 @@ export interface Store {
   code: string;
   name: string;
   address?: string | null;
+  isDefault?: boolean;
   isActive: boolean;
   isLocked?: boolean;
 }
@@ -1185,6 +1186,21 @@ export interface OpeningStockLineRow {
   isLocked: boolean;
 }
 
+// ---- Accounts: Supplier Master ----
+export interface Supplier {
+  id: number;
+  companyId: number;
+  code: string;
+  name: string;
+  contactPerson?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  gstNumber?: string | null;
+  address?: string | null;
+  isActive: boolean;
+  isLocked?: boolean;
+}
+
 // ---- Inventory Transactions (Goods Receipt / Delivery / Return / Issue) ----
 export type StockTxnKind =
   | 'PURCHASE'
@@ -1196,10 +1212,14 @@ export type StockTxnKind =
 export interface StockTransaction {
   id: number;
   companyId: number;
+  branchId?: number | null;
   type: StockTxnKind;
   docNo: string;
   docDate: string;
   storeId: number;
+  /** Goods Receipt Note only. */
+  supplierId?: number | null;
+  purchaseOrderRef?: string | null;
   reference?: string | null;
   notes?: string | null;
   status: string;

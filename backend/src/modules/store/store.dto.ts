@@ -24,6 +24,10 @@ export class CreateStoreDto {
 
   @IsOptional()
   @IsBoolean()
+  isDefault?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
   isActive?: boolean;
 }
 
@@ -41,6 +45,10 @@ export class UpdateStoreDto {
   @IsString()
   @MaxLength(300)
   address?: string | null;
+
+  @IsOptional()
+  @IsBoolean()
+  isDefault?: boolean;
 
   @IsOptional()
   @IsBoolean()

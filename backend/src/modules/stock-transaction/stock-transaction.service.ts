@@ -203,6 +203,10 @@ export class StockTransactionService {
           docNo,
           docDate,
           storeId: dto.storeId,
+          // Supplier + PO apply to Goods Receipt only.
+          supplierId: type === 'PURCHASE' ? dto.supplierId ?? null : null,
+          purchaseOrderRef:
+            type === 'PURCHASE' ? dto.purchaseOrderRef?.trim() || null : null,
           reference: dto.reference?.trim() || null,
           notes: dto.notes?.trim() || null,
           status: 'POSTED',
@@ -259,12 +263,19 @@ export class StockTransactionService {
     const resolved = dto.lines ? await this.resolveLines(dto.lines) : null;
 
     return this.prisma.$transaction(async (tx) => {
+      const isGrn = existing.type === 'PURCHASE';
       await tx.stockTransaction.update({
         where: { id },
         data: {
           storeId,
           branchId: txnBranchId,
           docDate,
+          supplierId:
+            isGrn && dto.supplierId !== undefined ? dto.supplierId : undefined,
+          purchaseOrderRef:
+            isGrn && dto.purchaseOrderRef !== undefined
+              ? dto.purchaseOrderRef?.trim() || null
+              : undefined,
           reference:
             dto.reference !== undefined ? dto.reference?.trim() || null : undefined,
           notes: dto.notes !== undefined ? dto.notes?.trim() || null : undefined,

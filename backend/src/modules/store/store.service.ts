@@ -58,16 +58,21 @@ export class StoreService {
       const n = await this.prisma.store.count({ where: { companyId } });
       const code = `ST-${String(n + 1 + i).padStart(4, '0')}`;
       try {
-        return await this.prisma.store.create({
+        const store = await this.prisma.store.create({
           data: {
             companyId,
             code,
             name: dto.name.trim(),
             branchId: storeBranchId,
             address: dto.address?.trim() || null,
+            isDefault: dto.isDefault ?? false,
             isActive: dto.isActive ?? true,
           },
         });
+        if (store.isDefault) {
+          await this.clearOtherDefaults(companyId, store.branchId, store.id);
+        }
+        return store;
       } catch (e) {
         if (
           i < 5 &&
@@ -84,15 +89,41 @@ export class StoreService {
   async update(id: number, dto: UpdateStoreDto) {
     const existing = await this.findOne(id);
     assertUnlocked(existing, 'store', 'editing');
-    return this.prisma.store.update({
+    const updated = await this.prisma.store.update({
       where: { id },
       data: {
         name: dto.name?.trim(),
         branchId: dto.branchId !== undefined ? dto.branchId : undefined,
         address:
           dto.address !== undefined ? dto.address?.trim() || null : undefined,
+        isDefault: dto.isDefault,
         isActive: dto.isActive,
       },
+    });
+    if (dto.isDefault) {
+      await this.clearOtherDefaults(
+        updated.companyId,
+        updated.branchId,
+        updated.id,
+      );
+    }
+    return updated;
+  }
+
+  /** Only one store per company+branch may be the default; clear the others. */
+  private async clearOtherDefaults(
+    companyId: number,
+    branchId: number | null,
+    exceptId: number,
+  ): Promise<void> {
+    await this.prisma.store.updateMany({
+      where: {
+        companyId,
+        branchId: branchId ?? null,
+        isDefault: true,
+        NOT: { id: exceptId },
+      },
+      data: { isDefault: false },
     });
   }
 

@@ -25,6 +25,7 @@ import type {
   Store,
   Item,
   Product,
+  Supplier,
 } from '@/lib/types';
 
 type DraftLine = {
@@ -50,6 +51,9 @@ export function StockTransactionScreen({
   route,
   title,
   noun,
+  showSupplier = false,
+  showClassification = false,
+  showRate = true,
 }: {
   type: StockTxnKind;
   /** IN types (receipt/return) capture batches; OUT types (delivery/issue) decrement stock. */
@@ -57,6 +61,12 @@ export function StockTransactionScreen({
   route: string;
   title: string;
   noun: string; // "goods receipt", "delivery", ...
+  /** Show the supplier dropdown + purchase-order reference in the header (GRN). */
+  showSupplier?: boolean;
+  /** Show each line's category + parent group (derived from the item/product). */
+  showClassification?: boolean;
+  /** Show the per-line rate/price input + column. */
+  showRate?: boolean;
 }) {
   const { can } = useAuth();
   const toast = useToast();
@@ -68,6 +78,9 @@ export function StockTransactionScreen({
   const { data: stores } = useFetch<Store[]>('/stores');
   const { data: items } = useFetch<Item[]>('/items');
   const { data: products } = useFetch<Product[]>('/products');
+  const { data: suppliers } = useFetch<Supplier[]>(
+    showSupplier ? '/suppliers' : null,
+  );
 
   const canAdd = can(route, 'add');
   const canEditPriv = can(route, 'edit');
@@ -82,14 +95,25 @@ export function StockTransactionScreen({
       key: `item:${i.id}`,
       name: i.name,
       unit: i.unit?.symbol ?? i.unit?.code ?? '',
+      category: i.category?.name ?? '—',
+      group: i.group?.name ?? '—',
     }));
     const prs = (products ?? []).map((p) => ({
       key: `product:${p.id}`,
       name: p.name,
       unit: p.unit?.symbol ?? p.unit?.code ?? '',
+      category: p.category?.name ?? '—',
+      group: p.group?.name ?? '—',
     }));
     return [...its, ...prs];
   }, [items, products]);
+  const supplierOptions = useMemo(
+    () =>
+      (suppliers ?? [])
+        .filter((s) => s.isActive)
+        .map((s) => ({ value: String(s.id), label: s.name })),
+    [suppliers],
+  );
   const pickById = useMemo(
     () => new Map(pickable.map((p) => [p.key, p])),
     [pickable],
@@ -101,6 +125,12 @@ export function StockTransactionScreen({
 
   const storeOptions = useMemo(
     () => (stores ?? []).map((s) => ({ value: s.id, label: `${s.name} (${s.code})` })),
+    [stores],
+  );
+  // The active branch's default store (stores are already branch-scoped), used
+  // to pre-select the store combo when a new document is started.
+  const defaultStoreId = useMemo(
+    () => (stores ?? []).find((s) => s.isDefault)?.id,
     [stores],
   );
 
@@ -171,6 +201,8 @@ export function StockTransactionScreen({
   const [saving, setSaving] = useState(false);
   const [storeId, setStoreId] = useState('');
   const [docDate, setDocDate] = useState(todayInput());
+  const [supplierId, setSupplierId] = useState('');
+  const [poRef, setPoRef] = useState('');
   const [reference, setReference] = useState('');
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<DraftLine[]>([]);
@@ -191,8 +223,10 @@ export function StockTransactionScreen({
   const openNew = () => {
     setEditingDoc(null);
     setViewMode(false);
-    setStoreId('');
+    setStoreId(defaultStoreId ? String(defaultStoreId) : '');
     setDocDate(todayInput());
+    setSupplierId('');
+    setPoRef('');
     setReference('');
     setNotes('');
     setLines([blankLine()]);
@@ -204,6 +238,8 @@ export function StockTransactionScreen({
     setEditingDoc(full);
     setStoreId(String(full.storeId));
     setDocDate(dateInput(full.docDate));
+    setSupplierId(full.supplierId ? String(full.supplierId) : '');
+    setPoRef(full.purchaseOrderRef ?? '');
     setReference(full.reference ?? '');
     setNotes(full.notes ?? '');
     setLines(
@@ -265,6 +301,8 @@ export function StockTransactionScreen({
     setEditingDoc(null);
     setStoreId('');
     setDocDate(todayInput());
+    setSupplierId('');
+    setPoRef('');
     setReference('');
     setNotes('');
     setLines([blankLine()]);
@@ -281,6 +319,12 @@ export function StockTransactionScreen({
       const payload = {
         storeId: Number(storeId),
         docDate: new Date(docDate).toISOString(),
+        ...(showSupplier
+          ? {
+              supplierId: supplierId ? Number(supplierId) : null,
+              purchaseOrderRef: poRef.trim() || null,
+            }
+          : {}),
         reference: reference.trim() || undefined,
         notes: notes.trim() || undefined,
         lines: buildLines(),
@@ -403,13 +447,17 @@ export function StockTransactionScreen({
       headerClassName: 'text-right',
     },
     { key: 'unit', header: 'Unit', accessor: (r) => r.unitSymbol ?? '' },
-    {
-      key: 'rate',
-      header: 'Rate',
-      accessor: (r) => (r.unitPrice ?? 0).toLocaleString(),
-      className: 'text-right tabular-nums',
-      headerClassName: 'text-right',
-    },
+    ...(showRate
+      ? ([
+          {
+            key: 'rate',
+            header: 'Rate',
+            accessor: (r) => (r.unitPrice ?? 0).toLocaleString(),
+            className: 'text-right tabular-nums',
+            headerClassName: 'text-right',
+          },
+        ] as Column<StockTransactionLineRow>[])
+      : []),
   ];
 
   return (
@@ -522,6 +570,25 @@ export function StockTransactionScreen({
         }
       >
         <div className="space-y-5">
+          {showSupplier && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Select
+                label="Supplier"
+                disabled={viewMode}
+                value={supplierId}
+                onChange={(e) => setSupplierId(e.target.value)}
+                placeholder="Select a supplier"
+                options={supplierOptions}
+              />
+              <Input
+                label="Purchase Order"
+                disabled={viewMode}
+                value={poRef}
+                onChange={(e) => setPoRef(e.target.value)}
+                placeholder="PO reference"
+              />
+            </div>
+          )}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Select
               label="Store"
@@ -562,19 +629,21 @@ export function StockTransactionScreen({
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700">
                     <th className="py-2 pr-2">Item / Product</th>
+                    {showClassification && <th className="py-2 px-1">Category</th>}
+                    {showClassification && <th className="py-2 px-1">Parent Group</th>}
                     {inbound && viewMode && <th className="py-2 px-1">Batch No</th>}
                     {inbound && <th className="py-2 px-1">Supplier Batch</th>}
                     {inbound && <th className="w-32 py-2 px-1">Expiry</th>}
                     <th className="w-24 py-2 px-1 text-right">Qty</th>
                     <th className="w-12 py-2 px-1">Unit</th>
-                    <th className="w-28 py-2 px-1 text-right">Rate</th>
+                    {showRate && <th className="w-28 py-2 px-1 text-right">Rate</th>}
                     {!viewMode && <th className="w-10 py-2" />}
                   </tr>
                 </thead>
                 <tbody>
                   {lines.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-4 text-center text-xs text-slate-400">
+                      <td colSpan={12} className="py-4 text-center text-xs text-slate-400">
                         No lines.
                       </td>
                     </tr>
@@ -598,6 +667,12 @@ export function StockTransactionScreen({
                               />
                             )}
                           </td>
+                          {showClassification && (
+                            <td className="px-1 text-slate-500">{p?.category ?? '—'}</td>
+                          )}
+                          {showClassification && (
+                            <td className="px-1 text-slate-500">{p?.group ?? '—'}</td>
+                          )}
                           {inbound && viewMode && (
                             <td className="px-1 font-mono text-xs text-slate-500">
                               {docLine?.batchNo1 ?? '—'}
@@ -648,22 +723,24 @@ export function StockTransactionScreen({
                             )}
                           </td>
                           <td className="px-1 text-slate-500">{p?.unit ?? ''}</td>
-                          <td className="px-1">
-                            {viewMode ? (
-                              <span className="block text-right tabular-nums">
-                                {Number(l.unitPrice || 0).toLocaleString()}
-                              </span>
-                            ) : (
-                              <Input
-                                type="number"
-                                min={0}
-                                step="any"
-                                value={l.unitPrice}
-                                onChange={(e) => setLine(i, { unitPrice: e.target.value })}
-                                className="text-right tabular-nums"
-                              />
-                            )}
-                          </td>
+                          {showRate && (
+                            <td className="px-1">
+                              {viewMode ? (
+                                <span className="block text-right tabular-nums">
+                                  {Number(l.unitPrice || 0).toLocaleString()}
+                                </span>
+                              ) : (
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  step="any"
+                                  value={l.unitPrice}
+                                  onChange={(e) => setLine(i, { unitPrice: e.target.value })}
+                                  className="text-right tabular-nums"
+                                />
+                              )}
+                            </td>
+                          )}
                           {!viewMode && (
                             <td className="text-center">
                               <button

@@ -455,6 +455,7 @@ model Store {
   code      String // ST-#### per company (system-generated)
   name      String
   address   String?
+  isDefault Boolean  @default(false) // the branch's default store (auto-picked in combos)
   isActive  Boolean  @default(true)
   isLocked  Boolean  @default(false)
   createdAt DateTime @default(now())
@@ -567,6 +568,11 @@ model StockTransaction {
   docNo     String
   docDate   DateTime
   storeId   Int
+  // Goods Receipt Note only: the supplier the goods came from and the purchase
+  // order they fulfil. supplierId -> Accounts Supplier (plain cross-domain id);
+  // purchaseOrderRef is free text for now (later a real PO link).
+  supplierId       Int?
+  purchaseOrderRef String?
   reference String?
   notes     String?
   status    String       @default("POSTED") // DRAFT | POSTED

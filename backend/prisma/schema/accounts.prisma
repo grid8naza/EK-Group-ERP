@@ -1,0 +1,27 @@
+// Accounts domain — finance & procurement master data.
+//
+// Own domain file. Per the schema-ownership rule, any cross-domain reference
+// (e.g. companyId -> Cpanel Company) is a PLAIN id column with NO @relation.
+
+/// Supplier master (per company). A vendor goods are purchased from; referenced
+/// by Goods Receipt Notes (Inventory) via a plain cross-domain id. `code` is
+/// system-generated (SUP-#### per company).
+model Supplier {
+  id            Int      @id @default(autoincrement())
+  companyId     Int // -> Cpanel Company (plain id)
+  code          String // SUP-#### per company (system-generated)
+  name          String
+  contactPerson String?
+  phone         String?
+  email         String?
+  gstNumber     String? // GSTIN
+  address       String?
+  isActive      Boolean  @default(true)
+  isLocked      Boolean  @default(false) // when locked, must be unlocked before edit/delete
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@map("suppliers")
+}

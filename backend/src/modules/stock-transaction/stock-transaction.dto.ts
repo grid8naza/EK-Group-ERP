@@ -49,6 +49,17 @@ export class CreateStockTransactionDto {
   @IsISO8601()
   docDate!: string;
 
+  /** Goods Receipt Note only: supplier the goods came from. */
+  @IsOptional()
+  @IsInt()
+  supplierId?: number | null;
+
+  /** Goods Receipt Note only: the purchase order reference (free text for now). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  purchaseOrderRef?: string | null;
+
   @IsOptional()
   @IsString()
   @MaxLength(200)
@@ -74,6 +85,15 @@ export class UpdateStockTransactionDto {
   @IsOptional()
   @IsISO8601()
   docDate?: string;
+
+  @IsOptional()
+  @IsInt()
+  supplierId?: number | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  purchaseOrderRef?: string | null;
 
   @IsOptional()
   @IsString()

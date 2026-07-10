@@ -21,6 +21,7 @@ import {
 import { HR_SUBS } from '../modules/hr-category/hr-provisioning';
 import { WORKFLOW_SUBS } from '../modules/workflow/workflow-provisioning';
 import { CRM_SUBS } from '../modules/crm/crm-provisioning';
+import { ACCOUNTS_SUBS } from '../modules/supplier/accounts-provisioning';
 
 /**
  * Single source of truth for every module and the menus/screens it ships with.
@@ -117,6 +118,9 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     icon: 'wallet',
     sortOrder: 3,
     description: 'Finance & accounting.',
+    autoEnable: true, // on for every company so the Supplier Master appears
+    menu: { name: 'Accounts', icon: 'wallet' },
+    subs: ACCOUNTS_SUBS,
   },
   {
     code: 'INVENTORY',

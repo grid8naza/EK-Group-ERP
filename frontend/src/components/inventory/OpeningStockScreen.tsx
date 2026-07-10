@@ -120,6 +120,12 @@ export function OpeningStockScreen({
     () => (stores ?? []).map((s) => ({ value: s.id, label: `${s.name} (${s.code})` })),
     [stores],
   );
+  // The active branch's default store (stores are already branch-scoped), used
+  // to pre-select the store combo when a new document is started.
+  const defaultStoreId = useMemo(
+    () => (stores ?? []).find((s) => s.isDefault)?.id,
+    [stores],
+  );
 
   // ---- filters (category / primary group / parent group), cascading ----
   const [fCat, setFCat] = useState('');
@@ -208,7 +214,7 @@ export function OpeningStockScreen({
   const openNew = () => {
     setEditingDoc(null);
     setViewMode(false);
-    setStoreId('');
+    setStoreId(defaultStoreId ? String(defaultStoreId) : '');
     setDocDate(todayInput());
     setReference('');
     setNotes('');

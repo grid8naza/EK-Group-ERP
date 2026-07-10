@@ -10,6 +10,9 @@ export default function GoodsReceiptNotePage() {
       route="/inventory/goods-receipt-note"
       title="Goods Receipt Note"
       noun="goods receipt"
+      showSupplier
+      showClassification
+      showRate={false}
     />
   );
 }
