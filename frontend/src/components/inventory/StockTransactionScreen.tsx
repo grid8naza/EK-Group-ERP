@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ClipboardList, Plus, Trash2, X } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
@@ -10,7 +10,13 @@ import { useAuth } from '@/providers/AuthProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  Kbd,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { Input, Select, Textarea } from '@/components/ui/Field';
 import type {
   StockTransaction,
@@ -255,7 +261,17 @@ export function StockTransactionScreen({
         };
       });
 
-  const doSave = async () => {
+  const resetForm = () => {
+    setEditingDoc(null);
+    setStoreId('');
+    setDocDate(todayInput());
+    setReference('');
+    setNotes('');
+    setLines([blankLine()]);
+  };
+
+  const doSave = async (mode: SaveMode = 'saveClose') => {
+    if (saving) return;
     if (!storeId) return toast.error('Select a store.');
     if (!docDate) return toast.error('Select a document date.');
     if (buildLines().length === 0)
@@ -269,21 +285,48 @@ export function StockTransactionScreen({
         notes: notes.trim() || undefined,
         lines: buildLines(),
       };
+      let savedId: number;
       if (editingDoc) {
         await api.patch(`/stock-transactions/${editingDoc.id}`, payload);
+        savedId = editingDoc.id;
         toast.success('Transaction updated.');
       } else {
-        await api.post(`/stock-transactions?type=${type}`, payload);
+        const created = await api.post<StockTransaction>(
+          `/stock-transactions?type=${type}`,
+          payload,
+        );
+        savedId = created.id;
         toast.success('Transaction posted.');
       }
-      closeOverlay();
-      refetch();
+      await refetch();
+      if (mode === 'saveNew') {
+        resetForm();
+      } else if (mode === 'save') {
+        await loadDoc(savedId); // keep open on the saved document
+      } else {
+        closeOverlay();
+      }
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
     } finally {
       setSaving(false);
     }
   };
+
+  // Alt+A adds a line while editing. Save shortcuts (Ctrl/⌘+S, Ctrl/⌘+Shift+S,
+  // Ctrl/⌘+Enter) and Esc are handled by DrawerFooter / the Drawer.
+  useEffect(() => {
+    if (!open || viewMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.altKey && e.key.toLowerCase() === 'a') {
+        e.preventDefault();
+        addLine();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, viewMode]);
 
   const remove = async (r: StockTransactionLineRow) => {
     if (r.isLocked) {
@@ -467,20 +510,14 @@ export function StockTransactionScreen({
         width="xl"
         footer={
           viewMode ? (
-            <div className="flex justify-end">
-              <button className="btn-secondary" onClick={closeOverlay}>
-                Close
-              </button>
-            </div>
+            <CloseFooter onClose={closeOverlay} />
           ) : (
-            <div className="flex justify-end gap-2">
-              <button className="btn-secondary" onClick={closeOverlay} disabled={saving}>
-                Cancel
-              </button>
-              <button className="btn-primary" onClick={doSave} disabled={saving}>
-                {saving ? 'Saving…' : editingDoc ? 'Update' : 'Post'}
-              </button>
-            </div>
+            <DrawerFooter
+              onCancel={closeOverlay}
+              onSave={doSave}
+              saving={saving}
+              dataEntry
+            />
           )
         }
       >
@@ -516,7 +553,7 @@ export function StockTransactionScreen({
               <span className="label !mb-0">Items / Products</span>
               {!viewMode && (
                 <button className="btn-secondary text-xs" onClick={addLine}>
-                  <Plus className="h-3.5 w-3.5" /> Add line
+                  <Plus className="h-3.5 w-3.5" /> Add line <Kbd>Alt+A</Kbd>
                 </button>
               )}
             </div>

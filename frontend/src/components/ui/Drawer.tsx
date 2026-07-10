@@ -114,7 +114,7 @@ export function Drawer({
 }
 
 /** A subtle keyboard-shortcut hint shown next to a button label. */
-function Kbd({ children }: { children: React.ReactNode }) {
+export function Kbd({ children }: { children: React.ReactNode }) {
   return (
     <span className="ml-1.5 hidden rounded border border-slate-300/60 px-1 text-[10px] font-normal leading-tight opacity-70 dark:border-slate-600/60 sm:inline">
       {children}
