@@ -9,13 +9,15 @@ export const BATCH_NUMBERING = Symbol('BATCH_NUMBERING');
 
 export interface BatchNumberingPort {
   /**
-   * The next formatted batch number for (company, branch), advancing that rule's
-   * counter. Returns null when no rule is configured — the caller falls back to
-   * its own built-in scheme.
+   * `count` sequential formatted batch numbers for (company, branch), derived
+   * from the MAX existing sequence in that rule's period (so back-dated /
+   * interleaved entry stays correct). Returns null when no rule is configured —
+   * the caller falls back to its own built-in scheme.
    */
-  next(
+  nextRange(
     companyId: number,
     branchId: number | null,
+    count: number,
     date?: Date,
-  ): Promise<string | null>;
+  ): Promise<string[] | null>;
 }

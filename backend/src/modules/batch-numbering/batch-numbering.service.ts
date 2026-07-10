@@ -125,28 +125,44 @@ export class BatchNumberingService implements BatchNumberingPort {
 
   // ---- BatchNumberingPort ----
 
-  async next(
+  async nextRange(
     companyId: number,
     branchId: number | null,
+    count: number,
     date: Date = new Date(),
-  ): Promise<string | null> {
+  ): Promise<string[] | null> {
     const rule = await this.prisma.batchNumberingRule.findFirst({
       where: { companyId, branchId: branchId ?? null },
     });
     if (!rule) return null;
-    const periodKey = this.periodKey(rule.renumber, date);
-    const num = await this.prisma.$transaction(async (tx) => {
-      const r = await tx.batchNumberingRule.findUnique({ where: { id: rule.id } });
-      if (!r) return null;
-      const n = r.lastPeriodKey === periodKey ? r.lastNumber + 1 : r.startingNo;
-      await tx.batchNumberingRule.update({
-        where: { id: rule.id },
-        data: { lastPeriodKey: periodKey, lastNumber: n },
-      });
-      return n;
+    // Derive the next number from the highest existing sequence for this rule's
+    // period (not a stored counter), so back-dated / out-of-order entry stays
+    // correct — max(day/month/year) + 1, or the starting number when none.
+    const base = await this.maxSeqForPeriod(rule, companyId, date);
+    const nos: string[] = [];
+    for (let i = 1; i <= count; i++) nos.push(this.format(rule, base + i, date));
+    return nos;
+  }
+
+  /** Highest batch sequence already used in this rule's current period (returns
+   *  startingNo - 1 when none, so the first generated number is startingNo). */
+  private async maxSeqForPeriod(
+    rule: RuleState,
+    companyId: number,
+    date: Date,
+  ): Promise<number> {
+    const like = this.periodPrefix(rule, date);
+    const batches = await this.prisma.stockBatch.findMany({
+      where: { companyId, batchNo1: { startsWith: like } },
+      select: { batchNo1: true },
     });
-    if (num == null) return null;
-    return this.format(rule, num, date);
+    let max = (rule.startingNo || 1) - 1;
+    for (const b of batches) {
+      // The sequence is the number after the final '-'.
+      const seq = Number(b.batchNo1?.split('-').pop());
+      if (Number.isFinite(seq) && seq > max) max = seq;
+    }
+    return max;
   }
 
   // ---- formatting ----
@@ -164,13 +180,16 @@ export class BatchNumberingService implements BatchNumberingPort {
     return fmt === 'YYYYMMDD' ? `${y}${m}${d}` : `${String(y).slice(2)}${m}${d}`;
   }
 
-  /** Counter reset bucket: day, month, or year. */
-  private periodKey(renumber: BatchRenumber, date: Date): string {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    if (renumber === 'DAILY') return `${y}${m}${d}`;
-    if (renumber === 'MONTHLY') return `${y}${m}`;
-    return `${y}`;
+  /** The batchNo1 prefix that scopes a period: prefix + the period-relevant part
+   *  of the date (full date for DAILY, YYMM/YYYYMM for MONTHLY, YY/YYYY for
+   *  YEARLY). Batches with this prefix belong to the same counter period. */
+  private periodPrefix(rule: RuleState, date: Date): string {
+    const prefix = rule.prefixEnabled ? rule.prefixValue ?? '' : '';
+    const dateStr = this.dateStr(rule.dateFormat, date);
+    const yyyy = rule.dateFormat === 'YYYYMMDD';
+    let datePart = dateStr; // DAILY: full date
+    if (rule.renumber === 'MONTHLY') datePart = dateStr.slice(0, yyyy ? 6 : 4);
+    else if (rule.renumber === 'YEARLY') datePart = dateStr.slice(0, yyyy ? 4 : 2);
+    return `${prefix}${datePart}`;
   }
 }

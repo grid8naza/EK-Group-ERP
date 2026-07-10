@@ -783,12 +783,12 @@ model BatchNumberingRule {
   startingNo    Int             @default(1)
   renumber      BatchRenumber   @default(DAILY)
   isLocked      Boolean         @default(false)
-  // Running counter state: the last period generated in and its last number, so
-  // DAILY / MONTHLY / YEARLY renumbering resets when the period rolls over.
-  lastPeriodKey String?
-  lastNumber    Int             @default(0)
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
+
+  // The next number is derived from the MAX existing batch sequence in the
+  // period (see BatchNumberingService), so no stored counter is kept — back-
+  // dated / out-of-order entry can't reset or duplicate a sequence.
 
   @@unique([companyId, branchId])
   @@index([companyId])

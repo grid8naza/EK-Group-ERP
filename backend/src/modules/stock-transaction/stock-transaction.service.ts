@@ -64,19 +64,13 @@ export class StockTransactionService {
 
   /** Batch numbers from the configured rule, or null to fall back to the
    *  built-in `CompanyCode-YYMMDD-####` scheme. One per line, in order. */
-  private async ruleBatchNumbers(
+  private ruleBatchNumbers(
     companyId: number,
     branchId: number | null,
     count: number,
     date: Date,
   ): Promise<string[] | null> {
-    const first = await this.batchNumbering.next(companyId, branchId, date);
-    if (!first) return null;
-    const nos = [first];
-    for (let i = 1; i < count; i++) {
-      nos.push((await this.batchNumbering.next(companyId, branchId, date)) ?? first);
-    }
-    return nos;
+    return this.batchNumbering.nextRange(companyId, branchId, count, date);
   }
 
   // ---- reads ----
