@@ -562,6 +562,7 @@ model OpeningStock {
 model StockTransaction {
   id        Int          @id @default(autoincrement())
   companyId Int
+  branchId  Int? // -> Cpanel Branch (plain id); null for companies without branches
   type      StockTxnType
   docNo     String
   docDate   DateTime
@@ -574,6 +575,6 @@ model StockTransaction {
   updatedAt DateTime     @updatedAt
 
   @@unique([companyId, type, docNo])
-  @@index([companyId, type])
+  @@index([companyId, branchId, type])
   @@map("stock_transactions")
 }

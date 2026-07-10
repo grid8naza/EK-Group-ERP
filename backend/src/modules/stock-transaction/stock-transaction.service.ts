@@ -176,10 +176,15 @@ export class StockTransactionService {
       throw new BadRequestException('Select a company before entering a transaction.');
     }
     const companyCode = await this.companyCode(companyId);
+    // Company + branch scoped: with an active branch, the store must belong to
+    // it — you can only transact against your own branch's stores.
     const store = await this.prisma.store.findFirst({
-      where: { id: dto.storeId, companyId },
+      where: { id: dto.storeId, companyId, ...(branchId ? { branchId } : {}) },
     });
-    if (!store) throw new BadRequestException('Choose a valid store.');
+    if (!store) {
+      throw new BadRequestException('Choose a valid store for this branch.');
+    }
+    const txnBranchId = store.branchId ?? branchId ?? null;
 
     const resolved = await this.resolveLines(dto.lines);
     const docDate = new Date(dto.docDate);
@@ -193,6 +198,7 @@ export class StockTransactionService {
       const header = await tx.stockTransaction.create({
         data: {
           companyId,
+          branchId: txnBranchId,
           type: type as StockTxnType,
           docNo,
           docDate,
@@ -206,7 +212,7 @@ export class StockTransactionService {
         type,
         header,
         companyId,
-        branchId: store.branchId ?? branchId ?? null,
+        branchId: txnBranchId,
         storeId: dto.storeId,
         docDate,
         docNo,
@@ -234,10 +240,19 @@ export class StockTransactionService {
     const companyCode = await this.companyCode(effCompany);
 
     const storeId = dto.storeId ?? existing.storeId;
+    // The edited document stays in its own branch — the (new) store must belong
+    // to it (companies without branches are unconstrained).
     const store = await this.prisma.store.findFirst({
-      where: { id: storeId, companyId: effCompany },
+      where: {
+        id: storeId,
+        companyId: effCompany,
+        ...(existing.branchId ? { branchId: existing.branchId } : {}),
+      },
     });
-    if (!store) throw new BadRequestException('Choose a valid store.');
+    if (!store) {
+      throw new BadRequestException('Choose a valid store for this branch.');
+    }
+    const txnBranchId = store.branchId ?? existing.branchId ?? null;
 
     const docDate = dto.docDate ? new Date(dto.docDate) : existing.docDate;
     const ymd = this.ymd(docDate.toISOString());
@@ -248,6 +263,7 @@ export class StockTransactionService {
         where: { id },
         data: {
           storeId,
+          branchId: txnBranchId,
           docDate,
           reference:
             dto.reference !== undefined ? dto.reference?.trim() || null : undefined,
@@ -280,7 +296,7 @@ export class StockTransactionService {
           type: existing.type as TxnType,
           header: existing,
           companyId: effCompany,
-          branchId: store.branchId ?? branchId ?? null,
+          branchId: txnBranchId,
           storeId,
           docDate,
           docNo: existing.docNo,
