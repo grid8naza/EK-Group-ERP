@@ -435,11 +435,14 @@ model ProductCompany {
 /// The kind of stock movement (drives which master/document it belongs to).
 enum StockTxnType {
   OPENING_STOCK // Opening Stock Journal
-  PURCHASE // Goods Receipt Note
-  SALE // Delivery Note
+  PURCHASE // Goods Receipt Note (stock IN)
+  SALE // Delivery Note (stock OUT)
   PRODUCTION // Production Receipt Note (finished goods in)
   TRANSFER // Stock Journal (store-to-store, intra/inter-company)
   ADJUSTMENT // Stock Adjustment (add/remove)
+  SALES_RETURN // Sales Return — customer returns goods into stock (IN)
+  PURCHASE_RETURN // Purchase Return — goods returned to the supplier (OUT)
+  CONSUMPTION // Goods Issue Note — internal consumption (stock OUT)
 }
 
 /// Stock location — a store / warehouse / godown within a company. Stock is
@@ -547,4 +550,30 @@ model OpeningStock {
   @@unique([companyId, docNo])
   @@index([companyId])
   @@map("opening_stock")
+}
+
+/// Generic stock-movement document (header) for the Inventory Transactions menu:
+/// Goods Receipt Note (PURCHASE), Delivery Note (SALE), Goods Return Note
+/// (RETURN) and Goods Issue Note / Consumption (CONSUMPTION). Its lines are the
+/// StockLedger rows with the matching `type` and documentId = this row's id.
+/// IN types (PURCHASE, RETURN) create a batch per line like Opening Stock; OUT
+/// types (SALE, CONSUMPTION) decrement store stock (qtyOut). docNo is unique per
+/// company AND type, so each note type keeps its own sequence.
+model StockTransaction {
+  id        Int          @id @default(autoincrement())
+  companyId Int
+  type      StockTxnType
+  docNo     String
+  docDate   DateTime
+  storeId   Int
+  reference String?
+  notes     String?
+  status    String       @default("POSTED") // DRAFT | POSTED
+  isLocked  Boolean      @default(false)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([companyId, type, docNo])
+  @@index([companyId, type])
+  @@map("stock_transactions")
 }

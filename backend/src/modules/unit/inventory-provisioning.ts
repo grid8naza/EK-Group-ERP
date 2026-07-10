@@ -46,6 +46,22 @@ export const OPENING_STOCK_MENU = {
   ],
 };
 
+// Inventory Transactions — the day-to-day stock-movement notes. Goods Receipt
+// and Sales Return add stock (and a batch); Delivery, Purchase Return and Goods
+// Issue remove it. All share the /stock-transactions backend, told apart by the
+// note type.
+export const INVENTORY_TXN_MENU = {
+  name: 'Inventory Transactions',
+  icon: 'arrow-left-right',
+  subs: [
+    { name: 'Goods Receipt Notes', route: '/inventory/goods-receipt-note', icon: 'package-plus', order: 1 },
+    { name: 'Delivery Notes', route: '/inventory/delivery-note', icon: 'truck', order: 2 },
+    { name: 'Sales Return', route: '/inventory/sales-return', icon: 'undo-2', order: 3 },
+    { name: 'Purchase Return', route: '/inventory/purchase-return', icon: 'redo-2', order: 4 },
+    { name: 'Goods Issue Note (Consumption)', route: '/inventory/goods-issue-note', icon: 'package-minus', order: 5 },
+  ],
+};
+
 // Production module screens. The recipe (ingredients + packing) for each product
 // is edited here, while the product's master data lives under Inventory.
 export const PRODUCTION_SUBS = [

@@ -8,6 +8,7 @@ import {
   INVENTORY_SUBS,
   INVENTORY_REPORT_MENUS,
   OPENING_STOCK_MENU,
+  INVENTORY_TXN_MENU,
   PRODUCTION_SUBS,
   seedInventoryDefaults,
   seedProductionDefaults,
@@ -126,8 +127,12 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     autoEnable: true, // preserves Inventory's current "on for every company" behaviour
     menu: { name: 'Inventory', icon: 'package' },
     subs: INVENTORY_SUBS,
-    // Opening Stock is its own main menu; reports get theirs too.
-    extraMenus: [OPENING_STOCK_MENU, ...INVENTORY_REPORT_MENUS],
+    // Order: Inventory → Opening Stock → Inventory Transactions → Report.
+    extraMenus: [
+      OPENING_STOCK_MENU,
+      INVENTORY_TXN_MENU,
+      ...INVENTORY_REPORT_MENUS,
+    ],
     seedData: seedInventoryDefaults,
   },
   {

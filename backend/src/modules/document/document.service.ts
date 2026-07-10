@@ -15,6 +15,11 @@ import { CreateDocumentDto, UpdateDocumentDto } from './document.dto';
 const SYSTEM_DOCUMENTS: { code: string; name: string }[] = [
   { code: 'OPENING_STOCK', name: 'Opening Stock' },
   { code: 'PURCHASE_ORDER_IC', name: 'Purchase Order - IC' },
+  { code: 'GOODS_RECEIPT_NOTE', name: 'Goods Receipt Note' },
+  { code: 'DELIVERY_NOTE', name: 'Delivery Note' },
+  { code: 'SALES_RETURN', name: 'Sales Return' },
+  { code: 'PURCHASE_RETURN', name: 'Purchase Return' },
+  { code: 'GOODS_ISSUE_NOTE', name: 'Goods Issue Note' },
 ];
 
 @Injectable()

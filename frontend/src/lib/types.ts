@@ -1185,6 +1185,36 @@ export interface OpeningStockLineRow {
   isLocked: boolean;
 }
 
+// ---- Inventory Transactions (Goods Receipt / Delivery / Return / Issue) ----
+export type StockTxnKind =
+  | 'PURCHASE'
+  | 'SALE'
+  | 'SALES_RETURN'
+  | 'PURCHASE_RETURN'
+  | 'CONSUMPTION';
+
+export interface StockTransaction {
+  id: number;
+  companyId: number;
+  type: StockTxnKind;
+  docNo: string;
+  docDate: string;
+  storeId: number;
+  reference?: string | null;
+  notes?: string | null;
+  status: string;
+  isLocked?: boolean;
+  // findOne returns the raw StockLedger rows, which share the line shape.
+  lines?: OpeningStockLine[];
+}
+
+/** One enriched stock-transaction line for the listing grid. */
+export interface StockTransactionLineRow extends OpeningStockLineRow {
+  qtyOut: number;
+  /** qtyIn for IN types (receipt/return), qtyOut for OUT types (delivery/issue). */
+  qty: number;
+}
+
 export type OpeningStockType =
   | 'ITEM_RAW'
   | 'ITEM_PACKING'

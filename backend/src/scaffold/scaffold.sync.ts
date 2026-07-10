@@ -17,6 +17,7 @@ const RETIRED_ROUTES: string[] = [
   '/inventory/opening-stock-items', // split into raw-material + packing-material
   '/inventory/opening-stock-products-packed', // renamed to opening-stock-packed-products
   '/inventory/opening-stock-products-unpacked', // renamed to opening-stock-unpacked-products
+  '/inventory/goods-return-note', // split into sales-return + purchase-return
 ];
 
 async function cleanupRetiredRoutes(
@@ -131,13 +132,14 @@ async function migrateOpeningStockMenu(
     );
     if (!primary) continue;
 
-    // Keep Inventory Report below Opening Stock so the sidebar order is
-    // Inventory → Opening Stock → Inventory Report (no sortOrder tie).
+    // Keep Inventory Report at the bottom so the sidebar order is Inventory →
+    // Opening Stock → Inventory Transactions (created by the sync at 3) →
+    // Inventory Report. Avoids a sortOrder tie with the transactions menu.
     const report = mine.find((m) => m.menuName === 'Inventory Report');
-    if (report && report.sortOrder < 3) {
+    if (report && report.sortOrder < 4) {
       await prisma.mainMenu.update({
         where: { id: report.id },
-        data: { sortOrder: 3 },
+        data: { sortOrder: 4 },
       });
     }
 
