@@ -214,11 +214,34 @@ export function StockTransactionScreen({
     batchNo2: '',
     expiry: '',
   });
-  const addLine = () => setLines((ls) => [...ls, blankLine()]);
+  // Keyboard-fast entry: focus a field by id; append a line and land the cursor
+  // on its item picker for uninterrupted, mouse-free data entry.
+  const focusId = (id: string) =>
+    setTimeout(() => document.getElementById(id)?.focus(), 0);
+  const addLine = () => {
+    const newIndex = lines.length;
+    setLines((ls) => [...ls, blankLine()]);
+    focusId(`stl-${newIndex}-item`);
+  };
   const setLine = (i: number, patch: Partial<DraftLine>) =>
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   const removeLine = (i: number) =>
     setLines((ls) => ls.filter((_, idx) => idx !== i));
+
+  // Enter in a line field moves to the next; Enter on a line's LAST field jumps
+  // to the next line's item (adding a line when on the last row).
+  const enterTo = (nextId: string) => (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      document.getElementById(nextId)?.focus();
+    }
+  };
+  const enterNextLine = (i: number) => (e: React.KeyboardEvent) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    if (i >= lines.length - 1) addLine();
+    else focusId(`stl-${i + 1}-item`);
+  };
 
   const openNew = () => {
     setEditingDoc(null);
@@ -231,6 +254,7 @@ export function StockTransactionScreen({
     setNotes('');
     setLines([blankLine()]);
     setOpen(true);
+    focusId('stl-0-item'); // land the cursor on the first item for no-mouse entry
   };
 
   const loadDoc = async (documentId: number) => {
@@ -660,6 +684,11 @@ export function StockTransactionScreen({
                               </span>
                             ) : (
                               <Select
+                                id={`stl-${i}-item`}
+                                openOnFocus
+                                advanceToId={
+                                  inbound ? `stl-${i}-batch` : `stl-${i}-qty`
+                                }
                                 value={l.key}
                                 onChange={(e) => setLine(i, { key: e.target.value })}
                                 placeholder="Select item / product"
@@ -684,8 +713,10 @@ export function StockTransactionScreen({
                                 <span className="text-slate-600">{l.batchNo2 || '—'}</span>
                               ) : (
                                 <Input
+                                  id={`stl-${i}-batch`}
                                   value={l.batchNo2}
                                   onChange={(e) => setLine(i, { batchNo2: e.target.value })}
+                                  onKeyDown={enterTo(`stl-${i}-expiry`)}
                                   placeholder="Supplier batch"
                                 />
                               )}
@@ -699,9 +730,11 @@ export function StockTransactionScreen({
                                 </span>
                               ) : (
                                 <Input
+                                  id={`stl-${i}-expiry`}
                                   type="date"
                                   value={l.expiry}
                                   onChange={(e) => setLine(i, { expiry: e.target.value })}
+                                  onKeyDown={enterTo(`stl-${i}-qty`)}
                                 />
                               )}
                             </td>
@@ -713,11 +746,17 @@ export function StockTransactionScreen({
                               </span>
                             ) : (
                               <Input
+                                id={`stl-${i}-qty`}
                                 type="number"
                                 min={0}
                                 step="any"
                                 value={l.quantity}
                                 onChange={(e) => setLine(i, { quantity: e.target.value })}
+                                onKeyDown={
+                                  showRate
+                                    ? enterTo(`stl-${i}-rate`)
+                                    : enterNextLine(i)
+                                }
                                 className="text-right tabular-nums"
                               />
                             )}
@@ -731,11 +770,13 @@ export function StockTransactionScreen({
                                 </span>
                               ) : (
                                 <Input
+                                  id={`stl-${i}-rate`}
                                   type="number"
                                   min={0}
                                   step="any"
                                   value={l.unitPrice}
                                   onChange={(e) => setLine(i, { unitPrice: e.target.value })}
+                                  onKeyDown={enterNextLine(i)}
                                   className="text-right tabular-nums"
                                 />
                               )}
@@ -759,6 +800,12 @@ export function StockTransactionScreen({
                 </tbody>
               </table>
             </div>
+            {!viewMode && (
+              <p className="mt-2 text-xs text-slate-400">
+                Enter moves to the next field; from the last field it starts a
+                new line. Alt+A adds a line. Ctrl+S posts.
+              </p>
+            )}
           </div>
 
           <Textarea
