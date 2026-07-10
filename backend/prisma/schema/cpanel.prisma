@@ -755,3 +755,42 @@ model DocumentNumberingRule {
   @@index([companyId])
   @@map("document_numbering_rules")
 }
+
+/// Date part of a generated batch number.
+enum BatchDateFormat {
+  YYMMDD
+  YYYYMMDD
+}
+
+/// How the batch counter resets.
+enum BatchRenumber {
+  DAILY
+  MONTHLY
+  YEARLY
+}
+
+/// Per company + branch sequencer for stock batch numbers. A batch number is
+/// `{prefix}{date}-{padded}` where date is YY/YYYY-MM-DD and the counter resets
+/// per the renumber period. branchId null = the company-level (no-branch) rule.
+model BatchNumberingRule {
+  id            Int             @id @default(autoincrement())
+  companyId     Int // -> Cpanel Company (plain id)
+  branchId      Int? // -> Cpanel Branch (plain id); null = company default
+  prefixEnabled Boolean         @default(true)
+  prefixValue   String?
+  dateFormat    BatchDateFormat @default(YYMMDD)
+  paddingLength Int             @default(4)
+  startingNo    Int             @default(1)
+  renumber      BatchRenumber   @default(DAILY)
+  isLocked      Boolean         @default(false)
+  // Running counter state: the last period generated in and its last number, so
+  // DAILY / MONTHLY / YEARLY renumbering resets when the period rolls over.
+  lastPeriodKey String?
+  lastNumber    Int             @default(0)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([companyId, branchId])
+  @@index([companyId])
+  @@map("batch_numbering_rules")
+}

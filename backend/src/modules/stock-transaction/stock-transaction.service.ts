@@ -7,6 +7,10 @@ import {
 import { Prisma, StockTxnType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
+import {
+  BATCH_NUMBERING,
+  BatchNumberingPort,
+} from '../../contracts/batch-numbering.port';
 import { assertUnlocked } from '../../common/assert-unlocked';
 import {
   CreateStockTransactionDto,
@@ -55,7 +59,25 @@ export class StockTransactionService {
   constructor(
     private prisma: PrismaService,
     @Inject(NUMBERING) private readonly numbering: NumberingPort,
+    @Inject(BATCH_NUMBERING) private readonly batchNumbering: BatchNumberingPort,
   ) {}
+
+  /** Batch numbers from the configured rule, or null to fall back to the
+   *  built-in `CompanyCode-YYMMDD-####` scheme. One per line, in order. */
+  private async ruleBatchNumbers(
+    companyId: number,
+    branchId: number | null,
+    count: number,
+    date: Date,
+  ): Promise<string[] | null> {
+    const first = await this.batchNumbering.next(companyId, branchId, date);
+    if (!first) return null;
+    const nos = [first];
+    for (let i = 1; i < count; i++) {
+      nos.push((await this.batchNumbering.next(companyId, branchId, date)) ?? first);
+    }
+    return nos;
+  }
 
   // ---- reads ----
 
@@ -272,6 +294,10 @@ export class StockTransactionService {
     const docDate = new Date(dto.docDate);
     const ymd = this.ymd(dto.docDate);
     const docNo = await this.nextDocNo(companyId, type, docDate);
+    // Only IN types create batches → only they need rule batch numbers.
+    const ruleBatchNos = isInbound(type)
+      ? await this.ruleBatchNumbers(companyId, txnBranchId, dto.lines.length, docDate)
+      : null;
 
     return this.prisma.$transaction(async (tx) => {
       const base = await tx.stockBatch.count({
@@ -306,6 +332,7 @@ export class StockTransactionService {
         companyCode,
         ymd,
         base,
+        ruleBatchNos,
         lines: dto.lines,
         resolved,
       });
@@ -343,6 +370,10 @@ export class StockTransactionService {
     const docDate = dto.docDate ? new Date(dto.docDate) : existing.docDate;
     const ymd = this.ymd(docDate.toISOString());
     const resolved = dto.lines ? await this.resolveLines(dto.lines) : null;
+    const ruleBatchNos =
+      dto.lines && isInbound(existing.type as TxnType)
+        ? await this.ruleBatchNumbers(effCompany, txnBranchId, dto.lines.length, docDate)
+        : null;
 
     return this.prisma.$transaction(async (tx) => {
       const isGrn = existing.type === 'PURCHASE';
@@ -397,6 +428,7 @@ export class StockTransactionService {
           companyCode,
           ymd,
           base,
+          ruleBatchNos,
           lines: dto.lines,
           resolved,
         });
@@ -454,6 +486,7 @@ export class StockTransactionService {
       companyCode: string;
       ymd: string;
       base: number;
+      ruleBatchNos: string[] | null;
       lines: StockTransactionLineInput[];
       resolved: LineClass[];
     },
@@ -469,7 +502,11 @@ export class StockTransactionService {
       let batchNo1: string | null = null;
       if (inbound) {
         batchSeq += 1;
-        batchNo1 = `${ctx.companyCode}-${ctx.ymd}-${String(ctx.base + batchSeq).padStart(4, '0')}`;
+        // Use the company/branch batch-numbering rule when configured; else fall
+        // back to the built-in CompanyCode-YYMMDD-#### scheme.
+        batchNo1 =
+          ctx.ruleBatchNos?.[batchSeq - 1] ??
+          `${ctx.companyCode}-${ctx.ymd}-${String(ctx.base + batchSeq).padStart(4, '0')}`;
         const batch = await tx.stockBatch.create({
           data: {
             companyId: ctx.companyId,

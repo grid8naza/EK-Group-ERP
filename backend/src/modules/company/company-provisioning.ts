@@ -34,6 +34,7 @@ export const CPANEL_COMPANY_SUBS = [
   { name: 'Approval Statuses', route: '/cpanel/approval-statuses', icon: 'shieldcheck', order: 8 },
   { name: 'Document Master', route: '/cpanel/documents', icon: 'file-text', order: 9 },
   { name: 'Document Numbering', route: '/cpanel/document-numbering', icon: 'hash', order: 10 },
+  { name: 'Batch Numbering', route: '/cpanel/batch-numbering', icon: 'boxes', order: 11 },
 ];
 
 export interface ProvisionResult {

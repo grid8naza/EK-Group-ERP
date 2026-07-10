@@ -1277,6 +1277,24 @@ export interface DocumentMaster {
 export type NumberingRenumber = 'NEVER' | 'MONTHLY' | 'YEARLY';
 export type NumberingPeriodPosition = 'BEFORE_SUFFIX' | 'AFTER_SUFFIX';
 
+// ---- Batch Numbering (per company + branch) ----
+export type BatchDateFormat = 'YYMMDD' | 'YYYYMMDD';
+export type BatchRenumber = 'DAILY' | 'MONTHLY' | 'YEARLY';
+
+export interface BatchNumberingRow {
+  branchId: number | null; // null = the company-level rule
+  branchName: string;
+  configured: boolean;
+  prefixEnabled: boolean;
+  prefixValue?: string | null;
+  dateFormat: BatchDateFormat;
+  paddingLength: number;
+  startingNo: number;
+  renumber: BatchRenumber;
+  isLocked: boolean;
+  preview: string;
+}
+
 export interface DocumentNumberingRow {
   documentId: number;
   documentName: string;

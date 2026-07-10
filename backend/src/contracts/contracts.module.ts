@@ -10,6 +10,8 @@ import { ProductionMetricsAdapter } from '../modules/production/production-metri
 import { InventoryMetricsAdapter } from '../modules/item/inventory-metrics.adapter';
 import { NUMBERING } from './numbering.port';
 import { DocumentNumberingService } from '../modules/document-numbering/document-numbering.service';
+import { BATCH_NUMBERING } from './batch-numbering.port';
+import { BatchNumberingService } from '../modules/batch-numbering/batch-numbering.service';
 
 /**
  * Composition root for cross-module contracts (ports & adapters).
@@ -47,6 +49,8 @@ import { DocumentNumberingService } from '../modules/document-numbering/document
     // fetch its next number via the NUMBERING port (no cross-module import).
     DocumentNumberingService,
     { provide: NUMBERING, useExisting: DocumentNumberingService },
+    BatchNumberingService,
+    { provide: BATCH_NUMBERING, useExisting: BatchNumberingService },
     CpanelMetricsAdapter,
     ProductionMetricsAdapter,
     InventoryMetricsAdapter,
@@ -64,6 +68,6 @@ import { DocumentNumberingService } from '../modules/document-numbering/document
       ],
     },
   ],
-  exports: [USER_LOOKUP, METRIC_PROVIDER, WORKFLOW, NUMBERING],
+  exports: [USER_LOOKUP, METRIC_PROVIDER, WORKFLOW, NUMBERING, BATCH_NUMBERING],
 })
 export class ContractsModule {}

@@ -7,6 +7,10 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
+import {
+  BATCH_NUMBERING,
+  BatchNumberingPort,
+} from '../../contracts/batch-numbering.port';
 import { assertUnlocked } from '../../common/assert-unlocked';
 import {
   CreateOpeningStockDto,
@@ -27,7 +31,25 @@ export class OpeningStockService {
   constructor(
     private prisma: PrismaService,
     @Inject(NUMBERING) private readonly numbering: NumberingPort,
+    @Inject(BATCH_NUMBERING) private readonly batchNumbering: BatchNumberingPort,
   ) {}
+
+  /** Batch numbers from the configured rule, or null to fall back to the
+   *  built-in `CompanyCode-YYMMDD-####` scheme. One per line, in order. */
+  private async ruleBatchNumbers(
+    companyId: number,
+    branchId: number | null,
+    count: number,
+    date: Date,
+  ): Promise<string[] | null> {
+    const first = await this.batchNumbering.next(companyId, branchId, date);
+    if (!first) return null;
+    const nos = [first];
+    for (let i = 1; i < count; i++) {
+      nos.push((await this.batchNumbering.next(companyId, branchId, date)) ?? first);
+    }
+    return nos;
+  }
 
   // ---- reads ----
 
@@ -340,6 +362,13 @@ export class OpeningStockService {
     const docDate = new Date(dto.docDate);
     const ymd = this.ymd(dto.docDate);
     const docNo = await this.nextDocNo(companyId, docDate);
+    const txnBranchId = store.branchId ?? branchId ?? null;
+    const ruleBatchNos = await this.ruleBatchNumbers(
+      companyId,
+      txnBranchId,
+      dto.lines.length,
+      docDate,
+    );
 
     return this.prisma.$transaction(async (tx) => {
       const base = await tx.stockBatch.count({
@@ -359,7 +388,7 @@ export class OpeningStockService {
       await this.writeLines(tx, {
         header,
         companyId,
-        branchId: store.branchId ?? branchId ?? null,
+        branchId: txnBranchId,
         storeId: dto.storeId,
         docDate,
         docNo,
@@ -367,6 +396,7 @@ export class OpeningStockService {
         companyCode,
         ymd,
         base,
+        ruleBatchNos,
         lines: dto.lines,
         resolved,
       });
@@ -395,6 +425,10 @@ export class OpeningStockService {
     const docDate = dto.docDate ? new Date(dto.docDate) : existing.docDate;
     const ymd = this.ymd(docDate.toISOString());
     const resolved = dto.lines ? await this.resolveLines(dto.lines) : null;
+    const txnBranchId = store.branchId ?? branchId ?? null;
+    const ruleBatchNos = dto.lines
+      ? await this.ruleBatchNumbers(effCompany, txnBranchId, dto.lines.length, docDate)
+      : null;
 
     return this.prisma.$transaction(async (tx) => {
       await tx.openingStock.update({
@@ -432,7 +466,7 @@ export class OpeningStockService {
         await this.writeLines(tx, {
           header: existing,
           companyId: effCompany,
-          branchId: store.branchId ?? branchId ?? null,
+          branchId: txnBranchId,
           storeId,
           docDate,
           docNo: existing.docNo,
@@ -440,6 +474,7 @@ export class OpeningStockService {
           companyCode,
           ymd,
           base,
+          ruleBatchNos,
           lines: dto.lines,
           resolved,
         });
@@ -496,6 +531,7 @@ export class OpeningStockService {
       companyCode: string;
       ymd: string;
       base: number;
+      ruleBatchNos: string[] | null;
       lines: OpeningStockLineInput[];
       resolved: LineClass[];
     },
@@ -503,7 +539,11 @@ export class OpeningStockService {
     for (let i = 0; i < ctx.lines.length; i++) {
       const line = ctx.lines[i];
       const cls = ctx.resolved[i];
-      const batchNo1 = `${ctx.companyCode}-${ctx.ymd}-${String(ctx.base + i + 1).padStart(4, '0')}`;
+      // Use the company/branch batch-numbering rule when configured; otherwise
+      // fall back to the built-in CompanyCode-YYMMDD-#### scheme.
+      const batchNo1 =
+        ctx.ruleBatchNos?.[i] ??
+        `${ctx.companyCode}-${ctx.ymd}-${String(ctx.base + i + 1).padStart(4, '0')}`;
       const expiry = line.expiryDate ? new Date(line.expiryDate) : null;
       const batch = await tx.stockBatch.create({
         data: {
