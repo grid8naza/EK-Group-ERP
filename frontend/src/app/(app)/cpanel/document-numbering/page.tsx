@@ -241,6 +241,8 @@ export default function DocumentNumberingPage() {
     {
       key: 'documentName',
       header: 'Document',
+      sortable: true,
+      sortAccessor: (r) => r.documentName,
       render: (r) => (
         <span className="flex items-center gap-2 font-medium text-slate-800 dark:text-slate-100">
           {r.documentName}
