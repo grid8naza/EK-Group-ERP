@@ -771,11 +771,12 @@ enum BatchRenumber {
 
 /// Per company + branch sequencer for stock batch numbers. A batch number is
 /// `{prefix}{date}-{padded}` where date is YY/YYYY-MM-DD and the counter resets
-/// per the renumber period. branchId null = the company-level (no-branch) rule.
+/// per the renumber period. Rules are per branch; branch-less batches use the
+/// built-in `CompanyCode-YYMMDD-####` fallback (no company-level rule).
 model BatchNumberingRule {
   id            Int             @id @default(autoincrement())
   companyId     Int // -> Cpanel Company (plain id)
-  branchId      Int? // -> Cpanel Branch (plain id); null = company default
+  branchId      Int? // -> Cpanel Branch (plain id); null legacy/unused — scoped per branch
   prefixEnabled Boolean         @default(true)
   prefixValue   String?
   dateFormat    BatchDateFormat @default(YYMMDD)

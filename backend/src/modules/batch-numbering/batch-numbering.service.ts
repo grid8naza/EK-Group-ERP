@@ -18,8 +18,9 @@ interface RuleState {
 export class BatchNumberingService implements BatchNumberingPort {
   constructor(private prisma: PrismaService) {}
 
-  /** A row per branch of the active company (+ a company-level row) with its
-   *  rule or defaults, plus a live NEXT example. */
+  /** A row per branch of the active company with its rule or defaults, plus a
+   *  live NEXT example. Branch-less batches use the built-in fallback scheme;
+   *  there is no company-level rule. */
   async overview(companyId: number | undefined) {
     const branches = companyId
       ? await this.prisma.branch.findMany({
@@ -32,10 +33,8 @@ export class BatchNumberingService implements BatchNumberingPort {
       : [];
     const byBranch = new Map(rules.map((r) => [r.branchId ?? 0, r]));
 
-    const targets: { branchId: number | null; branchName: string }[] = [
-      { branchId: null, branchName: '— Company (no branch) —' },
-      ...branches.map((b) => ({ branchId: b.id, branchName: b.name })),
-    ];
+    const targets: { branchId: number | null; branchName: string }[] =
+      branches.map((b) => ({ branchId: b.id, branchName: b.name }));
     return targets.map((t) => {
       const r = byBranch.get(t.branchId ?? 0);
       const state: RuleState = {
@@ -61,7 +60,12 @@ export class BatchNumberingService implements BatchNumberingPort {
     if (!companyId) {
       throw new BadRequestException('Select a company before setting batch numbering.');
     }
-    const branchId = dto.branchId ?? null;
+    if (dto.branchId == null) {
+      throw new BadRequestException(
+        'Select a branch. Branch-less batches use the built-in numbering scheme.',
+      );
+    }
+    const branchId = dto.branchId;
     const existing = await this.prisma.batchNumberingRule.findFirst({
       where: { companyId, branchId },
     });
@@ -106,7 +110,10 @@ export class BatchNumberingService implements BatchNumberingPort {
     if (!companyId) {
       throw new BadRequestException('Select a company before locking.');
     }
-    const b = branchId ?? null;
+    if (branchId == null) {
+      throw new BadRequestException('Select a branch to lock its numbering rule.');
+    }
+    const b = branchId;
     const existing = await this.prisma.batchNumberingRule.findFirst({
       where: { companyId, branchId: b },
     });
