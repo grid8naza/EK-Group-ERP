@@ -58,6 +58,16 @@ export class StockTransactionController {
     return this.service.lines(companyId, branchId, parseType(type));
   }
 
+  /** One row per document (header listing). */
+  @Get('documents')
+  documents(
+    @CompanyId() companyId: number | undefined,
+    @BranchId() branchId: number | undefined,
+    @Query('type') type?: string,
+  ) {
+    return this.service.documents(companyId, branchId, parseType(type));
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id);

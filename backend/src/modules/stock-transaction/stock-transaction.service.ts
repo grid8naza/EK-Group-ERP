@@ -164,6 +164,73 @@ export class StockTransactionService {
     }));
   }
 
+  /** One row per DOCUMENT (header listing): date, doc no, company, branch,
+   *  store, reference, total amount (sum qty × rate), lock. */
+  async documents(
+    companyId: number | undefined,
+    branchId: number | undefined,
+    type: TxnType,
+  ) {
+    const headers = await this.prisma.stockTransaction.findMany({
+      where: {
+        type: type as StockTxnType,
+        ...(companyId ? { companyId } : {}),
+        ...(branchId ? { branchId } : {}),
+      },
+      orderBy: { id: 'desc' },
+    });
+    const ids = headers.map((h) => h.id);
+    const ledger = ids.length
+      ? await this.prisma.stockLedger.findMany({
+          where: { transactionType: type as StockTxnType, documentId: { in: ids } },
+          select: { documentId: true, qtyIn: true, qtyOut: true, unitPrice: true },
+        })
+      : [];
+    const amountByDoc = new Map<number, number>();
+    for (const r of ledger) {
+      amountByDoc.set(
+        r.documentId,
+        (amountByDoc.get(r.documentId) ?? 0) +
+          (r.qtyIn + r.qtyOut) * (r.unitPrice ?? 0),
+      );
+    }
+
+    const uniq = <T>(xs: (T | null | undefined)[]) =>
+      [...new Set(xs.filter((x): x is T => x != null))];
+    const companyIds = uniq(headers.map((h) => h.companyId));
+    const branchIds = uniq(headers.map((h) => h.branchId));
+    const storeIds = uniq(headers.map((h) => h.storeId));
+    const [companies, branches, stores] = await Promise.all([
+      companyIds.length
+        ? this.prisma.company.findMany({ where: { id: { in: companyIds } }, select: { id: true, name: true } })
+        : [],
+      branchIds.length
+        ? this.prisma.branch.findMany({ where: { id: { in: branchIds } }, select: { id: true, name: true } })
+        : [],
+      storeIds.length
+        ? this.prisma.store.findMany({ where: { id: { in: storeIds } }, select: { id: true, name: true } })
+        : [],
+    ]);
+    const companyMap = new Map(companies.map((x) => [x.id, x.name] as const));
+    const branchMap = new Map(branches.map((x) => [x.id, x.name] as const));
+    const storeMap = new Map(stores.map((x) => [x.id, x.name] as const));
+
+    return headers.map((h) => ({
+      id: h.id,
+      docNo: h.docNo,
+      docDate: h.docDate,
+      companyId: h.companyId,
+      companyName: companyMap.get(h.companyId) ?? '',
+      branchId: h.branchId,
+      branchName: h.branchId ? branchMap.get(h.branchId) ?? null : null,
+      storeId: h.storeId,
+      storeName: storeMap.get(h.storeId) ?? '',
+      reference: h.reference,
+      amount: amountByDoc.get(h.id) ?? 0,
+      isLocked: h.isLocked,
+    }));
+  }
+
   // ---- writes ----
 
   async create(

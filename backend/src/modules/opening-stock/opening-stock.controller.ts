@@ -21,6 +21,16 @@ import {
   UpdateOpeningStockDto,
 } from './opening-stock.dto';
 
+type OsType = 'ITEM_RAW' | 'ITEM_PACKING' | 'PRODUCT_PACKED' | 'PRODUCT_UNPACKED';
+const OS_TYPES: readonly string[] = [
+  'ITEM_RAW',
+  'ITEM_PACKING',
+  'PRODUCT_PACKED',
+  'PRODUCT_UNPACKED',
+];
+const osType = (t?: string): OsType =>
+  OS_TYPES.includes(t ?? '') ? (t as OsType) : 'ITEM_RAW';
+
 /**
  * Opening Stock (Inventory) — the opening-balance document. Each line generates
  * a system batch number and writes a StockLedger stock-in row.
@@ -43,16 +53,17 @@ export class OpeningStockController {
     @BranchId() branchId: number | undefined,
     @Query('type') type?: string,
   ) {
-    const allowed = [
-      'ITEM_RAW',
-      'ITEM_PACKING',
-      'PRODUCT_PACKED',
-      'PRODUCT_UNPACKED',
-    ] as const;
-    const t = (allowed as readonly string[]).includes(type ?? '')
-      ? (type as (typeof allowed)[number])
-      : 'ITEM_RAW';
-    return this.service.lines(companyId, branchId, t);
+    return this.service.lines(companyId, branchId, osType(type));
+  }
+
+  /** One row per document (header listing). */
+  @Get('documents')
+  documents(
+    @CompanyId() companyId: number | undefined,
+    @BranchId() branchId: number | undefined,
+    @Query('type') type?: string,
+  ) {
+    return this.service.documents(companyId, branchId, osType(type));
   }
 
   @Get(':id')

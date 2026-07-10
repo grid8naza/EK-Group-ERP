@@ -75,7 +75,9 @@ export class OpeningStockService {
    * The two ITEM variants split items by their category's `forPacking` flag
    * (packing-material categories vs everything else = raw material).
    */
-  async lines(
+  /** OPENING_STOCK ledger rows for a company/branch, filtered to the stockable
+   *  type (raw/packing items by category.forPacking; packed/unpacked products). */
+  private async filteredLedger(
     companyId: number | undefined,
     branchId: number | undefined,
     type: 'ITEM_RAW' | 'ITEM_PACKING' | 'PRODUCT_PACKED' | 'PRODUCT_UNPACKED',
@@ -89,7 +91,6 @@ export class OpeningStockService {
       orderBy: { id: 'desc' },
     });
 
-    let filtered = rows;
     if (type === 'ITEM_RAW' || type === 'ITEM_PACKING') {
       const iids = [
         ...new Set(rows.filter((r) => r.itemId != null).map((r) => r.itemId!)),
@@ -106,23 +107,40 @@ export class OpeningStockService {
           .filter((i) => (i.category?.forPacking ?? false) === wantPacking)
           .map((i) => i.id),
       );
-      filtered = rows.filter((r) => r.itemId != null && ok.has(r.itemId));
-    } else {
-      const pids = [
-        ...new Set(rows.filter((r) => r.productId != null).map((r) => r.productId!)),
-      ];
-      const prods = pids.length
-        ? await this.prisma.product.findMany({
-            where: { id: { in: pids } },
-            select: { id: true, packed: true, unpacked: true },
-          })
-        : [];
-      const wantPacked = type === 'PRODUCT_PACKED';
-      const ok = new Set(
-        prods.filter((p) => (wantPacked ? p.packed : p.unpacked)).map((p) => p.id),
-      );
-      filtered = rows.filter((r) => r.productId != null && ok.has(r.productId));
+      return rows.filter((r) => r.itemId != null && ok.has(r.itemId));
     }
+    const pids = [
+      ...new Set(rows.filter((r) => r.productId != null).map((r) => r.productId!)),
+    ];
+    const prods = pids.length
+      ? await this.prisma.product.findMany({
+          where: { id: { in: pids } },
+          select: { id: true, packed: true, unpacked: true },
+        })
+      : [];
+    const wantPacked = type === 'PRODUCT_PACKED';
+    const ok = new Set(
+      prods.filter((p) => (wantPacked ? p.packed : p.unpacked)).map((p) => p.id),
+    );
+    return rows.filter((r) => r.productId != null && ok.has(r.productId));
+  }
+
+  /** One row per opening-stock DOCUMENT (for the header-level listing). */
+  async documents(
+    companyId: number | undefined,
+    branchId: number | undefined,
+    type: 'ITEM_RAW' | 'ITEM_PACKING' | 'PRODUCT_PACKED' | 'PRODUCT_UNPACKED',
+  ) {
+    const filtered = await this.filteredLedger(companyId, branchId, type);
+    return this.aggregateDocuments(filtered);
+  }
+
+  async lines(
+    companyId: number | undefined,
+    branchId: number | undefined,
+    type: 'ITEM_RAW' | 'ITEM_PACKING' | 'PRODUCT_PACKED' | 'PRODUCT_UNPACKED',
+  ) {
+    const filtered = await this.filteredLedger(companyId, branchId, type);
 
     const uniq = <T>(xs: (T | null | undefined)[]) =>
       [...new Set(xs.filter((x): x is T => x != null))];
@@ -197,6 +215,94 @@ export class OpeningStockService {
       unitSymbol: unitMap.get(r.unitId) ?? '',
       unitPrice: r.unitPrice,
       isLocked: lockMap.get(r.documentId) ?? false,
+    }));
+  }
+
+  /** Collapse ledger lines into one row per document (date, doc no, company,
+   *  branch, store, reference, total amount, lock) for the header listing. */
+  private async aggregateDocuments(
+    filtered: Array<{
+      documentId: number;
+      documentNo: string;
+      date: Date;
+      companyId: number;
+      branchId: number | null;
+      storeId: number;
+      reference: string | null;
+      qtyIn: number;
+      qtyOut: number;
+      unitPrice: number;
+    }>,
+  ) {
+    const byDoc = new Map<
+      number,
+      {
+        documentId: number;
+        docNo: string;
+        docDate: Date;
+        companyId: number;
+        branchId: number | null;
+        storeId: number;
+        reference: string | null;
+        amount: number;
+      }
+    >();
+    for (const r of filtered) {
+      const amount = (r.qtyIn + r.qtyOut) * (r.unitPrice ?? 0);
+      const cur = byDoc.get(r.documentId);
+      if (cur) cur.amount += amount;
+      else
+        byDoc.set(r.documentId, {
+          documentId: r.documentId,
+          docNo: r.documentNo,
+          docDate: r.date,
+          companyId: r.companyId,
+          branchId: r.branchId,
+          storeId: r.storeId,
+          reference: r.reference,
+          amount,
+        });
+    }
+    const docs = [...byDoc.values()];
+    const uniq = <T,>(xs: (T | null | undefined)[]) =>
+      [...new Set(xs.filter((x): x is T => x != null))];
+    const companyIds = uniq(docs.map((d) => d.companyId));
+    const branchIds = uniq(docs.map((d) => d.branchId));
+    const storeIds = uniq(docs.map((d) => d.storeId));
+    const docIds = docs.map((d) => d.documentId);
+
+    const [companies, branches, stores, headers] = await Promise.all([
+      companyIds.length
+        ? this.prisma.company.findMany({ where: { id: { in: companyIds } }, select: { id: true, name: true } })
+        : [],
+      branchIds.length
+        ? this.prisma.branch.findMany({ where: { id: { in: branchIds } }, select: { id: true, name: true } })
+        : [],
+      storeIds.length
+        ? this.prisma.store.findMany({ where: { id: { in: storeIds } }, select: { id: true, name: true } })
+        : [],
+      docIds.length
+        ? this.prisma.openingStock.findMany({ where: { id: { in: docIds } }, select: { id: true, isLocked: true } })
+        : [],
+    ]);
+    const companyMap = new Map(companies.map((x) => [x.id, x.name] as const));
+    const branchMap = new Map(branches.map((x) => [x.id, x.name] as const));
+    const storeMap = new Map(stores.map((x) => [x.id, x.name] as const));
+    const lockMap = new Map(headers.map((x) => [x.id, x.isLocked] as const));
+
+    return docs.map((d) => ({
+      id: d.documentId,
+      docNo: d.docNo,
+      docDate: d.docDate,
+      companyId: d.companyId,
+      companyName: companyMap.get(d.companyId) ?? '',
+      branchId: d.branchId,
+      branchName: d.branchId ? branchMap.get(d.branchId) ?? null : null,
+      storeId: d.storeId,
+      storeName: storeMap.get(d.storeId) ?? '',
+      reference: d.reference,
+      amount: d.amount,
+      isLocked: lockMap.get(d.documentId) ?? false,
     }));
   }
 

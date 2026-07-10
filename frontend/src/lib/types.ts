@@ -1235,6 +1235,22 @@ export interface StockTransactionLineRow extends OpeningStockLineRow {
   qty: number;
 }
 
+/** One row per stock DOCUMENT for the header-level listing. */
+export interface StockDocumentRow {
+  id: number; // document id
+  docNo: string;
+  docDate: string;
+  companyId: number;
+  companyName: string;
+  branchId?: number | null;
+  branchName?: string | null;
+  storeId: number;
+  storeName: string;
+  reference?: string | null;
+  amount: number;
+  isLocked: boolean;
+}
+
 export type OpeningStockType =
   | 'ITEM_RAW'
   | 'ITEM_PACKING'

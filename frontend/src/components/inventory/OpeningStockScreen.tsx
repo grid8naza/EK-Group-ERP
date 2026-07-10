@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ClipboardList, Plus, Trash2, X } from 'lucide-react';
+import { ClipboardList, Plus, Trash2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
@@ -20,7 +20,7 @@ import {
 import { Input, Select, Textarea, DateInput } from '@/components/ui/Field';
 import type {
   OpeningStock,
-  OpeningStockLineRow,
+  StockDocumentRow,
   OpeningStockType,
   Store,
   Item,
@@ -63,8 +63,8 @@ export function OpeningStockScreen({
   // Both ITEM variants draw from Item Master; products from Product Master.
   const isItem = type === 'ITEM_RAW' || type === 'ITEM_PACKING';
 
-  const { data: rows, loading, refetch } = useFetch<OpeningStockLineRow[]>(
-    `/opening-stock/lines?type=${type}`,
+  const { data: rows, loading, refetch } = useFetch<StockDocumentRow[]>(
+    `/opening-stock/documents?type=${type}`,
   );
   const { data: stores } = useFetch<Store[]>('/stores');
   const { data: items } = useFetch<Item[]>('/items');
@@ -126,66 +126,6 @@ export function OpeningStockScreen({
     () => (stores ?? []).find((s) => s.isDefault)?.id,
     [stores],
   );
-
-  // ---- filters (category / primary group / parent group), cascading ----
-  const [fCat, setFCat] = useState('');
-  const [fPrimary, setFPrimary] = useState('');
-  const [fParent, setFParent] = useState('');
-
-  const opt = (
-    list: OpeningStockLineRow[],
-    id: (r: OpeningStockLineRow) => number | null | undefined,
-    name: (r: OpeningStockLineRow) => string | null | undefined,
-  ) => {
-    const m = new Map<number, string>();
-    list.forEach((r) => {
-      const i = id(r);
-      if (i != null) m.set(i, name(r) ?? `#${i}`);
-    });
-    return [...m.entries()].map(([value, label]) => ({ value, label }));
-  };
-  const catOptions = useMemo(
-    () => opt(rows ?? [], (r) => r.categoryId, (r) => r.categoryName),
-    [rows],
-  );
-  const primaryOptions = useMemo(
-    () =>
-      opt(
-        (rows ?? []).filter((r) => !fCat || String(r.categoryId) === fCat),
-        (r) => r.primaryGroupId,
-        (r) => r.primaryGroupName,
-      ),
-    [rows, fCat],
-  );
-  const parentOptions = useMemo(
-    () =>
-      opt(
-        (rows ?? []).filter(
-          (r) =>
-            (!fCat || String(r.categoryId) === fCat) &&
-            (!fPrimary || String(r.primaryGroupId) === fPrimary),
-        ),
-        (r) => r.parentGroupId,
-        (r) => r.parentGroupName,
-      ),
-    [rows, fCat, fPrimary],
-  );
-  const filteredRows = useMemo(
-    () =>
-      (rows ?? []).filter(
-        (r) =>
-          (!fCat || String(r.categoryId) === fCat) &&
-          (!fPrimary || String(r.primaryGroupId) === fPrimary) &&
-          (!fParent || String(r.parentGroupId) === fParent),
-      ),
-    [rows, fCat, fPrimary, fParent],
-  );
-  const hasFilters = !!(fCat || fPrimary || fParent);
-  const clearFilters = () => {
-    setFCat('');
-    setFPrimary('');
-    setFParent('');
-  };
 
   // ---- overlay entry form ----
   const [open, setOpen] = useState(false);
@@ -263,22 +203,22 @@ export function OpeningStockScreen({
       })),
     );
   };
-  const openView = async (r: OpeningStockLineRow) => {
+  const openView = async (r: StockDocumentRow) => {
     try {
-      await loadDoc(r.documentId);
+      await loadDoc(r.id);
       setViewMode(true);
       setOpen(true);
     } catch {
       toast.error('Failed to open the document.');
     }
   };
-  const openEdit = async (r: OpeningStockLineRow) => {
+  const openEdit = async (r: StockDocumentRow) => {
     if (r.isLocked) {
       toast.error('This document is locked. Unlock it first to edit.');
       return;
     }
     try {
-      await loadDoc(r.documentId);
+      await loadDoc(r.id);
       setViewMode(false);
       setOpen(true);
     } catch {
@@ -367,7 +307,7 @@ export function OpeningStockScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, viewMode]);
 
-  const remove = async (r: OpeningStockLineRow) => {
+  const remove = async (r: StockDocumentRow) => {
     if (r.isLocked) {
       toast.error('This document is locked. Unlock it first to delete.');
       return;
@@ -380,7 +320,7 @@ export function OpeningStockScreen({
     });
     if (!ok) return;
     try {
-      await api.delete(`/opening-stock/${r.documentId}`);
+      await api.delete(`/opening-stock/${r.id}`);
       toast.success('Opening stock deleted.');
       refetch();
     } catch (e) {
@@ -388,7 +328,7 @@ export function OpeningStockScreen({
     }
   };
 
-  const toggleLock = async (r: OpeningStockLineRow) => {
+  const toggleLock = async (r: StockDocumentRow) => {
     const locking = !r.isLocked;
     if (locking) {
       const ok = await confirm({
@@ -399,7 +339,7 @@ export function OpeningStockScreen({
       if (!ok) return;
     }
     try {
-      await api.patch(`/opening-stock/${r.documentId}/lock`, { locked: locking });
+      await api.patch(`/opening-stock/${r.id}/lock`, { locked: locking });
       toast.success(locking ? 'Document locked.' : 'Document unlocked.');
       refetch();
     } catch (e) {
@@ -407,43 +347,38 @@ export function OpeningStockScreen({
     }
   };
 
-  const columns: Column<OpeningStockLineRow>[] = [
-    { key: 'docNo', header: 'Doc No', accessor: (r) => r.docNo },
-    { key: 'category', header: 'Category', accessor: (r) => r.categoryName ?? '—' },
-    { key: 'primaryGroup', header: 'Primary Group', accessor: (r) => r.primaryGroupName ?? '—' },
-    { key: 'parentGroup', header: 'Parent Group', accessor: (r) => r.parentGroupName ?? '—' },
+  const columns: Column<StockDocumentRow>[] = [
     {
-      key: 'name',
-      header: isItem ? 'Item' : 'Product',
+      key: 'docDate',
+      header: 'Date',
+      accessor: (r) => fmtDate(r.docDate),
+      sortable: true,
+      sortAccessor: (r) => r.docDate,
+    },
+    {
+      key: 'docNo',
+      header: 'Doc Number',
+      sortable: true,
+      sortAccessor: (r) => r.docNo,
       render: (r) => (
         <span className="font-medium text-slate-800 dark:text-slate-100">
-          {r.name}
+          {r.docNo}
         </span>
       ),
     },
-    { key: 'batchNo1', header: 'Batch No', accessor: (r) => r.batchNo1 ?? '—' },
-    { key: 'batchNo2', header: 'Supplier Batch', accessor: (r) => r.batchNo2 ?? '—' },
+    { key: 'reference', header: 'Reference', accessor: (r) => r.reference ?? '—' },
+    { key: 'company', header: 'Company', accessor: (r) => r.companyName },
+    { key: 'branch', header: 'Branch', accessor: (r) => r.branchName ?? '—' },
+    { key: 'store', header: 'Store', accessor: (r) => r.storeName },
     {
-      key: 'expiry',
-      header: 'Expiry',
-      accessor: (r) => (r.expiryDate ? fmtDate(r.expiryDate) : '—'),
-      className: 'text-center',
-      headerClassName: 'text-center',
-    },
-    {
-      key: 'qty',
-      header: 'Qty',
-      accessor: (r) => r.qtyIn.toLocaleString(),
+      key: 'amount',
+      header: 'Amount',
+      accessor: (r) =>
+        r.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
       className: 'text-right tabular-nums',
       headerClassName: 'text-right',
-    },
-    { key: 'unit', header: 'Unit', accessor: (r) => r.unitSymbol ?? '' },
-    {
-      key: 'rate',
-      header: 'Rate',
-      accessor: (r) => (r.unitPrice ?? 0).toLocaleString(),
-      className: 'text-right tabular-nums',
-      headerClassName: 'text-right',
+      sortable: true,
+      sortAccessor: (r) => r.amount,
     },
   ];
 
@@ -464,7 +399,7 @@ export function OpeningStockScreen({
 
       <DataTable
         columns={columns}
-        rows={filteredRows}
+        rows={rows ?? []}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
@@ -486,43 +421,6 @@ export function OpeningStockScreen({
           />
         )}
         emptyMessage="No opening stock entries yet"
-        toolbar={
-          <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={fCat}
-              onChange={(e) => {
-                setFCat(e.target.value);
-                setFPrimary('');
-                setFParent('');
-              }}
-              placeholder="All categories"
-              options={catOptions}
-              wrapClassName="w-44"
-            />
-            <Select
-              value={fPrimary}
-              onChange={(e) => {
-                setFPrimary(e.target.value);
-                setFParent('');
-              }}
-              placeholder="All primary groups"
-              options={primaryOptions}
-              wrapClassName="w-44"
-            />
-            <Select
-              value={fParent}
-              onChange={(e) => setFParent(e.target.value)}
-              placeholder="All parent groups"
-              options={parentOptions}
-              wrapClassName="w-44"
-            />
-            {hasFilters && (
-              <button className="btn-ghost text-xs text-slate-500" onClick={clearFilters}>
-                <X className="h-3.5 w-3.5" /> Clear
-              </button>
-            )}
-          </div>
-        }
       />
 
       {/* Overlay data-entry form */}
