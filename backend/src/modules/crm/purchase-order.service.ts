@@ -15,6 +15,7 @@ import {
   WorkflowPort,
   WorkflowStatus,
 } from '../../contracts/workflow.port';
+import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
 import {
   ActPurchaseOrderDto,
   CreatePurchaseOrderDto,
@@ -24,6 +25,8 @@ import {
 const CRM_MODULE_CODE = 'CRM';
 // The PO is received in the supplier's CRM; a workflow binds to this screen.
 const PO_IC_ROUTE = '/crm/purchase-orders-ic';
+// Document code the central numbering rules key on (see Document Master seed).
+const PO_IC_DOCUMENT_CODE = 'PURCHASE_ORDER_IC';
 
 // Workflow instance status → purchase-order status.
 const STATUS_MAP: Record<WorkflowStatus, PurchaseOrderStatus> = {
@@ -42,6 +45,7 @@ export class PurchaseOrderService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(WORKFLOW) private readonly workflow: WorkflowPort,
+    @Inject(NUMBERING) private readonly numbering: NumberingPort,
   ) {}
 
   /**
@@ -434,8 +438,7 @@ export class PurchaseOrderService {
     attempts = 5,
   ): Promise<T> {
     for (let i = 0; ; i++) {
-      const n = await this.prisma.purchaseOrder.count({ where: { companyId } });
-      const orderNo = `PO-${String(n + 1 + i).padStart(5, '0')}`;
+      const orderNo = await this.nextOrderNo(companyId, i);
       try {
         return await fn(orderNo);
       } catch (e) {
@@ -449,5 +452,18 @@ export class PurchaseOrderService {
         throw e;
       }
     }
+  }
+
+  /**
+   * The next Purchase Order - IC number for the supplier company. Prefers the
+   * company's configured Document Numbering rule (which advances its own counter,
+   * so each retry yields a fresh number); falls back to the built-in PO-##### when
+   * no rule is set for this document.
+   */
+  private async nextOrderNo(companyId: number, attempt: number): Promise<string> {
+    const configured = await this.numbering.next(companyId, PO_IC_DOCUMENT_CODE);
+    if (configured) return configured;
+    const n = await this.prisma.purchaseOrder.count({ where: { companyId } });
+    return `PO-${String(n + 1 + attempt).padStart(5, '0')}`;
   }
 }
