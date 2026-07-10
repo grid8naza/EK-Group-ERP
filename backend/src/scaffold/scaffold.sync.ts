@@ -188,6 +188,40 @@ async function migrateOpeningStockMenu(
 }
 
 /**
+ * One-time rename: "Inventory Transactions" main menu → "Inventory Vouchers"
+ * (the old label wrapped to two lines), and the Goods Issue Note screen loses
+ * its "(Consumption)" suffix. Idempotent — no-op once renamed.
+ */
+async function migrateInventoryVoucherMenu(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  const inv = await prisma.module.findUnique({
+    where: { code: 'INVENTORY' },
+    select: { id: true },
+  });
+  if (!inv) return;
+
+  await prisma.mainMenu.updateMany({
+    where: { moduleId: inv.id, menuName: 'Inventory Transactions' },
+    data: { menuName: 'Inventory Vouchers' },
+  });
+  await prisma.subMenu.updateMany({
+    where: {
+      route: '/inventory/goods-issue-note',
+      subMenuName: 'Goods Issue Note (Consumption)',
+    },
+    data: { subMenuName: 'Goods Issue Note' },
+  });
+  await prisma.objectMaster.updateMany({
+    where: {
+      route: '/inventory/goods-issue-note',
+      objectName: 'Goods Issue Note (Consumption)',
+    },
+    data: { objectName: 'Goods Issue Note', nameInMenu: 'Goods Issue Note' },
+  });
+}
+
+/**
  * Idempotent, additive sync of the module/menu scaffold declared in
  * MODULE_SCAFFOLDS. Run once on every app start so a pulled codebase brings each
  * developer's database up to date without manual SQL or a reseed.
@@ -216,6 +250,11 @@ export async function syncScaffold(
   // 0c) Move the Opening Stock screens out of the Inventory menu into their own
   //     "Opening Stock" main menu. Same ordering constraint as above.
   await migrateOpeningStockMenu(prisma);
+
+  // 0d) Rename the Inventory Transactions menu → Inventory Vouchers (fits on one
+  //     line) and drop the "(Consumption)" suffix from Goods Issue Note. Must run
+  //     before the sync so the extra menu is matched by its new name.
+  await migrateInventoryVoucherMenu(prisma);
 
   // 1) Module catalog — register/update. Never flips an existing module's global
   //    isActive (preserves an admin's enable/disable choice).

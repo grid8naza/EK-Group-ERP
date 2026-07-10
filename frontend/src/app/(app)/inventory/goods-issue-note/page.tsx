@@ -8,7 +8,7 @@ export default function GoodsIssueNotePage() {
       type="CONSUMPTION"
       inbound={false}
       route="/inventory/goods-issue-note"
-      title="Goods Issue Note (Consumption)"
+      title="Goods Issue Note"
       noun="goods issue"
     />
   );
