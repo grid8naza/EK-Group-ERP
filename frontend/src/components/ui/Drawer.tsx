@@ -10,8 +10,8 @@ interface DrawerProps {
   title?: string;
   subtitle?: string;
   icon?: React.ReactNode;
-  /** sm | md | lg | xl */
-  width?: 'sm' | 'md' | 'lg' | 'xl';
+  /** sm | md | lg | xl | full (fullscreen) */
+  width?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
   children: React.ReactNode;
   footer?: React.ReactNode;
 }
@@ -21,6 +21,7 @@ const WIDTHS: Record<NonNullable<DrawerProps['width']>, string> = {
   md: 'max-w-xl',
   lg: 'max-w-3xl',
   xl: 'max-w-5xl',
+  full: 'max-w-none', // fullscreen — the panel fills the viewport
 };
 
 export function Drawer({
@@ -148,6 +149,8 @@ interface DrawerFooterProps {
    * dialogs (backup, password, assignments), which keep a single action button.
    */
   dataEntry?: boolean;
+  /** Extra content shown at the start of the row (e.g. an "Add line" button). */
+  leading?: React.ReactNode;
 }
 
 /**
@@ -163,6 +166,7 @@ export function DrawerFooter({
   saving,
   saveLabel = 'Save',
   dataEntry = false,
+  leading,
 }: DrawerFooterProps) {
   // App-wide form shortcuts (active while a drawer footer is mounted):
   //   Ctrl/⌘+S        → Save (keeps the form open on data-entry forms)
@@ -186,6 +190,7 @@ export function DrawerFooter({
 
   return (
     <div className="flex flex-nowrap items-center justify-end gap-2">
+      {leading && <div className="mr-auto">{leading}</div>}
       <button
         type="button"
         className="btn-success whitespace-nowrap"

@@ -538,7 +538,7 @@ export function OpeningStockScreen({
         }
         subtitle="Opening balance document"
         icon={<ClipboardList className="h-5 w-5" />}
-        width="xl"
+        width="full"
         footer={
           viewMode ? (
             <CloseFooter onClose={closeOverlay} />
@@ -548,12 +548,18 @@ export function OpeningStockScreen({
               onSave={doSave}
               saving={saving}
               dataEntry
+              leading={
+                <button className="btn-secondary" onClick={addLine}>
+                  <Plus className="h-4 w-4" /> Add line <Kbd>Alt+A</Kbd>
+                </button>
+              }
             />
           )
         }
       >
-        <div className="space-y-5">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="mx-auto flex h-full w-full max-w-[1400px] flex-col gap-4">
+          {/* Frozen header pane — stays put while the lines scroll. */}
+          <div className="flex-none grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Select
               label="Store"
               required
@@ -579,21 +585,12 @@ export function OpeningStockScreen({
             />
           </div>
 
-          <div>
-            <div className="mb-2 flex items-center justify-between">
-              <span className="label !mb-0">
-                {isItem ? 'Items' : 'Products'}
-              </span>
-              {!viewMode && (
-                <button className="btn-secondary text-xs" onClick={addLine}>
-                  <Plus className="h-3.5 w-3.5" /> Add line <Kbd>Alt+A</Kbd>
-                </button>
-              )}
-            </div>
-            <div className="overflow-x-auto">
+          {/* Scrollable lines — the column headings stick to the top. */}
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 dark:border-slate-800">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700">
+                  <tr className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-900">
                     <th className="py-2 pr-2">{isItem ? 'Item' : 'Product'}</th>
                     {viewMode && <th className="py-2 px-1">Batch No</th>}
                     <th className="py-2 px-1">Supplier Batch</th>
