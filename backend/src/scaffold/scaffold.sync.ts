@@ -12,6 +12,9 @@ const RETIRED_ROUTES: string[] = [
   '/inventory/products', // split into products-unpacked + products-packed
   '/crm/place-order', // renamed to /crm/purchase-orders-ic
   '/inventory/opening-stock', // split into items / products-packed / products-unpacked
+  '/inventory/opening-stock-items', // split into raw-material + packing-material
+  '/inventory/opening-stock-products-packed', // renamed to opening-stock-packed-products
+  '/inventory/opening-stock-products-unpacked', // renamed to opening-stock-unpacked-products
 ];
 
 async function cleanupRetiredRoutes(

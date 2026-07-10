@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
 import {
@@ -6,6 +10,10 @@ import {
   UpdatePrivilegesDto,
   UpdateUserGroupDto,
 } from './user-group.dto';
+
+// The built-in full-access admin group (created by company-provisioning and
+// granted new screens by the scaffold sync). Kept permanently locked.
+const ADMIN_GROUP_NAME = 'Administrators';
 
 @Injectable()
 export class UserGroupService {
@@ -113,7 +121,15 @@ export class UserGroupService {
   }
 
   async setLock(id: number, locked: boolean) {
-    await this.findOne(id);
+    const existing = await this.findOne(id);
+    // The Administrators group is permanently locked: it protects the full-
+    // access admin definition from edits/deletes, so it can never be unlocked
+    // (guards the single toggle and the bulk "Unlock all" alike).
+    if (!locked && existing.name === ADMIN_GROUP_NAME) {
+      throw new ForbiddenException(
+        'The Administrators group is permanently locked and cannot be unlocked.',
+      );
+    }
     return this.prisma.userGroup.update({
       where: { id },
       data: { isLocked: locked },

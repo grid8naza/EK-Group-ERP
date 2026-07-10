@@ -20,17 +20,20 @@ export const INVENTORY_SUBS = [
   { name: 'Products - Unpacked', route: '/inventory/products-unpacked', icon: 'package-2', order: 6 },
   { name: 'Products - Packed', route: '/inventory/products-packed', icon: 'package', order: 7 },
   // Stock locations + the stock-movement documents. Opening Stock is entered
-  // separately per stockable type (items / packed / unpacked products).
+  // separately per stockable type: raw-material items, packing-material items,
+  // unpacked products and packed products. Menu labels use the short "OS -"
+  // prefix so they stay readable in the sidebar.
   { name: 'Store Master', route: '/inventory/stores', icon: 'warehouse', order: 8 },
-  { name: 'Opening Stock - Items', route: '/inventory/opening-stock-items', icon: 'clipboard-list', order: 9 },
-  { name: 'Opening Stock - Products (Packed)', route: '/inventory/opening-stock-products-packed', icon: 'clipboard-list', order: 10 },
-  { name: 'Opening Stock - Products (Unpacked)', route: '/inventory/opening-stock-products-unpacked', icon: 'clipboard-list', order: 11 },
+  { name: 'OS - Raw Material', route: '/inventory/opening-stock-raw-material', icon: 'clipboard-list', order: 9 },
+  { name: 'OS - Packing Material', route: '/inventory/opening-stock-packing-material', icon: 'clipboard-list', order: 10 },
+  { name: 'OS - Unpacked Products', route: '/inventory/opening-stock-unpacked-products', icon: 'clipboard-list', order: 11 },
+  { name: 'OS - Packed Products', route: '/inventory/opening-stock-packed-products', icon: 'clipboard-list', order: 12 },
   // Per-module reference data. Super-admin-only; isolated from other modules.
   {
     name: 'Lookups',
     route: '/inventory/lookups',
     icon: 'list',
-    order: 12,
+    order: 13,
     superAdminOnly: true,
   },
 ];

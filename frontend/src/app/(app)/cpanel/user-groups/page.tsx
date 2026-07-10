@@ -452,14 +452,18 @@ export default function UserGroupsPage() {
           </button>
         )}
         bulkLock={bulkLock}
-        renderLock={(r) => (
-          <LockButton
-            locked={r.isLocked}
-            canLock={canLock}
-            canUnlock={canUnlock}
-            onToggle={() => toggleLock(r)}
-          />
-        )}
+        renderLock={(r) => {
+          // The Administrators group is permanently locked — never offer unlock.
+          const protectedGroup = r.name === 'Administrators';
+          return (
+            <LockButton
+              locked={r.isLocked}
+              canLock={canLock}
+              canUnlock={protectedGroup ? false : canUnlock}
+              onToggle={() => toggleLock(r)}
+            />
+          );
+        }}
       />
 
       {/* Group drawer */}

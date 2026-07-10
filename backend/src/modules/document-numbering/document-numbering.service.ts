@@ -184,11 +184,23 @@ export class DocumentNumberingService implements NumberingPort {
     const prefix = rule.prefixEnabled ? rule.prefixValue ?? '' : '';
     const suffix = rule.suffixEnabled ? rule.suffixValue ?? '' : '';
     const period = this.periodToken(rule.renumber, date);
-    // The month/year token sits before or after the configured suffix.
-    if (period && rule.periodPosition === 'AFTER_SUFFIX') {
-      return `${prefix}${body}${suffix}${period}`;
+    if (!period) return `${prefix}${body}${suffix}`;
+    // The month/year token sits before or after the configured suffix, joined
+    // with a "/" separator — but only when what precedes it doesn't already end
+    // in a separator (e.g. a suffix like "/EKG/" already supplies the slash).
+    if (rule.periodPosition === 'AFTER_SUFFIX') {
+      const base = `${prefix}${body}${suffix}`;
+      return base + this.joinPeriod(base, period);
     }
-    return `${prefix}${body}${period}${suffix}`;
+    const base = `${prefix}${body}`;
+    return base + this.joinPeriod(base, period) + suffix;
+  }
+
+  /** Prefix the period token with a "/" separator unless `base` already ends in one. */
+  private joinPeriod(base: string, period: string): string {
+    const last = base.slice(-1);
+    const needsSep = !!last && /[A-Za-z0-9]/.test(last);
+    return (needsSep ? '/' : '') + period;
   }
 
   /** Bucket the counter resets by: month, year, or a single all-time bucket. */
@@ -204,8 +216,8 @@ export class DocumentNumberingService implements NumberingPort {
   private periodToken(renumber: NumberingRenumber, date: Date): string {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
-    if (renumber === 'MONTHLY') return `-${m}-${y}`; // e.g. -07-2026
-    if (renumber === 'YEARLY') return `${y}`; // e.g. 2026 (no leading hyphen)
+    if (renumber === 'MONTHLY') return `${m}-${y}`; // e.g. 07-2026
+    if (renumber === 'YEARLY') return `${y}`; // e.g. 2026
     return '';
   }
 }

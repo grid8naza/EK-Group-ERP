@@ -693,7 +693,8 @@ export default function UsersPage() {
           <LockButton
             locked={r.isLocked}
             canLock={canLock}
-            canUnlock={canUnlock}
+            // The super admin account is permanently locked — never offer unlock.
+            canUnlock={r.isSuperAdmin ? false : canUnlock}
             onToggle={() => toggleLock(r)}
           />
         )}

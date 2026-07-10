@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -325,7 +329,14 @@ export class UserService {
   }
 
   async setLock(id: number, locked: boolean) {
-    await this.ensureUser(id);
+    const existing = await this.ensureUser(id);
+    // The super admin account is permanently locked and can never be unlocked
+    // (guards the single toggle and the bulk "Unlock all" alike).
+    if (!locked && existing.isSuperAdmin) {
+      throw new ForbiddenException(
+        'The super admin account is permanently locked and cannot be unlocked.',
+      );
+    }
     return this.prisma.user.update({
       where: { id },
       data: { isLocked: locked },

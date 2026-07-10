@@ -43,8 +43,15 @@ export class OpeningStockController {
     @BranchId() branchId: number | undefined,
     @Query('type') type?: string,
   ) {
-    const t =
-      type === 'PRODUCT_PACKED' || type === 'PRODUCT_UNPACKED' ? type : 'ITEM';
+    const allowed = [
+      'ITEM_RAW',
+      'ITEM_PACKING',
+      'PRODUCT_PACKED',
+      'PRODUCT_UNPACKED',
+    ] as const;
+    const t = (allowed as readonly string[]).includes(type ?? '')
+      ? (type as (typeof allowed)[number])
+      : 'ITEM_RAW';
     return this.service.lines(companyId, branchId, t);
   }
 
@@ -77,7 +84,14 @@ export class OpeningStockController {
     return this.service.remove(id);
   }
 
-  @UseGuards(LockPrivilegeGuard('/inventory/opening-stock-items'))
+  @UseGuards(
+    LockPrivilegeGuard([
+      '/inventory/opening-stock-raw-material',
+      '/inventory/opening-stock-packing-material',
+      '/inventory/opening-stock-unpacked-products',
+      '/inventory/opening-stock-packed-products',
+    ]),
+  )
   @Patch(':id/lock')
   setLock(@Param('id', ParseIntPipe) id: number, @Body() dto: LockDto) {
     return this.service.setLock(id, dto.locked);

@@ -421,8 +421,8 @@ export default function DocumentNumberingPage() {
         {showPeriod && (
           <p className="mt-3 text-xs text-slate-400">
             {form.renumber === 'MONTHLY'
-              ? 'Counter resets each month and appends the month-year (e.g. -07-2026).'
-              : 'Counter resets each year and appends the year (e.g. -2026).'}
+              ? 'Counter resets each month and appends the month-year (e.g. /07-2026).'
+              : 'Counter resets each year and appends the year (e.g. /2026).'}
           </p>
         )}
       </Drawer>

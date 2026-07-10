@@ -71,12 +71,14 @@ export class OpeningStockService {
 
   /**
    * Flat, enriched opening-stock LINES for a stockable type, for the line-grid
-   * listing. type: ITEM | PRODUCT_PACKED | PRODUCT_UNPACKED.
+   * listing. type: ITEM_RAW | ITEM_PACKING | PRODUCT_PACKED | PRODUCT_UNPACKED.
+   * The two ITEM variants split items by their category's `forPacking` flag
+   * (packing-material categories vs everything else = raw material).
    */
   async lines(
     companyId: number | undefined,
     branchId: number | undefined,
-    type: 'ITEM' | 'PRODUCT_PACKED' | 'PRODUCT_UNPACKED',
+    type: 'ITEM_RAW' | 'ITEM_PACKING' | 'PRODUCT_PACKED' | 'PRODUCT_UNPACKED',
   ) {
     const rows = await this.prisma.stockLedger.findMany({
       where: {
@@ -88,8 +90,23 @@ export class OpeningStockService {
     });
 
     let filtered = rows;
-    if (type === 'ITEM') {
-      filtered = rows.filter((r) => r.itemId != null);
+    if (type === 'ITEM_RAW' || type === 'ITEM_PACKING') {
+      const iids = [
+        ...new Set(rows.filter((r) => r.itemId != null).map((r) => r.itemId!)),
+      ];
+      const its = iids.length
+        ? await this.prisma.item.findMany({
+            where: { id: { in: iids } },
+            select: { id: true, category: { select: { forPacking: true } } },
+          })
+        : [];
+      const wantPacking = type === 'ITEM_PACKING';
+      const ok = new Set(
+        its
+          .filter((i) => (i.category?.forPacking ?? false) === wantPacking)
+          .map((i) => i.id),
+      );
+      filtered = rows.filter((r) => r.itemId != null && ok.has(r.itemId));
     } else {
       const pids = [
         ...new Set(rows.filter((r) => r.productId != null).map((r) => r.productId!)),

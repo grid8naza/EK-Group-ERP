@@ -19,6 +19,7 @@ import type {
   Store,
   Item,
   Product,
+  Category,
 } from '@/lib/types';
 
 type DraftLine = {
@@ -53,12 +54,16 @@ export function OpeningStockScreen({
   const toast = useToast();
   const confirm = useConfirm();
 
+  // Both ITEM variants draw from Item Master; products from Product Master.
+  const isItem = type === 'ITEM_RAW' || type === 'ITEM_PACKING';
+
   const { data: rows, loading, refetch } = useFetch<OpeningStockLineRow[]>(
     `/opening-stock/lines?type=${type}`,
   );
   const { data: stores } = useFetch<Store[]>('/stores');
   const { data: items } = useFetch<Item[]>('/items');
   const { data: products } = useFetch<Product[]>('/products');
+  const { data: categories } = useFetch<Category[]>('/categories');
 
   const canAdd = can(route, 'add');
   const canEditPriv = can(route, 'edit');
@@ -69,12 +74,23 @@ export function OpeningStockScreen({
 
   // ---- pickable stockables for this screen's type ----
   const pickable = useMemo(() => {
-    if (type === 'ITEM') {
-      return (items ?? []).map((i) => ({
-        id: i.id,
-        name: i.name,
-        unit: i.unit?.symbol ?? i.unit?.code ?? '',
-      }));
+    if (isItem) {
+      // Packing-material categories carry `forPacking`; everything else (incl.
+      // uncategorised items) is raw material.
+      const packingCatIds = new Set(
+        (categories ?? []).filter((c) => c.forPacking).map((c) => c.id),
+      );
+      const wantPacking = type === 'ITEM_PACKING';
+      return (items ?? [])
+        .filter((i) => {
+          const isPacking = i.categoryId != null && packingCatIds.has(i.categoryId);
+          return wantPacking ? isPacking : !isPacking;
+        })
+        .map((i) => ({
+          id: i.id,
+          name: i.name,
+          unit: i.unit?.symbol ?? i.unit?.code ?? '',
+        }));
     }
     const wantPacked = type === 'PRODUCT_PACKED';
     return (products ?? [])
@@ -84,7 +100,7 @@ export function OpeningStockScreen({
         name: p.name,
         unit: p.unit?.symbol ?? p.unit?.code ?? '',
       }));
-  }, [type, items, products]);
+  }, [type, isItem, items, products, categories]);
   const pickById = useMemo(
     () => new Map(pickable.map((p) => [String(p.id), p])),
     [pickable],
@@ -243,8 +259,8 @@ export function OpeningStockScreen({
     lines
       .filter((l) => l.key && Number(l.quantity) > 0)
       .map((l) => ({
-        itemId: type === 'ITEM' ? Number(l.key) : undefined,
-        productId: type !== 'ITEM' ? Number(l.key) : undefined,
+        itemId: isItem ? Number(l.key) : undefined,
+        productId: !isItem ? Number(l.key) : undefined,
         quantity: Number(l.quantity),
         unitPrice: l.unitPrice ? Number(l.unitPrice) : 0,
         batchNo2: l.batchNo2.trim() || undefined,
@@ -328,7 +344,7 @@ export function OpeningStockScreen({
     { key: 'parentGroup', header: 'Parent Group', accessor: (r) => r.parentGroupName ?? '—' },
     {
       key: 'name',
-      header: type === 'ITEM' ? 'Item' : 'Product',
+      header: isItem ? 'Item' : 'Product',
       render: (r) => (
         <span className="font-medium text-slate-800 dark:text-slate-100">
           {r.name}
@@ -502,7 +518,7 @@ export function OpeningStockScreen({
           <div>
             <div className="mb-2 flex items-center justify-between">
               <span className="label !mb-0">
-                {type === 'ITEM' ? 'Items' : 'Products'}
+                {isItem ? 'Items' : 'Products'}
               </span>
               {!viewMode && (
                 <button className="btn-secondary text-xs" onClick={addLine}>
@@ -514,7 +530,7 @@ export function OpeningStockScreen({
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700">
-                    <th className="py-2 pr-2">{type === 'ITEM' ? 'Item' : 'Product'}</th>
+                    <th className="py-2 pr-2">{isItem ? 'Item' : 'Product'}</th>
                     {viewMode && <th className="py-2 px-1">Batch No</th>}
                     <th className="py-2 px-1">Supplier Batch</th>
                     <th className="w-32 py-2 px-1">Expiry</th>
@@ -546,7 +562,7 @@ export function OpeningStockScreen({
                               <Select
                                 value={l.key}
                                 onChange={(e) => setLine(i, { key: e.target.value })}
-                                placeholder={`Select ${type === 'ITEM' ? 'item' : 'product'}`}
+                                placeholder={`Select ${isItem ? 'item' : 'product'}`}
                                 options={pickOptions}
                               />
                             )}

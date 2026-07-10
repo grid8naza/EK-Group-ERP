@@ -1185,7 +1185,11 @@ export interface OpeningStockLineRow {
   isLocked: boolean;
 }
 
-export type OpeningStockType = 'ITEM' | 'PRODUCT_PACKED' | 'PRODUCT_UNPACKED';
+export type OpeningStockType =
+  | 'ITEM_RAW'
+  | 'ITEM_PACKING'
+  | 'PRODUCT_PACKED'
+  | 'PRODUCT_UNPACKED';
 
 // ---- Document master & numbering ----
 export interface DocumentMaster {

@@ -2,12 +2,12 @@
 
 import { OpeningStockScreen } from '@/components/inventory/OpeningStockScreen';
 
-export default function OpeningStockProductsUnpackedPage() {
+export default function OpeningStockUnpackedProductsPage() {
   return (
     <OpeningStockScreen
       type="PRODUCT_UNPACKED"
-      route="/inventory/opening-stock-products-unpacked"
-      title="Opening Stock - Products (Unpacked)"
+      route="/inventory/opening-stock-unpacked-products"
+      title="Opening Stock - Unpacked Products"
       noun="unpacked product"
     />
   );
