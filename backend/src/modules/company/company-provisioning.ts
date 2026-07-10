@@ -6,25 +6,34 @@ import { ObjectType, Prisma } from '@prisma/client';
  * runtime "create company" endpoint so the two never drift apart.
  */
 
-// Cpanel sub-menu screens (shared routes; data is company-scoped at runtime).
+// Cpanel is split across two main menus (shared routes; data is company-scoped
+// at runtime): "Admin Setup" hosts the application-wide setup screens, and
+// "Company Setup" hosts everything company/user/document related.
+// CPANEL_SUBS = the Admin Setup menu.
 export const CPANEL_SUBS = [
   { name: 'Object Master', route: '/cpanel/objects', icon: 'database', order: 1 },
   { name: 'Module Master', route: '/cpanel/modules', icon: 'layers', order: 2 },
   { name: 'Menu Setup', route: '/cpanel/menus', icon: 'menu', order: 3 },
-  { name: 'User Groups', route: '/cpanel/user-groups', icon: 'shield', order: 4 },
-  { name: 'Dashboards', route: '/cpanel/dashboards', icon: 'layout-dashboard', order: 5 },
-  { name: 'Widgets', route: '/cpanel/widgets', icon: 'box', order: 6 },
-  { name: 'Company Master', route: '/cpanel/companies', icon: 'building', order: 7 },
-  { name: 'Currency Master', route: '/cpanel/currencies', icon: 'wallet', order: 8 },
-  { name: 'Lookups', route: '/cpanel/lookups', icon: 'list', order: 9 },
-  { name: 'Users & Data Security', route: '/cpanel/users', icon: 'users', order: 10 },
-  { name: 'Backup & Restore', route: '/cpanel/backup', icon: 'database-backup', order: 11 },
-  { name: 'Login Screen Setup', route: '/cpanel/login-screen', icon: 'image', order: 12 },
-  { name: 'Workflow Setup', route: '/cpanel/workflows', icon: 'git-branch', order: 13 },
-  { name: 'Approval Statuses', route: '/cpanel/approval-statuses', icon: 'shieldcheck', order: 14 },
-  { name: 'Software Information', route: '/cpanel/software-info', icon: 'info', order: 15 },
-  { name: 'Document Master', route: '/cpanel/documents', icon: 'file-text', order: 16 },
-  { name: 'Document Numbering', route: '/cpanel/document-numbering', icon: 'hash', order: 17 },
+  { name: 'Lookups', route: '/cpanel/lookups', icon: 'list', order: 4 },
+  { name: 'Backup & Restore', route: '/cpanel/backup', icon: 'database-backup', order: 5 },
+  { name: 'Login Screen Setup', route: '/cpanel/login-screen', icon: 'image', order: 6 },
+  { name: 'Software Information', route: '/cpanel/software-info', icon: 'info', order: 7 },
+];
+
+// CPANEL_COMPANY_SUBS = the Company Setup menu (all other Cpanel screens). Order
+// mirrors the screens' former positions so a migrated DB and a fresh install
+// render the same list.
+export const CPANEL_COMPANY_SUBS = [
+  { name: 'User Groups', route: '/cpanel/user-groups', icon: 'shield', order: 1 },
+  { name: 'Dashboards', route: '/cpanel/dashboards', icon: 'layout-dashboard', order: 2 },
+  { name: 'Widgets', route: '/cpanel/widgets', icon: 'box', order: 3 },
+  { name: 'Company Master', route: '/cpanel/companies', icon: 'building', order: 4 },
+  { name: 'Currency Master', route: '/cpanel/currencies', icon: 'wallet', order: 5 },
+  { name: 'Users & Data Security', route: '/cpanel/users', icon: 'users', order: 6 },
+  { name: 'Workflow Setup', route: '/cpanel/workflows', icon: 'git-branch', order: 7 },
+  { name: 'Approval Statuses', route: '/cpanel/approval-statuses', icon: 'shieldcheck', order: 8 },
+  { name: 'Document Master', route: '/cpanel/documents', icon: 'file-text', order: 9 },
+  { name: 'Document Numbering', route: '/cpanel/document-numbering', icon: 'hash', order: 10 },
 ];
 
 export interface ProvisionResult {
@@ -53,57 +62,78 @@ export async function provisionCompanyCpanel(
   }
   const cpanelId = cpanel.id;
 
-  // Idempotency guard: never double-provision a company.
+  // Idempotency guard: never double-provision a company. Matched by module (not
+  // menu name) so a renamed/split Cpanel menu still counts as provisioned.
   const existing = await prisma.mainMenu.findFirst({
-    where: { companyId, moduleId: cpanelId, menuName: 'Cpanel' },
+    where: { companyId, moduleId: cpanelId },
   });
   if (existing) return null;
 
-  // ---- Cpanel main menu + sub-menus ----
-  const cpanelMain = await prisma.mainMenu.create({
-    data: {
-      companyId,
-      moduleId: cpanelId,
-      menuName: 'Cpanel',
-      sortOrder: 1,
-      objectType: ObjectType.FORM,
-      isUserMenu: true,
-      icon: 'settings',
-    },
-  });
-  // Sub-menus, batched. createMany doesn't return ids, so read them back
-  // (ordered) for the privilege rows below.
-  await prisma.subMenu.createMany({
-    data: CPANEL_SUBS.map((s) => ({
-      mainMenuId: cpanelMain.id,
-      subMenuName: s.name,
-      route: s.route,
-      icon: s.icon,
-      sortOrder: s.order,
-      objectType: ObjectType.FORM,
-    })),
-  });
-  const cpanelSubIds = (
-    await prisma.subMenu.findMany({
-      where: { mainMenuId: cpanelMain.id },
-      select: { id: true },
-      orderBy: { sortOrder: 'asc' },
-    })
-  ).map((s) => s.id);
+  // ---- Two Cpanel main menus: Admin Setup + Company Setup ----
+  const createMenu = async (
+    menuName: string,
+    icon: string,
+    sortOrder: number,
+    subs: typeof CPANEL_SUBS,
+  ) => {
+    const main = await prisma.mainMenu.create({
+      data: {
+        companyId,
+        moduleId: cpanelId,
+        menuName,
+        sortOrder,
+        objectType: ObjectType.FORM,
+        isUserMenu: true,
+        icon,
+      },
+    });
+    // createMany doesn't return ids, so read them back for the privilege rows.
+    await prisma.subMenu.createMany({
+      data: subs.map((s) => ({
+        mainMenuId: main.id,
+        subMenuName: s.name,
+        route: s.route,
+        icon: s.icon,
+        sortOrder: s.order,
+        objectType: ObjectType.FORM,
+      })),
+    });
+    const subIds = (
+      await prisma.subMenu.findMany({
+        where: { mainMenuId: main.id },
+        select: { id: true },
+      })
+    ).map((s) => s.id);
+    return { main, subIds };
+  };
 
-  // ---- Administrators group with full Cpanel privileges ----
+  const adminMenu = await createMenu('Admin Setup', 'settings', 1, CPANEL_SUBS);
+  const companyMenu = await createMenu(
+    'Company Setup',
+    'building',
+    2,
+    CPANEL_COMPANY_SUBS,
+  );
+  const cpanelSubIds = [...adminMenu.subIds, ...companyMenu.subIds];
+
+  // ---- Administrators group with full Cpanel privileges (permanently locked) ----
   const adminGroup = await prisma.userGroup.create({
     data: {
       companyId,
       name: 'Administrators',
       description: 'Full access to enabled modules.',
+      isLocked: true,
     },
   });
   await prisma.userGroupModule.create({
     data: { userGroupId: adminGroup.id, moduleId: cpanelId },
   });
-  await prisma.groupMainMenuAccess.create({
-    data: { userGroupId: adminGroup.id, mainMenuId: cpanelMain.id, visible: true },
+  await prisma.groupMainMenuAccess.createMany({
+    data: [adminMenu.main.id, companyMenu.main.id].map((mainMenuId) => ({
+      userGroupId: adminGroup.id,
+      mainMenuId,
+      visible: true,
+    })),
   });
   await prisma.groupSubMenuPrivilege.createMany({
     data: cpanelSubIds.map((subMenuId) => ({
@@ -119,7 +149,7 @@ export async function provisionCompanyCpanel(
     })),
   });
 
-  return { adminGroup, cpanelMain, cpanelSubIds };
+  return { adminGroup, cpanelMain: adminMenu.main, cpanelSubIds };
 }
 
 /**

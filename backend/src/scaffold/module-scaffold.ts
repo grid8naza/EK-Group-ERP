@@ -1,6 +1,7 @@
 import { ObjectType, Prisma } from '@prisma/client';
 import {
   CPANEL_SUBS,
+  CPANEL_COMPANY_SUBS,
   seedCpanelDefaults,
 } from '../modules/company/company-provisioning';
 import {
@@ -88,8 +89,13 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     sortOrder: 1,
     isCore: true,
     description: 'Control panel: configure the whole application.',
-    menu: { name: 'Cpanel', icon: 'settings' },
+    // The Cpanel module is split across two main menus: "Admin Setup" (primary)
+    // and "Company Setup" (extra). Existing DBs are migrated by the sync.
+    menu: { name: 'Admin Setup', icon: 'settings' },
     subs: CPANEL_SUBS,
+    extraMenus: [
+      { name: 'Company Setup', icon: 'building', subs: CPANEL_COMPANY_SUBS },
+    ],
     objectSystem: true,
     seedData: seedCpanelDefaults,
   },

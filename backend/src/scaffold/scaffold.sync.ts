@@ -1,5 +1,6 @@
 import { ObjectType, Prisma } from '@prisma/client';
 import { MODULE_SCAFFOLDS, type ModuleScaffold } from './module-scaffold';
+import { CPANEL_COMPANY_SUBS } from '../modules/company/company-provisioning';
 
 /**
  * Screen routes that were renamed or removed. The additive sync below never
@@ -28,6 +29,72 @@ async function cleanupRetiredRoutes(
 }
 
 /**
+ * One-time migration: the Cpanel module used to expose every screen under a
+ * single "Cpanel" main menu. It is now split into two — "Admin Setup" (the
+ * renamed primary) and "Company Setup" (the Cpanel screens listed in
+ * CPANEL_COMPANY_SUBS). Per company: rename the legacy menu, create Company
+ * Setup if missing, and move its screens across. Sub-menu ids don't change, so
+ * their privileges follow automatically. Idempotent — a no-op once split.
+ */
+async function migrateCpanelMenuSplit(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  const cpanel = await prisma.module.findUnique({
+    where: { code: 'CPANEL' },
+    select: { id: true },
+  });
+  if (!cpanel) return; // fresh DB: nothing to migrate yet
+  const cpanelId = cpanel.id;
+  const companyRoutes = CPANEL_COMPANY_SUBS.map((s) => s.route);
+
+  const menus = await prisma.mainMenu.findMany({
+    where: { moduleId: cpanelId },
+    select: { id: true, companyId: true, menuName: true, sortOrder: true },
+    orderBy: { id: 'asc' },
+  });
+  const companyIds = [...new Set(menus.map((m) => m.companyId))];
+
+  for (const companyId of companyIds) {
+    const mine = menus.filter((m) => m.companyId === companyId);
+    // The primary/admin menu is the oldest one that isn't the new Company Setup.
+    const admin = mine.find((m) => m.menuName !== 'Company Setup');
+    if (!admin) continue;
+
+    // Rename the legacy "Cpanel" menu to "Admin Setup" (leave a custom rename be).
+    if (admin.menuName === 'Cpanel') {
+      await prisma.mainMenu.update({
+        where: { id: admin.id },
+        data: { menuName: 'Admin Setup', icon: 'settings' },
+      });
+    }
+
+    // Ensure the Company Setup main menu exists.
+    let companySetupId = mine.find((m) => m.menuName === 'Company Setup')?.id;
+    if (!companySetupId) {
+      const created = await prisma.mainMenu.create({
+        data: {
+          companyId,
+          moduleId: cpanelId,
+          menuName: 'Company Setup',
+          sortOrder: (admin.sortOrder ?? 1) + 1,
+          objectType: ObjectType.FORM,
+          isUserMenu: true,
+          icon: 'building',
+        },
+        select: { id: true },
+      });
+      companySetupId = created.id;
+    }
+
+    // Move the Company Setup screens off the admin menu (no-op once moved).
+    await prisma.subMenu.updateMany({
+      where: { mainMenuId: admin.id, route: { in: companyRoutes } },
+      data: { mainMenuId: companySetupId },
+    });
+  }
+}
+
+/**
  * Idempotent, additive sync of the module/menu scaffold declared in
  * MODULE_SCAFFOLDS. Run once on every app start so a pulled codebase brings each
  * developer's database up to date without manual SQL or a reseed.
@@ -47,6 +114,11 @@ export async function syncScaffold(
   // 0) Retire routes that were renamed/removed. The steps below never delete,
   //    so a renamed screen's old menu/object would otherwise linger.
   await cleanupRetiredRoutes(prisma);
+
+  // 0b) Split the legacy single "Cpanel" menu into "Admin Setup" + "Company
+  //     Setup". Must run before the additive sync so it reuses the moved subs
+  //     instead of creating duplicates under the new menu.
+  await migrateCpanelMenuSplit(prisma);
 
   // 1) Module catalog — register/update. Never flips an existing module's global
   //    isActive (preserves an admin's enable/disable choice).
