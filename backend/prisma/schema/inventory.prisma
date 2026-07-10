@@ -508,6 +508,17 @@ model StockLedger {
   qtyOut             Float        @default(0)
   unitId             Int
   unitPrice          Float        @default(0)
+  // Tax captured on the movement line.
+  cgst               Float        @default(0)
+  sgst               Float        @default(0)
+  igst               Float        @default(0)
+  cess               Float        @default(0)
+  // Pricing snapshots captured on the movement line.
+  costPrice          Float        @default(0)
+  intercompanyPrice  Float        @default(0)
+  wholesalePrice     Float        @default(0)
+  retailPrice        Float        @default(0)
+  mrp                Float        @default(0)
   createdAt          DateTime     @default(now())
 
   @@index([companyId, storeId])
