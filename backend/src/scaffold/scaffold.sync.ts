@@ -221,6 +221,21 @@ async function migrateInventoryVoucherMenu(
   });
 }
 
+/** Rename the Accounts module's primary main menu "Accounts" → "Accounts Setup". */
+async function migrateAccountsMenuName(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  const acc = await prisma.module.findUnique({
+    where: { code: 'ACCOUNTS' },
+    select: { id: true },
+  });
+  if (!acc) return;
+  await prisma.mainMenu.updateMany({
+    where: { moduleId: acc.id, menuName: 'Accounts' },
+    data: { menuName: 'Accounts Setup' },
+  });
+}
+
 /**
  * Idempotent, additive sync of the module/menu scaffold declared in
  * MODULE_SCAFFOLDS. Run once on every app start so a pulled codebase brings each
@@ -255,6 +270,9 @@ export async function syncScaffold(
   //     line) and drop the "(Consumption)" suffix from Goods Issue Note. Must run
   //     before the sync so the extra menu is matched by its new name.
   await migrateInventoryVoucherMenu(prisma);
+
+  // 0e) Rename the Accounts module's main menu → "Accounts Setup".
+  await migrateAccountsMenuName(prisma);
 
   // 1) Module catalog — register/update. Never flips an existing module's global
   //    isActive (preserves an admin's enable/disable choice).

@@ -119,7 +119,7 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     sortOrder: 3,
     description: 'Finance & accounting.',
     autoEnable: true, // on for every company so the Supplier Master appears
-    menu: { name: 'Accounts', icon: 'wallet' },
+    menu: { name: 'Accounts Setup', icon: 'wallet' },
     subs: ACCOUNTS_SUBS,
   },
   {
