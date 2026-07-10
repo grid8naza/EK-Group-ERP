@@ -194,7 +194,7 @@ export function StockTransactionScreen({
     setNotes('');
     setLines([blankLine()]);
     setOpen(true);
-    focusId('stl-0-item'); // land the cursor on the first item for no-mouse entry
+    focusId('stl-docdate'); // land the cursor in Document date on open
   };
 
   const loadDoc = async (documentId: number) => {
@@ -390,9 +390,7 @@ export function StockTransactionScreen({
       sortable: true,
       sortAccessor: (r) => r.docNo,
       render: (r) => (
-        <span className="font-medium text-slate-800 dark:text-slate-100">
-          {r.docNo}
-        </span>
+        <span className="text-slate-800 dark:text-slate-100">{r.docNo}</span>
       ),
     },
     { key: 'reference', header: 'Reference', accessor: (r) => r.reference ?? '—' },
@@ -409,6 +407,8 @@ export function StockTransactionScreen({
       sortable: true,
       sortAccessor: (r) => r.amount,
     },
+    { key: 'txnType', header: 'Transaction Type', accessor: (r) => r.transactionType ?? '—' },
+    { key: 'txnSubtype', header: 'Transaction Subtype', accessor: (r) => r.transactionSubtype ?? '—' },
   ];
 
   return (
@@ -520,12 +520,12 @@ export function StockTransactionScreen({
                 placeholder="Select a store"
                 options={storeOptions}
               />
-              <Input
+              <DateInput
+                id="stl-docdate"
                 label="Document date"
-                type="date"
                 disabled={viewMode}
                 value={docDate}
-                onChange={(e) => setDocDate(e.target.value)}
+                onChange={(iso) => setDocDate(iso)}
               />
               <Input
                 label="Reference"
@@ -574,7 +574,7 @@ export function StockTransactionScreen({
                           </td>
                           <td className="py-1.5 pr-2 min-w-[12rem]">
                             {viewMode ? (
-                              <span className="font-medium text-slate-800 dark:text-slate-100">
+                              <span className="text-slate-800 dark:text-slate-100">
                                 {p?.name ?? '—'}
                               </span>
                             ) : (

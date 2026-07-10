@@ -97,6 +97,10 @@ interface DateInputProps {
   className?: string;
   placeholder?: string;
   onKeyDown?: (e: React.KeyboardEvent) => void;
+  /** When provided, the input is wrapped in the standard labelled field. */
+  label?: string;
+  required?: boolean;
+  wrapClassName?: string;
 }
 
 export function DateInput({
@@ -107,6 +111,9 @@ export function DateInput({
   className,
   placeholder = 'DD-MM-YYYY',
   onKeyDown,
+  label,
+  required,
+  wrapClassName,
 }: DateInputProps) {
   const [text, setText] = useState(() => isoToDisplay(value));
   // Adopt an external value change (e.g. loading a document), but never clobber
@@ -126,7 +133,7 @@ export function DateInput({
     onChange(displayToIso(out));
   };
 
-  return (
+  const input = (
     <input
       id={id}
       type="text"
@@ -139,6 +146,12 @@ export function DateInput({
       placeholder={placeholder}
       className={cn('input-base', className)}
     />
+  );
+  if (label === undefined) return input; // bare (e.g. inside a table cell)
+  return (
+    <FieldWrap label={label} required={required} className={wrapClassName}>
+      {input}
+    </FieldWrap>
   );
 }
 

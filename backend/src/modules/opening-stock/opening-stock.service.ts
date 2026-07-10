@@ -271,6 +271,18 @@ export class OpeningStockService {
     const storeIds = uniq(docs.map((d) => d.storeId));
     const docIds = docs.map((d) => d.documentId);
 
+    // Transaction type/subtype come from the OPENING_STOCK Document Master entry
+    // (same for every row in this listing).
+    const docMaster = await this.prisma.document.findUnique({
+      where: { code: 'OPENING_STOCK' },
+      select: {
+        transactionType: { select: { label: true } },
+        transactionSubtype: { select: { label: true } },
+      },
+    });
+    const txnType = docMaster?.transactionType?.label ?? null;
+    const txnSubtype = docMaster?.transactionSubtype?.label ?? null;
+
     const [companies, branches, stores, headers] = await Promise.all([
       companyIds.length
         ? this.prisma.company.findMany({ where: { id: { in: companyIds } }, select: { id: true, name: true } })
@@ -302,6 +314,8 @@ export class OpeningStockService {
       storeName: storeMap.get(d.storeId) ?? '',
       reference: d.reference,
       amount: d.amount,
+      transactionType: txnType,
+      transactionSubtype: txnSubtype,
       isLocked: lockMap.get(d.documentId) ?? false,
     }));
   }

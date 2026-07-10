@@ -1248,6 +1248,8 @@ export interface StockDocumentRow {
   storeName: string;
   reference?: string | null;
   amount: number;
+  transactionType?: string | null;
+  transactionSubtype?: string | null;
   isLocked: boolean;
 }
 

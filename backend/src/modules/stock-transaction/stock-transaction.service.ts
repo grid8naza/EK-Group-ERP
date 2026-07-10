@@ -24,7 +24,8 @@ export const TXN_TYPES = [
 ] as const;
 export type TxnType = (typeof TXN_TYPES)[number];
 
-/** Per-type config: numbering document code + built-in fallback prefix. */
+/** Per-type config: numbering document code + built-in fallback prefix. The
+ *  documentCode also links a type to its Document Master transaction type/subtype. */
 const TXN_CONFIG: Record<TxnType, { documentCode: string; prefix: string }> = {
   PURCHASE: { documentCode: 'GOODS_RECEIPT_NOTE', prefix: 'GRN' },
   SALE: { documentCode: 'DELIVERY_NOTE', prefix: 'DN' },
@@ -215,6 +216,18 @@ export class StockTransactionService {
     const branchMap = new Map(branches.map((x) => [x.id, x.name] as const));
     const storeMap = new Map(stores.map((x) => [x.id, x.name] as const));
 
+    // Transaction type/subtype from this note's Document Master entry (same for
+    // every row in the listing).
+    const docMaster = await this.prisma.document.findUnique({
+      where: { code: TXN_CONFIG[type].documentCode },
+      select: {
+        transactionType: { select: { label: true } },
+        transactionSubtype: { select: { label: true } },
+      },
+    });
+    const txnType = docMaster?.transactionType?.label ?? null;
+    const txnSubtype = docMaster?.transactionSubtype?.label ?? null;
+
     return headers.map((h) => ({
       id: h.id,
       docNo: h.docNo,
@@ -227,6 +240,8 @@ export class StockTransactionService {
       storeName: storeMap.get(h.storeId) ?? '',
       reference: h.reference,
       amount: amountByDoc.get(h.id) ?? 0,
+      transactionType: txnType,
+      transactionSubtype: txnSubtype,
       isLocked: h.isLocked,
     }));
   }
