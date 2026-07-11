@@ -183,6 +183,7 @@ model HsnCode {
   cgst        Float    @default(0) // %
   sgst        Float    @default(0) // %
   igst        Float    @default(0) // %
+  cess        Float    @default(0) // %
   isActive    Boolean  @default(true)
   isLocked    Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt   DateTime @default(now())

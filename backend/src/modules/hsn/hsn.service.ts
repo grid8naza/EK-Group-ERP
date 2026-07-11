@@ -41,6 +41,7 @@ export class HsnService {
           cgst: dto.cgst ?? 0,
           sgst: dto.sgst ?? 0,
           igst: dto.igst ?? 0,
+          cess: dto.cess ?? 0,
           isActive: dto.isActive ?? true,
         },
       });
@@ -61,6 +62,7 @@ export class HsnService {
           cgst: dto.cgst,
           sgst: dto.sgst,
           igst: dto.igst,
+          cess: dto.cess,
           isActive: dto.isActive,
         },
       });

@@ -641,6 +641,7 @@ export interface HsnCode {
   cgst: number;
   sgst: number;
   igst: number;
+  cess: number;
   isActive: boolean;
   isLocked?: boolean;
 }

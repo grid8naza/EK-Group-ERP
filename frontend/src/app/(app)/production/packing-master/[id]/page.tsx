@@ -28,6 +28,7 @@ import type {
   Unit,
   Asset,
   HrDesignation,
+  HsnCode,
   ProcessTimeUnit,
   Lookup,
   LookupValue,
@@ -124,6 +125,7 @@ export default function PackingMasterEditorPage() {
   const { data: allProducts } = useFetch<Product[]>('/products');
   // Categories — to list only packing-material items in the material picker.
   const { data: categories } = useFetch<Category[]>('/categories');
+  const { data: hsnCodes } = useFetch<HsnCode[]>('/hsn-codes');
 
   // Production Process lookup values for the process-name combo: find the lookup
   // by code, then fetch its values (mirrors the Asset Brand pattern).
@@ -215,8 +217,15 @@ export default function PackingMasterEditorPage() {
   const [fuelCost, setFuelCost] = useState('0');
   const [overheadCost, setOverheadCost] = useState('0');
   const [bomMarginPct, setBomMarginPct] = useState('0');
-  // Actual sales price per yield unit — user-entered (feeds the sales invoice).
-  const [actualSalesPrice, setActualSalesPrice] = useState('0');
+  // The three selling prices per yield unit (per box) and their profit % — both
+  // user-entered and kept in sync (enter a price to set its %, or a % to set the
+  // price). Saved onto the product, so the Product Master reflects them.
+  const [intercompanyPrice, setIntercompanyPrice] = useState('0');
+  const [intercompanyPct, setIntercompanyPct] = useState('0');
+  const [wholesalePrice, setWholesalePrice] = useState('0');
+  const [wholesalePct, setWholesalePct] = useState('0');
+  const [retailPrice, setRetailPrice] = useState('0');
+  const [retailPct, setRetailPct] = useState('0');
   // Source (unpacked) products this pack is made from, each with a quantity.
   const [packSources, setPackSources] = useState<Src[]>([]);
   const [saving, setSaving] = useState(false);
@@ -264,7 +273,12 @@ export default function PackingMasterEditorPage() {
     setFuelCost(to2(String(product.fuelCost ?? 0)));
     setOverheadCost(to2(String(product.overheadCost ?? 0)));
     setBomMarginPct(to2(String(product.bomMarginPct ?? 0)));
-    setActualSalesPrice(toPrice(String(product.actualSalesPrice ?? 0)));
+    setIntercompanyPrice(toPrice(String(product.intercompanyPrice ?? 0)));
+    setIntercompanyPct(toPrice(String(product.intercompanyProfitPct ?? 0)));
+    setWholesalePrice(toPrice(String(product.wholesalePrice ?? 0)));
+    setWholesalePct(toPrice(String(product.wholesaleProfitPct ?? 0)));
+    setRetailPrice(toPrice(String(product.retailPrice ?? 0)));
+    setRetailPct(toPrice(String(product.retailProfitPct ?? 0)));
     setPackSources(
       (product.packSources ?? []).map((s) => ({
         productId: String(s.sourceProductId),
@@ -276,7 +290,9 @@ export default function PackingMasterEditorPage() {
       fuelCost: Number(product.fuelCost ?? 0) || 0,
       overheadCost: Number(product.overheadCost ?? 0) || 0,
       bomMarginPct: Number(product.bomMarginPct ?? 0) || 0,
-      actualSalesPrice: Number(product.actualSalesPrice ?? 0) || 0,
+      intercompanyPrice: Number(product.intercompanyPrice ?? 0) || 0,
+      wholesalePrice: Number(product.wholesalePrice ?? 0) || 0,
+      retailPrice: Number(product.retailPrice ?? 0) || 0,
       packSources: (product.packSources ?? []).map((s) => ({
         p: s.sourceProductId,
         q: s.quantity,
@@ -381,22 +397,60 @@ export default function PackingMasterEditorPage() {
     manpowerCost +
     num(fuelCost) +
     num(overheadCost);
-  const salesPrice = costPrice * (1 + num(bomMarginPct) / 100);
-  const grossProfit = salesPrice - costPrice;
   const yQty = num(yieldQty) || 1;
-  // --- price per yield unit: Estimated vs Actual (all rounded to 1 decimal) ---
+  // Cost per yield unit (per box), rounded — the basis for profit and the same
+  // across every selling price.
   const estCostPerUnit = costPrice / yQty;
-  const estSalesPerUnit = salesPrice / yQty;
-  const estProfitPerUnit = estSalesPerUnit - estCostPerUnit;
-  // Actual cost/unit is populated from the estimated cost/unit (used in Packing).
   const actualCostPerUnit = round1(estCostPerUnit);
-  // Actual profit = actual (entered) sales price − actual cost price.
-  const actualProfitPerUnit = num(actualSalesPrice) - actualCostPerUnit;
-  // Profit % = profit ÷ cost × 100 (estimated equals the applied margin).
-  const estProfitPct = estCostPerUnit ? (estProfitPerUnit / estCostPerUnit) * 100 : 0;
-  const actualProfitPct = actualCostPerUnit
-    ? (actualProfitPerUnit / actualCostPerUnit) * 100
-    : 0;
+  // Two-way price/percent binding over the unit cost: profit % of a price, and
+  // the price implied by a profit %.
+  const profitOf = (price: string) => num(price) - actualCostPerUnit;
+  const profitPctOf = (price: string) =>
+    actualCostPerUnit ? (profitOf(price) / actualCostPerUnit) * 100 : 0;
+  const priceFromPct = (pct: string) => actualCostPerUnit * (1 + num(pct) / 100);
+  // GST / Cess rates come from this product's HSN code (set in Product Master).
+  // Each tax amount is the rate applied to the entered sales price; MRP adds them
+  // on top of the sales price.
+  const hsn = (hsnCodes ?? []).find((h) => h.id === product?.hsnCodeId);
+  const cgstPct = hsn?.cgst ?? 0;
+  const sgstPct = hsn?.sgst ?? 0;
+  const cessPct = hsn?.cess ?? 0;
+  const taxOf = (price: string, ratePct: number) => (num(price) * ratePct) / 100;
+  const mrpOf = (price: string) =>
+    num(price) + taxOf(price, cgstPct) + taxOf(price, sgstPct) + taxOf(price, cessPct);
+  // The three selling-price columns of the "Price per box" table. Editing a price
+  // recomputes its %, and editing a % recomputes its price (both over unit cost).
+  const priceCols = [
+    {
+      key: 'ic',
+      price: intercompanyPrice,
+      setPrice: setIntercompanyPrice,
+      pct: intercompanyPct,
+      setPct: setIntercompanyPct,
+    },
+    {
+      key: 'ws',
+      price: wholesalePrice,
+      setPrice: setWholesalePrice,
+      pct: wholesalePct,
+      setPct: setWholesalePct,
+    },
+    {
+      key: 'rt',
+      price: retailPrice,
+      setPrice: setRetailPrice,
+      pct: retailPct,
+      setPct: setRetailPct,
+    },
+  ];
+  const onPriceBlur = (col: (typeof priceCols)[number]) => {
+    col.setPrice(toPrice(col.price));
+    col.setPct(toPrice(String(profitPctOf(col.price))));
+  };
+  const onPctBlur = (col: (typeof priceCols)[number]) => {
+    col.setPct(toPrice(col.pct));
+    col.setPrice(toPrice(String(priceFromPct(col.pct))));
+  };
 
   // --- display resolvers ---
   const itemName = (idStr: string) => itemById.get(Number(idStr))?.name ?? '—';
@@ -607,7 +661,9 @@ export default function PackingMasterEditorPage() {
       fuelCost: num(fuelCost),
       overheadCost: num(overheadCost),
       bomMarginPct: num(bomMarginPct),
-      actualSalesPrice: num(actualSalesPrice),
+      intercompanyPrice: num(intercompanyPrice),
+      wholesalePrice: num(wholesalePrice),
+      retailPrice: num(retailPrice),
       packSources: packSources.map((s) => ({
         p: Number(s.productId) || 0,
         q: Number(s.quantity) || 0,
@@ -681,10 +737,16 @@ export default function PackingMasterEditorPage() {
       fuelCost: num(fuelCost),
       overheadCost: num(overheadCost),
       bomMarginPct: num(bomMarginPct),
-      // Per-unit actual prices (1 decimal). Cost is the estimated cost/unit;
-      // sales is the user-entered value.
+      // Per-unit cost (1 decimal) and the three entered selling prices, each with
+      // its profit % over cost. These write straight onto the product, so the
+      // Product Master reflects them.
       actualCostPrice: actualCostPerUnit,
-      actualSalesPrice: round1(num(actualSalesPrice)),
+      intercompanyPrice: round1(num(intercompanyPrice)),
+      intercompanyProfitPct: round1(profitPctOf(intercompanyPrice)),
+      wholesalePrice: round1(num(wholesalePrice)),
+      wholesaleProfitPct: round1(profitPctOf(wholesalePrice)),
+      retailPrice: round1(num(retailPrice)),
+      retailProfitPct: round1(profitPctOf(retailPrice)),
     };
     setSaving(true);
     try {
@@ -1078,8 +1140,8 @@ export default function PackingMasterEditorPage() {
             </h2>
           </div>
           <ReadOnlyFieldset readOnly={view}>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <div>
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+              <div className="lg:w-[460px] lg:flex-none">
                 <table className="w-full border-collapse border border-slate-300 text-sm dark:border-slate-600">
                   <colgroup>
                     <col />
@@ -1161,36 +1223,27 @@ export default function PackingMasterEditorPage() {
                     <CostLabelRow label="Cost Price" strong>
                       {money(costPrice)}
                     </CostLabelRow>
-                    <CostInputRow label="Profit Margin %">
-                      <input
-                        className="cell-input no-spinner text-right tabular-nums"
-                        type="number"
-                        step="any"
-                        value={bomMarginPct}
-                        onChange={(e) => setBomMarginPct(e.target.value)}
-                        onBlur={() => setBomMarginPct((v) => to2(v))}
-                      />
-                    </CostInputRow>
-                    <CostLabelRow label="Sales Price" strong>
-                      {money(salesPrice)}
-                    </CostLabelRow>
-                    <CostLabelRow label="Gross Profit" stronger>
-                      {money(grossProfit)}
+                    <CostLabelRow
+                      label={`Cost Price / ${yieldUnitCode || 'unit'}`}
+                      stronger
+                    >
+                      {money(estCostPerUnit)}
                     </CostLabelRow>
                   </tbody>
                 </table>
               </div>
-              <div className="self-start">
-                <table className="w-full border-collapse border border-slate-300 text-sm dark:border-slate-600">
+              <div className="min-w-0 flex-1 overflow-x-auto">
+                <table className="w-full min-w-[480px] border-collapse border border-slate-300 text-sm dark:border-slate-600">
                   <colgroup>
                     <col />
-                    <col className="w-28" />
-                    <col className="w-28" />
+                    <col className="w-32" />
+                    <col className="w-32" />
+                    <col className="w-32" />
                   </colgroup>
                   <thead>
                     <tr>
                       <th
-                        colSpan={3}
+                        colSpan={4}
                         className="border border-slate-300 bg-[#5b544c] px-3 py-2 text-center text-sm font-semibold text-white dark:border-slate-600 dark:bg-slate-800"
                       >
                         Price per 1 {yieldUnitCode || 'unit'}
@@ -1201,65 +1254,125 @@ export default function PackingMasterEditorPage() {
                         Description
                       </th>
                       <th className="border border-slate-200 px-3 py-1.5 text-center font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-100">
-                        Estimated
+                        Intercompany
                       </th>
                       <th className="border border-slate-200 px-3 py-1.5 text-center font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-100">
-                        Actual
+                        Wholesale
+                      </th>
+                      <th className="border border-slate-200 px-3 py-1.5 text-center font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-100">
+                        Retail
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
                       <td className="border border-slate-200 px-3 py-2 text-slate-600 dark:border-slate-700 dark:text-slate-300">
-                        Sales Price
+                        Profit Percentage
                       </td>
-                      <td className="border border-slate-200 px-3 py-2 text-right tabular-nums text-slate-800 dark:border-slate-700 dark:text-slate-100">
-                        {money1(estSalesPerUnit)}
-                      </td>
-                      <td className="border border-slate-200 p-0 dark:border-slate-700">
-                        <input
-                          className="cell-input no-spinner text-right tabular-nums"
-                          type="number"
-                          min={0}
-                          step="any"
-                          value={actualSalesPrice}
-                          onChange={(e) => setActualSalesPrice(e.target.value)}
-                          onBlur={() => setActualSalesPrice((v) => toPrice(v))}
-                        />
-                      </td>
+                      {priceCols.map((c) => (
+                        <td
+                          key={c.key}
+                          className="border border-slate-200 p-0 dark:border-slate-700"
+                        >
+                          <input
+                            className="cell-input no-spinner text-right tabular-nums"
+                            type="number"
+                            min={0}
+                            step="any"
+                            value={c.pct}
+                            disabled={view}
+                            onChange={(e) => c.setPct(e.target.value)}
+                            onBlur={() => onPctBlur(c)}
+                          />
+                        </td>
+                      ))}
                     </tr>
                     <tr>
                       <td className="border border-slate-200 px-3 py-2 text-slate-600 dark:border-slate-700 dark:text-slate-300">
-                        Cost Price
+                        Sales Price
                       </td>
-                      <td className="border border-slate-200 px-3 py-2 text-right tabular-nums text-slate-800 dark:border-slate-700 dark:text-slate-100">
-                        {money1(estCostPerUnit)}
+                      {priceCols.map((c) => (
+                        <td
+                          key={c.key}
+                          className="border border-slate-200 p-0 dark:border-slate-700"
+                        >
+                          <input
+                            className="cell-input no-spinner text-right tabular-nums"
+                            type="number"
+                            min={0}
+                            step="any"
+                            value={c.price}
+                            disabled={view}
+                            onChange={(e) => c.setPrice(e.target.value)}
+                            onBlur={() => onPriceBlur(c)}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                    <tr>
+                      <td className="border border-slate-200 px-3 py-2 text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                        CGST ({cgstPct}%)
                       </td>
-                      <td className="border border-slate-200 px-3 py-2 text-right tabular-nums text-slate-800 dark:border-slate-700 dark:text-slate-100">
-                        {money1(actualCostPerUnit)}
+                      {priceCols.map((c) => (
+                        <td
+                          key={c.key}
+                          className="border border-slate-200 px-3 py-2 text-right tabular-nums text-slate-800 dark:border-slate-700 dark:text-slate-100"
+                        >
+                          {money1(taxOf(c.price, cgstPct))}
+                        </td>
+                      ))}
+                    </tr>
+                    <tr>
+                      <td className="border border-slate-200 px-3 py-2 text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                        SGST ({sgstPct}%)
                       </td>
+                      {priceCols.map((c) => (
+                        <td
+                          key={c.key}
+                          className="border border-slate-200 px-3 py-2 text-right tabular-nums text-slate-800 dark:border-slate-700 dark:text-slate-100"
+                        >
+                          {money1(taxOf(c.price, sgstPct))}
+                        </td>
+                      ))}
+                    </tr>
+                    <tr>
+                      <td className="border border-slate-200 px-3 py-2 text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                        Cess ({cessPct}%)
+                      </td>
+                      {priceCols.map((c) => (
+                        <td
+                          key={c.key}
+                          className="border border-slate-200 px-3 py-2 text-right tabular-nums text-slate-800 dark:border-slate-700 dark:text-slate-100"
+                        >
+                          {money1(taxOf(c.price, cessPct))}
+                        </td>
+                      ))}
                     </tr>
                     <tr className="bg-[#f3ece0] dark:bg-slate-800/60">
                       <td className="border border-slate-200 px-3 py-2 font-semibold text-slate-800 dark:border-slate-700 dark:text-slate-100">
-                        Profit
+                        MRP
                       </td>
-                      <td className="border border-slate-200 px-3 py-2 text-right font-bold tabular-nums text-slate-900 dark:border-slate-700 dark:text-white">
-                        {money1(estProfitPerUnit)}
-                      </td>
-                      <td className="border border-slate-200 px-3 py-2 text-right font-bold tabular-nums text-slate-900 dark:border-slate-700 dark:text-white">
-                        {money1(actualProfitPerUnit)}
-                      </td>
+                      {priceCols.map((c) => (
+                        <td
+                          key={c.key}
+                          className="border border-slate-200 px-3 py-2 text-right font-bold tabular-nums text-slate-900 dark:border-slate-700 dark:text-white"
+                        >
+                          {money1(mrpOf(c.price))}
+                        </td>
+                      ))}
                     </tr>
                     <tr>
-                      <td className="border border-slate-200 px-3 py-2 text-slate-600 dark:border-slate-700 dark:text-slate-300">
-                        Profit Percentage
+                      <td className="border border-slate-200 px-3 py-2 font-semibold text-slate-800 dark:border-slate-700 dark:text-slate-100">
+                        Profit Amount
                       </td>
-                      <td className="border border-slate-200 px-3 py-2 text-right tabular-nums text-slate-800 dark:border-slate-700 dark:text-slate-100">
-                        {money1(estProfitPct)}%
-                      </td>
-                      <td className="border border-slate-200 px-3 py-2 text-right tabular-nums text-slate-800 dark:border-slate-700 dark:text-slate-100">
-                        {money1(actualProfitPct)}%
-                      </td>
+                      {priceCols.map((c) => (
+                        <td
+                          key={c.key}
+                          className="border border-slate-200 px-3 py-2 text-right font-bold tabular-nums text-slate-900 dark:border-slate-700 dark:text-white"
+                        >
+                          {money1(profitOf(c.price))}
+                        </td>
+                      ))}
                     </tr>
                   </tbody>
                 </table>

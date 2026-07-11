@@ -25,6 +25,7 @@ const empty = {
   cgst: '0',
   sgst: '0',
   igst: '0',
+  cess: '0',
   isActive: true,
 };
 
@@ -65,6 +66,7 @@ export default function HsnCodesPage() {
     cgst: String(h.cgst ?? 0),
     sgst: String(h.sgst ?? 0),
     igst: String(h.igst ?? 0),
+    cess: String(h.cess ?? 0),
     isActive: h.isActive,
   });
 
@@ -118,7 +120,12 @@ export default function HsnCodesPage() {
       toast.error('Code and Description are required.');
       return;
     }
-    const nums = { cgst: Number(form.cgst), sgst: Number(form.sgst), igst: Number(form.igst) };
+    const nums = {
+      cgst: Number(form.cgst),
+      sgst: Number(form.sgst),
+      igst: Number(form.igst),
+      cess: Number(form.cess),
+    };
     for (const [k, v] of Object.entries(nums)) {
       if (!Number.isFinite(v) || v < 0 || v > 100) {
         toast.error(`${k.toUpperCase()} must be between 0 and 100.`);
@@ -191,6 +198,7 @@ export default function HsnCodesPage() {
     { key: 'cgst', header: 'CGST', accessor: (r) => pct(r.cgst) },
     { key: 'sgst', header: 'SGST', accessor: (r) => pct(r.sgst) },
     { key: 'igst', header: 'IGST', accessor: (r) => pct(r.igst) },
+    { key: 'cess', header: 'Cess', accessor: (r) => pct(r.cess) },
     {
       key: 'isActive',
       header: 'Status',
@@ -318,7 +326,15 @@ export default function HsnCodesPage() {
               step="any"
               value={form.igst}
               onChange={(e) => setForm({ ...form, igst: e.target.value })}
-              wrapClassName="sm:col-span-2"
+            />
+            <Input
+              label="Cess %"
+              type="number"
+              min={0}
+              max={100}
+              step="any"
+              value={form.cess}
+              onChange={(e) => setForm({ ...form, cess: e.target.value })}
             />
             <div className="sm:col-span-2">
               <Checkbox

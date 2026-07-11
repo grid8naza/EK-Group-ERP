@@ -39,6 +39,12 @@ export class CreateHsnCodeDto {
   igst?: number;
 
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  cess?: number;
+
+  @IsOptional()
   @IsBoolean()
   isActive?: boolean;
 }
@@ -73,6 +79,12 @@ export class UpdateHsnCodeDto {
   @Min(0)
   @Max(100)
   igst?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  cess?: number;
 
   @IsOptional()
   @IsBoolean()
