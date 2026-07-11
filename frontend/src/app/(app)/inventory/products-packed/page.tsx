@@ -225,10 +225,11 @@ export default function ProductsPage() {
     categoryId: p.categoryId != null ? String(p.categoryId) : '',
     groupId: p.groupId != null ? String(p.groupId) : '',
     unitId: String(p.unitId),
-    // Forced invariants for the Packed screen (see `empty`).
+    // Forced invariants for the Packed screen (see `empty`) — packed products
+    // are always sellable.
     unpacked: false,
     packed: true,
-    canSell: p.canSell ?? true,
+    canSell: true,
     costPrice: String(p.costPrice ?? 0),
     wholesalePrice: String(p.wholesalePrice ?? 0),
     wholesaleProfitPct: pctDisplay(
@@ -817,11 +818,13 @@ export default function ProductsPage() {
                 unpacked), so the toggles are hidden and forced — see `empty` /
                 `formFrom`. */}
 
-            {/* Can Sell — gates the selling prices, profit %, and packing. */}
+            {/* Can Sell — packed products are always sellable, so it stays
+                checked and the control is disabled. */}
             <div className="sm:col-span-2">
               <Checkbox
                 label="Can Sell"
                 checked={form.canSell}
+                disabled
                 onChange={(e) => {
                   const canSell = e.target.checked;
                   // Unchecking clears the now-disabled selling fields.
