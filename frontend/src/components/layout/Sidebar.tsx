@@ -80,7 +80,7 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
         type="button"
         onClick={() => setInfoOpen(true)}
         title="Software information"
-        className="flex min-h-[4rem] flex-none flex-col items-center justify-start gap-0.5 border-b border-[#efe7db] px-3 pb-2 pt-2 text-center transition hover:bg-[#e6dcc9] dark:border-slate-800 dark:hover:bg-slate-800"
+        className="flex min-h-[4rem] flex-none flex-col items-center justify-center gap-0.5 border-b border-[#efe7db] bg-white/80 px-3 pb-2 pt-2 text-center backdrop-blur transition hover:bg-white dark:border-slate-800 dark:bg-slate-900/80 dark:hover:bg-slate-800"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
