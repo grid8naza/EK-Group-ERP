@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { printRecipe } from '@/lib/recipePrint';
 import { api, ApiError } from '@/lib/api';
+import { cn } from '@/lib/utils';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -25,6 +26,7 @@ import { Input, Select } from '@/components/ui/Field';
 import type {
   Product,
   Item,
+  Category,
   Unit,
   Asset,
   HrDesignation,
@@ -113,6 +115,7 @@ export default function RecipeMasterEditorPage() {
 
   const { data: product, loading } = useFetch<Product>(`/products/${id}`);
   const { data: items } = useFetch<Item[]>('/items');
+  const { data: categories } = useFetch<Category[]>('/categories');
   const { data: units } = useFetch<Unit[]>('/units');
   const { data: assets } = useFetch<Asset[]>('/assets');
   const { data: designations } = useFetch<HrDesignation[]>('/hr-designations');
@@ -145,6 +148,19 @@ export default function RecipeMasterEditorPage() {
 
   const itemList = items ?? [];
   const unitList = units ?? [];
+  // Recipe ingredients are raw materials only — exclude items in packing-material
+  // categories (those flagged forPacking), which belong to the Packing master.
+  const packingCatIds = useMemo(
+    () => new Set((categories ?? []).filter((c) => c.forPacking).map((c) => c.id)),
+    [categories],
+  );
+  const rawMaterialItems = useMemo(
+    () =>
+      itemList.filter(
+        (it) => it.categoryId == null || !packingCatIds.has(it.categoryId),
+      ),
+    [itemList, packingCatIds],
+  );
   // Only production-line machines that are currently active can be assigned;
   // any already-referenced machine still resolves for display.
   const machineList = useMemo(
@@ -200,6 +216,11 @@ export default function RecipeMasterEditorPage() {
   const [procForm, setProcForm] = useState<{ index: number | null; draft: Proc } | null>(
     null,
   );
+  // Manpower is entered inline in the process drawer via a small entry line
+  // (designation + count) that flows on Enter. `mpEditIndex` is the existing
+  // manpower row being edited (null when the entry line adds a new one).
+  const [mpDraft, setMpDraft] = useState<ManpowerRow>({ ...BLANK_MANPOWER });
+  const [mpEditIndex, setMpEditIndex] = useState<number | null>(null);
   const [ingSeq, setIngSeq] = useState(0);
   const [procSeq, setProcSeq] = useState(0);
 
@@ -448,9 +469,18 @@ export default function RecipeMasterEditorPage() {
   };
 
   // --- process overlay ---
-  const openAddProc = () => setProcForm({ index: null, draft: { ...BLANK_PROC } });
-  const openEditProc = (i: number) =>
+  const resetMpEntry = () => {
+    setMpDraft({ ...BLANK_MANPOWER });
+    setMpEditIndex(null);
+  };
+  const openAddProc = () => {
+    resetMpEntry();
+    setProcForm({ index: null, draft: { ...BLANK_PROC } });
+  };
+  const openEditProc = (i: number) => {
+    resetMpEntry();
     setProcForm({ index: i, draft: { ...processes[i] } });
+  };
   const saveProc = () => {
     if (!procForm) return;
     const d = procForm.draft;
@@ -476,14 +506,30 @@ export default function RecipeMasterEditorPage() {
     setProcForm((f) =>
       f ? { ...f, draft: { ...f.draft, manpower: fn(f.draft.manpower) } } : f,
     );
-  const addManpower = () =>
-    setDraftManpower((rows) => [...rows, { ...BLANK_MANPOWER }]);
-  const updateManpower = (idx: number, patch: Partial<ManpowerRow>) =>
-    setDraftManpower((rows) =>
-      rows.map((m, i) => (i === idx ? { ...m, ...patch } : m)),
-    );
-  const removeManpower = (idx: number) =>
+  // Commit the inline entry line into the process draft (add a new row, or update
+  // the one being edited). Returns false when the entry is empty/invalid so the
+  // Enter-flow can fall through to the Add button instead.
+  const commitManpower = (): boolean => {
+    if (!mpDraft.designationId || !(Number(mpDraft.count) > 0)) return false;
+    if (mpEditIndex == null) {
+      setDraftManpower((rows) => [...rows, mpDraft]);
+    } else {
+      const at = mpEditIndex;
+      setDraftManpower((rows) => rows.map((m, i) => (i === at ? mpDraft : m)));
+    }
+    resetMpEntry();
+    return true;
+  };
+  const editManpower = (idx: number) => {
+    setMpDraft({ ...(procForm?.draft.manpower[idx] ?? BLANK_MANPOWER) });
+    setMpEditIndex(idx);
+    setTimeout(() => document.getElementById('mp-designation')?.focus(), 0);
+  };
+  const removeManpower = (idx: number) => {
     setDraftManpower((rows) => rows.filter((_, i) => i !== idx));
+    if (mpEditIndex === idx) resetMpEntry();
+    else if (mpEditIndex != null && idx < mpEditIndex) setMpEditIndex(mpEditIndex - 1);
+  };
   // Rate/hr × step-hours × count for a single draft manpower row.
   const manpowerRowCost = (draft: Proc, m: ManpowerRow) => {
     const hours =
@@ -897,14 +943,15 @@ export default function RecipeMasterEditorPage() {
               {processes.length > 0 && (
                 <tfoot>
                   <tr className="border-t-2 border-slate-200 dark:border-slate-700">
-                    <td colSpan={2} className="py-2 text-right text-sm font-semibold">
-                      Total Processing Time
-                    </td>
-                    <td
-                      colSpan={view ? 3 : 4}
-                      className="py-2 px-1 text-sm font-bold tabular-nums text-slate-900 dark:text-white"
-                    >
-                      {fmtDuration(totalProcMinutes)}
+                    <td colSpan={view ? 5 : 6} className="py-2 px-1">
+                      <div className="flex items-center justify-end gap-3">
+                        <span className="text-sm font-semibold">
+                          Total Processing Time
+                        </span>
+                        <span className="text-sm font-bold tabular-nums text-slate-900 dark:text-white">
+                          {fmtDuration(totalProcMinutes)}
+                        </span>
+                      </div>
                     </td>
                   </tr>
                 </tfoot>
@@ -1123,6 +1170,73 @@ export default function RecipeMasterEditorPage() {
         subtitle="Item, quantity and unit"
         icon={<ListTree className="h-5 w-5" />}
         width="sm"
+        aside={
+          <div className="card overflow-hidden border-[#e7ddcb] bg-[#fbf9f4] p-4 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            <div className="-mx-4 -mt-4 mb-3 flex items-center justify-between rounded-t-2xl bg-[#5b544c] px-4 py-2.5 dark:bg-slate-800">
+              <h3 className="text-sm font-semibold text-white">Ingredients so far</h3>
+              <span className="text-xs text-white/70">
+                {recipe.length} item{recipe.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700">
+                  <th className="w-6 py-1.5 pr-1 text-center">#</th>
+                  <th className="py-1.5 pr-2">Item</th>
+                  <th className="w-20 py-1.5 px-1 text-right">Qty</th>
+                  <th className="w-24 py-1.5 pl-1 text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recipe.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      className="py-6 text-center text-xs text-slate-400"
+                    >
+                      No ingredients yet.
+                    </td>
+                  </tr>
+                ) : (
+                  recipe.map((line, i) => (
+                    <tr
+                      key={i}
+                      className={cn(
+                        'border-b border-slate-100 dark:border-slate-800/60',
+                        ingForm?.index === i && 'bg-amber-100/60 dark:bg-amber-500/10',
+                      )}
+                    >
+                      <td className="py-1.5 pr-1 text-center tabular-nums text-slate-500">
+                        {i + 1}
+                      </td>
+                      <td className="py-1.5 pr-2 font-medium text-slate-800 dark:text-slate-100">
+                        {itemName(line.itemId)}
+                      </td>
+                      <td className="px-1 text-right tabular-nums text-slate-600 dark:text-slate-300">
+                        {money(Number(line.quantity) || 0)} {unitCode(line.unitId)}
+                      </td>
+                      <td className="px-1 text-right font-medium tabular-nums text-slate-800 dark:text-slate-100">
+                        {money(amountOf(line))}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              {recipe.length > 0 && (
+                <tfoot>
+                  <tr className="border-t-2 border-slate-200 dark:border-slate-700">
+                    <td colSpan={3} className="py-1.5 text-right text-sm font-semibold">
+                      Total
+                    </td>
+                    <td className="py-1.5 px-1 text-right text-sm font-bold tabular-nums text-slate-900 dark:text-white">
+                      {money(materialCost)}
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        }
         footer={
           <div className="flex justify-end gap-2">
             <button className="btn-secondary" onClick={() => setIngForm(null)}>
@@ -1146,7 +1260,8 @@ export default function RecipeMasterEditorPage() {
               value={ingForm.draft.itemId}
               onChange={(e) => onPickIngItem(e.target.value)}
               placeholder="Select item"
-              options={itemList
+              searchThreshold={0}
+              options={rawMaterialItems
                 .filter(
                   (it) =>
                     !recipe.some((l) => Number(l.itemId) === it.id) ||
@@ -1214,9 +1329,72 @@ export default function RecipeMasterEditorPage() {
         open={!!procForm}
         onClose={() => setProcForm(null)}
         title={procForm?.index == null ? 'Add Process' : 'Edit Process'}
-        subtitle="Step, time, machine and manpower"
+        subtitle="Step, machine, time and manpower"
         icon={<Cog className="h-5 w-5" />}
         width="sm"
+        aside={
+          <div className="card overflow-hidden border-[#e7ddcb] bg-[#fbf9f4] p-4 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            <div className="-mx-4 -mt-4 mb-3 flex items-center justify-between rounded-t-2xl bg-[#5b544c] px-4 py-2.5 dark:bg-slate-800">
+              <h3 className="text-sm font-semibold text-white">Process flow so far</h3>
+              <span className="text-xs text-white/70">
+                {processes.length} step{processes.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700">
+                  <th className="w-6 py-1.5 pr-1 text-center">#</th>
+                  <th className="py-1.5 pr-2">Process</th>
+                  <th className="w-24 py-1.5 pl-1 text-right">Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {processes.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={3}
+                      className="py-6 text-center text-xs text-slate-400"
+                    >
+                      No processes yet.
+                    </td>
+                  </tr>
+                ) : (
+                  processes.map((p, i) => (
+                    <tr
+                      key={i}
+                      className={cn(
+                        'border-b border-slate-100 dark:border-slate-800/60',
+                        procForm?.index === i && 'bg-amber-100/60 dark:bg-amber-500/10',
+                      )}
+                    >
+                      <td className="py-1.5 pr-1 text-center tabular-nums text-slate-500">
+                        {i + 1}
+                      </td>
+                      <td className="py-1.5 pr-2 font-medium text-slate-800 dark:text-slate-100">
+                        {p.name}
+                      </td>
+                      <td className="px-1 text-right tabular-nums text-slate-600 dark:text-slate-300">
+                        {Number(p.timeValue) || 0} {timeUnitLabel(p.timeUnit)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              {processes.length > 0 && (
+                <tfoot>
+                  <tr className="border-t-2 border-slate-200 dark:border-slate-700">
+                    <td colSpan={2} className="py-1.5 text-right text-sm font-semibold">
+                      Total time
+                    </td>
+                    <td className="py-1.5 px-1 text-right text-sm font-bold tabular-nums text-slate-900 dark:text-white">
+                      {fmtDuration(totalProcMinutes)}
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        }
         footer={
           <div className="flex justify-end gap-2">
             <button className="btn-secondary" onClick={() => setProcForm(null)}>
@@ -1236,7 +1414,7 @@ export default function RecipeMasterEditorPage() {
               id="proc-name"
               autoFocus={procForm.index == null}
               openOnFocus
-              advanceToId="proc-time"
+              advanceToId="proc-machine"
               value={procForm.draft.name}
               onChange={(e) =>
                 setProcForm((f) =>
@@ -1257,6 +1435,23 @@ export default function RecipeMasterEditorPage() {
                   : processChoices
               }
             />
+            <Select
+              label="Machine"
+              id="proc-machine"
+              openOnFocus
+              advanceToId="proc-time"
+              value={procForm.draft.machineId}
+              onChange={(e) =>
+                setProcForm((f) =>
+                  f ? { ...f, draft: { ...f.draft, machineId: e.target.value } } : f,
+                )
+              }
+              placeholder="— Select machine —"
+              options={machineList.map((m) => ({
+                value: m.id,
+                label: m.name,
+              }))}
+            />
             <div className="grid grid-cols-2 gap-3">
               <Input
                 label="Time"
@@ -1276,7 +1471,7 @@ export default function RecipeMasterEditorPage() {
                 label="Unit"
                 id="proc-tunit"
                 openOnFocus
-                advanceToId="proc-machine"
+                advanceToId="mp-designation"
                 plainSelected
                 value={procForm.draft.timeUnit}
                 onChange={(e) =>
@@ -1298,106 +1493,133 @@ export default function RecipeMasterEditorPage() {
                 ]}
               />
             </div>
-            <Select
-              label="Machine"
-              id="proc-machine"
-              openOnFocus
-              advanceToId="proc-add"
-              value={procForm.draft.machineId}
-              onChange={(e) =>
-                setProcForm((f) =>
-                  f ? { ...f, draft: { ...f.draft, machineId: e.target.value } } : f,
-                )
-              }
-              placeholder="— Select machine —"
-              options={machineList.map((m) => ({
-                value: m.id,
-                label: m.name,
-              }))}
-            />
 
-            {/* Manpower — one or more designations, each with a worker count.
-                The rate/hour is read-only (from the HR Designation master); the
-                cost per row = rate × step-time × count. */}
+            {/* Manpower — entered inline via the entry line below (designation +
+                count), which flows on Enter: the Unit field lands on the
+                designation, then the count, and Enter on the count adds the row
+                and returns to the designation for the next worker. Rate/hour is
+                read-only (from the HR Designation master); the cost per row =
+                rate × step-time × count. */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="label !mb-0">Manpower</span>
-                <button
-                  type="button"
-                  className="btn-secondary text-xs"
-                  onClick={addManpower}
-                >
-                  <Plus className="h-3.5 w-3.5" /> Add manpower
-                </button>
-              </div>
-              {procForm.draft.manpower.length === 0 ? (
+              <span className="label !mb-0">Manpower</span>
+              {designationList.length === 0 ? (
                 <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-400 dark:bg-slate-800/50">
-                  {designationList.length === 0
-                    ? 'No designations yet — add them in HR → Designation Master.'
-                    : 'No manpower added. Click “Add manpower” to assign workers.'}
+                  No designations yet — add them in HR → Designation Master.
                 </p>
               ) : (
-                procForm.draft.manpower.map((m, idx) => {
-                  const rate =
-                    designationById.get(Number(m.designationId))?.ratePerHour ?? 0;
-                  return (
-                    <div
-                      key={idx}
-                      className="rounded-lg border border-slate-200 p-2 dark:border-slate-700"
-                    >
-                      <div className="flex items-end gap-2">
-                        <div className="flex-1">
-                          <Select
-                            label="Designation"
-                            value={m.designationId}
-                            onChange={(e) =>
-                              updateManpower(idx, { designationId: e.target.value })
-                            }
-                            placeholder="— Select designation —"
-                            options={designationList
-                              .filter(
-                                (d) =>
-                                  !procForm.draft.manpower.some(
-                                    (mm, j) =>
-                                      j !== idx &&
-                                      Number(mm.designationId) === d.id,
-                                  ),
-                              )
-                              .map((d) => ({ value: d.id, label: d.name }))}
-                          />
+                <>
+                  {procForm.draft.manpower.map((m, idx) => {
+                    const rate =
+                      designationById.get(Number(m.designationId))?.ratePerHour ?? 0;
+                    const name =
+                      designationById.get(Number(m.designationId))?.name ?? '—';
+                    return (
+                      <div
+                        key={idx}
+                        className={cn(
+                          'flex items-center gap-2 rounded-lg border border-slate-200 p-2 dark:border-slate-700',
+                          mpEditIndex === idx &&
+                            'border-brand-400 bg-brand-50/60 dark:border-brand-500/40 dark:bg-brand-500/10',
+                        )}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+                            {name}
+                          </p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Rate {money(rate)}/hr × {Number(m.count) || 0}
+                          </p>
                         </div>
-                        <div className="w-20">
-                          <Input
-                            label="Count"
-                            type="number"
-                            min={1}
-                            step={1}
-                            value={m.count}
-                            onChange={(e) =>
-                              updateManpower(idx, { count: e.target.value })
-                            }
-                          />
-                        </div>
+                        <span className="text-sm font-semibold tabular-nums text-slate-700 dark:text-slate-200">
+                          {money(manpowerRowCost(procForm.draft, m))}
+                        </span>
                         <button
                           type="button"
-                          className="mb-1 rounded p-2 text-slate-400 hover:bg-slate-100 hover:text-red-600 dark:hover:bg-slate-800"
+                          className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800"
+                          onClick={() => editManpower(idx)}
+                          aria-label="Edit manpower"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600 dark:hover:bg-slate-800"
                           onClick={() => removeManpower(idx)}
                           aria-label="Remove manpower"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
-                      <div className="mt-1.5 flex items-center justify-between px-1 text-xs text-slate-500 dark:text-slate-400">
-                        <span>
-                          Rate {money(rate)}/hr × {Number(m.count) || 0}
-                        </span>
-                        <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200">
-                          {money(manpowerRowCost(procForm.draft, m))}
-                        </span>
-                      </div>
+                    );
+                  })}
+
+                  {/* Entry line — flows on Enter and adds/updates a row. */}
+                  <div className="flex items-end gap-2 rounded-lg border border-dashed border-slate-300 p-2 dark:border-slate-600">
+                    <div className="flex-1">
+                      <Select
+                        label="Designation"
+                        id="mp-designation"
+                        openOnFocus
+                        advanceToId="mp-count"
+                        value={mpDraft.designationId}
+                        onChange={(e) =>
+                          setMpDraft((d) => ({ ...d, designationId: e.target.value }))
+                        }
+                        placeholder="— Select designation —"
+                        options={designationList
+                          .filter(
+                            (d) =>
+                              !procForm.draft.manpower.some(
+                                (mm, j) =>
+                                  j !== mpEditIndex && Number(mm.designationId) === d.id,
+                              ),
+                          )
+                          .map((d) => ({ value: d.id, label: d.name }))}
+                      />
                     </div>
-                  );
-                })
+                    <div className="w-20">
+                      <Input
+                        label="Count"
+                        id="mp-count"
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={mpDraft.count}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter') return;
+                          e.preventDefault();
+                          if (commitManpower()) {
+                            setTimeout(
+                              () => document.getElementById('mp-designation')?.focus(),
+                              0,
+                            );
+                          } else {
+                            document.getElementById('proc-add')?.focus();
+                          }
+                        }}
+                        onChange={(e) =>
+                          setMpDraft((d) => ({ ...d, count: e.target.value }))
+                        }
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-secondary mb-1 whitespace-nowrap text-xs"
+                      onClick={() => {
+                        if (commitManpower())
+                          document.getElementById('mp-designation')?.focus();
+                      }}
+                    >
+                      {mpEditIndex == null ? (
+                        <>
+                          <Plus className="h-3.5 w-3.5" /> Add
+                        </>
+                      ) : (
+                        'Update'
+                      )}
+                    </button>
+                  </div>
+                </>
               )}
             </div>
             {procForm.index == null && (

@@ -14,6 +14,17 @@ interface DrawerProps {
   width?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
   children: React.ReactNode;
   footer?: React.ReactNode;
+  /**
+   * Optional card floated in the blurred backdrop, left of the panel — e.g. a
+   * running summary of what's already been entered while adding more. Shown only
+   * on large screens (where there's room beside the panel); ignored for `full`.
+   */
+  aside?: React.ReactNode;
+  /**
+   * Whether Escape closes this drawer. Set false on an outer drawer while a
+   * nested drawer is open, so Escape only dismisses the top-most one.
+   */
+  closeOnEsc?: boolean;
 }
 
 const WIDTHS: Record<NonNullable<DrawerProps['width']>, string> = {
@@ -22,6 +33,16 @@ const WIDTHS: Record<NonNullable<DrawerProps['width']>, string> = {
   lg: 'max-w-3xl',
   xl: 'max-w-5xl',
   full: 'max-w-none', // fullscreen — the panel fills the viewport
+};
+
+// Panel widths in rem (matching WIDTHS), used to offset the `aside` card so it
+// sits just left of the panel rather than under it.
+const PANEL_OFFSET: Record<NonNullable<DrawerProps['width']>, string> = {
+  sm: '28rem',
+  md: '36rem',
+  lg: '48rem',
+  xl: '64rem',
+  full: '100%',
 };
 
 export function Drawer({
@@ -33,12 +54,14 @@ export function Drawer({
   width = 'md',
   children,
   footer,
+  aside,
+  closeOnEsc = true,
 }: DrawerProps) {
   // Close on Escape; lock body scroll while open.
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && closeOnEsc) onClose();
     };
     document.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
@@ -47,7 +70,7 @@ export function Drawer({
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prev;
     };
-  }, [open, onClose]);
+  }, [open, onClose, closeOnEsc]);
 
   return (
     <div
@@ -65,6 +88,26 @@ export function Drawer({
         )}
         onClick={onClose}
       />
+
+      {/* Summary card floated in the blurred area, left of the panel. Only on
+          large screens with room beside the panel, and never for fullscreen. */}
+      {aside && width !== 'full' && (
+        <div
+          className={cn(
+            'absolute inset-y-0 left-0 hidden items-center justify-center p-6 transition-opacity duration-300 lg:flex',
+            open ? 'opacity-100' : 'opacity-0',
+          )}
+          style={{ right: PANEL_OFFSET[width] }}
+          onClick={onClose}
+        >
+          <div
+            className="pointer-events-auto max-h-full w-full max-w-md overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {aside}
+          </div>
+        </div>
+      )}
 
       {/* Panel (slides in from the right) */}
       <div
