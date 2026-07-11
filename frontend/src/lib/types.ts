@@ -1151,6 +1151,9 @@ export interface OpeningStockLine {
   qtyOut: number;
   unitId: number;
   unitPrice: number;
+  intercompanyPrice?: number;
+  wholesalePrice?: number;
+  retailPrice?: number;
 }
 
 export interface OpeningStock {

@@ -31,6 +31,23 @@ export class OpeningStockLineInput {
   @Min(0)
   unitPrice?: number;
 
+  /** Selling-price snapshots captured on the opening-stock line (products only;
+   *  defaulted from the product master, editable). */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  intercompanyPrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  wholesalePrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  retailPrice?: number;
+
   /** Supplier's batch number printed on the goods (optional). */
   @IsOptional()
   @IsString()

@@ -32,6 +32,10 @@ type DraftLine = {
   key: string; // stockable id (item or product, by screen type)
   quantity: string;
   unitPrice: string;
+  // Selling-price snapshots (products only; defaulted from the product master).
+  intercompanyPrice: string;
+  wholesalePrice: string;
+  retailPrice: string;
   batchNo2: string;
   expiry: string;
 };
@@ -79,7 +83,18 @@ export function OpeningStockScreen({
   const canUnlock = can(route, 'unlock');
 
   // ---- pickable stockables for this screen's type ----
-  const pickable = useMemo(() => {
+  // Products carry the master prices (cost + the three selling prices) so a
+  // freshly picked product can default them onto the opening-stock line.
+  type Pickable = {
+    id: number;
+    name: string;
+    unit: string;
+    costPrice?: number;
+    intercompanyPrice?: number;
+    wholesalePrice?: number;
+    retailPrice?: number;
+  };
+  const pickable = useMemo<Pickable[]>(() => {
     if (isItem) {
       // Packing-material categories carry `forPacking`; everything else (incl.
       // uncategorised items) is raw material.
@@ -105,6 +120,10 @@ export function OpeningStockScreen({
         id: p.id,
         name: p.name,
         unit: p.unit?.symbol ?? p.unit?.code ?? '',
+        costPrice: p.costPrice,
+        intercompanyPrice: p.intercompanyPrice,
+        wholesalePrice: p.wholesalePrice,
+        retailPrice: p.retailPrice,
       }));
   }, [type, isItem, items, products, categories]);
   const pickById = useMemo(
@@ -142,6 +161,9 @@ export function OpeningStockScreen({
     key: '',
     quantity: '',
     unitPrice: '',
+    intercompanyPrice: '',
+    wholesalePrice: '',
+    retailPrice: '',
     batchNo2: '',
     expiry: '',
   });
@@ -158,6 +180,25 @@ export function OpeningStockScreen({
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
   const removeLine = (i: number) =>
     setLines((ls) => ls.filter((_, idx) => idx !== i));
+
+  // Picking a product defaults its rate (cost) + the three selling prices from
+  // the product master — same values as the Products - Packed screen. Editable
+  // afterwards. Items have no such prices, so only the key is set.
+  const s0 = (n?: number) => (n ? String(n) : '');
+  const selectStockable = (i: number, id: string) => {
+    const pk = id ? pickById.get(id) : undefined;
+    setLine(i, {
+      key: id,
+      ...(pk && !isItem
+        ? {
+            unitPrice: s0(pk.costPrice),
+            intercompanyPrice: s0(pk.intercompanyPrice),
+            wholesalePrice: s0(pk.wholesalePrice),
+            retailPrice: s0(pk.retailPrice),
+          }
+        : {}),
+    });
+  };
 
   // Enter in a line field moves to the next; Enter on a line's LAST field jumps
   // to the next line's item (adding a line when on the last row).
@@ -198,6 +239,9 @@ export function OpeningStockScreen({
         key: String(l.itemId ?? l.productId ?? ''),
         quantity: String(l.qtyIn),
         unitPrice: String(l.unitPrice ?? 0),
+        intercompanyPrice: l.intercompanyPrice ? String(l.intercompanyPrice) : '',
+        wholesalePrice: l.wholesalePrice ? String(l.wholesalePrice) : '',
+        retailPrice: l.retailPrice ? String(l.retailPrice) : '',
         batchNo2: l.batchNo2 ?? '',
         expiry: dateInput(l.expiryDate),
       })),
@@ -239,6 +283,10 @@ export function OpeningStockScreen({
         productId: !isItem ? Number(l.key) : undefined,
         quantity: Number(l.quantity),
         unitPrice: l.unitPrice ? Number(l.unitPrice) : 0,
+        // Selling prices apply to products only.
+        intercompanyPrice: !isItem && l.intercompanyPrice ? Number(l.intercompanyPrice) : 0,
+        wholesalePrice: !isItem && l.wholesalePrice ? Number(l.wholesalePrice) : 0,
+        retailPrice: !isItem && l.retailPrice ? Number(l.retailPrice) : 0,
         batchNo2: l.batchNo2.trim() || undefined,
         expiryDate: l.expiry ? new Date(l.expiry).toISOString() : undefined,
       }));
@@ -494,9 +542,16 @@ export function OpeningStockScreen({
                     {viewMode && <th className="py-2 px-1">Batch No</th>}
                     <th className="py-2 px-1">Supplier Batch</th>
                     <th className="w-32 py-2 px-1">Expiry</th>
-                    <th className="w-24 py-2 px-1 text-right">Qty</th>
+                    <th className="w-24 py-2 px-1">Qty</th>
                     <th className="w-12 py-2 px-1">Unit</th>
-                    <th className="w-28 py-2 px-1 text-right">Rate</th>
+                    <th className="w-28 py-2 px-1">Rate</th>
+                    {!isItem && (
+                      <>
+                        <th className="w-28 py-2 px-1">Inter-Co</th>
+                        <th className="w-28 py-2 px-1">Wholesale</th>
+                        <th className="w-28 py-2 px-1">Retail</th>
+                      </>
+                    )}
                     {!viewMode && <th className="w-10 py-2" />}
                   </tr>
                 </thead>
@@ -525,9 +580,13 @@ export function OpeningStockScreen({
                               <Select
                                 id={`os-${i}-item`}
                                 openOnFocus
+                                // Always show the search box (even with few
+                                // options) so the picker is type-to-search the
+                                // moment it gets focus.
+                                searchThreshold={0}
                                 advanceToId={`os-${i}-batch`}
                                 value={l.key}
-                                onChange={(e) => setLine(i, { key: e.target.value })}
+                                onChange={(e) => selectStockable(i, e.target.value)}
                                 placeholder={`Select ${isItem ? 'item' : 'product'}`}
                                 options={pickOptions}
                               />
@@ -597,11 +656,77 @@ export function OpeningStockScreen({
                                 step="any"
                                 value={l.unitPrice}
                                 onChange={(e) => setLine(i, { unitPrice: e.target.value })}
-                                onKeyDown={enterNextLine(i)}
+                                onKeyDown={
+                                  isItem ? enterNextLine(i) : enterTo(`os-${i}-interco`)
+                                }
                                 className="text-right tabular-nums"
                               />
                             )}
                           </td>
+                          {!isItem && (
+                            <>
+                              <td className="px-1">
+                                {viewMode ? (
+                                  <span className="block text-right tabular-nums">
+                                    {Number(l.intercompanyPrice || 0).toLocaleString()}
+                                  </span>
+                                ) : (
+                                  <Input
+                                    id={`os-${i}-interco`}
+                                    type="number"
+                                    min={0}
+                                    step="any"
+                                    value={l.intercompanyPrice}
+                                    onChange={(e) =>
+                                      setLine(i, { intercompanyPrice: e.target.value })
+                                    }
+                                    onKeyDown={enterTo(`os-${i}-wholesale`)}
+                                    className="text-right tabular-nums"
+                                  />
+                                )}
+                              </td>
+                              <td className="px-1">
+                                {viewMode ? (
+                                  <span className="block text-right tabular-nums">
+                                    {Number(l.wholesalePrice || 0).toLocaleString()}
+                                  </span>
+                                ) : (
+                                  <Input
+                                    id={`os-${i}-wholesale`}
+                                    type="number"
+                                    min={0}
+                                    step="any"
+                                    value={l.wholesalePrice}
+                                    onChange={(e) =>
+                                      setLine(i, { wholesalePrice: e.target.value })
+                                    }
+                                    onKeyDown={enterTo(`os-${i}-retail`)}
+                                    className="text-right tabular-nums"
+                                  />
+                                )}
+                              </td>
+                              <td className="px-1">
+                                {viewMode ? (
+                                  <span className="block text-right tabular-nums">
+                                    {Number(l.retailPrice || 0).toLocaleString()}
+                                  </span>
+                                ) : (
+                                  <Input
+                                    id={`os-${i}-retail`}
+                                    type="number"
+                                    min={0}
+                                    step="any"
+                                    value={l.retailPrice}
+                                    onChange={(e) =>
+                                      setLine(i, { retailPrice: e.target.value })
+                                    }
+                                    onKeyDown={enterNextLine(i)}
+                                    className="text-right tabular-nums"
+                                  />
+                                )}
+                              </td>
+                            </>
+                          )}
                           {!viewMode && (
                             <td className="text-center">
                               <button

@@ -573,6 +573,10 @@ export class OpeningStockService {
           qtyOut: 0,
           unitId: cls.unitId,
           unitPrice: line.unitPrice ?? 0,
+          // Selling-price snapshots (products carry these; items default to 0).
+          intercompanyPrice: line.intercompanyPrice ?? 0,
+          wholesalePrice: line.wholesalePrice ?? 0,
+          retailPrice: line.retailPrice ?? 0,
         },
       });
     }
