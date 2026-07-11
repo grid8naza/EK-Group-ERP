@@ -33,12 +33,17 @@ export default function SoftwareInfoPage() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [logoSize, setLogoSize] = useState<number>(LOGO_SIZE_DEFAULT);
   const [logoBroken, setLogoBroken] = useState(false);
+  const [symbolLogoUrl, setSymbolLogoUrl] = useState<string | null>(null);
+  const [symbolLogoSize, setSymbolLogoSize] = useState<number>(LOGO_SIZE_DEFAULT);
+  const [symbolBroken, setSymbolBroken] = useState(false);
 
   const close = () => router.back();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [symbolUploading, setSymbolUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const symbolFileRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
     try {
@@ -56,6 +61,9 @@ export default function SoftwareInfoPage() {
       setLogoUrl(data.logoUrl ?? null);
       setLogoSize(data.logoSize ?? LOGO_SIZE_DEFAULT);
       setLogoBroken(false);
+      setSymbolLogoUrl(data.symbolLogoUrl ?? null);
+      setSymbolLogoSize(data.symbolLogoSize ?? LOGO_SIZE_DEFAULT);
+      setSymbolBroken(false);
     } catch {
       toast.error('Failed to load software information.');
     } finally {
@@ -83,6 +91,7 @@ export default function SoftwareInfoPage() {
         licenceKey: form.licenceKey?.trim() || null,
         subscriptionExpiry: form.subscriptionExpiry || null,
         logoSize,
+        symbolLogoSize,
       });
       toast.success('Software information saved.');
       await refresh();
@@ -111,6 +120,26 @@ export default function SoftwareInfoPage() {
     }
   };
 
+  const onPickSymbolLogo = async (file: File) => {
+    setSymbolUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await api.post<SoftwareInfo>('/software-info/symbol-logo', fd);
+      setSymbolLogoUrl(res.symbolLogoUrl ?? null);
+      setSymbolBroken(false);
+      toast.success('Symbol logo updated.');
+      await refresh();
+    } catch (e) {
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to upload symbol logo.',
+      );
+    } finally {
+      setSymbolUploading(false);
+      if (symbolFileRef.current) symbolFileRef.current.value = '';
+    }
+  };
+
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader
@@ -129,31 +158,33 @@ export default function SoftwareInfoPage() {
           <p className="py-8 text-center text-sm text-slate-400">Loading…</p>
         ) : (
           <div className="space-y-6">
-            {/* Logo */}
-            <div className="flex items-start gap-4">
-              <div className="flex h-24 w-24 flex-none items-center justify-center overflow-hidden rounded-xl border border-[#e7ddcb] bg-white dark:border-slate-700 dark:bg-slate-800">
-                {logoUrl && !logoBroken ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={mediaUrl(logoUrl)}
-                    alt="Logo"
-                    onError={() => setLogoBroken(true)}
-                    // Preview at the chosen brand size so the effect is visible
-                    // before saving.
-                    style={{ height: logoSize, width: logoSize }}
-                    className="object-contain"
-                  />
-                ) : (
-                  <ImageOff className="h-7 w-7 text-slate-300" />
-                )}
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                  Logo
-                </p>
-                <p className="mb-2 text-xs text-slate-400">
-                  PNG / JPG / WEBP / SVG, up to 5 MB.
-                </p>
+            {/* Logos — full logo (expanded sidebar) + symbol logo (collapsed),
+                each centered (horizontally and vertically) with its own upload
+                and display-size control. */}
+            <div className="grid grid-cols-1 items-center gap-6 sm:grid-cols-2">
+              {/* Full logo */}
+              <div className="flex flex-col items-center gap-3 text-center">
+                <div className="flex h-24 w-24 flex-none items-center justify-center overflow-hidden rounded-xl border border-[#e7ddcb] bg-white p-2 dark:border-slate-700 dark:bg-slate-800">
+                  {logoUrl && !logoBroken ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={mediaUrl(logoUrl)}
+                      alt="Logo"
+                      onError={() => setLogoBroken(true)}
+                      // Zoomed to fit the preview box so the logo is clearly
+                      // visible; the sidebar display size is set by the slider.
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  ) : (
+                    <ImageOff className="h-7 w-7 text-slate-300" />
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                    Logo
+                  </p>
+                  <p className="text-xs text-slate-400">Full logo — expanded sidebar.</p>
+                </div>
                 <input
                   ref={fileRef}
                   type="file"
@@ -174,11 +205,9 @@ export default function SoftwareInfoPage() {
                   {uploading ? 'Uploading…' : 'Upload logo'}
                 </button>
 
-                {/* Brand-logo display size */}
-                <div className="mt-3 flex items-center gap-3">
-                  <label className="text-xs font-medium text-slate-500">
-                    Logo size
-                  </label>
+                {/* Full-logo display size */}
+                <div className="flex items-center justify-center gap-3">
+                  <label className="text-xs font-medium text-slate-500">Size</label>
                   <input
                     type="range"
                     min={LOGO_SIZE_MIN}
@@ -186,10 +215,71 @@ export default function SoftwareInfoPage() {
                     value={logoSize}
                     disabled={readOnly}
                     onChange={(e) => setLogoSize(Number(e.target.value))}
-                    className="w-40 accent-brand-600"
+                    className="w-32 accent-brand-600"
                   />
                   <span className="w-10 text-xs tabular-nums text-slate-500">
                     {logoSize}px
+                  </span>
+                </div>
+              </div>
+
+              {/* Symbol logo — shown when the sidebar is collapsed. */}
+              <div className="flex flex-col items-center gap-3 text-center">
+                <div className="flex h-24 w-24 flex-none items-center justify-center overflow-hidden rounded-xl border border-[#e7ddcb] bg-white p-2 dark:border-slate-700 dark:bg-slate-800">
+                  {symbolLogoUrl && !symbolBroken ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={mediaUrl(symbolLogoUrl)}
+                      alt="Symbol logo"
+                      onError={() => setSymbolBroken(true)}
+                      className="max-h-full max-w-full object-contain"
+                    />
+                  ) : (
+                    <ImageOff className="h-7 w-7 text-slate-300" />
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                    Symbol logo
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    Symbol only — collapsed sidebar. Square works best.
+                  </p>
+                </div>
+                <input
+                  ref={symbolFileRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) void onPickSymbolLogo(f);
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn-secondary text-sm"
+                  disabled={readOnly || symbolUploading}
+                  onClick={() => symbolFileRef.current?.click()}
+                >
+                  <Upload className="h-4 w-4" />
+                  {symbolUploading ? 'Uploading…' : 'Upload symbol logo'}
+                </button>
+
+                {/* Symbol-logo display size */}
+                <div className="flex items-center justify-center gap-3">
+                  <label className="text-xs font-medium text-slate-500">Size</label>
+                  <input
+                    type="range"
+                    min={LOGO_SIZE_MIN}
+                    max={LOGO_SIZE_MAX}
+                    value={symbolLogoSize}
+                    disabled={readOnly}
+                    onChange={(e) => setSymbolLogoSize(Number(e.target.value))}
+                    className="w-32 accent-brand-600"
+                  />
+                  <span className="w-10 text-xs tabular-nums text-slate-500">
+                    {symbolLogoSize}px
                   </span>
                 </div>
               </div>

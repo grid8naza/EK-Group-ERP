@@ -57,8 +57,18 @@ export class SaveSoftwareInfoDto {
   logoUrl?: string | null;
 
   @IsOptional()
+  @IsString()
+  symbolLogoUrl?: string | null;
+
+  @IsOptional()
   @IsInt()
   @Min(16)
   @Max(56)
   logoSize?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  @Min(16)
+  @Max(56)
+  symbolLogoSize?: number | null;
 }

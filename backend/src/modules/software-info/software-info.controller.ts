@@ -78,4 +78,21 @@ export class SoftwareInfoController {
     }
     return this.service.addLogo(file);
   }
+
+  @Post('symbol-logo')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      dest: SOFTWARE_UPLOAD_DIR,
+      limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+      fileFilter: imageFilter,
+    }),
+  )
+  uploadSymbolLogo(@UploadedFile() file: MulterFile) {
+    if (!file) {
+      throw new BadRequestException(
+        'No image uploaded (PNG / JPG / WEBP / GIF / SVG, max 5 MB).',
+      );
+    }
+    return this.service.addSymbolLogo(file);
+  }
 }

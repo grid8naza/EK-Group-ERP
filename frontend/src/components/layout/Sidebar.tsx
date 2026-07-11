@@ -44,16 +44,24 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [menuSig]);
 
-  // Brand mark = the SOFTWARE logo + name (set in Cpanel → Software Information).
-  // Clicking it opens the software-info panel. Falls back to the committed
-  // /brand-logo.png + a generic name until configured.
-  const softwareLogo = info?.logoUrl ?? null;
-  const softwareName = info?.softwareName || 'ERP';
-  const logoPx = info?.logoSize ?? LOGO_SIZE_DEFAULT;
+  // Brand mark = the SOFTWARE logo (set in Cpanel → Software Information).
+  // Clicking it opens the software-info panel. When the sidebar is collapsed we
+  // show the symbol-only logo (falling back to the full logo, then the committed
+  // /brand-logo.png) so only the mark — never text — is visible.
+  const fullLogo = info?.logoUrl ?? null;
+  const symbolLogo = info?.symbolLogoUrl ?? null;
+  // When collapsed, show the symbol logo at its own size; otherwise the full
+  // logo at its size. Only fall back to the full logo (and its size) if no
+  // symbol logo is set.
+  const showSymbol = collapsed && !!symbolLogo;
+  const activeLogo = collapsed ? symbolLogo ?? fullLogo : fullLogo;
+  const logoPx = showSymbol
+    ? info?.symbolLogoSize ?? LOGO_SIZE_DEFAULT
+    : info?.logoSize ?? LOGO_SIZE_DEFAULT;
   const [logoBroken, setLogoBroken] = useState(false);
   useEffect(() => {
-    setLogoBroken(false); // retry the image when the logo changes
-  }, [softwareLogo]);
+    setLogoBroken(false); // retry the image when the shown logo changes
+  }, [activeLogo]);
 
   const toggle = (key: string) => {
     setOpenMenus((prev) => {
@@ -66,27 +74,25 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
 
   const content = (
     <div className="flex h-full flex-col">
-      {/* Brand — software logo with its name centered underneath; click to view
-          software information. */}
+      {/* Brand — software logo only (full logo expanded, symbol logo collapsed);
+          click to view software information. */}
       <button
         type="button"
         onClick={() => setInfoOpen(true)}
         title="Software information"
-        className="flex min-h-[4rem] flex-none flex-col items-center justify-start gap-0.5 border-b border-[#efe7db] px-3 pb-2 pt-2 text-center transition hover:bg-[#f6eee3] dark:border-slate-800 dark:hover:bg-slate-800"
+        className="flex min-h-[4rem] flex-none flex-col items-center justify-start gap-0.5 border-b border-[#efe7db] px-3 pb-2 pt-2 text-center transition hover:bg-[#e6dcc9] dark:border-slate-800 dark:hover:bg-slate-800"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={!logoBroken && softwareLogo ? mediaUrl(softwareLogo) : '/brand-logo.png'}
+          src={!logoBroken && activeLogo ? mediaUrl(activeLogo) : '/brand-logo.png'}
           alt="Logo"
           onError={() => setLogoBroken(true)}
-          style={{ height: logoPx, width: logoPx }}
-          className="flex-none rounded-lg object-contain"
+          // Constrain the height only (from the size slider) and let the width
+          // follow the logo's natural aspect ratio, capped to the tile — so a
+          // wide wordmark fills the box instead of being squashed into a square.
+          style={{ height: logoPx }}
+          className="max-w-full flex-none rounded-lg object-contain"
         />
-        {!collapsed && (
-          <span className="max-w-full truncate text-xs font-semibold leading-tight tracking-tight text-slate-700 dark:text-slate-200">
-            {softwareName}
-          </span>
-        )}
       </button>
 
       {/* Nav */}
@@ -109,7 +115,7 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
               list.length > 0 && (
                 <div>
                   {!collapsed && (
-                    <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                    <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-[#7c7266] dark:text-slate-500">
                       {label}
                     </p>
                   )}
@@ -145,7 +151,7 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
         {activeModule && (
           <div>
             {!collapsed && (
-              <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-[#7c7266] dark:text-slate-500">
                 {activeModule.name}
               </p>
             )}
@@ -157,6 +163,9 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
                 const hasActive = menu.items.some(
                   (it) => it.route === pathname,
                 );
+                // A main menu reads as "selected" when it's expanded, or when it
+                // holds the active route (which matters while collapsed).
+                const selected = hasActive || (!collapsed && isOpen);
 
                 return (
                   <div key={key}>
@@ -165,9 +174,9 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
                       title={collapsed ? menu.name : undefined}
                       className={cn(
                         'flex w-full items-center gap-3 rounded-lg border-l-4 border-transparent px-3 py-2 text-sm font-medium transition',
-                        hasActive
-                          ? 'text-[#8b5e34] dark:text-brand-300'
-                          : 'text-[#5d5a56] hover:bg-[#f6eee3] hover:text-[#8b5e34] dark:text-slate-300 dark:hover:bg-slate-800',
+                        selected
+                          ? 'border-[#a06a2c] bg-[#f7ebd7] text-[#4f3416] dark:border-brand-500 dark:bg-brand-950 dark:text-brand-200'
+                          : 'text-[#5a544c] hover:bg-[#e6dcc9] hover:text-[#4f3416] dark:text-slate-300 dark:hover:bg-slate-800',
                         collapsed && 'justify-center',
                       )}
                     >
@@ -236,7 +245,7 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-30 hidden flex-none border-r border-[#efe7db] bg-[#fcfbf8] transition-[width] duration-200 dark:border-slate-800 dark:bg-slate-900 lg:block',
+          'fixed inset-y-0 left-0 z-30 hidden flex-none border-r border-[#efe7db] bg-[#f0e9dc] transition-[width] duration-200 dark:border-slate-800 dark:bg-slate-900 lg:block',
           collapsed ? 'w-[76px]' : 'w-64',
         )}
       >
@@ -259,7 +268,7 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
         />
         <aside
           className={cn(
-            'absolute inset-y-0 left-0 w-64 border-r border-[#efe7db] bg-[#fcfbf8] transition-transform duration-200 dark:border-slate-800 dark:bg-slate-900',
+            'absolute inset-y-0 left-0 w-64 border-r border-[#efe7db] bg-[#f0e9dc] transition-transform duration-200 dark:border-slate-800 dark:bg-slate-900',
             mobileOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
@@ -295,10 +304,10 @@ function NavLink({
       className={cn(
         'flex items-center gap-3 rounded-lg border-l-4 border-transparent px-3 py-2 text-sm transition',
         active
-          ? 'border-[#a06a2c] bg-[#f7ebd7] font-medium text-[#8b5e34] dark:border-brand-500 dark:bg-brand-950 dark:text-brand-200'
-          : 'text-[#5d5a56] hover:bg-[#f6eee3] hover:text-[#8b5e34] dark:text-slate-300 dark:hover:bg-slate-800',
+          ? 'border-[#a06a2c] bg-[#f7ebd7] font-medium text-[#4f3416] dark:border-brand-500 dark:bg-brand-950 dark:text-brand-200'
+          : 'text-[#5a544c] hover:bg-[#e6dcc9] hover:text-[#4f3416] dark:text-slate-300 dark:hover:bg-slate-800',
         collapsed && 'justify-center',
-        sub && !active && 'text-[#7b746c] dark:text-slate-400',
+        sub && !active && 'text-[#6b645b] dark:text-slate-400',
       )}
     >
       <span className="flex-none">{icon}</span>

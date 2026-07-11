@@ -679,6 +679,8 @@ model SoftwareInfo {
   subscriptionExpiry DateTime?
   logoUrl            String?
   logoSize           Int? // displayed brand-logo size in px (null = default)
+  symbolLogoUrl      String? // symbol-only mark shown when the sidebar is collapsed
+  symbolLogoSize     Int? // displayed symbol-logo size in px (null = default)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 

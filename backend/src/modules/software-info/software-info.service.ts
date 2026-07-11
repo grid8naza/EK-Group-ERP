@@ -41,7 +41,11 @@ export class SoftwareInfoService {
         ? new Date(dto.subscriptionExpiry)
         : null,
       logoSize: dto.logoSize ?? null,
+      symbolLogoSize: dto.symbolLogoSize ?? null,
       ...(dto.logoUrl !== undefined ? { logoUrl: dto.logoUrl } : {}),
+      ...(dto.symbolLogoUrl !== undefined
+        ? { symbolLogoUrl: dto.symbolLogoUrl }
+        : {}),
     };
     return this.prisma.softwareInfo.upsert({
       where: { id: 1 },
@@ -56,6 +60,15 @@ export class SoftwareInfoService {
       where: { id: 1 },
       create: { id: 1, logoUrl: url },
       update: { logoUrl: url },
+    });
+  }
+
+  async addSymbolLogo(file: UploadedFile) {
+    const url = await this.persist(file);
+    return this.prisma.softwareInfo.upsert({
+      where: { id: 1 },
+      create: { id: 1, symbolLogoUrl: url },
+      update: { symbolLogoUrl: url },
     });
   }
 

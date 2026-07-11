@@ -11,8 +11,12 @@ export interface SoftwareInfo {
   /** ISO date string (yyyy-mm-dd or full ISO). */
   subscriptionExpiry?: string | null;
   logoUrl?: string | null;
+  /** Symbol-only mark shown when the sidebar is collapsed. */
+  symbolLogoUrl?: string | null;
   /** Displayed brand-logo size in px (null = default 36). */
   logoSize?: number | null;
+  /** Displayed symbol-logo size in px (null = default 36). */
+  symbolLogoSize?: number | null;
 }
 
 /** Default and bounds for the brand-logo size control. */
