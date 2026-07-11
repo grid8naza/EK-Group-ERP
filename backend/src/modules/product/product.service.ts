@@ -22,6 +22,7 @@ import {
   CreateProductDto,
   PackSourceInput,
   ProcessInput,
+  ProductBranchStockInput,
   UpdateProductDto,
 } from './product.dto';
 import { PRODUCT_UPLOAD_DIR, PRODUCT_URL_PREFIX } from './product.constants';
@@ -45,6 +46,17 @@ const withRelations = {
   packSources: {
     orderBy: { sequence: 'asc' },
     select: { id: true, sourceProductId: true, quantity: true, sequence: true },
+  },
+  branchStocks: {
+    orderBy: { branchId: 'asc' },
+    select: {
+      id: true,
+      branchId: true,
+      minStock: true,
+      maxStock: true,
+      reorderLevel: true,
+      leadTimeDays: true,
+    },
   },
   bomLines: {
     orderBy: { sequence: 'asc' },
@@ -164,6 +176,7 @@ export class ProductService {
           bomLines: { create: this.bomCreate(dto.recipe, dto.packing) },
           processes: { create: this.processCreate(dto.processes) },
           packSources: { create: this.packSourceCreate(dto.packSources) },
+          branchStocks: { create: this.branchStockCreate(dto.branchStocks) },
         },
         include: withRelations,
       });
@@ -333,6 +346,14 @@ export class ProductService {
                 },
               }
             : {}),
+          ...(dto.branchStocks !== undefined
+            ? {
+                branchStocks: {
+                  deleteMany: {},
+                  create: this.branchStockCreate(dto.branchStocks),
+                },
+              }
+            : {}),
         },
         include: withRelations,
       });
@@ -412,6 +433,33 @@ export class ProductService {
       sourceProductId: s.sourceProductId,
       quantity: s.quantity,
     }));
+  }
+
+  /** Build ProductBranchStock create rows. Rows whose levels are all zero are
+   *  dropped so the table only holds branches the user actually configured. */
+  private branchStockCreate(
+    rows: ProductBranchStockInput[] | undefined,
+  ): Prisma.ProductBranchStockUncheckedCreateWithoutProductInput[] {
+    const seen = new Set<number>();
+    return (rows ?? [])
+      .filter((r) => {
+        // Guard against duplicate branchIds (unique on [productId, branchId]).
+        if (seen.has(r.branchId)) return false;
+        seen.add(r.branchId);
+        return (
+          (r.minStock ?? 0) > 0 ||
+          (r.maxStock ?? 0) > 0 ||
+          (r.reorderLevel ?? 0) > 0 ||
+          (r.leadTimeDays ?? 0) > 0
+        );
+      })
+      .map((r) => ({
+        branchId: r.branchId,
+        minStock: r.minStock ?? 0,
+        maxStock: r.maxStock ?? 0,
+        reorderLevel: r.reorderLevel ?? 0,
+        leadTimeDays: r.leadTimeDays ?? 0,
+      }));
   }
 
   /** Build ProductProcess create rows from the process-flow array. */

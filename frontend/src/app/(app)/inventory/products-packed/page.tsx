@@ -17,9 +17,24 @@ import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/u
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import type { Product, Group, Unit, HsnCode, Company } from '@/lib/types';
+import type { Product, Group, Unit, HsnCode, Company, Branch } from '@/lib/types';
 
 const ROUTE = '/inventory/products-packed';
+
+// Per-branch stocking parameters, kept as strings while editing (like every
+// other numeric field on this form). Keyed by branchId in the form state.
+type BranchStockForm = {
+  minStock: string;
+  maxStock: string;
+  reorderLevel: string;
+  leadTimeDays: string;
+};
+const EMPTY_BS: BranchStockForm = {
+  minStock: '',
+  maxStock: '',
+  reorderLevel: '',
+  leadTimeDays: '',
+};
 
 const empty = {
   code: '',
@@ -51,6 +66,9 @@ const empty = {
   isIngredient: false,
   allCompanies: true,
   companyIds: [] as number[],
+  // Per-branch stock levels, keyed by branchId (built from the product's saved
+  // rows; branches with no saved row start blank).
+  branchStocks: {} as Record<number, BranchStockForm>,
   isActive: true,
 };
 
@@ -85,6 +103,7 @@ export default function ProductsPage() {
   const { data: units } = useFetch<Unit[]>('/units');
   const { data: hsnCodes } = useFetch<HsnCode[]>('/hsn-codes');
   const { data: companies } = useFetch<Company[]>('/companies');
+  const { data: branches } = useFetch<Branch[]>('/branches');
   const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<Product>({
     endpoint: '/products',
     route: ROUTE,
@@ -232,6 +251,17 @@ export default function ProductsPage() {
     isIngredient: false,
     allCompanies: p.allCompanies,
     companyIds: p.companyIds ?? [],
+    branchStocks: Object.fromEntries(
+      (p.branchStocks ?? []).map((bs) => [
+        bs.branchId,
+        {
+          minStock: bs.minStock ? String(bs.minStock) : '',
+          maxStock: bs.maxStock ? String(bs.maxStock) : '',
+          reorderLevel: bs.reorderLevel ? String(bs.reorderLevel) : '',
+          leadTimeDays: bs.leadTimeDays ? String(bs.leadTimeDays) : '',
+        },
+      ]),
+    ) as Record<number, BranchStockForm>,
     isActive: p.isActive,
   });
 
@@ -276,6 +306,36 @@ export default function ProductsPage() {
         : [...f.companyIds, id],
     }));
 
+  // Branches the product can be stocked at: every active branch of each company
+  // the product is available in (all companies, or the chosen set), grouped by
+  // company. New branches appear automatically because this reads the live
+  // branch list rather than the product's saved rows.
+  const availableCompanyIds = form.allCompanies
+    ? companyList.map((c) => c.id)
+    : form.companyIds;
+  const branchGroups = companyList
+    .filter((c) => availableCompanyIds.includes(c.id))
+    .map((c) => ({
+      company: c,
+      branches: (branches ?? []).filter(
+        (b) => b.companyId === c.id && b.isActive,
+      ),
+    }))
+    .filter((g) => g.branches.length > 0);
+
+  const setBranchStock = (
+    branchId: number,
+    field: keyof BranchStockForm,
+    value: string,
+  ) =>
+    setForm((f) => ({
+      ...f,
+      branchStocks: {
+        ...f.branchStocks,
+        [branchId]: { ...(f.branchStocks[branchId] ?? EMPTY_BS), [field]: value },
+      },
+    }));
+
   const save = async (mode: SaveMode = 'saveClose') => {
     if (!form.name.trim()) {
       toast.error('Name is required.');
@@ -296,6 +356,20 @@ export default function ProductsPage() {
 
     const num = (s: string) => Number(s) || 0;
     const idOrNull = (s: string) => (s ? Number(s) : null);
+    // One row per displayed branch (available companies only). Branches removed
+    // from availability are dropped; the backend also drops all-zero rows.
+    const branchStocks = branchGroups
+      .flatMap((g) => g.branches)
+      .map((b) => {
+        const v = form.branchStocks[b.id] ?? EMPTY_BS;
+        return {
+          branchId: b.id,
+          minStock: num(v.minStock),
+          maxStock: num(v.maxStock),
+          reorderLevel: num(v.reorderLevel),
+          leadTimeDays: num(v.leadTimeDays),
+        };
+      });
     // Note: recipe/packing are intentionally omitted — the BOM is edited under
     // Production, and omitting them leaves the saved BOM untouched.
     const payload = {
@@ -325,6 +399,9 @@ export default function ProductsPage() {
       isIngredient: form.isIngredient,
       allCompanies: form.allCompanies,
       companyIds: form.allCompanies ? [] : form.companyIds,
+      // Only send when the branch list has loaded, so a failed/empty fetch can't
+      // silently wipe saved rows (backend leaves them intact when omitted).
+      ...(branches ? { branchStocks } : {}),
       isActive: form.isActive,
     };
 
@@ -1020,6 +1097,122 @@ export default function ProductsPage() {
                       />
                     ))
                   )}
+                </div>
+              )}
+            </div>
+
+            {/* Per-branch stock levels — one row per active branch of every
+                company this product is available in. New branches appear here
+                automatically (rendered from the live branch list). */}
+            <div className="flex flex-col gap-2 sm:col-span-2">
+              <span className="label !mb-0">Branch Stock Levels</span>
+              <p className="text-xs text-slate-400">
+                Minimum / maximum stock, reorder level and lead time (days) per
+                branch. New branches are added here automatically.
+              </p>
+              {branchGroups.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-slate-200 p-3 text-sm text-slate-400 dark:border-slate-700">
+                  No branches to configure. Add branches under the companies this
+                  product is available in.
+                </p>
+              ) : (
+                <div className="space-y-4 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                  {branchGroups.map((g) => (
+                    <div key={g.company.id}>
+                      <div className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                        {g.company.name}
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse text-sm">
+                          <thead>
+                            <tr className="text-left text-xs text-slate-400">
+                              <th className="pb-1 pr-2 font-medium">Branch</th>
+                              <th className="pb-1 pr-2 font-medium">Min</th>
+                              <th className="pb-1 pr-2 font-medium">Max</th>
+                              <th className="pb-1 pr-2 font-medium">Reorder</th>
+                              <th className="pb-1 font-medium">Lead (days)</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {g.branches.map((b) => {
+                              const v = form.branchStocks[b.id] ?? EMPTY_BS;
+                              return (
+                                <tr key={b.id}>
+                                  <td className="py-1 pr-2 align-middle text-slate-700 dark:text-slate-200">
+                                    {b.name}
+                                  </td>
+                                  <td className="py-1 pr-2">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      step="any"
+                                      className="input-base w-24 text-right"
+                                      value={v.minStock}
+                                      onChange={(e) =>
+                                        setBranchStock(
+                                          b.id,
+                                          'minStock',
+                                          e.target.value,
+                                        )
+                                      }
+                                    />
+                                  </td>
+                                  <td className="py-1 pr-2">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      step="any"
+                                      className="input-base w-24 text-right"
+                                      value={v.maxStock}
+                                      onChange={(e) =>
+                                        setBranchStock(
+                                          b.id,
+                                          'maxStock',
+                                          e.target.value,
+                                        )
+                                      }
+                                    />
+                                  </td>
+                                  <td className="py-1 pr-2">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      step="any"
+                                      className="input-base w-24 text-right"
+                                      value={v.reorderLevel}
+                                      onChange={(e) =>
+                                        setBranchStock(
+                                          b.id,
+                                          'reorderLevel',
+                                          e.target.value,
+                                        )
+                                      }
+                                    />
+                                  </td>
+                                  <td className="py-1">
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      step={1}
+                                      className="input-base w-24 text-right"
+                                      value={v.leadTimeDays}
+                                      onChange={(e) =>
+                                        setBranchStock(
+                                          b.id,
+                                          'leadTimeDays',
+                                          e.target.value,
+                                        )
+                                      }
+                                    />
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

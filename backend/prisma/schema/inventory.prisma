@@ -320,6 +320,7 @@ model Product {
   processes ProductProcess[]
   packSources  ProductPackSource[] @relation("PackSources")  // unpacked products this pack is made from
   packSourceOf ProductPackSource[] @relation("PackSourceOf") // packs that use this product as a source
+  branchStocks ProductBranchStock[] // per-branch stocking parameters
 
   @@index([categoryId])
   @@index([groupId])
@@ -406,6 +407,30 @@ model ProductBomLine {
   @@index([productId])
   @@index([itemId])
   @@map("product_bom_lines")
+}
+
+/// Per-branch stocking parameters for a product: minimum / maximum stock levels,
+/// the reorder trigger level, and the replenishment lead time (in days). One row
+/// per branch the user has set values for; branches with no row fall back to
+/// zero. `branchId` is a plain cross-domain id -> Cpanel Branch (mirrors
+/// ProductCompany.companyId — no cross-domain FK). Edited on Products - Packed;
+/// new branches are picked up automatically because the editor renders from the
+/// live branch list, not from stored rows.
+model ProductBranchStock {
+  id           Int   @id @default(autoincrement())
+  productId    Int
+  branchId     Int // -> Cpanel Branch, by id (no cross-domain FK)
+  minStock     Float @default(0)
+  maxStock     Float @default(0)
+  reorderLevel Float @default(0)
+  leadTimeDays Int   @default(0)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, branchId])
+  @@index([productId])
+  @@index([branchId])
+  @@map("product_branch_stocks")
 }
 
 /// Links a product to a company it is available in (when not `allCompanies`).

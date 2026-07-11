@@ -26,6 +26,34 @@ export class PackSourceInput {
   quantity!: number;
 }
 
+/** Per-branch stocking parameters for a product. `branchId` is a plain
+ *  cross-domain id -> Cpanel Branch. All levels default to 0 when omitted. */
+export class ProductBranchStockInput {
+  @IsInt()
+  branchId!: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  minStock?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maxStock?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  reorderLevel?: number;
+
+  /** Replenishment lead time in days. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  leadTimeDays?: number;
+}
+
 /** One BOM line — `quantity` of `itemId`, measured in `unitId`. */
 export class BomLineInput {
   @IsInt()
@@ -207,6 +235,13 @@ export class CreateProductDto {
   @ValidateNested({ each: true })
   @Type(() => PackSourceInput)
   packSources?: PackSourceInput[];
+
+  /** Per-branch stocking parameters (min/max/reorder/lead time). */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductBranchStockInput)
+  branchStocks?: ProductBranchStockInput[];
 
   /** A production (recipe) BOM can be created for this product. */
   @IsOptional()
@@ -404,6 +439,13 @@ export class UpdateProductDto {
   @ValidateNested({ each: true })
   @Type(() => PackSourceInput)
   packSources?: PackSourceInput[];
+
+  /** Per-branch stocking parameters (min/max/reorder/lead time). */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductBranchStockInput)
+  branchStocks?: ProductBranchStockInput[];
 
   @IsOptional()
   @IsBoolean()

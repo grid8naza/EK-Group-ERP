@@ -762,6 +762,16 @@ export interface Product {
     quantity: number;
     sequence?: number;
   }[];
+  /** Per-branch stocking parameters (min/max/reorder level + lead time in days).
+   *  One entry per branch that has been configured. */
+  branchStocks?: {
+    id?: number;
+    branchId: number;
+    minStock: number;
+    maxStock: number;
+    reorderLevel: number;
+    leadTimeDays: number;
+  }[];
   // BOM costing inputs (material cost is computed from the recipe).
   labourCost: number;
   fuelCost: number;
