@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ClipboardList, Plus, Trash2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
@@ -218,11 +218,15 @@ export function OpeningStockScreen({
   const openNew = () => {
     setEditingDoc(null);
     setViewMode(false);
-    setStoreId(defaultStoreId ? String(defaultStoreId) : '');
-    setDocDate(todayInput());
+    const initStore = defaultStoreId ? String(defaultStoreId) : '';
+    const initDate = todayInput();
+    const initLines = [blankLine()];
+    setStoreId(initStore);
+    setDocDate(initDate);
     setReference('');
     setNotes('');
-    setLines([blankLine()]);
+    setLines(initLines);
+    initialSnapshot.current = makeSnap(initStore, initDate, '', '', initLines);
     setOpen(true);
     focusId('os-docdate'); // land the cursor in Document date on open
   };
@@ -234,17 +238,23 @@ export function OpeningStockScreen({
     setDocDate(dateInput(full.docDate));
     setReference(full.reference ?? '');
     setNotes(full.notes ?? '');
-    setLines(
-      (full.lines ?? []).map((l) => ({
-        key: String(l.itemId ?? l.productId ?? ''),
-        quantity: String(l.qtyIn),
-        unitPrice: String(l.unitPrice ?? 0),
-        intercompanyPrice: l.intercompanyPrice ? String(l.intercompanyPrice) : '',
-        wholesalePrice: l.wholesalePrice ? String(l.wholesalePrice) : '',
-        retailPrice: l.retailPrice ? String(l.retailPrice) : '',
-        batchNo2: l.batchNo2 ?? '',
-        expiry: dateInput(l.expiryDate),
-      })),
+    const loadedLines: DraftLine[] = (full.lines ?? []).map((l) => ({
+      key: String(l.itemId ?? l.productId ?? ''),
+      quantity: String(l.qtyIn),
+      unitPrice: String(l.unitPrice ?? 0),
+      intercompanyPrice: l.intercompanyPrice ? String(l.intercompanyPrice) : '',
+      wholesalePrice: l.wholesalePrice ? String(l.wholesalePrice) : '',
+      retailPrice: l.retailPrice ? String(l.retailPrice) : '',
+      batchNo2: l.batchNo2 ?? '',
+      expiry: dateInput(l.expiryDate),
+    }));
+    setLines(loadedLines);
+    initialSnapshot.current = makeSnap(
+      String(full.storeId),
+      dateInput(full.docDate),
+      full.reference ?? '',
+      full.notes ?? '',
+      loadedLines,
     );
   };
   const openView = async (r: StockDocumentRow) => {
@@ -275,6 +285,33 @@ export function OpeningStockScreen({
     setEditingDoc(null);
   };
 
+  // Snapshot of the form as it was opened/last saved, to detect unsaved edits.
+  const initialSnapshot = useRef('');
+  const makeSnap = (
+    sStore: string,
+    sDate: string,
+    sRef: string,
+    sNotes: string,
+    sLines: DraftLine[],
+  ) => JSON.stringify({ sStore, sDate, sRef, sNotes, sLines });
+  const isDirty = () =>
+    makeSnap(storeId, docDate, reference, notes, lines) !== initialSnapshot.current;
+
+  // Close guarded by an unsaved-changes prompt (X, Cancel, Esc). View mode and a
+  // pristine form close straight away.
+  const requestClose = async () => {
+    if (!viewMode && isDirty()) {
+      const ok = await confirm({
+        title: 'Discard changes?',
+        message: 'This document has unsaved changes. Close without saving?',
+        danger: true,
+        confirmText: 'Discard',
+      });
+      if (!ok) return;
+    }
+    closeOverlay();
+  };
+
   const buildLines = () =>
     lines
       .filter((l) => l.key && Number(l.quantity) > 0)
@@ -293,11 +330,14 @@ export function OpeningStockScreen({
 
   const resetForm = () => {
     setEditingDoc(null);
+    const initDate = todayInput();
+    const initLines = [blankLine()];
     setStoreId('');
-    setDocDate(todayInput());
+    setDocDate(initDate);
     setReference('');
     setNotes('');
-    setLines([blankLine()]);
+    setLines(initLines);
+    initialSnapshot.current = makeSnap('', initDate, '', '', initLines);
   };
 
   const doSave = async (mode: SaveMode = 'saveClose') => {
@@ -474,7 +514,7 @@ export function OpeningStockScreen({
       {/* Overlay data-entry form */}
       <Drawer
         open={open}
-        onClose={closeOverlay}
+        onClose={requestClose}
         title={
           viewMode
             ? `Opening Stock ${editingDoc?.docNo ?? ''}`
@@ -490,7 +530,7 @@ export function OpeningStockScreen({
             <CloseFooter onClose={closeOverlay} />
           ) : (
             <DrawerFooter
-              onCancel={closeOverlay}
+              onCancel={requestClose}
               onSave={doSave}
               saving={saving}
               dataEntry
@@ -534,10 +574,10 @@ export function OpeningStockScreen({
           {/* Scrollable lines — the column headings stick to the top. */}
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-slate-200 dark:border-slate-800">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm [&_td]:border [&_td]:border-slate-200 [&_th]:border [&_th]:border-slate-200 dark:[&_td]:border-slate-700 dark:[&_th]:border-slate-700">
                 <thead>
-                  <tr className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-900">
-                    <th className="w-10 py-2 pl-3 pr-1 text-right">#</th>
+                  <tr className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-center text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-900">
+                    <th className="w-10 py-2 pl-3 pr-1 text-center">#</th>
                     <th className="py-2 pr-2">{isItem ? 'Item' : 'Product'}</th>
                     {viewMode && <th className="py-2 px-1">Batch No</th>}
                     <th className="py-2 px-1">Supplier Batch</th>
