@@ -1,7 +1,40 @@
 # Erp Grid8 — Build Progress / Resume Notes
 
-_Last updated: 2026-06-27. Tracks what's built so work can resume across
-sessions._
+_Tracks what's built so work can resume across sessions._
+
+---
+
+## ⚡ Update 2026-07-12 (corrections to the 2026-06-27 notes below)
+
+The detailed status further down is a **2026-06-27** snapshot and is now
+partly out of date. Current reality (see `PROJECT_CONTEXT.md` for the full map):
+
+- **Branch:** all work lives on **`control-panel-setup`** (≈183 commits ahead of
+  `main`; `main` is stale at the merge-base). Work/verify against that branch.
+- **Workflow Engine is BUILT** (the earlier "intentionally excluded" note is
+  obsolete): configurable per-document approval chains, runtime tasks/inbox,
+  immutable action log, in-app notifications, reusable status vocabulary. UI in
+  Cpanel (`workflows`, `approval-statuses`) + user inbox `/workflow/approvals`.
+- **New user modules since June 27:** **Production** (Recipe Master, Packing
+  Master, Production Orders), **Asset** (categories/groups/assets + bookings),
+  **HR** (categories/groups/designations w/ hourly rate), **CRM** (inter-company
+  Purchase Orders + Sales Orders), **Accounts** (Supplier master), **Workflow**.
+- **Inventory grew:** Product master (recipe/packing BOM), Store master, Opening
+  Stock (4 screens by material type), Stock Transactions / Inventory Vouchers
+  (GRN, Delivery Note, Goods Issue, Purchase/Sales Return), `StockLedger` +
+  `StockBatch` lots, per-branch product stock.
+- **New Cpanel:** Document Master + **Document Numbering** (per company) and
+  **Batch Numbering** (per company+branch), Software Info singleton, Login-screen
+  branding, per-company logo.
+- **New contract ports:** `numbering`, `batch-numbering`, `workflow`,
+  `metric-provider` (in addition to `user-lookup`).
+- **Prisma schema split** now spans: `cpanel, inventory, production, asset, hr,
+  crm, accounts, workflow, enums, schema`.
+
+The section below is retained as historical context; treat conflicts in its
+favour of this block.
+
+---
 
 ## What Erp Grid8 is
 
