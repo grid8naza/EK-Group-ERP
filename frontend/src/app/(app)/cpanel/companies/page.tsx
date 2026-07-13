@@ -856,7 +856,7 @@ export default function CompaniesPage() {
           <div className="sm:col-span-2">
             <label className="label">Logo</label>
             <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-xl border border-[#e7ddd0] bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
+              <div className="flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
                 {form.logo ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={mediaUrl(form.logo)} alt="Logo" className="h-full w-full object-contain" />

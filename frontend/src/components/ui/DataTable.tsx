@@ -170,7 +170,7 @@ export function DataTable<T>({
   fillHeight = true,
   bordered = false,
 }: DataTableProps<T>) {
-  const cellBorder = bordered ? 'border border-[#e7ddcb] dark:border-slate-800' : '';
+  const cellBorder = bordered ? 'border border-slate-200 dark:border-slate-800' : '';
   const [internalSearch, setInternalSearch] = useState('');
   const [page, setPage] = useState(1);
   const [sortState, setSortState] = useState<SortState | null>(
@@ -358,7 +358,7 @@ export function DataTable<T>({
       )}
     >
       {/* Toolbar */}
-      <div className="flex flex-col gap-3 border-b border-slate-200 p-4 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 border-b border-slate-200 p-3 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-1 flex-wrap items-center gap-2">{toolbar}</div>
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -409,7 +409,7 @@ export function DataTable<T>({
       >
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="border-b border-[#efe7db] bg-[#fcfbf8] text-xs font-semibold uppercase tracking-wide text-[#6d6258] dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
+            <tr className="border-b border-slate-200 bg-white text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500">
               {visibleColumns.map((c) => {
                 const sortable =
                   (c.sortable ?? (!!c.accessor || !!c.sortAccessor)) &&
@@ -441,10 +441,10 @@ export function DataTable<T>({
                         : undefined
                     }
                     className={cn(
-                      'group px-4 py-3',
+                      'group px-4 py-2.5',
                       cellBorder,
                       fillHeight &&
-                        'sticky top-0 z-10 bg-[#fcfbf8] dark:bg-slate-900',
+                        'sticky top-0 z-10 bg-white dark:bg-slate-900',
                       canReorder &&
                         dragKey &&
                         overKey === c.key &&
@@ -505,10 +505,10 @@ export function DataTable<T>({
               {hasActions && (
                 <th
                   className={cn(
-                    'px-4 py-3 text-right',
+                    'px-4 py-2.5 text-right',
                     cellBorder,
                     fillHeight &&
-                      'sticky top-0 z-10 bg-[#fcfbf8] dark:bg-slate-900',
+                      'sticky top-0 z-10 bg-white dark:bg-slate-900',
                   )}
                 >
                   Actions
@@ -543,7 +543,7 @@ export function DataTable<T>({
                   key={rowKey(row)}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                   className={cn(
-                    'border-b border-slate-100 transition last:border-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40',
+                    'border-b border-slate-100 transition last:border-0 hover:bg-slate-50/70 dark:border-slate-800/60 dark:hover:bg-slate-800/40',
                     onRowClick && 'cursor-pointer',
                     rowClassName?.(row),
                   )}
@@ -552,7 +552,7 @@ export function DataTable<T>({
                     <td
                       key={c.key}
                       className={cn(
-                        'px-4 py-3 text-slate-700 dark:text-slate-300',
+                        'px-4 py-2.5 text-slate-700 dark:text-slate-300',
                         cellBorder,
                         c.className,
                       )}
@@ -565,7 +565,7 @@ export function DataTable<T>({
                     </td>
                   ))}
                   {hasActions && (
-                    <td className={cn('px-4 py-3', cellBorder)}>
+                    <td className={cn('px-4 py-2.5', cellBorder)}>
                       <div
                         className="flex items-center justify-end gap-1"
                         onClick={(e) => e.stopPropagation()}

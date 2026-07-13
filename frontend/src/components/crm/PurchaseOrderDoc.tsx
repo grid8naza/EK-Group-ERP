@@ -43,7 +43,7 @@ export function PurchaseOrderDoc({
   const timeline = order.workflow?.timeline ?? [];
 
   return (
-    <div className="mx-auto w-full max-w-3xl rounded-xl border border-[#e7ddcb] bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="mx-auto w-full max-w-3xl rounded-xl border border-slate-200 bg-white p-8 dark:border-slate-800 dark:bg-slate-900">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-5 dark:border-slate-700">
         <div>

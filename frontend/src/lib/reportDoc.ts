@@ -320,23 +320,23 @@ export function printReport(
       h1{font-size:20px;font-weight:bold;margin:0 0 2px;text-align:center}
       .sub{font-size:14px;margin:0;text-align:center}
       .date{color:#64748b;font-size:12px;margin:2px 0 16px;text-align:center}
-      h2{font-size:14px;margin:18px 0 4px;border-bottom:2px solid #c9b896;padding-bottom:2px;text-align:center}
+      h2{font-size:14px;margin:18px 0 4px;border-bottom:2px solid #cbd5e1;padding-bottom:2px;text-align:center}
       h3{font-size:12px;margin:10px 0 4px;color:#475569}
       .muted{color:#94a3b8;font-weight:normal}
       table{width:100%;table-layout:fixed;border-collapse:collapse;margin-bottom:8px;font-size:11px}
-      th,td{border:1px solid #d8d2c6;padding:4px 6px;text-align:left;overflow-wrap:anywhere;word-break:break-word}
-      th{background:#f3ece0;text-align:center}
+      th,td{border:1px solid #e2e8f0;padding:4px 6px;text-align:left;overflow-wrap:anywhere;word-break:break-word}
+      th{background:#f1f5f9;text-align:center}
       /* Repeat the column headings on every printed page. */
       thead{display:table-header-group}
-      tr.lvl1 td{background:#f7ebd7}
+      tr.lvl1 td{background:#eef4f1}
       td.num{text-align:right;font-variant-numeric:tabular-nums}
       ${spec.serial ? 'td:first-child{text-align:center}' : ''}
-      .summary{margin-top:14px;padding:8px 12px;border:1px solid #d8d2c6;border-radius:6px;background:#faf6ee;display:flex;flex-wrap:wrap;gap:6px 20px;font-size:12px;page-break-inside:avoid}
-      .summary-title{font-weight:bold;text-transform:uppercase;letter-spacing:.04em;color:#6d6258;margin-right:6px}
-      .summary-item b{color:#3f3a33}
+      .summary{margin-top:14px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc;display:flex;flex-wrap:wrap;gap:6px 20px;font-size:12px;page-break-inside:avoid}
+      .summary-title{font-weight:bold;text-transform:uppercase;letter-spacing:.04em;color:#64748b;margin-right:6px}
+      .summary-item b{color:#0f172a}
       .toolbar{display:flex;gap:8px;margin-bottom:14px}
       .toolbar button{padding:6px 16px;font-size:13px;font-family:inherit;border:1px solid #cbd5e1;border-radius:6px;background:#f1f5f9;color:#334155;cursor:pointer}
-      .toolbar button.primary{background:#8b5e34;border-color:#8b5e34;color:#fff}
+      .toolbar button.primary{background:#1c463a;border-color:#1c463a;color:#fff}
       /* Page setup: print only the report (hide the toolbar), landscape. */
       @page{size:landscape;margin:10mm}
       @media print{.toolbar{display:none} body{margin:0}}
@@ -472,7 +472,7 @@ export function pdfReport(spec: ReportSpec): void {
           section: string;
           row: { index: number };
           column: { index: number };
-          cell: { styles: { fillColor?: number[]; halign?: 'right' } };
+          cell: { styles: { fillColor?: string | number | number[] | false; halign?: string } };
         }) => {
           if (d.section === 'body' && t.shade?.[d.row.index])
             d.cell.styles.fillColor = [247, 235, 215];

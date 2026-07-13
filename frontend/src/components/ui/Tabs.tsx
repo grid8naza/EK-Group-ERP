@@ -20,7 +20,7 @@ export function Tabs({ tabs, active, onChange, className }: TabsProps) {
   return (
     <div
       className={cn(
-        'flex gap-1 border-b border-slate-200 dark:border-slate-800',
+        'inline-flex flex-wrap items-center gap-1 rounded-full border border-slate-200 bg-slate-100/70 p-1 dark:border-slate-800 dark:bg-slate-900',
         className,
       )}
     >
@@ -31,10 +31,10 @@ export function Tabs({ tabs, active, onChange, className }: TabsProps) {
           disabled={t.disabled}
           onClick={() => onChange(t.key)}
           className={cn(
-            '-mb-px flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40',
+            'flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-40',
             active === t.key
-              ? 'border-brand-600 text-brand-600'
-              : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
+              ? 'bg-white text-brand-700 dark:bg-slate-700 dark:text-white'
+              : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200',
           )}
         >
           {t.icon}

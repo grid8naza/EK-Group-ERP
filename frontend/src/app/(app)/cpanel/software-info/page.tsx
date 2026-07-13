@@ -153,7 +153,7 @@ export default function SoftwareInfoPage() {
         }
       />
 
-      <div className="card border-[#e7ddcb] bg-[#fbf9f4] p-6 dark:border-slate-800 dark:bg-slate-900">
+      <div className="card border-slate-200 bg-slate-50 p-6 dark:border-slate-800 dark:bg-slate-900">
         {loading ? (
           <p className="py-8 text-center text-sm text-slate-400">Loading…</p>
         ) : (
@@ -164,7 +164,7 @@ export default function SoftwareInfoPage() {
             <div className="grid grid-cols-1 items-center gap-6 sm:grid-cols-2">
               {/* Full logo */}
               <div className="flex flex-col items-center gap-3 text-center">
-                <div className="flex h-24 w-24 flex-none items-center justify-center overflow-hidden rounded-xl border border-[#e7ddcb] bg-white p-2 dark:border-slate-700 dark:bg-slate-800">
+                <div className="flex h-24 w-24 flex-none items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-800">
                   {logoUrl && !logoBroken ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -225,7 +225,7 @@ export default function SoftwareInfoPage() {
 
               {/* Symbol logo — shown when the sidebar is collapsed. */}
               <div className="flex flex-col items-center gap-3 text-center">
-                <div className="flex h-24 w-24 flex-none items-center justify-center overflow-hidden rounded-xl border border-[#e7ddcb] bg-white p-2 dark:border-slate-700 dark:bg-slate-800">
+                <div className="flex h-24 w-24 flex-none items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-800">
                   {symbolLogoUrl && !symbolBroken ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img

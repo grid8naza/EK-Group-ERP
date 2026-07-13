@@ -114,7 +114,7 @@ export function Drawer({
         role="dialog"
         aria-modal="true"
         className={cn(
-          'absolute right-0 top-0 flex h-full w-full flex-col bg-slate-50 shadow-2xl transition-transform duration-300 ease-out dark:bg-slate-950',
+          'absolute right-0 top-0 flex h-full w-full flex-col border-l border-slate-200 bg-slate-50 transition-transform duration-300 ease-out dark:border-slate-800 dark:bg-slate-950',
           WIDTHS[width],
           open ? 'translate-x-0' : 'translate-x-full',
         )}

@@ -10,28 +10,31 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Warm "bakery" coffee/gold palette — drives every brand-* usage
-        // (primary buttons, active nav, focus rings, header gradients). Primary
-        // = brand-600 (#8F5A1E), hover = brand-500 (#A56A24), gold = brand-400
-        // (#C98A25), tint = brand-100 (#F7EBD7). A future dynamic theme swaps these.
+        // Deep evergreen / pine-teal palette — drives every brand-* usage
+        // (primary buttons, active nav, focus rings, brand marks). Primary =
+        // brand-600 (#245746), hover = brand-500 (#2f6b58), darkest CTA/mark =
+        // brand-800 (#15352c), tint = brand-100 (#d7e7e0). Static tokens (no
+        // API/DB theming reads these — a future dynamic theme may swap them).
         brand: {
-          50: '#faf6ef',
-          100: '#f7ebd7',
-          200: '#ead3ac',
-          300: '#d9b27a',
-          400: '#c98a25',
-          500: '#a56a24',
-          600: '#8f5a1e',
-          700: '#774a18',
-          800: '#5e3b14',
-          900: '#4a2f11',
-          950: '#2b1b0a',
+          50: '#eef4f1',
+          100: '#d7e7e0',
+          200: '#b0cfc3',
+          300: '#82b0a0',
+          400: '#54907c',
+          500: '#2f6b58',
+          600: '#245746',
+          700: '#1c463a',
+          800: '#15352c',
+          900: '#0f2820',
+          950: '#081a15',
         },
       },
       boxShadow: {
-        soft: '0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06)',
-        // Warm, soft card shadow tuned to the bakery palette.
-        card: '0 8px 24px rgba(87, 58, 24, 0.06)',
+        // Flat, shadow-free design: surfaces are defined by hairline borders,
+        // never elevation. These tokens resolve to nothing so any stray
+        // `shadow-soft` / `shadow-card` usage stays invisible.
+        soft: 'none',
+        card: 'none',
       },
       borderRadius: {
         xl: '0.875rem',

@@ -49,8 +49,8 @@ export function SoftwareInfoDialog({
         className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-[#e7ddcb] bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
-        <div className="relative flex flex-col items-center gap-2 border-b border-slate-100 bg-[#fbf9f4] px-5 py-5 text-center dark:border-slate-800 dark:bg-slate-900/60">
+      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div className="relative flex flex-col items-center gap-2 border-b border-slate-100 bg-slate-50 px-5 py-5 text-center dark:border-slate-800 dark:bg-slate-900/60">
           <button
             onClick={onClose}
             className="absolute right-3 top-3 rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"

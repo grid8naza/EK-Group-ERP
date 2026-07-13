@@ -200,20 +200,20 @@ export function buildRecipeHtml(
 <title>Recipe — ${esc(p.name)}</title>
 <style>
   * { box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; color: #2f2a26; margin: 24px; font-size: 12px; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #1e293b; margin: 24px; font-size: 12px; }
   h1 { font-size: 18px; margin: 0 0 2px; }
-  .sub { color: #6d6258; font-size: 11px; margin-bottom: 14px; }
-  .meta { display: flex; gap: 24px; flex-wrap: wrap; border: 1px solid #cfc4b0; background: #f3e8d3; padding: 10px 12px; border-radius: 6px; margin-bottom: 16px; }
-  .meta div span { display: block; color: #6d6258; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+  .sub { color: #64748b; font-size: 11px; margin-bottom: 14px; }
+  .meta { display: flex; gap: 24px; flex-wrap: wrap; border: 1px solid #cbd5e1; background: #eef4f1; padding: 10px 12px; border-radius: 6px; margin-bottom: 16px; }
+  .meta div span { display: block; color: #64748b; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
   .meta div b { font-size: 13px; }
-  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; background: #5b544c; color: #fff; padding: 6px 8px; margin: 18px 0 0; border-radius: 4px 4px 0 0; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; background: #334155; color: #fff; padding: 6px 8px; margin: 18px 0 0; border-radius: 4px 4px 0 0; }
   table { width: 100%; border-collapse: collapse; font-size: 11px; }
-  th, td { border: 1px solid #c9c1b4; padding: 5px 8px; text-align: left; }
-  th { background: #efe7d6; }
+  th, td { border: 1px solid #e2e8f0; padding: 5px 8px; text-align: left; }
+  th { background: #f1f5f9; }
   td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
   td.c, th.c { text-align: center; }
   .muted { color: #999; }
-  tfoot td, tr.total td { font-weight: bold; background: #f3ece0; }
+  tfoot td, tr.total td { font-weight: bold; background: #f1f5f9; }
   .grid2 { display: flex; gap: 16px; align-items: flex-start; }
   .grid2 > div { flex: 1; }
   @media print { body { margin: 12mm; } .no-print { display: none; } }
@@ -248,7 +248,7 @@ export function buildRecipeHtml(
   <div class="grid2">
     <table>
       <thead>
-        <tr><th colspan="2" style="text-align:center;background:#5b544c;color:#fff;">Price per ${batchQty} ${esc(yieldUnitCode)}</th></tr>
+        <tr><th colspan="2" style="text-align:center;background:#334155;color:#fff;">Price per ${batchQty} ${esc(yieldUnitCode)}</th></tr>
         <tr><th>Description</th><th class="r">Amount</th></tr>
       </thead>
       <tbody>
@@ -265,7 +265,7 @@ export function buildRecipeHtml(
     </table>
     <table>
       <thead>
-        <tr><th colspan="3" style="text-align:center;background:#5b544c;color:#fff;">Price per 1 ${esc(yieldUnitCode)}</th></tr>
+        <tr><th colspan="3" style="text-align:center;background:#334155;color:#fff;">Price per 1 ${esc(yieldUnitCode)}</th></tr>
         <tr><th>Description</th><th class="r">Estimated</th><th class="r">Actual</th></tr>
       </thead>
       <tbody>
