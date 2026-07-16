@@ -159,7 +159,7 @@ export function Topbar({
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 flex-none items-center gap-3 border-b border-[#efe7db] bg-white/80 px-4 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
+    <header className="sticky top-0 z-30 flex h-16 flex-none items-center gap-3 border-b border-slate-200 bg-white/80 px-4 backdrop-blur dark:border-slate-800 dark:bg-slate-900/80">
       {/* Mobile menu button */}
       <button
         onClick={onToggleMobile}
@@ -200,10 +200,10 @@ export function Topbar({
               </span>
             )}
             <span className="hidden flex-col justify-center sm:flex">
-              <span className="text-[9px] font-semibold uppercase leading-none tracking-wider text-[#a79b8c]">
+              <span className="text-[9px] font-semibold uppercase leading-none tracking-wider text-slate-400">
                 Company
               </span>
-              <span className="mt-0.5 text-sm font-bold leading-tight text-[#2f2a26] dark:text-slate-100">
+              <span className="mt-0.5 text-sm font-bold leading-tight text-slate-800 dark:text-slate-100">
                 {activeCompany.legalName || activeCompany.name}
               </span>
             </span>
@@ -217,15 +217,15 @@ export function Topbar({
           <div className="relative" ref={coRef}>
             <button
               onClick={() => setCoOpen((v) => !v)}
-              className="flex h-11 items-center gap-2.5 rounded-xl border border-[#e7ddd0] bg-white px-3 text-left transition hover:bg-[#f6eee3] dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
+              className="flex h-11 items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 text-left transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
               title="Switch company"
             >
               <Building2 className="h-[18px] w-[18px] flex-none text-brand-600" />
               <span className="hidden min-w-0 flex-col justify-center sm:flex">
-                <span className="text-[9px] font-semibold uppercase leading-none tracking-wider text-[#a79b8c]">
+                <span className="text-[9px] font-semibold uppercase leading-none tracking-wider text-slate-400">
                   Company
                 </span>
-                <span className="mt-0.5 max-w-[12rem] truncate text-[13px] font-semibold leading-tight text-[#2f2a26] dark:text-slate-200">
+                <span className="mt-0.5 max-w-[12rem] truncate text-[13px] font-semibold leading-tight text-slate-800 dark:text-slate-200">
                   {activeCompany?.name || 'Select company'}
                 </span>
               </span>
@@ -238,7 +238,7 @@ export function Topbar({
             </button>
 
             {coOpen && (
-              <div className="absolute right-0 mt-2 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-800 dark:bg-slate-900">
+              <div className="absolute right-0 mt-2 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 dark:border-slate-800 dark:bg-slate-900">
                 <p className="px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                   Companies
                 </p>
@@ -276,15 +276,15 @@ export function Topbar({
           <div className="relative" ref={brRef}>
             <button
               onClick={() => setBrOpen((v) => !v)}
-              className="flex h-11 items-center gap-2.5 rounded-xl border border-[#e7ddd0] bg-white px-3 text-left transition hover:bg-[#f6eee3] dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
+              className="flex h-11 items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 text-left transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
               title="Switch branch"
             >
               <GitBranch className="h-[18px] w-[18px] flex-none text-brand-600" />
               <span className="hidden min-w-0 flex-col justify-center sm:flex">
-                <span className="text-[9px] font-semibold uppercase leading-none tracking-wider text-[#a79b8c]">
+                <span className="text-[9px] font-semibold uppercase leading-none tracking-wider text-slate-400">
                   Branch
                 </span>
-                <span className="mt-0.5 max-w-[12rem] truncate text-[13px] font-semibold leading-tight text-[#2f2a26] dark:text-slate-200">
+                <span className="mt-0.5 max-w-[12rem] truncate text-[13px] font-semibold leading-tight text-slate-800 dark:text-slate-200">
                   {activeBranch?.name || 'Select branch'}
                 </span>
               </span>
@@ -297,7 +297,7 @@ export function Topbar({
             </button>
 
             {brOpen && (
-              <div className="absolute right-0 mt-2 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-800 dark:bg-slate-900">
+              <div className="absolute right-0 mt-2 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 dark:border-slate-800 dark:bg-slate-900">
                 <p className="px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                   Branches
                 </p>
@@ -335,15 +335,15 @@ export function Topbar({
           <div className="relative" ref={modRef}>
             <button
               onClick={() => setModOpen((v) => !v)}
-              className="flex h-11 items-center gap-2.5 rounded-xl border border-[#e7ddd0] bg-white px-3 text-left transition hover:bg-[#f6eee3] dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
+              className="flex h-11 items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3 text-left transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
               title="Switch module"
             >
               <LayoutGrid className="h-[18px] w-[18px] flex-none text-brand-600" />
               <span className="hidden min-w-0 flex-col justify-center sm:flex">
-                <span className="text-[9px] font-semibold uppercase leading-none tracking-wider text-[#a79b8c]">
+                <span className="text-[9px] font-semibold uppercase leading-none tracking-wider text-slate-400">
                   Module
                 </span>
-                <span className="mt-0.5 max-w-[12rem] truncate text-[13px] font-semibold leading-tight text-[#2f2a26] dark:text-slate-200">
+                <span className="mt-0.5 max-w-[12rem] truncate text-[13px] font-semibold leading-tight text-slate-800 dark:text-slate-200">
                   {activeModule?.name || 'Modules'}
                 </span>
               </span>
@@ -356,7 +356,7 @@ export function Topbar({
             </button>
 
             {modOpen && (
-              <div className="absolute right-0 mt-2 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-800 dark:bg-slate-900">
+              <div className="absolute right-0 mt-2 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white py-1 dark:border-slate-800 dark:bg-slate-900">
                 <p className="px-4 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                   Modules
                 </p>
@@ -404,7 +404,7 @@ export function Topbar({
           </button>
 
           {notifOpen && (
-            <div className="absolute right-0 mt-2 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900">
+            <div className="absolute right-0 mt-2 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
               <p className="border-b border-slate-100 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-slate-800">
                 Notifications
               </p>
@@ -486,7 +486,7 @@ export function Topbar({
           </button>
 
           {menuOpen && (
-            <div className="absolute right-0 mt-2 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-800 dark:bg-slate-900">
+            <div className="absolute right-0 mt-2 w-60 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
               <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
                 <span className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-600 text-sm font-semibold text-white">
                   {initials(user?.name)}

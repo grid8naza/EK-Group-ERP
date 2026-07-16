@@ -671,7 +671,7 @@ function DraftEditor(props: {
   } = props;
 
   return (
-    <div className="card border-[#e7ddcb] bg-[#fbf9f4] p-6 dark:border-slate-800 dark:bg-slate-900">
+    <div className="card border-slate-200 bg-slate-50 p-6 dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
           {orderNo ? `Draft ${orderNo}` : 'New Purchase Order'}

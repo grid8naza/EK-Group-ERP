@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Eye, FileText, Printer, Sheet } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Badge } from './Badge';
 import {
   colPercent,
   reportColumns,
@@ -86,12 +85,33 @@ interface ReportViewProps {
 
 const fmt = (v: Cell) => (typeof v === 'number' ? v.toLocaleString() : String(v));
 
+// shadcn-style column header: no filled band — just muted text on a white
+// (sticky-safe) surface with a single hairline underneath.
 const HEAD_ROW_CLASS =
-  'border-b border-[#efe7db] bg-[#fcfbf8] text-xs font-semibold uppercase tracking-wide text-[#6d6258] shadow-[0_1px_0_#efe7db] dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400';
+  'border-b border-slate-200 bg-white text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-500';
 
-// Vertical column separator (left border) — applied to every internal column
-// boundary so the on-screen table shows a full grid, matching print / PDF.
-const V_BORDER = 'border-l border-[#efe7db] dark:border-slate-800';
+/** Soft-filled status pill with a leading status dot (green when Active). */
+function StatusPill({ value }: { value: string }) {
+  const active = value === 'Active';
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium',
+        active
+          ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+          : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300',
+      )}
+    >
+      <span
+        className={cn(
+          'h-1.5 w-1.5 rounded-full',
+          active ? 'bg-emerald-500' : 'bg-slate-400',
+        )}
+      />
+      {value}
+    </span>
+  );
+}
 
 /** On-screen grouped report: centered block headings, left sub-headings, and
  *  fixed-width tables with centered column headers — matching the exports. */
@@ -142,6 +162,11 @@ export function ReportView({
     ].map((i) => i + shift),
   );
 
+  // Header cells align with their column's data: numeric and status → right,
+  // everything else (including the serial column) → left.
+  const headAlign = (i: number) =>
+    numericColX.has(i) || i === statusColX ? 'text-right' : 'text-left';
+
   const table = (
     t: ReportBlock['tables'][number],
     key: string,
@@ -156,7 +181,7 @@ export function ReportView({
         </colgroup>
         {/* Column header sits just below the sticky block heading (h-10) when
             the block has one, otherwise pins to the top. */}
-        <thead className={cn('sticky z-10', hasHeading ? 'top-10' : 'top-0')}>
+        <thead className={cn('sticky z-10', hasHeading ? 'top-11' : 'top-0')}>
           {plan ? (
             <>
               <tr className={HEAD_ROW_CLASS}>
@@ -165,7 +190,7 @@ export function ReportView({
                     key={i}
                     colSpan={c.colspan}
                     rowSpan={c.rowspan}
-                    className={cn('px-3 py-2 text-center', i > 0 && V_BORDER)}
+                    className="px-3 py-2 text-center"
                   >
                     {c.label}
                   </th>
@@ -173,7 +198,7 @@ export function ReportView({
               </tr>
               <tr className={HEAD_ROW_CLASS}>
                 {plan.bottom.map((s, i) => (
-                  <th key={i} className={cn('px-3 py-2 text-center', V_BORDER)}>
+                  <th key={i} className={cn('px-3 py-2.5', headAlign(i))}>
                     {s}
                   </th>
                 ))}
@@ -182,10 +207,7 @@ export function ReportView({
           ) : (
             <tr className={HEAD_ROW_CLASS}>
               {eff.columns.map((col, i) => (
-                <th
-                  key={col}
-                  className={cn('px-3 py-2 text-center', i > 0 && V_BORDER)}
-                >
+                <th key={col} className={cn('px-3 py-2.5', headAlign(i))}>
                   {col}
                 </th>
               ))}
@@ -197,34 +219,32 @@ export function ReportView({
             <tr
               key={ri}
               className={cn(
-                'border-b border-slate-100 last:border-0 dark:border-slate-800/60',
-                t.shade?.[ri] && 'bg-brand-100/60 dark:bg-brand-950/40',
+                'border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-100/70 dark:border-slate-800/60 dark:hover:bg-slate-800/50',
+                // Zebra striping — even rows carry a faint neutral tint.
+                ri % 2 === 1 && 'bg-slate-50/70 dark:bg-slate-900/40',
               )}
             >
               {(serial ? [ri + 1, ...row] : row).map((v, ci) =>
                 serial && ci === 0 ? (
                   <td
                     key={ci}
-                    className="px-3 py-2 text-center tabular-nums text-slate-500 dark:text-slate-400"
+                    className="px-3 py-3 tabular-nums text-slate-400 dark:text-slate-500"
                   >
                     {ri + 1}
                   </td>
                 ) : ci === statusColX ? (
-                  <td key={ci} className={cn('px-3 py-2', ci > 0 && V_BORDER)}>
-                    <Badge color={String(v) === 'Active' ? 'green' : 'slate'}>
-                      {String(v)}
-                    </Badge>
+                  <td key={ci} className="px-3 py-3 text-right">
+                    <StatusPill value={String(v)} />
                   </td>
                 ) : (
                   <td
                     key={ci}
                     className={cn(
-                      'break-words px-3 py-2',
-                      ci > 0 && V_BORDER,
+                      'break-words px-3 py-3',
                       numericColX.has(ci) && 'text-right tabular-nums',
                       ci === boldColX
-                        ? 'font-medium text-slate-800 dark:text-slate-100'
-                        : 'text-slate-700 dark:text-slate-300',
+                        ? 'font-semibold text-slate-900 dark:text-slate-100'
+                        : 'text-slate-600 dark:text-slate-300',
                     )}
                   >
                     {fmt(v)}
@@ -243,9 +263,13 @@ export function ReportView({
       {blocks.map((b, bi) => (
         <div key={bi} className="mb-6">
           {b.heading && (
-            <h2 className="sticky top-0 z-20 flex h-10 items-center justify-center gap-2 border-b-2 border-[#c9b896] bg-white text-base font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+            <h2 className="sticky top-0 z-20 flex h-11 items-center gap-2 bg-white text-lg font-bold text-slate-900 dark:bg-slate-900 dark:text-slate-100">
               {b.heading}
-              {b.count != null && <Badge color="slate">{b.count}</Badge>}
+              {b.count != null && (
+                <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                  {b.count}
+                </span>
+              )}
             </h2>
           )}
           {b.tables.map((t, ti) => (
@@ -265,8 +289,8 @@ export function ReportView({
       ))}
 
       {summary && summary.length > 0 && (
-        <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-[#e7ddcb] bg-[#faf6ee] px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-900/50">
-          <span className="text-xs font-semibold uppercase tracking-wide text-[#6d6258] dark:text-slate-400">
+        <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-900/50">
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             Summary
           </span>
           {summary.map((s) => (

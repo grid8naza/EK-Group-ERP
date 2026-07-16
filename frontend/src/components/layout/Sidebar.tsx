@@ -80,7 +80,7 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
         type="button"
         onClick={() => setInfoOpen(true)}
         title="Software information"
-        className="flex min-h-[4rem] flex-none flex-col items-center justify-center gap-0.5 border-b border-[#efe7db] bg-white/80 px-3 pb-2 pt-2 text-center backdrop-blur transition hover:bg-white dark:border-slate-800 dark:bg-slate-900/80 dark:hover:bg-slate-800"
+        className="flex min-h-[4rem] flex-none flex-col items-center justify-center gap-0.5 border-b border-slate-200 bg-white/80 px-3 pb-2 pt-2 text-center backdrop-blur transition hover:bg-white dark:border-slate-800 dark:bg-slate-900/80 dark:hover:bg-slate-800"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
@@ -115,7 +115,7 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
               list.length > 0 && (
                 <div>
                   {!collapsed && (
-                    <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-[#7c7266] dark:text-slate-500">
+                    <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                       {label}
                     </p>
                   )}
@@ -151,7 +151,7 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
         {activeModule && (
           <div>
             {!collapsed && (
-              <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-[#7c7266] dark:text-slate-500">
+              <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
                 {activeModule.name}
               </p>
             )}
@@ -175,8 +175,8 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
                       className={cn(
                         'flex w-full items-center gap-3 rounded-lg border-l-4 border-transparent px-3 py-2 text-sm font-medium transition',
                         selected
-                          ? 'border-[#a06a2c] bg-[#f7ebd7] text-[#4f3416] dark:border-brand-500 dark:bg-brand-950 dark:text-brand-200'
-                          : 'text-[#5a544c] hover:bg-[#e6dcc9] hover:text-[#4f3416] dark:text-slate-300 dark:hover:bg-slate-800',
+                          ? 'border-brand-600 bg-brand-50 text-brand-700 dark:border-brand-500 dark:bg-brand-950 dark:text-brand-200'
+                          : 'text-slate-600 hover:bg-slate-100 hover:text-brand-700 dark:text-slate-300 dark:hover:bg-slate-800',
                         collapsed && 'justify-center',
                       )}
                     >
@@ -201,7 +201,7 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
                         )}
                       >
                         <div className="overflow-hidden">
-                          <div className="mt-0.5 space-y-0.5 border-l border-[#efe7db] pl-3 dark:border-slate-800">
+                          <div className="mt-0.5 space-y-0.5 border-l border-slate-200 pl-3 dark:border-slate-800">
                             {menu.items.map((item) => {
                               const ItemIcon = resolveIcon(item.icon);
                               const active = item.route === pathname;
@@ -245,7 +245,7 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
       {/* Desktop sidebar */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-30 hidden flex-none border-r border-[#efe7db] bg-[#f0e9dc] transition-[width] duration-200 dark:border-slate-800 dark:bg-slate-900 lg:block',
+          'fixed inset-y-0 left-0 z-30 hidden flex-none border-r border-slate-200 bg-white transition-[width] duration-200 dark:border-slate-800 dark:bg-slate-900 lg:block',
           collapsed ? 'w-[76px]' : 'w-64',
         )}
       >
@@ -268,7 +268,7 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
         />
         <aside
           className={cn(
-            'absolute inset-y-0 left-0 w-64 border-r border-[#efe7db] bg-[#f0e9dc] transition-transform duration-200 dark:border-slate-800 dark:bg-slate-900',
+            'absolute inset-y-0 left-0 w-64 border-r border-slate-200 bg-white transition-transform duration-200 dark:border-slate-800 dark:bg-slate-900',
             mobileOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
@@ -304,10 +304,10 @@ function NavLink({
       className={cn(
         'flex items-center gap-3 rounded-lg border-l-4 border-transparent px-3 py-2 text-sm transition',
         active
-          ? 'border-[#a06a2c] bg-[#f7ebd7] font-medium text-[#4f3416] dark:border-brand-500 dark:bg-brand-950 dark:text-brand-200'
-          : 'text-[#5a544c] hover:bg-[#e6dcc9] hover:text-[#4f3416] dark:text-slate-300 dark:hover:bg-slate-800',
+          ? 'border-brand-600 bg-brand-50 font-medium text-brand-700 dark:border-brand-500 dark:bg-brand-950 dark:text-brand-200'
+          : 'text-slate-600 hover:bg-slate-100 hover:text-brand-700 dark:text-slate-300 dark:hover:bg-slate-800',
         collapsed && 'justify-center',
-        sub && !active && 'text-[#6b645b] dark:text-slate-400',
+        sub && !active && 'text-slate-500 dark:text-slate-400',
       )}
     >
       <span className="flex-none">{icon}</span>

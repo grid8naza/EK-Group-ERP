@@ -4,15 +4,20 @@ import { cn } from '@/lib/utils';
 
 type BadgeColor = 'green' | 'red' | 'blue' | 'amber' | 'slate' | 'violet';
 
+// Outlined status pills — a colored hairline ring + colored text on a
+// transparent fill (matching the reference dashboard's Excellent / Good /
+// Warning / Cancel chips). No fill, no shadow.
 const COLORS: Record<BadgeColor, string> = {
   green:
-    'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
-  red: 'bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300',
-  blue: 'bg-brand-50 text-brand-700 dark:bg-brand-950 dark:text-brand-300',
-  amber: 'bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
-  slate: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+    'border-emerald-300 text-emerald-700 dark:border-emerald-800 dark:text-emerald-300',
+  red: 'border-rose-300 text-rose-600 dark:border-rose-800 dark:text-rose-300',
+  blue: 'border-blue-300 text-blue-600 dark:border-blue-800 dark:text-blue-300',
+  amber:
+    'border-amber-300 text-amber-600 dark:border-amber-800 dark:text-amber-300',
+  slate:
+    'border-slate-300 text-slate-600 dark:border-slate-700 dark:text-slate-300',
   violet:
-    'bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300',
+    'border-violet-300 text-violet-600 dark:border-violet-800 dark:text-violet-300',
 };
 
 export function Badge({
@@ -27,7 +32,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium',
+        'inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium',
         COLORS[color],
         className,
       )}

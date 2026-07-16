@@ -753,7 +753,7 @@ export default function RecipeMasterEditorPage() {
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-4">
         {/* Header — identity + yield. Frozen at the top of the scroll area with a
             distinct tan tint + shadow so it stays recognisable while scrolling. */}
-        <div className="card sticky top-0 z-20 grid grid-cols-2 gap-4 border-[#d8c6a3] bg-[#f3e8d3] p-4 shadow-md dark:border-slate-700 dark:bg-slate-800 sm:grid-cols-4">
+        <div className="card sticky top-0 z-20 grid grid-cols-2 gap-4 border-brand-200 bg-brand-50 p-4 dark:border-slate-700 dark:bg-slate-800 sm:grid-cols-4">
           <ReadField
             label="Category"
             value={product.category?.name ?? '-'}
@@ -797,7 +797,7 @@ export default function RecipeMasterEditorPage() {
         {/* Ingredients + Process Flow side by side */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {/* Ingredients */}
-          <div className="card flex flex-col border-[#e7ddcb] bg-[#fbf9f4] p-4 dark:border-slate-800 dark:bg-slate-900">
+          <div className="card flex flex-col border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
             <SectionHeader
               title="Ingredients"
               onAdd={!view ? openAddIng : undefined}
@@ -877,7 +877,7 @@ export default function RecipeMasterEditorPage() {
           </div>
 
           {/* Process Flow */}
-          <div className="card flex flex-col border-[#e7ddcb] bg-[#fbf9f4] p-4 dark:border-slate-800 dark:bg-slate-900">
+          <div className="card flex flex-col border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
             <SectionHeader
               title="Process Flow"
               onAdd={!view ? openAddProc : undefined}
@@ -967,8 +967,8 @@ export default function RecipeMasterEditorPage() {
         </div>
 
         {/* Costing */}
-        <div className="card rounded-3xl border-[#e7ddcb] bg-[#fbf9f4] p-4 dark:border-slate-800 dark:bg-slate-900">
-          <div className="-mx-4 -mt-4 mb-4 rounded-t-3xl bg-[#8a7d6c] px-4 py-2.5 dark:bg-slate-700">
+        <div className="card rounded-3xl border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+          <div className="-mx-4 -mt-4 mb-4 rounded-t-3xl bg-slate-600 px-4 py-2.5 dark:bg-slate-700">
             <h2 className="text-center text-sm font-semibold uppercase tracking-wide text-white">
               Costing
             </h2>
@@ -985,12 +985,12 @@ export default function RecipeMasterEditorPage() {
                     <tr>
                       <th
                         colSpan={2}
-                        className="border border-slate-300 bg-[#5b544c] px-3 py-2 text-center text-sm font-semibold text-white dark:border-slate-600 dark:bg-slate-800"
+                        className="border border-slate-300 bg-slate-700 px-3 py-2 text-center text-sm font-semibold text-white dark:border-slate-600 dark:bg-slate-800"
                       >
                         Price per {Number(yieldQty) || 1} {yieldUnitCode || 'unit'}
                       </th>
                     </tr>
-                    <tr className="bg-[#f3ece0] dark:bg-slate-800/60">
+                    <tr className="bg-slate-100 dark:bg-slate-800/60">
                       <th className="border border-slate-200 px-3 py-1.5 text-left font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-100">
                         Description
                       </th>
@@ -1084,12 +1084,12 @@ export default function RecipeMasterEditorPage() {
                     <tr>
                       <th
                         colSpan={3}
-                        className="border border-slate-300 bg-[#5b544c] px-3 py-2 text-center text-sm font-semibold text-white dark:border-slate-600 dark:bg-slate-800"
+                        className="border border-slate-300 bg-slate-700 px-3 py-2 text-center text-sm font-semibold text-white dark:border-slate-600 dark:bg-slate-800"
                       >
                         Price per 1 {yieldUnitCode || 'unit'}
                       </th>
                     </tr>
-                    <tr className="bg-[#f3ece0] dark:bg-slate-800/60">
+                    <tr className="bg-slate-100 dark:bg-slate-800/60">
                       <th className="border border-slate-200 px-3 py-1.5 text-left font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-100">
                         Description
                       </th>
@@ -1132,7 +1132,7 @@ export default function RecipeMasterEditorPage() {
                         {money1(actualCostPerUnit)}
                       </td>
                     </tr>
-                    <tr className="bg-[#f3ece0] dark:bg-slate-800/60">
+                    <tr className="bg-slate-100 dark:bg-slate-800/60">
                       <td className="border border-slate-200 px-3 py-2 font-semibold text-slate-800 dark:border-slate-700 dark:text-slate-100">
                         Profit
                       </td>
@@ -1171,8 +1171,8 @@ export default function RecipeMasterEditorPage() {
         icon={<ListTree className="h-5 w-5" />}
         width="sm"
         aside={
-          <div className="card overflow-hidden border-[#e7ddcb] bg-[#fbf9f4] p-4 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
-            <div className="-mx-4 -mt-4 mb-3 flex items-center justify-between rounded-t-2xl bg-[#5b544c] px-4 py-2.5 dark:bg-slate-800">
+          <div className="card overflow-hidden border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+            <div className="-mx-4 -mt-4 mb-3 flex items-center justify-between rounded-t-2xl bg-slate-700 px-4 py-2.5 dark:bg-slate-800">
               <h3 className="text-sm font-semibold text-white">Ingredients so far</h3>
               <span className="text-xs text-white/70">
                 {recipe.length} item{recipe.length === 1 ? '' : 's'}
@@ -1333,8 +1333,8 @@ export default function RecipeMasterEditorPage() {
         icon={<Cog className="h-5 w-5" />}
         width="sm"
         aside={
-          <div className="card overflow-hidden border-[#e7ddcb] bg-[#fbf9f4] p-4 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
-            <div className="-mx-4 -mt-4 mb-3 flex items-center justify-between rounded-t-2xl bg-[#5b544c] px-4 py-2.5 dark:bg-slate-800">
+          <div className="card overflow-hidden border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
+            <div className="-mx-4 -mt-4 mb-3 flex items-center justify-between rounded-t-2xl bg-slate-700 px-4 py-2.5 dark:bg-slate-800">
               <h3 className="text-sm font-semibold text-white">Process flow so far</h3>
               <span className="text-xs text-white/70">
                 {processes.length} step{processes.length === 1 ? '' : 's'}
@@ -1647,11 +1647,11 @@ function SectionHeader({
   shortcut?: string;
 }) {
   return (
-    <div className="-mx-4 -mt-4 mb-3 flex items-center justify-between rounded-t-2xl bg-[#5b544c] px-4 py-2.5 dark:bg-slate-800">
+    <div className="-mx-4 -mt-4 mb-3 flex items-center justify-between rounded-t-2xl bg-slate-700 px-4 py-2.5 dark:bg-slate-800">
       <h2 className="text-sm font-semibold text-white">{title}</h2>
       {onAdd && (
         <button
-          className="btn-secondary border-[#8a7d6c] bg-[#8a7d6c] text-xs text-white hover:bg-[#7c6f5e]"
+          className="btn-secondary border-slate-600 bg-slate-600 text-xs text-white hover:bg-slate-600"
           onClick={onAdd}
         >
           <Plus className="h-3.5 w-3.5" /> {addLabel}
@@ -1730,7 +1730,7 @@ function ReadField({
         {value}
       </div>
       {tooltip && (
-        <div className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-max max-w-md rounded-lg border border-slate-200 bg-white p-3 text-xs shadow-xl group-hover:block dark:border-slate-700 dark:bg-slate-800">
+        <div className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-max max-w-md rounded-lg border border-slate-200 bg-white p-3 text-xs group-hover:block dark:border-slate-700 dark:bg-slate-800">
           {tooltip}
         </div>
       )}
@@ -1760,9 +1760,9 @@ function CostLabelRow({
     <tr
       className={
         stronger
-          ? 'bg-[#e2d0ad] dark:bg-slate-700/70'
+          ? 'bg-slate-200 dark:bg-slate-700/70'
           : strong
-            ? 'bg-[#f3ece0] dark:bg-slate-800/60'
+            ? 'bg-slate-100 dark:bg-slate-800/60'
             : ''
       }
     >
@@ -1777,7 +1777,7 @@ function CostLabelRow({
           <div className="group relative inline-flex cursor-help items-center gap-1">
             <span>{label}</span>
             <Info className="h-3.5 w-3.5 text-slate-400" />
-            <div className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-max max-w-md rounded-lg border border-slate-200 bg-white p-3 text-left font-normal shadow-xl group-hover:block dark:border-slate-700 dark:bg-slate-800">
+            <div className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-max max-w-md rounded-lg border border-slate-200 bg-white p-3 text-left font-normal group-hover:block dark:border-slate-700 dark:bg-slate-800">
               {tip}
             </div>
           </div>

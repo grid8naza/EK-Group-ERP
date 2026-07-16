@@ -44,7 +44,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
             className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
             onClick={() => close(false)}
           />
-          <div className="relative w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900">
+          <div className="relative w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
             <div className="flex items-start gap-4">
               <div
                 className={

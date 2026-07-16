@@ -16,8 +16,9 @@ body {
 }
 
 body {
-  /* Warm ivory app background — continuation of the login experience. */
-  @apply bg-[#faf7f2] text-[#2f2a26] antialiased dark:bg-slate-950 dark:text-slate-200;
+  /* Soft cool-neutral app canvas — cards and panels sit on top as white
+     surfaces separated by hairline borders (no elevation). */
+  @apply bg-[#f0f2f5] text-slate-800 antialiased dark:bg-slate-950 dark:text-slate-200;
 }
 
 /* Thin, subtle scrollbars */
@@ -38,9 +39,9 @@ body {
 
 @layer components {
   .input-base {
-    @apply w-full rounded-lg border border-[#e7ddd0] bg-white px-3 py-2 text-sm text-[#2f2a26]
-      shadow-sm outline-none transition placeholder:text-slate-400
-      focus:border-brand-400 focus:ring-2 focus:ring-brand-400/30
+    @apply w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800
+      outline-none transition placeholder:text-slate-400
+      focus:border-brand-500 focus:ring-2 focus:ring-brand-500/25
       disabled:cursor-not-allowed disabled:bg-slate-100
       dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500
       dark:disabled:bg-slate-800;
@@ -49,7 +50,7 @@ body {
   /* An editable cell that blends into a table cell: no border/box, and no
      number-input spinner arrows. */
   .cell-input {
-    @apply w-full bg-transparent px-3 py-2 text-sm text-[#2f2a26] outline-none
+    @apply w-full bg-transparent px-3 py-2 text-sm text-slate-800 outline-none
       transition focus:bg-white disabled:cursor-not-allowed
       dark:text-slate-100 dark:focus:bg-slate-900/50;
   }
@@ -64,15 +65,15 @@ body {
   }
 
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium
       transition focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:cursor-not-allowed
       disabled:opacity-60 dark:focus:ring-offset-slate-900;
   }
   .btn-primary {
-    @apply btn bg-brand-600 text-white hover:bg-brand-500 focus:ring-brand-500;
+    @apply btn bg-brand-700 text-white hover:bg-brand-600 focus:ring-brand-500;
   }
   .btn-secondary {
-    @apply btn border border-[#e7ddd0] bg-white text-[#5d5a56] hover:bg-[#f6eee3]
+    @apply btn border border-slate-200 bg-white text-slate-600 hover:bg-slate-50
       focus:ring-brand-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200
       dark:hover:bg-slate-800;
   }
@@ -87,10 +88,10 @@ body {
   }
 
   .card {
-    @apply rounded-2xl border border-[#efe7db] bg-white shadow-card dark:border-slate-800 dark:bg-slate-900;
+    @apply rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900;
   }
 
   .label {
-    @apply mb-1.5 block text-sm font-medium text-[#5d5a56] dark:text-slate-300;
+    @apply mb-1.5 block text-sm font-medium text-slate-600 dark:text-slate-300;
   }
 }

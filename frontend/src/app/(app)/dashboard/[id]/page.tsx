@@ -25,6 +25,7 @@ import { resolveIcon } from '@/lib/icons';
 import { cn } from '@/lib/utils';
 import { resolveDashboardHeader } from '@/lib/dashboard-header';
 import { WidgetView, isStatWidget } from '@/components/dashboard/WidgetView';
+import { ProductionDashboard } from '@/components/dashboard/ProductionDashboard';
 import type {
   DashboardDetail,
   DashboardWidget,
@@ -150,6 +151,16 @@ export default function DashboardViewPage() {
     [detail?.header],
   );
   const centered = header.align === 'center';
+
+  // Dashboard 2 is the Production Dashboard — render the bespoke, fixed layout
+  // instead of the configurable widget grid.
+  if (id === 2) {
+    return (
+      <div className="mx-auto max-w-7xl">
+        <ProductionDashboard />
+      </div>
+    );
+  }
 
   if (!loading && !detail) {
     return (

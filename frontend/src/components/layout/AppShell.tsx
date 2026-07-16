@@ -32,7 +32,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // show a minimal loading screen instead of the shell.
   if (loading || !user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#faf7f2] dark:bg-slate-950">
+      <div className="flex min-h-screen items-center justify-center bg-[#f0f2f5] dark:bg-slate-950">
         <div className="flex flex-col items-center gap-4">
           {/* Premium ring spinner around the brand logo. */}
           <div className="relative flex h-20 w-20 items-center justify-center">
@@ -45,7 +45,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               className="h-12 w-12 rounded-lg object-contain"
             />
           </div>
-          <p className="text-sm font-medium tracking-wide text-[#7b746c] dark:text-slate-400">
+          <p className="text-sm font-medium tracking-wide text-slate-400 dark:text-slate-400">
             Loading…
           </p>
         </div>
@@ -55,7 +55,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <SoftwareInfoProvider>
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
+      <div className="min-h-screen bg-[#f0f2f5] dark:bg-slate-950">
         <Sidebar
           collapsed={collapsed}
           mobileOpen={mobileOpen}
