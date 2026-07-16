@@ -12,3 +12,7 @@ coverage/
 *.tsbuildinfo
 backend/uploads/
 backend/backups/
+
+# Database dumps
+*.dump
+*.sql.gz
