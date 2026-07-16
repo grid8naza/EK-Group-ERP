@@ -200,10 +200,7 @@ export function Topbar({
               </span>
             )}
             <span className="hidden flex-col justify-center sm:flex">
-              <span className="text-[9px] font-semibold uppercase leading-none tracking-wider text-slate-400">
-                Company
-              </span>
-              <span className="mt-0.5 text-sm font-bold leading-tight text-slate-800 dark:text-slate-100">
+              <span className="text-sm font-bold leading-tight text-slate-800 dark:text-slate-100">
                 {activeCompany.legalName || activeCompany.name}
               </span>
             </span>
