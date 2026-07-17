@@ -44,10 +44,11 @@ export function PurchaseOrderDoc({
   productName,
   unitLabel,
 }: PoDocProps) {
-  // The rate each line was PLACED at — not today's master price. This is the
-  // value the approval workflow's field limits were tested against, so it has to
-  // be the value an approver reads.
-  const total = order.lines.reduce((s, l) => s + l.quantity * l.rate, 0);
+  // No value on this document, by design: an intercompany order is quantities
+  // only. Its price is decided later, by the batches that fill it — stock
+  // labelled at an old price can't be sold at a new one — so a figure here would
+  // be a guess the goods then contradict. The priced document is the sales order.
+  const totalQty = order.lines.reduce((s, l) => s + l.quantity, 0);
   const timeline = order.workflow?.timeline ?? [];
 
   return (
@@ -99,8 +100,6 @@ export function PurchaseOrderDoc({
               <th className="py-2 pr-2">Product</th>
               <th className="w-24 py-2 text-right">Quantity</th>
               <th className="w-14 py-2 pl-2">Unit</th>
-              <th className="w-24 py-2 text-right">Rate</th>
-              <th className="w-28 py-2 text-right">Value</th>
             </tr>
           </thead>
           <tbody>
@@ -121,21 +120,20 @@ export function PurchaseOrderDoc({
                 <td className="py-2 pl-2 text-slate-500">
                   {unitLabel(l.unitId)}
                 </td>
-                <td className="py-2 text-right tabular-nums">{money(l.rate)}</td>
-                <td className="py-2 text-right tabular-nums">
-                  {money(l.quantity * l.rate)}
-                </td>
               </tr>
             ))}
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-slate-200 font-semibold dark:border-slate-700">
-              <td className="py-2" colSpan={3} />
-              <td className="py-2 pl-2 text-right text-xs uppercase tracking-wide text-slate-500" colSpan={2}>
+              <td className="py-2" />
+              <td className="py-2 text-right text-xs uppercase tracking-wide text-slate-500">
                 {order.lines.length} item{order.lines.length === 1 ? '' : 's'} ·
-                Order value
+                Total quantity
               </td>
-              <td className="py-2 text-right tabular-nums">{money(total)}</td>
+              <td className="py-2 text-right tabular-nums">
+                {totalQty.toLocaleString()}
+              </td>
+              <td className="py-2" />
             </tr>
           </tfoot>
         </table>

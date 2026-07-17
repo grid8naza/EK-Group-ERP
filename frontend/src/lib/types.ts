@@ -827,13 +827,8 @@ export interface PurchaseOrderLine {
   reservedQty?: number;
   /** accepted - reserved: the gap to produce. null until reviewed. */
   balanceQty?: number | null;
-  /**
-   * Transfer price per unit, snapshotted from the supplier's
-   * Product.intercompanyPrice when the order was PLACED. Never user-entered (an
-   * intercompany price is group policy), and never re-read afterwards — a later
-   * master price change must not restate an approved order.
-   */
-  rate: number;
+  // NO rate. An ICPO carries quantities only — the price is decided by the batch
+  // that ships (see SalesOrderLine.rate).
 }
 
 /** The viewer's pending action on a document (from the workflow step). */
@@ -886,8 +881,6 @@ export interface PurchaseOrder {
   createdAt: string;
   updatedAt?: string;
   lines: PurchaseOrderLine[];
-  /** Order value (sum of quantity x rate) — computed by the API. */
-  total?: number;
   // Present on the single-order response (GET /purchase-orders/:id).
   /** The sales order the supplier converted this into; null until they do. */
   salesOrderId?: number | null;
@@ -908,12 +901,26 @@ export interface SalesOrderLine {
   id: number;
   sequence: number;
   productId: number;
-  /** What the ICPO asked for — carried over, never edited. */
+  /**
+   * The batch this line ships from. null = nothing reserved, so the quantity
+   * must be produced and has no batch price to inherit.
+   */
+  batchId?: number | null;
+  batchNo?: string | null;
+  /**
+   * What the ICPO asked for, of this PRODUCT — repeated across the product's
+   * split lines, so never sum it. Never edited.
+   */
   orderedQty: number;
-  /** What the seller commits to supply — the editable one. 0 drops the line. */
+  /** What THIS line supplies. 0 drops the line. */
   quantity: number;
   unitId: number;
-  /** Transfer price carried from the ICPO line's placed rate. */
+  /**
+   * The batch's own selling price, captured when that stock came in — the goods
+   * carry it, so it is NOT editable. On a balance line (no batch) it defaults to
+   * the master's latest price and IS editable, until production supplies a real
+   * batch with a real price.
+   */
   rate: number;
 }
 

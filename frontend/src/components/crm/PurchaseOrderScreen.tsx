@@ -549,13 +549,6 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
       headerClassName: 'text-right',
     },
     {
-      key: 'total',
-      header: 'Value',
-      accessor: (r) => money(r.total ?? 0),
-      className: 'text-right tabular-nums',
-      headerClassName: 'text-right',
-    },
-    {
       key: 'delivery',
       header: 'Delivery',
       accessor: (r) => fmtDelivery(r.deliveryAt),
@@ -785,7 +778,7 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
 
   // ============================== LIST MODE ==============================
   return (
-    <div className="mx-auto flex h-full max-w-6xl flex-col">
+    <div className="mx-auto flex h-full max-w-4xl flex-col">
       <PageHeader
         title={screen.title}
         description={screen.description}
@@ -889,14 +882,6 @@ function DraftEditor(props: {
     orderNo,
   } = props;
 
-  // What this order is worth at today's transfer prices. A draft tracks the
-  // master; placing it fixes the rates, and the backend is the one that decides
-  // them — this is a preview, not the source of truth.
-  const draftTotal = lines.reduce((s, l) => {
-    const p = l.productId ? productById.get(Number(l.productId)) : undefined;
-    return s + (Number(l.quantity) || 0) * (p?.intercompanyPrice ?? 0);
-  }, 0);
-
   return (
     <div className="card border-slate-200 bg-slate-50 p-6 dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-4 flex items-center justify-between">
@@ -942,8 +927,6 @@ function DraftEditor(props: {
                 <th className="py-2 pr-2">Product</th>
                 <th className="w-28 py-2 px-1 text-right">Quantity</th>
                 <th className="w-14 py-2 px-1">Unit</th>
-                <th className="w-24 py-2 px-1 text-right">Rate</th>
-                <th className="w-28 py-2 px-1 text-right">Value</th>
                 <th className="w-12 py-2" />
               </tr>
             </thead>
@@ -962,8 +945,6 @@ function DraftEditor(props: {
                   const p = l.productId
                     ? productById.get(Number(l.productId))
                     : undefined;
-                  const rate = p?.intercompanyPrice ?? 0;
-                  const value = (Number(l.quantity) || 0) * rate;
                   return (
                     <tr
                       key={i}
@@ -997,14 +978,6 @@ function DraftEditor(props: {
                       <td className="px-1 text-slate-500">
                         {p ? (p.unit?.symbol ?? p.unit?.code ?? '') : ''}
                       </td>
-                      {/* The transfer price is group policy — shown, not edited.
-                          It's fixed onto the order when it's placed. */}
-                      <td className="px-1 text-right tabular-nums text-slate-500">
-                        {p ? money(rate) : ''}
-                      </td>
-                      <td className="px-1 text-right tabular-nums text-slate-600 dark:text-slate-300">
-                        {p ? money(value) : ''}
-                      </td>
                       <td className="text-center">
                         <button
                           className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600 dark:hover:bg-slate-800"
@@ -1019,23 +992,10 @@ function DraftEditor(props: {
                 })
               )}
             </tbody>
-            {lines.length > 0 && (
-              <tfoot>
-                <tr className="border-t border-slate-200 dark:border-slate-700">
-                  <td
-                    colSpan={4}
-                    className="py-2 pr-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500"
-                  >
-                    Order value
-                  </td>
-                  <td className="px-1 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-100">
-                    {money(draftTotal)}
-                  </td>
-                  <td />
-                </tr>
-              </tfoot>
-            )}
           </table>
+          {/* No value here on purpose: an intercompany order is quantities only.
+              What it will be worth depends on the batches that end up filling it,
+              which nobody knows yet — the sales order carries the prices. */}
 
           <Textarea
             label="Notes"

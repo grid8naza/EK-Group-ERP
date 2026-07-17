@@ -22,13 +22,27 @@ import {
  * A line set to 0 is dropped from the order.
  */
 export class SalesOrderLineInput {
+  /**
+   * Identifies the line. Keyed by id, not product: one product SPLITS across a
+   * line per batch, so productId is not unique on this document.
+   */
   @IsInt()
-  productId!: number;
+  lineId!: number;
 
   /** 0 drops the line. Negative is rejected. */
   @IsNumber()
   @Min(0)
   quantity!: number;
+
+  /**
+   * Only honoured on a BALANCE line (one with no batch, awaiting production).
+   * A batch-backed line's price is the batch's own and is ignored here — stock
+   * labelled at a price cannot be sold at another.
+   */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  rate?: number;
 }
 
 /** Edit a draft (or an in-workflow order when the step allows editing). */

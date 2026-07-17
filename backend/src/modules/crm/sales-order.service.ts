@@ -17,6 +17,7 @@ import {
   WorkflowStatus,
 } from '../../contracts/workflow.port';
 import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
+import { STOCK, StockPort } from '../../contracts/stock.port';
 import {
   ActSalesOrderDto,
   SalesOrderLineInput,
@@ -27,6 +28,9 @@ import {
 // seller's company — the only origin there is.
 const CRM_MODULE_CODE = 'CRM';
 const ICSO_ROUTE = '/crm/icso';
+// The purchase order's rows in the shared stock_reservations table — where this
+// order's prices come from, since the price follows the batch that ships.
+const PO_DOCUMENT_TYPE = 'PURCHASE_ORDER';
 // Document code the central numbering rules key on (see Document Master seed).
 const ICSO_DOCUMENT_CODE = 'SALES_ORDER_IC';
 
@@ -48,6 +52,7 @@ export class SalesOrderService {
     private readonly prisma: PrismaService,
     @Inject(WORKFLOW) private readonly workflow: WorkflowPort,
     @Inject(NUMBERING) private readonly numbering: NumberingPort,
+    @Inject(STOCK) private readonly stock: StockPort,
   ) {}
 
   /**
@@ -110,6 +115,8 @@ export class SalesOrderService {
       );
     }
 
+    const lines = await this.priceFromBatches(po.id, supplying);
+
     const order = await this.withOrderNoRetry(companyId, (orderNo) =>
       this.prisma.salesOrder.create({
         data: {
@@ -128,16 +135,7 @@ export class SalesOrderService {
           deliveryAt: po.deliveryAt,
           createdByUserId: userId,
           status: 'DRAFT',
-          lines: {
-            create: supplying.map((l, i) => ({
-              sequence: i,
-              productId: l.productId,
-              orderedQty: l.quantity, // what was asked — never edited
-              quantity: l.supplyQty, // what Customer Relations accepted
-              unitId: l.unitId,
-              rate: l.rate, // the rate the buyer's approver signed off
-            })),
-          },
+          lines: { create: lines.map((l, i) => ({ sequence: i, ...l })) },
         },
         include: withLines,
       }),
@@ -375,23 +373,117 @@ export class SalesOrderService {
   }
 
   /**
-   * Apply the seller's quantities to the converted lines.
+   * Turn the supplier's accepted quantities into priced sales lines.
    *
-   * Only quantity moves. Product, unit, rate and the ordered quantity all come
-   * from the ICPO and stay put — the seller chooses how much to send, not what
-   * it costs or what was asked for. A line at 0 is DROPPED rather than stored,
-   * and an order can't be emptied that way.
+   * The price comes from the BATCH that will ship, never from the product
+   * master: stock physically labelled at an old price cannot be sold at a new
+   * one, and the master only holds the most recent price, for information. So a
+   * product filled from two batches becomes TWO lines at two prices — which is
+   * exactly how FEFO reserved it.
+   *
+   * Whatever the reservation couldn't cover has to be produced. It has no batch,
+   * so there is no price to inherit: it takes the master's latest price as a
+   * starting point and stays editable, until production gives it a real batch
+   * with a real price.
+   */
+  private async priceFromBatches(
+    purchaseOrderId: number,
+    supplying: {
+      id: number;
+      productId: number;
+      unitId: number;
+      quantity: number;
+      supplyQty: number;
+    }[],
+  ) {
+    const held = await this.stock.reservationDetailFor(
+      PO_DOCUMENT_TYPE,
+      purchaseOrderId,
+    );
+    const heldByLine = new Map<number, typeof held>();
+    for (const h of held) {
+      const arr = heldByLine.get(h.lineId) ?? [];
+      arr.push(h);
+      heldByLine.set(h.lineId, arr);
+    }
+
+    // Only needed for the balance — the "latest price", explicitly informational.
+    const masterPrice = new Map(
+      (
+        await this.prisma.product.findMany({
+          where: { id: { in: [...new Set(supplying.map((l) => l.productId))] } },
+          select: { id: true, intercompanyPrice: true },
+        })
+      ).map((p) => [p.id, p.intercompanyPrice]),
+    );
+
+    const out: {
+      productId: number;
+      batchId: number | null;
+      batchNo: string | null;
+      orderedQty: number;
+      quantity: number;
+      unitId: number;
+      rate: number;
+    }[] = [];
+
+    for (const l of supplying) {
+      const holds = heldByLine.get(l.id) ?? [];
+      let covered = 0;
+      for (const h of holds) {
+        // Never ship more of a batch than was accepted, even if more is held.
+        const take = Math.min(h.quantity, l.supplyQty - covered);
+        if (take <= 0) break;
+        out.push({
+          productId: l.productId,
+          batchId: h.batchId,
+          batchNo: h.batchNo,
+          orderedQty: l.quantity,
+          quantity: take,
+          unitId: l.unitId,
+          rate: h.intercompanyPrice, // the batch's own price — not editable
+        });
+        covered += take;
+      }
+      const balance = l.supplyQty - covered;
+      if (balance > 0) {
+        out.push({
+          productId: l.productId,
+          batchId: null, // to be produced
+          batchNo: null,
+          orderedQty: l.quantity,
+          quantity: balance,
+          rate: masterPrice.get(l.productId) ?? 0,
+          unitId: l.unitId,
+        });
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Apply the seller's edits to the converted lines.
+   *
+   * Quantity always moves. The PRICE moves only on a balance line — one with no
+   * batch, waiting to be produced — because a batch's price belongs to the goods
+   * and cannot be renegotiated on the way out. Product, unit, batch and the
+   * ordered quantity all come from the purchase order and its reservations, and
+   * stay put. A line at 0 is DROPPED rather than stored, and an order can't be
+   * emptied that way.
    */
   private resolveLines(
     current: {
+      id: number;
       productId: number;
+      batchId: number | null;
+      batchNo: string | null;
       orderedQty: number;
       unitId: number;
       rate: number;
     }[],
     input: SalesOrderLineInput[],
   ) {
-    const byProduct = new Map(current.map((l) => [l.productId, l]));
+    const byId = new Map(current.map((l) => [l.id, l]));
     const kept = input.filter((l) => l.quantity > 0);
     if (!kept.length) {
       throw new BadRequestException(
@@ -399,18 +491,21 @@ export class SalesOrderService {
       );
     }
     return kept.map((l) => {
-      const from = byProduct.get(l.productId);
+      const from = byId.get(l.lineId);
       if (!from) {
         throw new BadRequestException(
-          'That product is not on this order. Lines come from the purchase order and cannot be added.',
+          'That line is not on this order. Lines come from the purchase order and cannot be added.',
         );
       }
       return {
-        productId: l.productId,
+        productId: from.productId,
+        batchId: from.batchId,
+        batchNo: from.batchNo,
         orderedQty: from.orderedQty,
         quantity: l.quantity,
         unitId: from.unitId,
-        rate: from.rate,
+        // A batch dictates its own price; only the to-be-produced part is open.
+        rate: from.batchId === null ? (l.rate ?? from.rate) : from.rate,
       };
     });
   }

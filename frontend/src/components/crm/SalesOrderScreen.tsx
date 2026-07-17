@@ -34,7 +34,9 @@ import type {
 
 const ROUTE = '/crm/icso';
 
-type DraftLine = { productId: number; quantity: string };
+// Keyed by lineId, not product: one product SPLITS across a line per batch, so
+// productId is not unique on this document. `rate` only moves on a balance line.
+type DraftLine = { lineId: number; quantity: string; rate: string };
 type Mode = 'list' | 'edit' | 'view';
 
 const statusColor = (s: SalesOrderStatus) =>
@@ -142,17 +144,18 @@ export function SalesOrderScreen() {
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [notes, setNotes] = useState('');
 
-  const setLineQty = (productId: number, quantity: string) =>
-    setLines((ls) =>
-      ls.map((l) => (l.productId === productId ? { ...l, quantity } : l)),
-    );
+  const setLineQty = (lineId: number, quantity: string) =>
+    setLines((ls) => ls.map((l) => (l.lineId === lineId ? { ...l, quantity } : l)));
+  // Only a balance line (no batch) accepts a price — the backend enforces it too.
+  const setLineRate = (lineId: number, rate: string) =>
+    setLines((ls) => ls.map((l) => (l.lineId === lineId ? { ...l, rate } : l)));
 
   const draftTotal = useMemo(
     () =>
-      lines.reduce((s, l) => {
-        const src = current?.lines.find((x) => x.productId === l.productId);
-        return s + (Number(l.quantity) || 0) * (src?.rate ?? 0);
-      }, 0),
+      lines.reduce(
+        (s, l) => s + (Number(l.quantity) || 0) * (Number(l.rate) || 0),
+        0,
+      ),
     [lines, current],
   );
 
@@ -163,8 +166,9 @@ export function SalesOrderScreen() {
     setDeliveryAt(toLocalInput(full.deliveryAt));
     setLines(
       full.lines.map((l) => ({
-        productId: l.productId,
+        lineId: l.id,
         quantity: String(l.quantity),
+        rate: String(l.rate),
       })),
     );
     setNotes(full.notes ?? '');
@@ -203,11 +207,13 @@ export function SalesOrderScreen() {
   };
 
   // ---- persistence ----
-  // Only quantities travel — product, unit and rate belong to the buyer's order.
+  // Quantity always travels; the price only matters on a balance line, and the
+  // backend ignores it on a batch-backed one.
   const buildLines = () =>
     lines.map((l) => ({
-      productId: l.productId,
+      lineId: l.lineId,
       quantity: Number(l.quantity) || 0,
+      rate: Number(l.rate) || 0,
     }));
 
   const validate = (): string | null => {
@@ -240,8 +246,9 @@ export function SalesOrderScreen() {
         setCurrent(saved);
         setLines(
           saved.lines.map((l) => ({
-            productId: l.productId,
+            lineId: l.id,
             quantity: String(l.quantity),
+            rate: String(l.rate),
           })),
         );
       }
@@ -447,6 +454,7 @@ export function SalesOrderScreen() {
             onDelivery={setDeliveryAt}
             lines={lines}
             setLineQty={setLineQty}
+            setLineRate={setLineRate}
             total={draftTotal}
             notes={notes}
             onNotes={setNotes}
@@ -484,7 +492,7 @@ export function SalesOrderScreen() {
 
   // ============================== LIST MODE ==============================
   return (
-    <div className="mx-auto flex h-full max-w-6xl flex-col">
+    <div className="mx-auto flex h-full max-w-4xl flex-col">
       <PageHeader
         title="Inter-Company Sales Order (ICSO)"
         description="Orders to supply another group company, converted from their purchase orders"
@@ -545,7 +553,8 @@ function DraftEditor(props: {
   deliveryAt: string;
   onDelivery: (v: string) => void;
   lines: DraftLine[];
-  setLineQty: (productId: number, quantity: string) => void;
+  setLineQty: (lineId: number, quantity: string) => void;
+  setLineRate: (lineId: number, rate: string) => void;
   total: number;
   notes: string;
   onNotes: (v: string) => void;
@@ -560,6 +569,7 @@ function DraftEditor(props: {
     onDelivery,
     lines,
     setLineQty,
+    setLineRate,
     total,
     notes,
     onNotes,
@@ -615,16 +625,19 @@ function DraftEditor(props: {
       <div className="mt-6">
         <span className="label !mb-0">Supply</span>
         <p className="mt-1 text-xs text-slate-500">
-          Lines come from their purchase order. Set a quantity to 0 to drop that
-          line from this order.
+          One product may appear more than once — a line per batch, each at that
+          batch&apos;s own price. A batch price can&apos;t be changed: the goods carry it.
+          A line with no batch is still to be produced, so its price is only an
+          estimate and stays editable. Set a quantity to 0 to drop a line.
         </p>
       </div>
       <table className="mt-2 w-full text-sm">
         <thead>
           <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700">
             <th className="py-2 pr-2">Product</th>
-            <th className="w-24 py-2 px-1 text-right">Asked</th>
-            <th className="w-28 py-2 px-1 text-right">Supplying</th>
+            <th className="w-40 py-2 px-1">Batch</th>
+            <th className="w-20 py-2 px-1 text-right">Asked</th>
+            <th className="w-24 py-2 px-1 text-right">Supplying</th>
             <th className="w-14 py-2 px-1">Unit</th>
             <th className="w-24 py-2 px-1 text-right">Rate</th>
             <th className="w-28 py-2 px-1 text-right">Value</th>
@@ -632,16 +645,28 @@ function DraftEditor(props: {
         </thead>
         <tbody>
           {order.lines.map((src) => {
-            const l = lines.find((x) => x.productId === src.productId);
+            const l = lines.find((x) => x.lineId === src.id);
             const qty = Number(l?.quantity) || 0;
-            const short = qty < src.orderedQty;
+            const rate = Number(l?.rate) || 0;
+            // No batch = nothing reserved: this quantity has to be produced, and
+            // there's no batch price to inherit, so the price is open.
+            const toProduce = !src.batchId;
             return (
               <tr
-                key={src.productId}
+                key={src.id}
                 className="border-b border-slate-100 dark:border-slate-800/60"
               >
                 <td className="py-1.5 pr-2 font-medium text-slate-800 dark:text-slate-100">
                   {productName(src.productId)}
+                </td>
+                <td className="px-1 text-xs">
+                  {toProduce ? (
+                    <span className="font-medium text-amber-600 dark:text-amber-500">
+                      To produce
+                    </span>
+                  ) : (
+                    <span className="font-mono text-slate-500">{src.batchNo}</span>
+                  )}
                 </td>
                 <td className="px-1 text-right tabular-nums text-slate-500">
                   {src.orderedQty.toLocaleString()}
@@ -652,21 +677,33 @@ function DraftEditor(props: {
                     min={0}
                     step="any"
                     value={l?.quantity ?? ''}
-                    onChange={(e) => setLineQty(src.productId, e.target.value)}
-                    className={`text-right tabular-nums ${short ? 'text-amber-600 dark:text-amber-500' : ''}`}
-                    title={
-                      short
-                        ? `Short of the ${src.orderedQty.toLocaleString()} they asked for`
-                        : undefined
-                    }
+                    onChange={(e) => setLineQty(src.id, e.target.value)}
+                    className="text-right tabular-nums"
                   />
                 </td>
                 <td className="px-1 text-slate-500">{unitLabel(src.unitId)}</td>
-                <td className="px-1 text-right tabular-nums text-slate-500">
-                  {money(src.rate)}
+                <td className="px-1">
+                  {toProduce ? (
+                    <Input
+                      type="number"
+                      min={0}
+                      step="any"
+                      value={l?.rate ?? ''}
+                      onChange={(e) => setLineRate(src.id, e.target.value)}
+                      className="text-right tabular-nums"
+                      title="Estimated — no batch exists yet to set the price"
+                    />
+                  ) : (
+                    <span
+                      className="block text-right tabular-nums text-slate-500"
+                      title="The batch's own price — the goods carry it"
+                    >
+                      {money(rate)}
+                    </span>
+                  )}
                 </td>
                 <td className="px-1 text-right tabular-nums text-slate-600 dark:text-slate-300">
-                  {money(qty * src.rate)}
+                  {money(qty * rate)}
                 </td>
               </tr>
             );
@@ -675,7 +712,7 @@ function DraftEditor(props: {
         <tfoot>
           <tr className="border-t border-slate-200 dark:border-slate-700">
             <td
-              colSpan={5}
+              colSpan={6}
               className="py-2 pr-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500"
             >
               Order value

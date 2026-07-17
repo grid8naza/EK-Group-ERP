@@ -66,17 +66,15 @@ model PurchaseOrderLine {
   // buyer can see their line was declined instead of watching it vanish;
   // acceptedQty is forced to 0 and any reservation released.
   cancelled Boolean @default(false)
-  // Transfer price per unit, snapshotted from the SUPPLIER's
-  // Product.intercompanyPrice when the draft is saved. Unlike an LPO's rate this
-  // is never user-entered — an intercompany price is group policy, not
-  // negotiated. It is snapshotted rather than read live so an approval granted
-  // for a given value keeps meaning that value: the workflow's field limits test
-  // the order total, and a later master price change must not silently move an
-  // approved order past the limit that cleared it.
-  // (The references-only/no-snapshot rule in the costing plan governs packing and
-  // recipe BOM lines, which exist to be recosted. An order is a commercial
-  // record, not a cost model.)
-  rate      Float @default(0)
+
+  // NO RATE, deliberately. An intercompany order carries quantities only; the
+  // price is decided later, by the BATCH that ends up shipping (see
+  // SalesOrderLine.rate). Stock physically labelled at an old price cannot be
+  // sold at a new one, so a price fixed here — before anyone knows which batch
+  // fills the order — would be a guess that the goods then contradict.
+  // Product.intercompanyPrice is only the latest price, for information.
+  // Consequence: an ICPO has no value, so its approval steps must be
+  // whole-form; a field-limit step has nothing to test and would pass anything.
 
   order PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
@@ -155,15 +153,26 @@ model SalesOrderLine {
   orderId    Int
   sequence   Int   @default(0)
   productId  Int // -> inventory Product (plain cross-domain id)
-  // What the ICPO asked for, carried over unchanged so the seller can always see
-  // the gap between demand and what was committed. 0 on a directly-raised order.
+  // The batch this line ships from, its number snapshotted for the document.
+  // NULL = nothing reserved: this quantity must be PRODUCED, so no batch exists
+  // to take a price from yet.
+  batchId    Int? // -> inventory StockBatch (plain cross-domain id)
+  batchNo    String?
+  // What the ICPO asked for, of this PRODUCT. Repeated across the product's split
+  // lines — it describes the demand, not the line, so sum `quantity` (never this)
+  // for the order's totals. 0 on a directly-raised order.
   orderedQty Float @default(0)
-  // What the seller commits to supply — the editable one. A line set to 0 is
-  // dropped from the order entirely rather than stored as a zero.
+  // What THIS line supplies. A line set to 0 is dropped from the order entirely
+  // rather than stored as a zero.
   quantity   Float
   unitId     Int // -> Unit (plain cross-domain id)
-  // Transfer price per unit, carried from the ICPO line's placed rate, so the
-  // sales order values at exactly what the buyer's approver signed off.
+  // Selling price per unit.
+  //  - Batch-backed line: the batch's own intercompany price, captured when that
+  //    stock came in. NOT editable — the goods carry that price, and stock
+  //    labelled at an old price cannot be sold at a new one.
+  //  - Balance line (batchId null): defaulted from Product.intercompanyPrice —
+  //    the latest price, which is information only — and EDITABLE, because the
+  //    batch that will carry the real price does not exist until it is produced.
   rate       Float @default(0)
 
   order SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)

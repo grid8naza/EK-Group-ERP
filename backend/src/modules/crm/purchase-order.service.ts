@@ -21,7 +21,6 @@ import { STOCK, StockPort } from '../../contracts/stock.port';
 import {
   ActPurchaseOrderDto,
   CreatePurchaseOrderDto,
-  PurchaseOrderLineInput,
   ReviewPurchaseOrderDto,
   UpdatePurchaseOrderDto,
 } from './purchase-order.dto';
@@ -48,14 +47,6 @@ const STATUS_MAP: Record<WorkflowStatus, PurchaseOrderStatus> = {
 
 const withLines = {
   lines: { orderBy: { sequence: 'asc' as const } },
-};
-
-/** A line as persisted, once its transfer price has been resolved. */
-type LinePayload = {
-  productId: number;
-  quantity: number;
-  unitId: number;
-  rate: number;
 };
 
 @Injectable()
@@ -111,8 +102,6 @@ export class PurchaseOrderService {
       );
     }
 
-    const lines = await this.priceLines(dto.supplierCompanyId, dto.lines);
-
     const order = await this.withOrderNoRetry(dto.supplierCompanyId, (orderNo) =>
       this.prisma.purchaseOrder.create({
         data: {
@@ -124,7 +113,7 @@ export class PurchaseOrderService {
           placedByUserId: userId,
           status: 'DRAFT',
           notes: dto.notes?.trim() || null,
-          lines: { create: lines.map((l, i) => ({ sequence: i, ...l })) },
+          lines: { create: dto.lines.map((l, i) => ({ sequence: i, ...l })) },
         },
         include: withLines,
       }),
@@ -155,14 +144,7 @@ export class PurchaseOrderService {
       throw new ForbiddenException('You cannot edit this order right now.');
     }
 
-    // A draft isn't placed yet, so it tracks the master's current price. Once the
-    // order is in the workflow its rates are frozen at what they were placed at —
-    // an approver editing quantities must not re-price the order under them.
-    const lines = dto.lines
-      ? order.status === 'DRAFT'
-        ? await this.priceLines(order.companyId, dto.lines)
-        : await this.repriceInFlight(order.companyId, dto.lines, order.lines)
-      : undefined;
+    const lines = dto.lines;
 
     // Replacing the lines destroys the ids stock reservations hang off, so any
     // hold stops meaning anything — hand the stock back rather than strand it
@@ -227,27 +209,6 @@ export class PurchaseOrderService {
       throw new ForbiddenException('Only the creator can submit this order.');
     }
 
-    // THE snapshot moment. Placing the order fixes its rates at the supplier's
-    // transfer price right now, and nothing moves them afterwards. Doing it here
-    // rather than trusting the last draft save means a draft that sat for a month
-    // can't be placed at a stale price, whatever route reached this method.
-    const priceOf = await this.priceMap(
-      order.companyId,
-      order.lines.map((l) => l.productId),
-    );
-    await this.prisma.$transaction(
-      order.lines.map((l) =>
-        this.prisma.purchaseOrderLine.update({
-          where: { id: l.id },
-          data: { rate: priceOf.get(l.productId)! },
-        }),
-      ),
-    );
-    const placedLines = order.lines.map((l) => ({
-      ...l,
-      rate: priceOf.get(l.productId)!,
-    }));
-
     const { moduleId, objectId } = await this.docType();
     const res = await this.workflow.submitAsCreator({
       startedByUserId: userId,
@@ -260,10 +221,12 @@ export class PurchaseOrderService {
       objectId,
       documentId: order.id,
       documentRef: order.orderNo,
-      // Field-limit steps test this. It is the order's VALUE at placement —
-      // summed quantity would be meaningless here, since lines carry their own
-      // units and adding 5 Kg to 3 Cartons yields "8".
-      amount: this.orderTotal(placedLines),
+      // NO amount. An ICPO carries quantities only — its price isn't decided
+      // until the batches that fill it are known, long after this — so there is
+      // nothing meaningful for a field-limit step to test. (Summed quantity, the
+      // old value here, was worse than nothing: it added 5 Kg to 3 Cartons and
+      // called it 8.) Approval steps on this form must be whole-form; a FIELD
+      // step sees a null amount and passes everything.
     });
 
     await this.prisma.purchaseOrder.update({
@@ -492,7 +455,7 @@ export class PurchaseOrderService {
       orderBy: { createdAt: 'desc' },
       include: withLines,
     });
-    return rows.map((r) => ({ ...r, total: this.orderTotal(r.lines) }));
+    return rows;
   }
 
   /** One order plus the viewer's workflow state and available actions. */
@@ -580,7 +543,6 @@ export class PurchaseOrderService {
           balanceQty: accepted === null ? null : Math.max(0, accepted - reservedQty),
         };
       }),
-      total: this.orderTotal(order.lines),
       salesOrderId: salesOrder?.id ?? null,
       salesOrderNo: salesOrder?.orderNo ?? null,
       workflow,
@@ -598,11 +560,6 @@ export class PurchaseOrderService {
   }
 
   // --- helpers ---
-
-  /** The order's value — what field-limit approval steps are tested against. */
-  private orderTotal(lines: { quantity: number; rate: number }[]): number {
-    return lines.reduce((s, l) => s + l.quantity * l.rate, 0);
-  }
 
   /**
    * Only the SUPPLIER company answers an order, and only while it holds a task
@@ -659,86 +616,6 @@ export class PurchaseOrderService {
         );
       }
     }
-  }
-
-  /**
-   * Current transfer prices for these products, from the SUPPLIER's master.
-   *
-   * Prices are read here rather than accepted from the client: an intercompany
-   * price is group policy (Product.intercompanyPrice), not something the
-   * ordering branch negotiates — which is exactly how it differs from an LPO's
-   * rate. A product the supplier doesn't offer is rejected rather than silently
-   * priced at 0, since a 0 would understate the order's value and let it slip
-   * under an approval limit.
-   */
-  private async priceMap(
-    supplierCompanyId: number,
-    productIds: number[],
-  ): Promise<Map<number, number>> {
-    const ids = [...new Set(productIds)];
-    const products = await this.prisma.product.findMany({
-      where: {
-        id: { in: ids },
-        OR: [
-          { allCompanies: true },
-          { companies: { some: { companyId: supplierCompanyId } } },
-        ],
-      },
-      select: { id: true, intercompanyPrice: true },
-    });
-    const priceOf = new Map(products.map((p) => [p.id, p.intercompanyPrice]));
-    const missing = ids.filter((id) => !priceOf.has(id));
-    if (missing.length) {
-      throw new BadRequestException(
-        'Some products are not offered by the supplier company.',
-      );
-    }
-    return priceOf;
-  }
-
-  /** Lines priced at the supplier's CURRENT transfer price (drafts only). */
-  private async priceLines(
-    supplierCompanyId: number,
-    lines: PurchaseOrderLineInput[],
-  ): Promise<LinePayload[]> {
-    const priceOf = await this.priceMap(
-      supplierCompanyId,
-      lines.map((l) => l.productId),
-    );
-    return lines.map((l) => ({
-      productId: l.productId,
-      quantity: l.quantity,
-      unitId: l.unitId,
-      rate: priceOf.get(l.productId)!,
-    }));
-  }
-
-  /**
-   * Lines for an order already in the workflow: keep the rate it was PLACED at.
-   *
-   * The order's value is what an approver signed off, so a later master price
-   * change must not reach back into it. A line for a product that wasn't on the
-   * order before has no placed rate to keep, so it takes the current one.
-   */
-  private async repriceInFlight(
-    supplierCompanyId: number,
-    lines: PurchaseOrderLineInput[],
-    placed: { productId: number; rate: number }[],
-  ): Promise<LinePayload[]> {
-    const placedRate = new Map(placed.map((l) => [l.productId, l.rate]));
-    const added = lines
-      .map((l) => l.productId)
-      .filter((id) => !placedRate.has(id));
-    const priceOf = added.length
-      ? await this.priceMap(supplierCompanyId, added)
-      : new Map<number, number>();
-
-    return lines.map((l) => ({
-      productId: l.productId,
-      quantity: l.quantity,
-      unitId: l.unitId,
-      rate: placedRate.get(l.productId) ?? priceOf.get(l.productId)!,
-    }));
   }
 
   private async ensureOrder(id: number) {

@@ -101,6 +101,7 @@ export function SalesOrderDoc({
             <tr className="border-b-2 border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700">
               <th className="w-10 py-2 pr-2">#</th>
               <th className="py-2 pr-2">Product</th>
+              <th className="w-36 py-2 pl-2">Batch</th>
               <th className="w-20 py-2 text-right">Asked</th>
               <th className="w-24 py-2 text-right">Supplying</th>
               <th className="w-14 py-2 pl-2">Unit</th>
@@ -117,6 +118,15 @@ export function SalesOrderDoc({
                 <td className="py-2 pr-2 tabular-nums text-slate-400">{i + 1}</td>
                 <td className="py-2 pr-2 font-medium text-slate-800 dark:text-slate-100">
                   {productName(l.productId)}
+                </td>
+                <td className="py-2 pl-2 text-xs">
+                  {l.batchId ? (
+                    <span className="font-mono text-slate-500">{l.batchNo}</span>
+                  ) : (
+                    <span className="font-medium text-amber-600 dark:text-amber-500">
+                      To produce
+                    </span>
+                  )}
                 </td>
                 <td className="py-2 text-right tabular-nums text-slate-500">
                   {l.orderedQty.toLocaleString()}
@@ -140,7 +150,7 @@ export function SalesOrderDoc({
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-slate-200 font-semibold dark:border-slate-700">
-              <td className="py-2" colSpan={4} />
+              <td className="py-2" colSpan={5} />
               <td
                 className="py-2 pl-2 text-right text-xs uppercase tracking-wide text-slate-500"
                 colSpan={2}
