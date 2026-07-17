@@ -1,9 +1,13 @@
 'use client';
 
 import { Badge } from '@/components/ui/Badge';
-import type { PurchaseOrder, PurchaseOrderStatus } from '@/lib/types';
+import type {
+  LocalPurchaseOrder,
+  LocalPurchaseOrderLine,
+  LocalPurchaseOrderStatus,
+} from '@/lib/types';
 
-const statusColor = (s: PurchaseOrderStatus) =>
+const statusColor = (s: LocalPurchaseOrderStatus) =>
   s === 'APPROVED'
     ? 'green'
     : s === 'REJECTED'
@@ -14,8 +18,7 @@ const statusColor = (s: PurchaseOrderStatus) =>
           ? 'blue'
           : 'amber';
 
-const fmt = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleString() : '—';
+const fmt = (iso?: string | null) => (iso ? new Date(iso).toLocaleString() : '—');
 const fmtDate = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleDateString() : '—';
 const money = (n: number) =>
@@ -24,29 +27,26 @@ const money = (n: number) =>
     maximumFractionDigits: 2,
   });
 
-export interface PoDocProps {
-  order: PurchaseOrder;
-  companyName: (id: number) => string;
-  branchName: (id?: number | null) => string;
-  productName: (id: number) => string;
+export interface LpoDocProps {
+  order: LocalPurchaseOrder;
+  supplierName: (id: number) => string;
+  storeName: (id?: number | null) => string;
+  targetName: (l: LocalPurchaseOrderLine) => string;
   unitLabel: (id: number) => string;
 }
 
 /**
- * Professional, print-style Purchase Order document — company header, From/To,
- * itemised lines with totals, delivery + notes, and the workflow approval trail.
- * Read-only; each screen wraps it with its own action bar.
+ * Print-style Local Purchase Order document — supplier, delivery, priced lines
+ * with an order value, notes and the approval trail. Read-only; the screen wraps
+ * it with its own action bar.
  */
-export function PurchaseOrderDoc({
+export function LocalPurchaseOrderDoc({
   order,
-  companyName,
-  branchName,
-  productName,
+  supplierName,
+  storeName,
+  targetName,
   unitLabel,
-}: PoDocProps) {
-  // The rate each line was PLACED at — not today's master price. This is the
-  // value the approval workflow's field limits were tested against, so it has to
-  // be the value an approver reads.
+}: LpoDocProps) {
   const total = order.lines.reduce((s, l) => s + l.quantity * l.rate, 0);
   const timeline = order.workflow?.timeline ?? [];
 
@@ -56,11 +56,9 @@ export function PurchaseOrderDoc({
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-5 dark:border-slate-700">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-            Purchase Order
+            Local Purchase Order
           </h1>
-          <p className="mt-1 font-mono text-sm text-slate-500">
-            {order.orderNo}
-          </p>
+          <p className="mt-1 font-mono text-sm text-slate-500">{order.orderNo}</p>
         </div>
         <div className="text-right">
           <Badge color={statusColor(order.status)}>
@@ -72,22 +70,12 @@ export function PurchaseOrderDoc({
         </div>
       </div>
 
-      {/* From / To */}
+      {/* Supplier / delivery */}
       <div className="mt-6 grid grid-cols-1 gap-6 sm:grid-cols-2">
-        <Party
-          heading="From (Requester)"
-          name={companyName(order.orderingCompanyId)}
-          sub={branchName(order.orderingBranchId)}
-        />
-        <Party
-          heading="To (Supplier)"
-          name={companyName(order.companyId)}
-        />
+        <Party heading="To (Supplier)" name={supplierName(order.supplierId)} />
+        <Party heading="Deliver to" name={storeName(order.storeId)} />
         <Field label="Delivery date & time" value={fmt(order.deliveryAt)} />
-        <Field
-          label="Created"
-          value={fmt(order.createdAt)}
-        />
+        <Field label="Created" value={fmt(order.createdAt)} />
       </div>
 
       {/* Line items */}
@@ -96,7 +84,7 @@ export function PurchaseOrderDoc({
           <thead>
             <tr className="border-b-2 border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700">
               <th className="w-10 py-2 pr-2">#</th>
-              <th className="py-2 pr-2">Product</th>
+              <th className="py-2 pr-2">Item / Product</th>
               <th className="w-24 py-2 text-right">Quantity</th>
               <th className="w-14 py-2 pl-2">Unit</th>
               <th className="w-24 py-2 text-right">Rate</th>
@@ -109,18 +97,17 @@ export function PurchaseOrderDoc({
                 key={l.id ?? i}
                 className="border-b border-slate-100 dark:border-slate-800/60"
               >
-                <td className="py-2 pr-2 text-slate-400 tabular-nums">
-                  {i + 1}
-                </td>
+                <td className="py-2 pr-2 tabular-nums text-slate-400">{i + 1}</td>
                 <td className="py-2 pr-2 font-medium text-slate-800 dark:text-slate-100">
-                  {productName(l.productId)}
+                  {targetName(l)}
+                  <span className="ml-2 text-xs font-normal text-slate-400">
+                    {l.itemId ? 'Item' : 'Product'}
+                  </span>
                 </td>
                 <td className="py-2 text-right tabular-nums">
                   {l.quantity.toLocaleString()}
                 </td>
-                <td className="py-2 pl-2 text-slate-500">
-                  {unitLabel(l.unitId)}
-                </td>
+                <td className="py-2 pl-2 text-slate-500">{unitLabel(l.unitId)}</td>
                 <td className="py-2 text-right tabular-nums">{money(l.rate)}</td>
                 <td className="py-2 text-right tabular-nums">
                   {money(l.quantity * l.rate)}
@@ -130,9 +117,8 @@ export function PurchaseOrderDoc({
           </tbody>
           <tfoot>
             <tr className="border-t-2 border-slate-200 font-semibold dark:border-slate-700">
-              <td className="py-2" colSpan={3} />
-              <td className="py-2 pl-2 text-right text-xs uppercase tracking-wide text-slate-500" colSpan={2}>
-                {order.lines.length} item{order.lines.length === 1 ? '' : 's'} ·
+              <td className="py-2" colSpan={4} />
+              <td className="py-2 text-right text-xs uppercase tracking-wide text-slate-500">
                 Order value
               </td>
               <td className="py-2 text-right tabular-nums">{money(total)}</td>
@@ -170,9 +156,7 @@ export function PurchaseOrderDoc({
                     {' '}
                     — {t.userName} · {fmt(t.createdAt)}
                   </span>
-                  {t.comment && (
-                    <p className="text-slate-500">“{t.comment}”</p>
-                  )}
+                  {t.comment && <p className="text-slate-500">“{t.comment}”</p>}
                 </div>
               </li>
             ))}
@@ -183,15 +167,7 @@ export function PurchaseOrderDoc({
   );
 }
 
-function Party({
-  heading,
-  name,
-  sub,
-}: {
-  heading: string;
-  name: string;
-  sub?: string;
-}) {
+function Party({ heading, name }: { heading: string; name: string }) {
   return (
     <div>
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -200,9 +176,6 @@ function Party({
       <p className="mt-1 text-base font-semibold text-slate-900 dark:text-slate-100">
         {name}
       </p>
-      {sub && sub !== '—' && (
-        <p className="text-sm text-slate-500 dark:text-slate-400">{sub}</p>
-      )}
     </div>
   );
 }

@@ -221,6 +221,261 @@ async function migrateInventoryVoucherMenu(
   });
 }
 
+/**
+ * Collapse duplicate rows for a screen, keeping the OLDEST — it's the original,
+ * the one carrying privileges and workflow bindings; a twin is always the empty
+ * newcomer.
+ *
+ * Duplicates arise whenever the additive sync creates a screen from the scaffold
+ * BEFORE a migration renames the original onto that same route (nest --watch
+ * re-runs the sync on every intermediate save, so this is routine in dev). They
+ * are not cosmetic: PurchaseOrderService.docType resolves its screen with a
+ * findFirst on the route, so a twin makes workflow matching a coin flip.
+ *
+ * Pass `repointToModuleId` for a screen that owns workflows: definitions match on
+ * module AND object, so both are pulled onto the surviving row before the twins
+ * are deleted. Deleting a SubMenu cascades its GroupSubMenuPrivilege rows.
+ */
+async function dedupeScreenRows(
+  prisma: Prisma.TransactionClient,
+  route: string,
+  opts: { repointToModuleId?: number } = {},
+): Promise<void> {
+  const objects = await prisma.objectMaster.findMany({
+    where: { route },
+    select: { id: true },
+    orderBy: { id: 'asc' },
+  });
+  const canonical = objects[0]?.id;
+  if (canonical) {
+    const ids = objects.map((o) => o.id);
+    if (opts.repointToModuleId !== undefined) {
+      const data = { objectId: canonical, moduleId: opts.repointToModuleId };
+      await prisma.workflowDefinition.updateMany({
+        where: { objectId: { in: ids } },
+        data,
+      });
+      await prisma.workflowInstance.updateMany({
+        where: { objectId: { in: ids } },
+        data,
+      });
+    }
+    if (ids.length > 1) {
+      await prisma.objectMaster.deleteMany({
+        where: { id: { in: ids.filter((id) => id !== canonical) } },
+      });
+    }
+  }
+
+  // One entry per menu (a screen legitimately appears once per company).
+  const subs = await prisma.subMenu.findMany({
+    where: { route },
+    select: { id: true, mainMenuId: true },
+    orderBy: { id: 'asc' },
+  });
+  const keptPerMenu = new Set<number>();
+  const dropIds: number[] = [];
+  for (const s of subs) {
+    if (keptPerMenu.has(s.mainMenuId)) dropIds.push(s.id);
+    else keptPerMenu.add(s.mainMenuId);
+  }
+  if (dropIds.length) {
+    await prisma.subMenu.deleteMany({ where: { id: { in: dropIds } } });
+  }
+}
+
+/**
+ * One-time migration: the single CRM "Purchase Order - IC" screen became two —
+ * "Purchase Order - Sent" (the buyer's view, which MOVES to the Purchase module)
+ * and "Purchase Order - Received" (the supplier's view, which stays in CRM and
+ * is created by the additive sync).
+ *
+ * The Sent screen inherits the original row, and everything here is an in-place
+ * UPDATE rather than a delete + recreate via RETIRED_ROUTES, because ids are
+ * load-bearing:
+ *  - WorkflowDefinition.objectId / WorkflowInstance.objectId point at
+ *    ObjectMaster.id, and WorkflowDefinition.moduleId at Module.id — all plain
+ *    Ints with no FK (the cross-domain rule), so a delete would silently strand
+ *    every configured PO workflow instead of failing loudly.
+ *  - GroupSubMenuPrivilege hangs off SubMenu.id, so moving the row keeps the
+ *    privileges already granted on it.
+ * Because the screen changes module, the definitions' moduleId is re-pointed too
+ * — otherwise they'd match on objectId but not module, and never fire.
+ *
+ * Idempotent — a no-op once migrated.
+ */
+async function migrateCrmPurchaseOrderRoutes(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  const [crm, purchase] = await Promise.all([
+    prisma.module.findUnique({ where: { code: 'CRM' }, select: { id: true } }),
+    prisma.module.findUnique({
+      where: { code: 'PURCHASE' },
+      select: { id: true },
+    }),
+  ]);
+  // Fresh DB (or Purchase not registered yet): the additive sync seeds both
+  // screens in their right modules directly, so there's nothing to move.
+  if (!crm || !purchase) return;
+
+  const SENT_ROUTE = '/purchase/icpo';
+  const SENT_NAME = 'ICPO';
+  // Every shape this screen has had. Listed so a DB pulled from any earlier
+  // point lands here in one hop — the route is unique enough that the current
+  // module doesn't need filtering (it has since moved to Purchase).
+  const LEGACY_ROUTES = [
+    '/crm/purchase-orders-ic',
+    '/crm/purchase-orders-sent',
+    '/purchase/purchase-orders-sent',
+  ];
+
+  // ---- the screen itself: rename + hand it to the Purchase module ----
+  await prisma.objectMaster.updateMany({
+    where: { route: { in: LEGACY_ROUTES } },
+    data: {
+      moduleId: purchase.id,
+      route: SENT_ROUTE,
+      objectName: SENT_NAME,
+      nameInMenu: SENT_NAME,
+    },
+  });
+
+  // ---- the supplier's side: rename in place, stays in CRM ----
+  await prisma.objectMaster.updateMany({
+    where: { route: '/crm/purchase-orders-received' },
+    data: {
+      route: '/crm/icpo-received',
+      objectName: 'ICPO - Received',
+      nameInMenu: 'ICPO - Received',
+    },
+  });
+  await prisma.subMenu.updateMany({
+    where: { route: '/crm/purchase-orders-received' },
+    data: { route: '/crm/icpo-received', subMenuName: 'ICPO - Received' },
+  });
+
+  // ---- the Document Master entry (user-visible in Document Numbering) ----
+  // Guarded on the old name so an admin's own rename is left alone. The CODE
+  // stays PURCHASE_ORDER_IC: numbering rules key on documentId, but the seeder
+  // upserts by code, so changing it would orphan the row and its rules.
+  await prisma.document.updateMany({
+    where: { code: 'PURCHASE_ORDER_IC', name: 'Purchase Order - IC' },
+    data: { name: 'Inter-Company Purchase Order (ICPO)' },
+  });
+
+  // ---- the menu entry: move it from the CRM menu to the Purchase menu ----
+  const crmMenus = await prisma.mainMenu.findMany({
+    where: { moduleId: crm.id },
+    select: { id: true, companyId: true },
+    orderBy: { id: 'asc' },
+  });
+  for (const crmMenu of crmMenus) {
+    const stale = await prisma.subMenu.findFirst({
+      where: { mainMenuId: crmMenu.id, route: { in: LEGACY_ROUTES } },
+      select: { id: true },
+    });
+    if (!stale) continue; // already moved for this company
+
+    // Ensure this company has a Purchase main menu to move the screen onto.
+    let purchaseMenu = await prisma.mainMenu.findFirst({
+      where: { companyId: crmMenu.companyId, moduleId: purchase.id },
+      select: { id: true },
+      orderBy: { id: 'asc' },
+    });
+    if (!purchaseMenu) {
+      purchaseMenu = await prisma.mainMenu.create({
+        data: {
+          companyId: crmMenu.companyId,
+          moduleId: purchase.id,
+          menuName: 'Purchase',
+          sortOrder: 1,
+          objectType: ObjectType.FORM,
+          isUserMenu: true,
+          icon: 'shopping-cart',
+        },
+        select: { id: true },
+      });
+    }
+
+    // Mirror the CRM menu's group visibility onto Purchase so no group loses
+    // reach (the nav hides empty menus for non-super-admins anyway).
+    const crmAccess = await prisma.groupMainMenuAccess.findMany({
+      where: { mainMenuId: crmMenu.id },
+      select: { userGroupId: true, visible: true },
+    });
+    if (crmAccess.length) {
+      await prisma.groupMainMenuAccess.createMany({
+        data: crmAccess.map((a) => ({
+          userGroupId: a.userGroupId,
+          mainMenuId: purchaseMenu!.id,
+          visible: a.visible,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    await prisma.subMenu.update({
+      where: { id: stale.id },
+      data: {
+        mainMenuId: purchaseMenu.id,
+        route: SENT_ROUTE,
+        subMenuName: SENT_NAME,
+        sortOrder: 1,
+      },
+    });
+  }
+
+  // Screens already moved to Purchase by an earlier run of this migration still
+  // need the ICPO rename — the loop above only catches ones still sitting on a
+  // CRM menu.
+  await prisma.subMenu.updateMany({
+    where: { route: { in: LEGACY_ROUTES } },
+    data: { route: SENT_ROUTE, subMenuName: SENT_NAME, sortOrder: 1 },
+  });
+
+  // ---- collapse twins, and pull the workflows onto the survivor ----
+  // Runs LAST on purpose: everything above can mint a row on these routes (the
+  // renames, and the menu move), and dedupe must see the final set. It also runs
+  // outside the move loop — once a company's screen has moved there's no stale
+  // row left to key off, so a twin would otherwise survive forever.
+  await dedupeScreenRows(prisma, SENT_ROUTE, { repointToModuleId: purchase.id });
+  await dedupeScreenRows(prisma, '/crm/icpo-received');
+
+  // ---- keep everyone's reach ----
+  // Module access is granted per group, and the screen just changed module: a
+  // group that could open it under CRM (e.g. Branch Manager, who raises the
+  // orders) would silently lose it, since the sync only ever grants a new module
+  // to Administrators. Mirror CRM's grants onto Purchase so the move doesn't
+  // change who can get in — the screen's own privileges still gate it, and
+  // Purchase hosts nothing else, so this grants no extra reach.
+  const crmGroups = await prisma.userGroupModule.findMany({
+    where: { moduleId: crm.id },
+    select: { userGroupId: true },
+  });
+  if (crmGroups.length) {
+    await prisma.userGroupModule.createMany({
+      data: crmGroups.map((g) => ({
+        userGroupId: g.userGroupId,
+        moduleId: purchase.id,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  // With the buyer's screen gone to Purchase, CRM leads with ICPO - Received (1)
+  // then Sales Orders (2). The additive sync only sets sortOrder on create — and
+  // Received was seeded at 2 back when Sent held 1 — so pin both or they tie and
+  // order arbitrarily.
+  await prisma.subMenu.updateMany({
+    where: { route: '/crm/icpo-received' },
+    data: { sortOrder: 1 },
+  });
+  await prisma.subMenu.updateMany({
+    where: { route: '/crm/sales-orders' },
+    data: { sortOrder: 2 },
+  });
+}
+
 /** Rename the Accounts module's primary main menu "Accounts" → "Accounts Setup". */
 async function migrateAccountsMenuName(
   prisma: Prisma.TransactionClient,
@@ -273,6 +528,12 @@ export async function syncScaffold(
 
   // 0e) Rename the Accounts module's main menu → "Accounts Setup".
   await migrateAccountsMenuName(prisma);
+
+  // 0f) Split Purchase Order - IC in two: Sent moves to the Purchase module,
+  //     Received stays in CRM. Must run before the sync so the moved screen is
+  //     matched by its new route/module and the sync adds Received alongside it
+  //     rather than duplicating either.
+  await migrateCrmPurchaseOrderRoutes(prisma);
 
   // 1) Module catalog — register/update. Never flips an existing module's global
   //    isActive (preserves an admin's enable/disable choice).

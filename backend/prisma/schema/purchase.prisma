@@ -1,0 +1,83 @@
+// Purchase domain — orders raised on EXTERNAL suppliers (the Accounts Supplier
+// master): the Local Purchase Order (LPO).
+//
+// Its inter-company sibling, the ICPO, lives in the CRM domain and is a
+// DIFFERENT model on purpose. The two share only their workflow choreography;
+// they differ on counterparty, line entity, valuation, destination, numbering
+// key and directionality — i.e. nearly every field. Most importantly CRM's
+// `PurchaseOrder.companyId` is the SUPPLIER company, whereas here it is the
+// BUYER (see below). Folding them into one table would mean a nullable
+// `companyId` whose MEANING FLIPS between rows, a unique constraint that stops
+// enforcing anything (Postgres treats NULLs as distinct), and a dead "received"
+// scope — an external supplier never logs in to see its orders.
+//
+// Cross-domain rule: every reference to another domain's row (Supplier, Item,
+// Product, Unit, Store, Company, Branch, User) is a plain Int with NO @relation.
+
+/// Lifecycle of a Local Purchase Order. Mirrors PurchaseOrderStatus, but
+/// APPROVED here means the BUYER's own approval chain signed it off — there is
+/// no supplier-side staff to accept it.
+enum LocalPurchaseOrderStatus {
+  DRAFT // created by the requester, not yet submitted into the approval workflow
+  PLACED // submitted; travelling through the approval workflow
+  APPROVED // approval workflow complete — the order stands
+  REJECTED
+  CANCELLED
+}
+
+/// A purchase order raised on an external supplier.
+model LocalPurchaseOrder {
+  id Int @id @default(autoincrement())
+  // The BUYER — the company raising the order. NOTE the inversion vs CRM's
+  // PurchaseOrder.companyId, which is the supplier company. An LPO has no
+  // supplier company, so this is the company that owns the order, holds the
+  // numbering rule, and whose staff see it.
+  companyId      Int
+  branchId       Int? // -> Cpanel Branch (the raising branch)
+  supplierId     Int // -> Accounts Supplier (the external vendor)
+  orderNo        String // per-buyer sequential number (LPO-#####)
+  orderDate      DateTime @default(now())
+  deliveryAt     DateTime? // requested delivery date & time
+  storeId        Int? // -> Inventory Store: where the goods should be delivered
+  placedByUserId Int // -> User who raised it
+
+  status             LocalPurchaseOrderStatus @default(DRAFT)
+  workflowStatus     String? // human-readable status from the step that last acted
+  notes              String?
+  workflowInstanceId Int? // -> WorkflowInstance (approval routing)
+  isLocked           Boolean                  @default(false)
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
+
+  lines LocalPurchaseOrderLine[]
+
+  @@unique([companyId, orderNo])
+  @@index([companyId, status])
+  @@index([supplierId])
+  @@map("local_purchase_orders")
+}
+
+/// One line of an LPO: `quantity` of an item OR a product, at `rate` each.
+///
+/// Exactly one of itemId / productId is set — the same exclusive-or the Goods
+/// Receipt Note uses (StockTransactionLineInput), so an approved LPO line maps
+/// onto a GRN line without translation. Prisma cannot express XOR, so the
+/// invariant is enforced in LpoService.resolveLines.
+model LocalPurchaseOrderLine {
+  id        Int   @id @default(autoincrement())
+  orderId   Int
+  sequence  Int   @default(0)
+  itemId    Int? // -> inventory Item (raw / packing material)
+  productId Int? // -> inventory Product (finished goods bought in)
+  quantity  Float
+  unitId    Int // -> Unit, resolved from the item/product master (not client input)
+  // Agreed price per unit, snapshotted at order time: a later change to
+  // Item.lastPurchasePrice must not silently rewrite an approved order. The line
+  // value is quantity * rate — derived, never stored twice.
+  rate      Float @default(0)
+
+  order LocalPurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("local_purchase_order_lines")
+}

@@ -813,6 +813,13 @@ export interface PurchaseOrderLine {
   productId: number;
   quantity: number;
   unitId: number;
+  /**
+   * Transfer price per unit, snapshotted from the supplier's
+   * Product.intercompanyPrice when the order was PLACED. Never user-entered (an
+   * intercompany price is group policy), and never re-read afterwards — a later
+   * master price change must not restate an approved order.
+   */
+  rate: number;
 }
 
 /** The viewer's pending action on a document (from the workflow step). */
@@ -863,7 +870,57 @@ export interface PurchaseOrder {
   createdAt: string;
   updatedAt?: string;
   lines: PurchaseOrderLine[];
+  /** Order value (sum of quantity x rate) — computed by the API. */
+  total?: number;
   // Present on the single-order response (GET /purchase-orders/:id).
+  workflow?: PurchaseOrderWorkflow;
+  viewer?: PurchaseOrderViewer;
+}
+
+// ---- Purchase: Local Purchase Orders (external suppliers) ----
+export type LocalPurchaseOrderStatus =
+  | 'DRAFT'
+  | 'PLACED'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CANCELLED';
+
+/** Exactly one of itemId / productId is set. */
+export interface LocalPurchaseOrderLine {
+  id: number;
+  sequence: number;
+  itemId?: number | null;
+  productId?: number | null;
+  quantity: number;
+  /** Resolved server-side from the item/product master. */
+  unitId: number;
+  /** Agreed price per unit, snapshotted at order time. */
+  rate: number;
+}
+
+export interface LocalPurchaseOrder {
+  id: number;
+  companyId: number; // the BUYER — note the inversion vs PurchaseOrder.companyId
+  branchId?: number | null;
+  supplierId: number; // -> Accounts Supplier (external vendor)
+  orderNo: string;
+  orderDate: string;
+  /** Requested delivery date & time (ISO). */
+  deliveryAt?: string | null;
+  /** Store the goods should be delivered to. */
+  storeId?: number | null;
+  placedByUserId: number;
+  status: LocalPurchaseOrderStatus;
+  /** Human-readable status from the workflow step that last acted (if any). */
+  workflowStatus?: string | null;
+  notes?: string | null;
+  workflowInstanceId?: number | null;
+  createdAt: string;
+  updatedAt?: string;
+  lines: LocalPurchaseOrderLine[];
+  /** Order value (sum of quantity x rate) — computed by the API. */
+  total?: number;
+  // Present on the single-order response (GET /local-purchase-orders/:id).
   workflow?: PurchaseOrderWorkflow;
   viewer?: PurchaseOrderViewer;
 }

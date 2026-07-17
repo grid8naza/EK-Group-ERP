@@ -14,7 +14,9 @@ import { CreateDocumentDto, UpdateDocumentDto } from './document.dto';
 /** System documents wired to a real numbered flow (seeded on boot). */
 const SYSTEM_DOCUMENTS: { code: string; name: string }[] = [
   { code: 'OPENING_STOCK', name: 'Opening Stock' },
-  { code: 'PURCHASE_ORDER_IC', name: 'Purchase Order - IC' },
+  // Code stays *_IC (numbering rules key on its id; the seeder upserts by code).
+  { code: 'PURCHASE_ORDER_IC', name: 'Inter-Company Purchase Order (ICPO)' },
+  { code: 'PURCHASE_ORDER_LOCAL', name: 'Local Purchase Order (LPO)' },
   { code: 'GOODS_RECEIPT_NOTE', name: 'Goods Receipt Note' },
   { code: 'DELIVERY_NOTE', name: 'Delivery Note' },
   { code: 'SALES_RETURN', name: 'Sales Return' },

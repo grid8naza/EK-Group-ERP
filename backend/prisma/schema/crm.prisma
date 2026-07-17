@@ -43,7 +43,8 @@ model PurchaseOrder {
   @@map("purchase_orders")
 }
 
-/// One line of a Purchase Order - IC: `quantity` of a `product` (in `unit`).
+/// One line of a Purchase Order - IC: `quantity` of a `product` (in `unit`), at
+/// the group's transfer price.
 model PurchaseOrderLine {
   id        Int   @id @default(autoincrement())
   orderId   Int
@@ -51,6 +52,17 @@ model PurchaseOrderLine {
   productId Int // -> inventory Product (plain cross-domain id)
   quantity  Float
   unitId    Int // -> Unit (plain cross-domain id)
+  // Transfer price per unit, snapshotted from the SUPPLIER's
+  // Product.intercompanyPrice when the draft is saved. Unlike an LPO's rate this
+  // is never user-entered — an intercompany price is group policy, not
+  // negotiated. It is snapshotted rather than read live so an approval granted
+  // for a given value keeps meaning that value: the workflow's field limits test
+  // the order total, and a later master price change must not silently move an
+  // approved order past the limit that cleared it.
+  // (The references-only/no-snapshot rule in the costing plan governs packing and
+  // recipe BOM lines, which exist to be recosted. An order is a commercial
+  // record, not a cost model.)
+  rate      Float @default(0)
 
   order PurchaseOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
 

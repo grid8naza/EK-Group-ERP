@@ -7,36 +7,34 @@ import {
   ParseIntPipe,
   Patch,
   Post,
-  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CompanyId } from '../../auth/company.decorator';
 import { BranchId } from '../../auth/branch.decorator';
 import { AuthUser, CurrentUser } from '../../auth/current-user.decorator';
-import { PurchaseOrderService } from './purchase-order.service';
-import {
-  ActPurchaseOrderDto,
-  CreatePurchaseOrderDto,
-  UpdatePurchaseOrderDto,
-} from './purchase-order.dto';
+import { LpoService } from './lpo.service';
+import { ActLpoDto, CreateLpoDto, UpdateLpoDto } from './lpo.dto';
 
 /**
- * Purchase Orders - IC. Raised by a requester (active company/branch) on a
- * supplier company as a DRAFT, then submitted into the supplier's approval
- * workflow. Visibility, buttons and status all follow the workflow engine.
+ * Local Purchase Orders — raised by the active company/branch on an EXTERNAL
+ * supplier as a DRAFT, then submitted into the buyer's own approval workflow.
+ * Visibility, buttons and status all follow the workflow engine.
+ *
+ * Unlike the ICPO there is no second side: an external supplier has no login, so
+ * this lists one direction only.
  */
-@ApiTags('purchase-orders')
+@ApiTags('local-purchase-orders')
 @ApiBearerAuth()
-@Controller('purchase-orders')
-export class PurchaseOrderController {
-  constructor(private readonly service: PurchaseOrderService) {}
+@Controller('local-purchase-orders')
+export class LpoController {
+  constructor(private readonly service: LpoService) {}
 
   @Post()
   create(
     @CurrentUser() user: AuthUser,
     @CompanyId() companyId: number | undefined,
     @BranchId() branchId: number | undefined,
-    @Body() dto: CreatePurchaseOrderDto,
+    @Body() dto: CreateLpoDto,
   ) {
     return this.service.create(
       user.id,
@@ -47,18 +45,12 @@ export class PurchaseOrderController {
     );
   }
 
-  /**
-   * List by direction relative to the active company: `received` (raised on us)
-   * or `sent` (raised by us — the default).
-   */
   @Get()
   findAll(
     @CurrentUser() user: AuthUser,
     @CompanyId() companyId: number | undefined,
-    @Query('scope') scope?: string,
   ) {
-    const s = scope === 'received' ? 'received' : 'sent';
-    return this.service.findAll(user.id, companyId ?? 0, s, !!user.isSuperAdmin);
+    return this.service.findAll(user.id, companyId ?? 0, !!user.isSuperAdmin);
   }
 
   /** Whether the current user may raise a new order (workflow-governed). */
@@ -68,10 +60,7 @@ export class PurchaseOrderController {
   }
 
   @Get(':id')
-  findOne(
-    @CurrentUser() user: AuthUser,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
+  findOne(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(user.id, id, !!user.isSuperAdmin);
   }
 
@@ -79,25 +68,19 @@ export class PurchaseOrderController {
   update(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: UpdatePurchaseOrderDto,
+    @Body() dto: UpdateLpoDto,
   ) {
     return this.service.update(user.id, id, dto);
   }
 
   @Delete(':id')
-  remove(
-    @CurrentUser() user: AuthUser,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
+  remove(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     return this.service.remove(user.id, id, !!user.isSuperAdmin);
   }
 
   /** Submit a draft into the approval workflow (the creator's forward action). */
   @Post(':id/submit')
-  submit(
-    @CurrentUser() user: AuthUser,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
+  submit(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     return this.service.submit(user.id, id, !!user.isSuperAdmin);
   }
 
@@ -106,7 +89,7 @@ export class PurchaseOrderController {
   act(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: ActPurchaseOrderDto,
+    @Body() dto: ActLpoDto,
   ) {
     return this.service.act(user.id, id, dto);
   }

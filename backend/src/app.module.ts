@@ -38,6 +38,7 @@ import { HrGroupModule } from './modules/hr-group/hr-group.module';
 import { HrDesignationModule } from './modules/hr-designation/hr-designation.module';
 import { WorkflowModule } from './modules/workflow/workflow.module';
 import { CrmModule } from './modules/crm/crm.module';
+import { PurchaseModule } from './modules/purchase/purchase.module';
 import { LoginScreenModule } from './modules/login-screen/login-screen.module';
 import { SoftwareInfoModule } from './modules/software-info/software-info.module';
 import { DocumentModule } from './modules/document/document.module';
@@ -84,6 +85,7 @@ import { ScaffoldModule } from './scaffold/scaffold.module';
     HrDesignationModule,
     WorkflowModule,
     CrmModule,
+    PurchaseModule,
     LoginScreenModule,
     SoftwareInfoModule,
     DocumentModule,

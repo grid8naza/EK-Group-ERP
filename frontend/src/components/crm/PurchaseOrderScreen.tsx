@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   ShoppingCart,
+  Inbox,
   Plus,
   Trash2,
   ArrowLeft,
@@ -32,10 +33,36 @@ import type {
   WorkflowStatus,
 } from '@/lib/types';
 
-const ROUTE = '/crm/purchase-orders-ic';
+/**
+ * Which side of an inter-company order this screen shows. A PO is ONE row: the
+ * active company is either the requester (`sent`) or the supplier (`received`).
+ * Only the requester raises and edits it; the supplier reads it and acts on its
+ * workflow task. Keeping the two apart matters because a company is usually both.
+ */
+export type PurchaseOrderScope = 'sent' | 'received';
 
 type DraftLine = { productId: string; quantity: string };
 type Mode = 'list' | 'edit' | 'view';
+
+// The buyer's side lives in the Purchase module, the supplier's in CRM, and the
+// routes are module-namespaced to match. Titles carry the full expansion — the
+// menu only has room for the acronym.
+const SCREEN = {
+  sent: {
+    route: '/purchase/icpo',
+    title: 'Inter-Company Purchase Order (ICPO)',
+    description: 'Orders your company raised on another group company',
+    partyHeader: 'Supplier',
+    empty: 'No inter-company purchase orders raised yet',
+  },
+  received: {
+    route: '/crm/icpo-received',
+    title: 'Inter-Company Purchase Order — Received',
+    description: 'Orders other group companies raised on yours',
+    partyHeader: 'Customer',
+    empty: 'No inter-company purchase orders received yet',
+  },
+} as const;
 
 const statusColor = (s: PurchaseOrderStatus) =>
   s === 'APPROVED'
@@ -50,6 +77,11 @@ const statusColor = (s: PurchaseOrderStatus) =>
 
 const fmtDelivery = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleString() : '—';
+const money = (n: number) =>
+  n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 // datetime-local wants "YYYY-MM-DDTHH:mm" in local time.
 const toLocalInput = (iso?: string | null) => {
   if (!iso) return '';
@@ -58,7 +90,11 @@ const toLocalInput = (iso?: string | null) => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 };
 
-export default function PurchaseOrderIcPage() {
+export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
+  const isSent = scope === 'sent';
+  const screen = SCREEN[scope];
+  const ROUTE = screen.route;
+
   const { can, activeCompanyId } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
@@ -72,23 +108,24 @@ export default function PurchaseOrderIcPage() {
     () => new Map((statuses ?? []).map((s) => [s.name, s])),
     [statuses],
   );
-  // Unified list: orders the user raised AND orders the workflow has routed to
-  // them for action (approvers see them here, not in Sales Orders).
-  const { data: placed, loading, refetch } = useFetch<PurchaseOrder[]>(
-    '/purchase-orders?scope=involved',
-  );
+  const {
+    data: rows,
+    loading,
+    refetch,
+  } = useFetch<PurchaseOrder[]>(`/purchase-orders?scope=${scope}`, [scope]);
   // When a workflow governs the PO form, it supersedes the Add privilege: only
-  // the workflow's designated creator may raise an order.
+  // the workflow's designated creator may raise an order. Only the requester
+  // ever creates, so the Received screen doesn't ask.
   const { data: createAccess } = useFetch<{
     workflowGoverned: boolean;
     canCreate: boolean;
-  }>('/purchase-orders/create-access');
+  }>(isSent ? '/purchase-orders/create-access' : null);
 
   const canAdd = can(ROUTE, 'add');
   const canDeletePriv = can(ROUTE, 'delete');
   // Show "New" only when the screen privilege allows AND the workflow (if any)
   // designates this user a creator.
-  const canCreate = canAdd && (createAccess?.canCreate ?? false);
+  const canCreate = isSent && canAdd && (createAccess?.canCreate ?? false);
 
   const suppliers = useMemo(
     () => (companies ?? []).filter((c) => c.id !== activeCompanyId),
@@ -99,23 +136,12 @@ export default function PurchaseOrderIcPage() {
   const branchName = (id?: number | null) =>
     id ? ((branches ?? []).find((b) => b.id === id)?.name ?? `#${id}`) : '—';
 
-  // The unified list holds orders on both sides: ones the active company raised
-  // (it's the requester → the counterparty is the Supplier) and ones routed to
-  // it as the supplier (→ the counterparty is the Customer). Show whichever the
-  // active company is NOT, and label the header for whichever role(s) are present.
-  const activeIsSupplier = (r: PurchaseOrder) => r.companyId === activeCompanyId;
+  // The counterparty is whichever side the active company is NOT: on Sent we
+  // raised it, so the other party is the supplier (companyId); on Received it
+  // was raised on us, so the other party is the customer (orderingCompanyId).
   const counterpartyId = (r: PurchaseOrder) =>
-    activeIsSupplier(r) ? r.orderingCompanyId : r.companyId;
-  const counterpartyName = (r: PurchaseOrder) =>
-    companyName(counterpartyId(r));
-  const partyHeader = useMemo(() => {
-    const rows = placed ?? [];
-    const asSupplier = rows.some(activeIsSupplier);
-    const asRequester = rows.some((r) => !activeIsSupplier(r));
-    if (asSupplier && asRequester) return 'Supplier / Customer';
-    return asSupplier ? 'Customer' : 'Supplier';
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [placed, activeCompanyId]);
+    isSent ? r.companyId : r.orderingCompanyId;
+  const counterpartyName = (r: PurchaseOrder) => companyName(counterpartyId(r));
 
   // ---- filters (Company / Branch / Status) ----
   const [fCompany, setFCompany] = useState('');
@@ -126,34 +152,35 @@ export default function PurchaseOrderIcPage() {
   // are offered (and they match what the list shows).
   const companyOptions = useMemo(() => {
     const m = new Map<number, string>();
-    (placed ?? []).forEach((r) => m.set(counterpartyId(r), counterpartyName(r)));
+    (rows ?? []).forEach((r) => m.set(counterpartyId(r), counterpartyName(r)));
     return [...m.entries()].map(([value, label]) => ({ value, label }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [placed, companies, activeCompanyId]);
+  }, [rows, companies, isSent]);
   const branchOptions = useMemo(() => {
     const m = new Map<number, string>();
-    (placed ?? []).forEach((r) => {
-      if (r.orderingBranchId) m.set(r.orderingBranchId, branchName(r.orderingBranchId));
+    (rows ?? []).forEach((r) => {
+      if (r.orderingBranchId)
+        m.set(r.orderingBranchId, branchName(r.orderingBranchId));
     });
     return [...m.entries()].map(([value, label]) => ({ value, label }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [placed, branches]);
+  }, [rows, branches]);
   const statusOptions = useMemo(() => {
     const s = new Set<string>();
-    (placed ?? []).forEach((r) => s.add(r.workflowStatus ?? r.status));
+    (rows ?? []).forEach((r) => s.add(r.workflowStatus ?? r.status));
     return [...s].map((v) => ({ value: v, label: v }));
-  }, [placed]);
+  }, [rows]);
 
   const filteredRows = useMemo(
     () =>
-      (placed ?? []).filter(
+      (rows ?? []).filter(
         (r) =>
           (!fCompany || String(counterpartyId(r)) === fCompany) &&
           (!fBranch || String(r.orderingBranchId ?? '') === fBranch) &&
           (!fStatus || (r.workflowStatus ?? r.status) === fStatus),
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [placed, fCompany, fBranch, fStatus, activeCompanyId],
+    [rows, fCompany, fBranch, fStatus, isSent],
   );
   const hasFilters = !!(fCompany || fBranch || fStatus);
   const clearFilters = () => {
@@ -182,7 +209,8 @@ export default function PurchaseOrderIcPage() {
   const [notes, setNotes] = useState('');
   const [products, setProducts] = useState<Product[]>([]);
 
-  // Products belong to the SUPPLIER; fetch that company's catalogue.
+  // Products belong to the SUPPLIER; fetch that company's catalogue. Needed on
+  // both screens — the document view names each ordered product.
   useEffect(() => {
     if (!supplierId) {
       setProducts([]);
@@ -239,7 +267,8 @@ export default function PurchaseOrderIcPage() {
   const openView = async (row: PurchaseOrder) => {
     try {
       const full = await loadOrder(row.id);
-      setMode(full.status === 'DRAFT' ? 'edit' : 'view');
+      // Drafts are the requester's to edit; they never reach the Received list.
+      setMode(isSent && full.status === 'DRAFT' ? 'edit' : 'view');
     } catch {
       toast.error('Failed to open the order.');
     }
@@ -384,18 +413,26 @@ export default function PurchaseOrderIcPage() {
     { key: 'orderNo', header: 'Order No', accessor: (r) => r.orderNo },
     {
       key: 'party',
-      header: partyHeader,
+      header: screen.partyHeader,
       accessor: (r) => counterpartyName(r),
     },
     {
       key: 'branch',
-      header: 'Branch',
+      // The branch is always the requester's — ours on Sent, theirs on Received.
+      header: isSent ? 'Branch' : 'Customer Branch',
       accessor: (r) => branchName(r.orderingBranchId),
     },
     {
       key: 'items',
       header: 'Items',
       accessor: (r) => r.lines.length,
+      className: 'text-right tabular-nums',
+      headerClassName: 'text-right',
+    },
+    {
+      key: 'total',
+      header: 'Value',
+      accessor: (r) => money(r.total ?? 0),
       className: 'text-right tabular-nums',
       headerClassName: 'text-right',
     },
@@ -574,13 +611,19 @@ export default function PurchaseOrderIcPage() {
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col">
       <PageHeader
-        title="Purchase Order - IC"
-        description="Raise inter-company purchase orders on a supplier company"
-        icon={<ShoppingCart className="h-5 w-5" />}
+        title={screen.title}
+        description={screen.description}
+        icon={
+          isSent ? (
+            <ShoppingCart className="h-5 w-5" />
+          ) : (
+            <Inbox className="h-5 w-5" />
+          )
+        }
         actions={
           canCreate ? (
             <button className="btn-primary" onClick={openNew}>
-              <Plus className="h-4 w-4" /> New Purchase Order
+              <Plus className="h-4 w-4" /> New ICPO
             </button>
           ) : undefined
         }
@@ -595,13 +638,13 @@ export default function PurchaseOrderIcPage() {
         searchPlaceholder="Search orders..."
         onView={openView}
         canView
-        emptyMessage="No purchase orders yet"
+        emptyMessage={screen.empty}
         toolbar={
           <div className="flex flex-wrap items-center gap-2">
             <Select
               value={fCompany}
               onChange={(e) => setFCompany(e.target.value)}
-              placeholder="All companies"
+              placeholder={isSent ? 'All suppliers' : 'All customers'}
               options={companyOptions}
               wrapClassName="w-44"
             />
@@ -634,7 +677,7 @@ export default function PurchaseOrderIcPage() {
   );
 }
 
-// --- draft editor (extracted to keep the page readable) ---
+// --- draft editor (extracted to keep the screen readable) ---
 function DraftEditor(props: {
   creating: boolean;
   supplierId: string;
@@ -670,11 +713,19 @@ function DraftEditor(props: {
     orderNo,
   } = props;
 
+  // What this order is worth at today's transfer prices. A draft tracks the
+  // master; placing it fixes the rates, and the backend is the one that decides
+  // them — this is a preview, not the source of truth.
+  const draftTotal = lines.reduce((s, l) => {
+    const p = l.productId ? productById.get(Number(l.productId)) : undefined;
+    return s + (Number(l.quantity) || 0) * (p?.intercompanyPrice ?? 0);
+  }, 0);
+
   return (
     <div className="card border-slate-200 bg-slate-50 p-6 dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
-          {orderNo ? `Draft ${orderNo}` : 'New Purchase Order'}
+          {orderNo ? `Draft ${orderNo}` : 'New ICPO'}
         </h2>
         {orderNo && <Badge color="blue">DRAFT</Badge>}
       </div>
@@ -713,8 +764,10 @@ function DraftEditor(props: {
             <thead>
               <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700">
                 <th className="py-2 pr-2">Product</th>
-                <th className="w-32 py-2 px-1 text-right">Quantity</th>
-                <th className="w-16 py-2 px-1">Unit</th>
+                <th className="w-28 py-2 px-1 text-right">Quantity</th>
+                <th className="w-14 py-2 px-1">Unit</th>
+                <th className="w-24 py-2 px-1 text-right">Rate</th>
+                <th className="w-28 py-2 px-1 text-right">Value</th>
                 <th className="w-12 py-2" />
               </tr>
             </thead>
@@ -722,7 +775,7 @@ function DraftEditor(props: {
               {lines.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={4}
+                    colSpan={6}
                     className="py-4 text-center text-xs text-slate-400"
                   >
                     No lines yet — click “Add line”.
@@ -733,6 +786,8 @@ function DraftEditor(props: {
                   const p = l.productId
                     ? productById.get(Number(l.productId))
                     : undefined;
+                  const rate = p?.intercompanyPrice ?? 0;
+                  const value = (Number(l.quantity) || 0) * rate;
                   return (
                     <tr
                       key={i}
@@ -766,6 +821,14 @@ function DraftEditor(props: {
                       <td className="px-1 text-slate-500">
                         {p ? (p.unit?.symbol ?? p.unit?.code ?? '') : ''}
                       </td>
+                      {/* The transfer price is group policy — shown, not edited.
+                          It's fixed onto the order when it's placed. */}
+                      <td className="px-1 text-right tabular-nums text-slate-500">
+                        {p ? money(rate) : ''}
+                      </td>
+                      <td className="px-1 text-right tabular-nums text-slate-600 dark:text-slate-300">
+                        {p ? money(value) : ''}
+                      </td>
                       <td className="text-center">
                         <button
                           className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600 dark:hover:bg-slate-800"
@@ -780,6 +843,22 @@ function DraftEditor(props: {
                 })
               )}
             </tbody>
+            {lines.length > 0 && (
+              <tfoot>
+                <tr className="border-t border-slate-200 dark:border-slate-700">
+                  <td
+                    colSpan={4}
+                    className="py-2 pr-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500"
+                  >
+                    Order value
+                  </td>
+                  <td className="px-1 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+                    {money(draftTotal)}
+                  </td>
+                  <td />
+                </tr>
+              </tfoot>
+            )}
           </table>
 
           <Textarea

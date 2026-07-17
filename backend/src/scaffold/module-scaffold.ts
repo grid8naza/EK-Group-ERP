@@ -21,6 +21,7 @@ import {
 import { HR_SUBS } from '../modules/hr-category/hr-provisioning';
 import { WORKFLOW_SUBS } from '../modules/workflow/workflow-provisioning';
 import { CRM_SUBS } from '../modules/crm/crm-provisioning';
+import { PURCHASE_SUBS } from '../modules/purchase/purchase-provisioning';
 import { ACCOUNTS_SUBS } from '../modules/supplier/accounts-provisioning';
 
 /**
@@ -181,5 +182,18 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     autoEnable: true, // on for every company so approvers see their inbox
     menu: { name: 'Workflow', icon: 'git-branch' },
     subs: WORKFLOW_SUBS,
+  },
+  {
+    code: 'PURCHASE',
+    name: 'Purchase',
+    icon: 'shopping-cart',
+    sortOrder: 9,
+    description: 'Purchasing — orders raised on supplier companies.',
+    // Mirrors CRM: a company that can receive an intercompany order can also
+    // raise one, so the buyer's screen exists wherever the supplier's does.
+    // Otherwise a new company would get Received without Sent.
+    autoEnable: true,
+    menu: { name: 'Purchase', icon: 'shopping-cart' },
+    subs: PURCHASE_SUBS,
   },
 ];
