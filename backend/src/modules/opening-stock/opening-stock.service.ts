@@ -12,6 +12,8 @@ import {
   BatchNumberingPort,
 } from '../../contracts/batch-numbering.port';
 import { assertUnlocked } from '../../common/assert-unlocked';
+import { assertBatchesFree } from '../../common/assert-batches-free';
+import { STOCK, StockPort } from '../../contracts/stock.port';
 import {
   CreateOpeningStockDto,
   OpeningStockLineInput,
@@ -32,6 +34,9 @@ export class OpeningStockService {
     private prisma: PrismaService,
     @Inject(NUMBERING) private readonly numbering: NumberingPort,
     @Inject(BATCH_NUMBERING) private readonly batchNumbering: BatchNumberingPort,
+    // Batches are regenerated on every edit and dropped on delete, so this
+    // service must ask whether anything is holding them first.
+    @Inject(STOCK) private readonly stock: StockPort,
   ) {}
 
   /** Batch numbers from the configured rule, or null to fall back to the
@@ -445,6 +450,10 @@ export class OpeningStockService {
         const batchIds = old
           .map((l) => l.batchId)
           .filter((b): b is number => b != null);
+        // These batches are about to be destroyed. If stock is reserved against
+        // any of them, the hold would outlive the batch and quietly sterilise the
+        // quantity — so refuse, and let the reservation be dealt with first.
+        await assertBatchesFree(this.stock, batchIds, 'opening stock', 'editing');
         await tx.stockLedger.deleteMany({
           where: { transactionType: 'OPENING_STOCK', documentId: id },
         });
@@ -489,6 +498,8 @@ export class OpeningStockService {
       const batchIds = old
         .map((l) => l.batchId)
         .filter((b): b is number => b != null);
+      // Deleting takes the batches with it — see the guard in update().
+      await assertBatchesFree(this.stock, batchIds, 'opening stock', 'deleting');
       await tx.stockLedger.deleteMany({
         where: { transactionType: 'OPENING_STOCK', documentId: id },
       });

@@ -56,6 +56,38 @@ export interface ReservedForLine {
   quantity: number;
 }
 
+/**
+ * One hold, on one batch — the grain FEFO actually works at.
+ *
+ * Carries the batch's own selling prices, captured when that stock came in. They
+ * are what a sale must charge: goods labelled at an old price cannot be sold at
+ * a new one, so the price follows the batch rather than the product master
+ * (whose price is only the most recent one, for information).
+ */
+export interface ReservationDetail {
+  lineId: number;
+  productId: number;
+  batchId: number;
+  batchNo: string;
+  /** Supplier's batch number on the goods, if they gave one. */
+  supplierBatchNo: string | null;
+  expiryDate: string | null;
+  quantity: number;
+  intercompanyPrice: number;
+  wholesalePrice: number;
+  retailPrice: number;
+}
+
+/** A live hold standing in the way of destroying a batch. */
+export interface BatchHold {
+  batchId: number;
+  batchNo: string;
+  quantity: number;
+  /** What is holding it, e.g. 'PURCHASE_ORDER'. */
+  documentType: string;
+  documentId: number;
+}
+
 export interface StockPort {
   /**
    * On-hand / reserved / available per product for a company, across all its
@@ -92,12 +124,35 @@ export interface StockPort {
     lineIds?: number[],
   ): Promise<void>;
 
+  /**
+   * ACTIVE holds standing on any of these batches. Empty = the batches are free.
+   *
+   * Ask before DESTROYING a batch — which every stock document does when its
+   * lines are edited or it's deleted, since batches are regenerated wholesale.
+   * A hold outlives the batch it names, and then quietly sterilises the stock:
+   * it counts against what anyone else can reserve, while pointing at a row that
+   * no longer exists, so nothing on any screen explains where the quantity went.
+   */
+  holdsOnBatches(batchIds: number[]): Promise<BatchHold[]>;
+
   /** Mark a document's holds CONSUMED — the goods have moved on. */
   consumeFor(documentType: string, documentId: number): Promise<void>;
 
-  /** What each line of a document currently holds. */
+  /** What each line of a document currently holds, summed across its batches. */
   reservedFor(
     documentType: string,
     documentId: number,
   ): Promise<ReservedForLine[]>;
+
+  /**
+   * Every hold of a document, one row per batch, with that batch's prices.
+   *
+   * This is what a sales order is built from: the price a customer pays comes
+   * from the batch that ships, so one ordered product becomes one line per batch
+   * it was filled from. Ordered oldest-expiry-first, matching how FEFO allocated.
+   */
+  reservationDetailFor(
+    documentType: string,
+    documentId: number,
+  ): Promise<ReservationDetail[]>;
 }

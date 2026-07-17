@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
+  BatchHold,
+  ReservationDetail,
   ReserveRequest,
   ReserveResultLine,
   ReservedForLine,
@@ -185,6 +187,36 @@ export class StockService {
     });
   }
 
+  /**
+   * ACTIVE holds on any of these batches — what a caller must clear before it
+   * may destroy them. See StockPort.holdsOnBatches for why this matters.
+   */
+  async holdsOnBatches(batchIds: number[]): Promise<BatchHold[]> {
+    const ids = [...new Set(batchIds)];
+    if (!ids.length) return [];
+
+    const holds = await this.prisma.stockReservation.groupBy({
+      by: ['batchId', 'documentType', 'documentId'],
+      where: { batchId: { in: ids }, status: 'ACTIVE' },
+      _sum: { quantity: true },
+    });
+    if (!holds.length) return [];
+
+    const batches = await this.prisma.stockBatch.findMany({
+      where: { id: { in: holds.map((h) => h.batchId) } },
+      select: { id: true, batchNo1: true },
+    });
+    const noOf = new Map(batches.map((b) => [b.id, b.batchNo1]));
+
+    return holds.map((h) => ({
+      batchId: h.batchId,
+      batchNo: noOf.get(h.batchId) ?? `#${h.batchId}`,
+      quantity: h._sum.quantity ?? 0,
+      documentType: h.documentType,
+      documentId: h.documentId,
+    }));
+  }
+
   async releaseFor(
     documentType: string,
     documentId: number,
@@ -222,6 +254,81 @@ export class StockService {
       productId: r.productId,
       quantity: r._sum.quantity ?? 0,
     }));
+  }
+
+  /**
+   * Every hold of a document at batch grain, carrying each batch's prices.
+   *
+   * The prices live on the batch's inbound LEDGER row, not on StockBatch (which
+   * is only a label) — they were captured there when the stock came in. One
+   * batch is created per goods-in line, so that inbound row is unique per batch
+   * and its prices are the batch's prices.
+   */
+  async reservationDetailFor(
+    documentType: string,
+    documentId: number,
+  ): Promise<ReservationDetail[]> {
+    const holds = await this.prisma.stockReservation.groupBy({
+      by: ['documentLineId', 'productId', 'batchId'],
+      where: { documentType, documentId, status: 'ACTIVE' },
+      _sum: { quantity: true },
+    });
+    if (!holds.length) return [];
+
+    const batchIds = [...new Set(holds.map((h) => h.batchId))];
+    const [batches, inbound] = await Promise.all([
+      this.prisma.stockBatch.findMany({
+        where: { id: { in: batchIds } },
+        select: {
+          id: true,
+          batchNo1: true,
+          batchNo2: true,
+          expiryDate: true,
+        },
+      }),
+      // The prices the stock arrived at. qtyIn > 0 picks the receipt row.
+      this.prisma.stockLedger.findMany({
+        where: { batchId: { in: batchIds }, qtyIn: { gt: 0 } },
+        select: {
+          batchId: true,
+          intercompanyPrice: true,
+          wholesalePrice: true,
+          retailPrice: true,
+        },
+      }),
+    ]);
+    const batchOf = new Map(batches.map((b) => [b.id, b]));
+    const pricesOf = new Map(inbound.map((l) => [l.batchId!, l]));
+
+    return holds
+      .map((h) => {
+        const b = batchOf.get(h.batchId);
+        const p = pricesOf.get(h.batchId);
+        return {
+          lineId: h.documentLineId,
+          productId: h.productId,
+          batchId: h.batchId,
+          batchNo: b?.batchNo1 ?? `#${h.batchId}`,
+          supplierBatchNo: b?.batchNo2 ?? null,
+          expiryDate: b?.expiryDate?.toISOString() ?? null,
+          quantity: h._sum.quantity ?? 0,
+          intercompanyPrice: p?.intercompanyPrice ?? 0,
+          wholesalePrice: p?.wholesalePrice ?? 0,
+          retailPrice: p?.retailPrice ?? 0,
+          _expiry: b?.expiryDate ?? null,
+        };
+      })
+      // Same order FEFO allocated in, so the document reads the way it was filled.
+      .sort((a, b) => {
+        if (a.lineId !== b.lineId) return a.lineId - b.lineId;
+        if (a._expiry && b._expiry) {
+          const d = a._expiry.getTime() - b._expiry.getTime();
+          if (d !== 0) return d;
+        } else if (a._expiry) return -1;
+        else if (b._expiry) return 1;
+        return a.batchId - b.batchId;
+      })
+      .map(({ _expiry, ...rest }) => rest);
   }
 
   // --- helpers ---

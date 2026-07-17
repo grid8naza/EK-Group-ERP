@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
+  BatchHold,
+  ReservationDetail,
   ReserveRequest,
   ReserveResultLine,
   ReservedForLine,
@@ -38,6 +40,10 @@ export class StockAdapter implements StockPort {
     return this.stock.releaseFor(documentType, documentId, lineIds);
   }
 
+  holdsOnBatches(batchIds: number[]): Promise<BatchHold[]> {
+    return this.stock.holdsOnBatches(batchIds);
+  }
+
   consumeFor(documentType: string, documentId: number): Promise<void> {
     return this.stock.consumeFor(documentType, documentId);
   }
@@ -47,5 +53,12 @@ export class StockAdapter implements StockPort {
     documentId: number,
   ): Promise<ReservedForLine[]> {
     return this.stock.reservedFor(documentType, documentId);
+  }
+
+  reservationDetailFor(
+    documentType: string,
+    documentId: number,
+  ): Promise<ReservationDetail[]> {
+    return this.stock.reservationDetailFor(documentType, documentId);
   }
 }
