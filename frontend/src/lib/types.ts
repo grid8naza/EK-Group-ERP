@@ -1093,7 +1093,9 @@ export type WorkflowActionType =
   | 'APPROVE_FORWARD'
   | 'CREATE_REFERENCE'
   | 'REFERENCE'
-  | 'REVIEW_FORWARD';
+  | 'REVIEW_FORWARD'
+  /** Approve + convert an ICPO into a sales order. Offered only on that form. */
+  | 'CONVERT_ICSO';
 export type WorkflowApprovalMode = 'FORM' | 'FIELD';
 export type WorkflowInstanceStatus =
   | 'IN_PROGRESS'

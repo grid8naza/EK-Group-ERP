@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, PurchaseOrderStatus } from '@prisma/client';
@@ -22,6 +23,7 @@ import {
   PurchaseOrderLineInput,
   UpdatePurchaseOrderDto,
 } from './purchase-order.dto';
+import { SalesOrderService } from './sales-order.service';
 
 // A PO is matched to its workflow at the ORIGIN (the buyer's company/branch), so
 // the workflow binds to the ICPO screen — the buyer's view of the order, which
@@ -54,10 +56,15 @@ type LinePayload = {
 
 @Injectable()
 export class PurchaseOrderService {
+  private readonly logger = new Logger(PurchaseOrderService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(WORKFLOW) private readonly workflow: WorkflowPort,
     @Inject(NUMBERING) private readonly numbering: NumberingPort,
+    // Same module, so a direct injection — the boundary rule forbids reaching
+    // ACROSS modules, and the sales order is CRM's own document.
+    private readonly salesOrders: SalesOrderService,
   ) {}
 
   /**
@@ -303,6 +310,28 @@ export class PurchaseOrderService {
         workflowStatus: res.statusLabel ?? null,
       },
     });
+
+    // A step configured as "Convert to ICSO" approves the order AND hands it to
+    // the sales side — the engine reports the action, we do the work (it can't
+    // import CRM). Best-effort on purpose: the approval genuinely happened and
+    // must stand, so a failure here leaves the order APPROVED-but-unconverted,
+    // which is exactly the state the manual Convert button on ICPO - Received
+    // exists to recover from.
+    if (res.actedAction === 'CONVERT_ICSO' && STATUS_MAP[res.status] === 'APPROVED') {
+      try {
+        await this.salesOrders.convertFromPurchaseOrder(
+          userId,
+          order.companyId, // the supplier company — it is the seller
+          order.id,
+        );
+      } catch (e) {
+        this.logger.error(
+          `Approved ${order.orderNo} but could not convert it to a sales order: ${
+            e instanceof Error ? e.message : e
+          }. Convert it by hand from ICPO - Received.`,
+        );
+      }
+    }
     return this.findOne(userId, id, true);
   }
 

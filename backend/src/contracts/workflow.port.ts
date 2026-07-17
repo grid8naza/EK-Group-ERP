@@ -119,13 +119,24 @@ export interface WorkflowPort {
    * Act on the current user's pending task for a document (approve / forward /
    * reject / cancel). Returns the resulting instance status so the caller can
    * sync its document status.
+   *
+   * `actedAction` is the WorkflowActionType the acted STEP was configured with —
+   * not the verb the caller passed in. The engine cannot reach a business module
+   * to run an action's side-effect (that would couple it to CRM, Accounts, …), so
+   * it reports what fired and the owning module decides what it means: seeing
+   * CONVERT_ICSO is how CRM knows to turn the approved ICPO into a sales order.
+   * Null on reject/cancel — nothing was converted.
    */
   actOnDocument(
     userId: number,
     ref: DocumentRef,
     action: 'APPROVE' | 'FORWARD' | 'REJECT' | 'CANCEL' | 'REFERENCE',
     comment?: string,
-  ): Promise<{ status: WorkflowStatus; statusLabel: string | null }>;
+  ): Promise<{
+    status: WorkflowStatus;
+    statusLabel: string | null;
+    actedAction: string | null;
+  }>;
 
   /** The document's workflow state for the viewer (buttons + approval trail). */
   docState(userId: number, ref: DocumentRef): Promise<WorkflowDocState>;

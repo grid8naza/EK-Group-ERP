@@ -20,6 +20,12 @@ enum WorkflowActionType {
   CREATE_REFERENCE // create + send to next level for reference only (no action there)
   REFERENCE // view only; end of workflow
   REVIEW_FORWARD // no action, forward to next level
+  // Approve AND hand the document on to its module's business logic; end of
+  // workflow. The engine does NOT do the converting — it can't reach a business
+  // module — it reports which action fired and the module acts on it. Only the
+  // ICPO answers to this today (CRM turns it into a sales order); on any other
+  // document it behaves as a plain APPROVE.
+  CONVERT_ICSO // approve + convert an ICPO into an Inter-Company Sales Order
 }
 
 /// Whole-form approval, or approval gated by a numeric field's limit.

@@ -43,7 +43,7 @@ import type {
 
 const ROUTE = '/cpanel/workflows';
 
-// The 7 approval actions, with friendly labels for the pull-down.
+// The approval actions, with friendly labels for the pull-down.
 const ACTION_OPTIONS: { value: WorkflowActionType; label: string }[] = [
   { value: 'CREATE_APPROVE', label: 'Create & Approve' },
   { value: 'CREATE_FORWARD', label: 'Create & Forward' },
@@ -52,9 +52,27 @@ const ACTION_OPTIONS: { value: WorkflowActionType; label: string }[] = [
   { value: 'CREATE_REFERENCE', label: 'Create & Reference' },
   { value: 'REFERENCE', label: 'Reference' },
   { value: 'REVIEW_FORWARD', label: 'Review & Forward' },
+  { value: 'CONVERT_ICSO', label: 'Convert to ICSO' },
 ];
 const actionLabel = (a: WorkflowActionType) =>
   ACTION_OPTIONS.find((o) => o.value === a)?.label ?? a;
+
+/**
+ * Actions that only mean something on one form, keyed by that form's route.
+ *
+ * A CONVERT_* action approves the document AND hands it to its module's business
+ * logic — but only that module knows how to answer. On any other form it would
+ * quietly behave as a plain Approve, so it isn't offered there at all: an action
+ * that silently does nothing is worse than one that isn't in the list.
+ */
+const ACTION_ONLY_ON: Partial<Record<WorkflowActionType, string>> = {
+  CONVERT_ICSO: '/purchase/icpo',
+};
+const actionsForForm = (route?: string) =>
+  ACTION_OPTIONS.filter((o) => {
+    const only = ACTION_ONLY_ON[o.value];
+    return !only || only === route;
+  });
 
 const APPROVAL_MODE_OPTIONS: { value: WorkflowApprovalMode; label: string }[] = [
   { value: 'FORM', label: 'Whole form' },
@@ -238,6 +256,12 @@ export default function WorkflowsPage() {
   const [view, setView] = useState(false);
   const [tab, setTab] = useState('def');
   const [def, setDef] = useState({ ...emptyDef });
+  // The form this definition governs — decides which form-specific actions its
+  // steps may use (see ACTION_ONLY_ON).
+  const selectedFormRoute = useMemo(
+    () => forms.find((f) => String(f.id) === String(def.objectId))?.route ?? undefined,
+    [forms, def.objectId],
+  );
   const [steps, setSteps] = useState<StepDraft[]>([]);
   const [saving, setSaving] = useState(false);
 
@@ -717,6 +741,7 @@ export default function WorkflowsPage() {
                     stepCompanyId={effectiveStepCompanyId(i)}
                     stepBranchId={effectiveStepBranchId(i)}
                     stepModuleId={effectiveStepModuleId(i)}
+                    formRoute={selectedFormRoute}
                     statuses={statuses ?? []}
                     groupName={groupName}
                     userName={userName}
@@ -753,6 +778,7 @@ function StepCard({
   stepCompanyId,
   stepBranchId,
   stepModuleId,
+  formRoute,
   groupName,
   userName,
   onChange,
@@ -772,6 +798,8 @@ function StepCard({
   stepCompanyId?: number;
   stepBranchId?: number;
   stepModuleId?: number;
+  /** Route of the form this definition governs — gates form-specific actions. */
+  formRoute?: string;
   groupName: (id?: number | null) => string;
   userName: (id: number) => string;
   onChange: (patch: Partial<StepDraft>) => void;
@@ -981,7 +1009,9 @@ function StepCard({
           onChange={(e) =>
             onChange({ action: e.target.value as WorkflowActionType })
           }
-          options={ACTION_OPTIONS}
+          // Scoped to the form this definition governs — a Convert action is
+          // offered only where something can answer it.
+          options={actionsForForm(formRoute)}
         />
         <Input
           label="Button text"

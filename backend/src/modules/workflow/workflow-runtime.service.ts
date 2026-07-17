@@ -23,10 +23,13 @@ import {
 import { ActOnTaskDto, StartWorkflowDto } from './workflow.dto';
 
 // Actions whose level ENDS the workflow when approved (no onward routing).
+// CONVERT_* actions approve like APPROVE does; what makes them different happens
+// in the owning module, after this engine reports which action fired.
 const TERMINAL_ACTIONS: WorkflowActionType[] = [
   'APPROVE',
   'CREATE_APPROVE',
   'REFERENCE',
+  'CONVERT_ICSO',
 ];
 
 @Injectable()
@@ -334,7 +337,11 @@ export class WorkflowRuntimeService {
     ref: DocumentRef,
     action: ActOnTaskDto['action'],
     comment?: string,
-  ): Promise<{ status: WorkflowStatus; statusLabel: string | null }> {
+  ): Promise<{
+    status: WorkflowStatus;
+    statusLabel: string | null;
+    actedAction: string | null;
+  }> {
     const instance = await this.currentInstance(ref);
     if (!instance || instance.status !== 'IN_PROGRESS') {
       throw new BadRequestException('This document has no active workflow.');
@@ -351,16 +358,22 @@ export class WorkflowRuntimeService {
     }
     const step = await this.prisma.workflowStep.findUnique({
       where: { id: task.stepId },
-      select: { statusLabel: true },
+      select: { statusLabel: true, action: true },
     });
     const after = await this.act(userId, task.id, { action, comment });
     // The status a positive step stamps onto the document; reject/cancel fall back
     // to the enum status the caller derives from `status`.
-    const statusLabel =
-      action === 'REJECT' || action === 'CANCEL'
-        ? null
-        : (step?.statusLabel ?? null);
-    return { status: after.status as WorkflowStatus, statusLabel };
+    const positive = action !== 'REJECT' && action !== 'CANCEL';
+    const statusLabel = positive ? (step?.statusLabel ?? null) : null;
+    // Which action the acted step was configured with. The engine can't reach a
+    // business module to run a CONVERT_* action's side-effect, so it reports what
+    // fired and the owning module decides what that means. Null on reject/cancel:
+    // nothing was converted.
+    return {
+      status: after.status as WorkflowStatus,
+      statusLabel,
+      actedAction: positive ? (step?.action ?? null) : null,
+    };
   }
 
   /** The document's workflow state for the viewer (buttons + approval trail). */
