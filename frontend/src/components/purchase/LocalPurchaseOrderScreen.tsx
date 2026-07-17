@@ -467,8 +467,10 @@ export function LocalPurchaseOrderScreen() {
     const isEditing = mode === 'edit';
     const submitLabel = current?.viewer?.submitButtonText ?? 'Forward';
     return (
-      <div className="mx-auto flex h-full max-w-4xl flex-col gap-4 overflow-y-auto pb-6">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="mx-auto flex h-full max-w-6xl flex-col gap-4 overflow-y-auto pb-6">
+        {/* Action bar — frozen to the top of the scroll area, so the buttons stay
+            reachable however far down the document you are. */}
+        <div className="sticky top-0 z-20 -mt-1 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 bg-[#f0f2f5]/90 py-3 backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/90">
           <button className="btn-ghost" onClick={backToList}>
             <ArrowLeft className="h-4 w-4" /> Back to list
           </button>
@@ -569,7 +571,7 @@ export function LocalPurchaseOrderScreen() {
                 unitLabel={unitLabel}
               />
               {myTask && (
-                <div className="mx-auto w-full max-w-3xl">
+                <div className="mx-auto w-full max-w-5xl">
                   <Textarea
                     label={
                       myTask.canReject

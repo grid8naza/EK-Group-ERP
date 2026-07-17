@@ -376,8 +376,10 @@ export function SalesOrderScreen() {
     const isEditing = mode === 'edit';
     const submitLabel = current?.viewer?.submitButtonText ?? 'Forward';
     return (
-      <div className="mx-auto flex h-full max-w-4xl flex-col gap-4 overflow-y-auto pb-6">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="mx-auto flex h-full max-w-6xl flex-col gap-4 overflow-y-auto pb-6">
+        {/* Action bar — frozen to the top of the scroll area, so the buttons stay
+            reachable however far down the document you are. */}
+        <div className="sticky top-0 z-20 -mt-1 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 bg-[#f0f2f5]/90 py-3 backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/90">
           <button className="btn-ghost" onClick={backToList}>
             <ArrowLeft className="h-4 w-4" /> Back to list
           </button>
@@ -470,7 +472,7 @@ export function SalesOrderScreen() {
                 unitLabel={unitLabel}
               />
               {myTask && (
-                <div className="mx-auto w-full max-w-3xl">
+                <div className="mx-auto w-full max-w-5xl">
                   <Textarea
                     label={
                       myTask.canReject
@@ -492,7 +494,7 @@ export function SalesOrderScreen() {
 
   // ============================== LIST MODE ==============================
   return (
-    <div className="mx-auto flex h-full max-w-4xl flex-col">
+    <div className="mx-auto flex h-full max-w-6xl flex-col">
       <PageHeader
         title="Inter-Company Sales Order (ICSO)"
         description="Orders to supply another group company, converted from their purchase orders"
@@ -656,7 +658,7 @@ function DraftEditor(props: {
                 key={src.id}
                 className="border-b border-slate-100 dark:border-slate-800/60"
               >
-                <td className="py-1.5 pr-2 font-medium text-slate-800 dark:text-slate-100">
+                <td className="whitespace-nowrap py-1.5 pr-2 font-medium text-slate-800 dark:text-slate-100">
                   {productName(src.productId)}
                 </td>
                 <td className="px-1 text-xs">
@@ -665,7 +667,7 @@ function DraftEditor(props: {
                       To produce
                     </span>
                   ) : (
-                    <span className="font-mono text-slate-500">{src.batchNo}</span>
+                    <span className="whitespace-nowrap font-mono text-slate-500">{src.batchNo}</span>
                   )}
                 </td>
                 <td className="px-1 text-right tabular-nums text-slate-500">

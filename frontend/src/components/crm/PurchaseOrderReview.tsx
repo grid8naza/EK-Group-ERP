@@ -16,6 +16,13 @@ export interface PurchaseOrderReviewProps {
   unitLabel: (id: number) => string;
   onAccepted: (lineId: number, qty: string) => void;
   onToggleCancel: (lineId: number) => void;
+  /**
+   * Show the numbers without the means to change them — for everyone but the
+   * reviewer currently holding the order. The next approver is approving these
+   * figures, so they must see them; they just don't get to set them.
+   */
+  readOnly?: boolean;
+  /** Momentarily inert while a save / reserve is in flight. */
   disabled?: boolean;
 }
 
@@ -35,12 +42,13 @@ export function PurchaseOrderReview({
   unitLabel,
   onAccepted,
   onToggleCancel,
+  readOnly,
   disabled,
 }: PurchaseOrderReviewProps) {
   const draftOf = (lineId: number) => lines.find((l) => l.lineId === lineId);
 
   return (
-    <div className="mx-auto w-full max-w-3xl rounded-xl border border-slate-200 bg-slate-50 p-6 dark:border-slate-800 dark:bg-slate-900">
+    <div className="mx-auto w-full max-w-5xl rounded-xl border border-slate-200 bg-slate-50 p-6 dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-1 flex items-center justify-between">
         <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-800 dark:text-slate-100">
           <Package className="h-5 w-5 text-slate-400" /> Stock &amp; acceptance
@@ -48,9 +56,9 @@ export function PurchaseOrderReview({
         <Badge color="amber">{order.workflowStatus ?? order.status}</Badge>
       </div>
       <p className="mb-4 text-xs text-slate-500">
-        Available is company-wide and already nets off stock held by other orders.
-        Accepting more than is available is fine — reserve takes what exists and
-        the balance is produced.
+        {readOnly
+          ? 'What Customer Relations committed to, and what is held against it. Balance is still to be produced.'
+          : 'Available is company-wide and already nets off stock held by other orders. Accepting more than is available is fine — reserve takes what exists and the balance is produced.'}
       </p>
 
       <div className="overflow-x-auto">
@@ -84,7 +92,7 @@ export function PurchaseOrderReview({
                     cancelled ? 'opacity-50' : ''
                   }`}
                 >
-                  <td className="py-2 pr-2 font-medium text-slate-800 dark:text-slate-100">
+                  <td className="whitespace-nowrap py-2 pr-2 font-medium text-slate-800 dark:text-slate-100">
                     <span className={cancelled ? 'line-through' : ''}>
                       {productName(l.productId)}
                     </span>
@@ -113,22 +121,28 @@ export function PurchaseOrderReview({
                     {num(l.stockAvailable ?? 0)}
                   </td>
                   <td className="py-2 pl-1">
-                    <Input
-                      type="number"
-                      min={0}
-                      step="any"
-                      value={cancelled ? '0' : (d?.acceptedQty ?? '')}
-                      onChange={(e) => onAccepted(l.id, e.target.value)}
-                      disabled={disabled || cancelled}
-                      className={`text-right tabular-nums ${
-                        short ? 'text-amber-600 dark:text-amber-500' : ''
-                      }`}
-                      title={
-                        short
-                          ? 'More than is available — the shortfall becomes the balance to produce'
-                          : undefined
-                      }
-                    />
+                    {readOnly ? (
+                      <span className="block pr-1 text-right font-medium tabular-nums text-slate-700 dark:text-slate-200">
+                        {num(accepted)}
+                      </span>
+                    ) : (
+                      <Input
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={cancelled ? '0' : (d?.acceptedQty ?? '')}
+                        onChange={(e) => onAccepted(l.id, e.target.value)}
+                        disabled={disabled || cancelled}
+                        className={`text-right tabular-nums ${
+                          short ? 'text-amber-600 dark:text-amber-500' : ''
+                        }`}
+                        title={
+                          short
+                            ? 'More than is available — the shortfall becomes the balance to produce'
+                            : undefined
+                        }
+                      />
+                    )}
                   </td>
                   <td className="py-2 text-right font-medium tabular-nums text-slate-700 dark:text-slate-200">
                     {num(reserved)}
@@ -144,19 +158,21 @@ export function PurchaseOrderReview({
                     {num(balance)}
                   </td>
                   <td className="py-2 text-center">
-                    <button
-                      className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600 disabled:opacity-40 dark:hover:bg-slate-800"
-                      onClick={() => onToggleCancel(l.id)}
-                      disabled={disabled}
-                      title={cancelled ? 'Restore this line' : 'Cancel this line'}
-                      aria-label={cancelled ? 'Restore line' : 'Cancel line'}
-                    >
-                      {cancelled ? (
-                        <Undo2 className="h-4 w-4" />
-                      ) : (
-                        <RotateCcw className="h-4 w-4" />
-                      )}
-                    </button>
+                    {!readOnly && (
+                      <button
+                        className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600 disabled:opacity-40 dark:hover:bg-slate-800"
+                        onClick={() => onToggleCancel(l.id)}
+                        disabled={disabled}
+                        title={cancelled ? 'Restore this line' : 'Cancel this line'}
+                        aria-label={cancelled ? 'Restore line' : 'Cancel line'}
+                      >
+                        {cancelled ? (
+                          <Undo2 className="h-4 w-4" />
+                        ) : (
+                          <RotateCcw className="h-4 w-4" />
+                        )}
+                      </button>
+                    )}
                   </td>
                 </tr>
               );

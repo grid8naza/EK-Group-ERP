@@ -52,7 +52,7 @@ export function PurchaseOrderDoc({
   const timeline = order.workflow?.timeline ?? [];
 
   return (
-    <div className="mx-auto w-full max-w-3xl rounded-xl border border-slate-200 bg-white p-8 dark:border-slate-800 dark:bg-slate-900">
+    <div className="mx-auto w-full max-w-5xl rounded-xl border border-slate-200 bg-white p-8 dark:border-slate-800 dark:bg-slate-900">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-5 dark:border-slate-700">
         <div>
@@ -111,7 +111,7 @@ export function PurchaseOrderDoc({
                 <td className="py-2 pr-2 text-slate-400 tabular-nums">
                   {i + 1}
                 </td>
-                <td className="py-2 pr-2 font-medium text-slate-800 dark:text-slate-100">
+                <td className="whitespace-nowrap py-2 pr-2 font-medium text-slate-800 dark:text-slate-100">
                   {productName(l.productId)}
                 </td>
                 <td className="py-2 text-right tabular-nums">

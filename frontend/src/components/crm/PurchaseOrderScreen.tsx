@@ -596,12 +596,25 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
     // the privilege to create the sales order it produces.
     const showConvert =
       !isSent && current?.status === 'APPROVED' && can('/crm/icso', 'add');
+    // The stock answer belongs to the ORDER, not to whoever is holding it: once
+    // Customer Relations has said what they'll supply and reserved against it,
+    // everyone downstream needs to see those numbers — Operations is approving
+    // exactly them. So the panel shows for the whole of the supplier's side of
+    // the order's life, and only the INPUTS are gated on holding an editing task.
+    const showReview =
+      !isSent &&
+      !!current &&
+      current.status !== 'DRAFT' &&
+      current.status !== 'CANCELLED';
     // The seller answers the order while it sits with them on an editing step.
-    const canReview = !isSent && !!current?.viewer?.canReview;
+    const canReview = showReview && !!current?.viewer?.canReview;
     return (
-      <div className="mx-auto flex h-full max-w-4xl flex-col gap-4 overflow-y-auto pb-6">
-        {/* action bar */}
-        <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="mx-auto flex h-full max-w-6xl flex-col gap-4 overflow-y-auto pb-6">
+        {/* Action bar — frozen to the top of the scroll area, so Save / Reserve /
+            Forward stay reachable however far down the document you are. The
+            translucent backdrop keeps the lines from showing through as they pass
+            underneath. */}
+        <div className="sticky top-0 z-20 -mt-1 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 bg-[#f0f2f5]/90 py-3 backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/90">
           <button className="btn-ghost" onClick={backToList}>
             <ArrowLeft className="h-4 w-4" /> Back to list
           </button>
@@ -744,7 +757,7 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
                 productName={productName}
                 unitLabel={unitLabel}
               />
-              {canReview && (
+              {showReview && (
                 <PurchaseOrderReview
                   order={current}
                   lines={review}
@@ -752,11 +765,14 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
                   unitLabel={unitLabel}
                   onAccepted={setAccepted}
                   onToggleCancel={toggleCancel}
+                  // Read-only for everyone but the current reviewer — the next
+                  // approver reads these numbers, they don't set them.
+                  readOnly={!canReview}
                   disabled={reviewing || reserving}
                 />
               )}
               {myTask && (
-                <div className="mx-auto w-full max-w-3xl">
+                <div className="mx-auto w-full max-w-5xl">
                   <Textarea
                     label={
                       myTask.canReject
@@ -778,7 +794,7 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
 
   // ============================== LIST MODE ==============================
   return (
-    <div className="mx-auto flex h-full max-w-4xl flex-col">
+    <div className="mx-auto flex h-full max-w-6xl flex-col">
       <PageHeader
         title={screen.title}
         description={screen.description}

@@ -51,7 +51,7 @@ export function LocalPurchaseOrderDoc({
   const timeline = order.workflow?.timeline ?? [];
 
   return (
-    <div className="mx-auto w-full max-w-3xl rounded-xl border border-slate-200 bg-white p-8 dark:border-slate-800 dark:bg-slate-900">
+    <div className="mx-auto w-full max-w-5xl rounded-xl border border-slate-200 bg-white p-8 dark:border-slate-800 dark:bg-slate-900">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-5 dark:border-slate-700">
         <div>
@@ -98,7 +98,7 @@ export function LocalPurchaseOrderDoc({
                 className="border-b border-slate-100 dark:border-slate-800/60"
               >
                 <td className="py-2 pr-2 tabular-nums text-slate-400">{i + 1}</td>
-                <td className="py-2 pr-2 font-medium text-slate-800 dark:text-slate-100">
+                <td className="whitespace-nowrap py-2 pr-2 font-medium text-slate-800 dark:text-slate-100">
                   {targetName(l)}
                   <span className="ml-2 text-xs font-normal text-slate-400">
                     {l.itemId ? 'Item' : 'Product'}
