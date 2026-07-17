@@ -24,6 +24,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Input, Select, Textarea } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
+import { Tabs } from '@/components/ui/Tabs';
 import { PurchaseOrderDoc } from '@/components/crm/PurchaseOrderDoc';
 import {
   PurchaseOrderReview,
@@ -203,6 +204,10 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
 
   // ---- screen state ----
   const [mode, setMode] = useState<Mode>('list');
+  // Stock & acceptance is its own tab rather than a card stacked under the
+  // document: on an order with many lines it would sit a long scroll away, and
+  // it answers a different question from the one the document answers.
+  const [tab, setTab] = useState<'order' | 'stock'>('order');
   const [current, setCurrent] = useState<PurchaseOrder | null>(null);
   const [saving, setSaving] = useState(false);
   // Approver action state (when the open order has a pending task for this user).
@@ -276,6 +281,9 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
   const openView = async (row: PurchaseOrder) => {
     try {
       const full = await loadOrder(row.id);
+      // Always open on the document — it's what identifies the order. The
+      // reviewer switches to Stock & acceptance when they're ready to answer.
+      setTab('order');
       // Drafts are the requester's to edit; they never reach the Received list.
       setMode(isSent && full.status === 'DRAFT' ? 'edit' : 'view');
     } catch {
@@ -726,6 +734,25 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
           )}
         </div>
 
+        {/* Tabs ride with the frozen bar, so switching sides of the order never
+            means scrolling back up. Only the supplier gets a second side. */}
+        {showReview && !isEditing && (
+          <div className="sticky top-[3.75rem] z-10 -mt-2 bg-[#f0f2f5]/90 pb-1 pt-1 backdrop-blur dark:bg-slate-950/90">
+            <Tabs
+              tabs={[
+                { key: 'order', label: 'Purchase Order' },
+                {
+                  key: 'stock',
+                  label: 'Stock & acceptance',
+                  icon: <Package className="h-4 w-4" />,
+                },
+              ]}
+              active={tab}
+              onChange={(k) => setTab(k as 'order' | 'stock')}
+            />
+          </div>
+        )}
+
         {isEditing ? (
           <DraftEditor
             creating={!current}
@@ -750,14 +777,18 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
         ) : (
           current && (
             <>
-              <PurchaseOrderDoc
-                order={current}
-                companyName={companyName}
-                branchName={branchName}
-                productName={productName}
-                unitLabel={unitLabel}
-              />
-              {showReview && (
+              {/* One tab at a time — stacking them meant scrolling the whole
+                  document to reach the stock answer on a long order. */}
+              {(!showReview || tab === 'order') && (
+                <PurchaseOrderDoc
+                  order={current}
+                  companyName={companyName}
+                  branchName={branchName}
+                  productName={productName}
+                  unitLabel={unitLabel}
+                />
+              )}
+              {showReview && tab === 'stock' && (
                 <PurchaseOrderReview
                   order={current}
                   lines={review}
@@ -771,6 +802,8 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
                   disabled={reviewing || reserving}
                 />
               )}
+              {/* The comment feeds Reject / Forward, which live in the frozen bar
+                  above — so it belongs to the order, not to either tab. */}
               {myTask && (
                 <div className="mx-auto w-full max-w-5xl">
                   <Textarea
