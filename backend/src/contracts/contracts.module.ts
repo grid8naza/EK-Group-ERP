@@ -12,6 +12,9 @@ import { NUMBERING } from './numbering.port';
 import { DocumentNumberingService } from '../modules/document-numbering/document-numbering.service';
 import { BATCH_NUMBERING } from './batch-numbering.port';
 import { BatchNumberingService } from '../modules/batch-numbering/batch-numbering.service';
+import { STOCK } from './stock.port';
+import { StockAdapter } from '../modules/stock/stock.adapter';
+import { StockService } from '../modules/stock/stock.service';
 
 /**
  * Composition root for cross-module contracts (ports & adapters).
@@ -51,6 +54,11 @@ import { BatchNumberingService } from '../modules/batch-numbering/batch-numberin
     { provide: NUMBERING, useExisting: DocumentNumberingService },
     BatchNumberingService,
     { provide: BATCH_NUMBERING, useExisting: BatchNumberingService },
+    // Stock reads + reservations. Bound here with its service rather than via a
+    // module of its own — it ships no controller, and its only consumer is CRM
+    // reaching it through the port.
+    StockService,
+    { provide: STOCK, useClass: StockAdapter },
     CpanelMetricsAdapter,
     ProductionMetricsAdapter,
     InventoryMetricsAdapter,
@@ -68,6 +76,13 @@ import { BatchNumberingService } from '../modules/batch-numbering/batch-numberin
       ],
     },
   ],
-  exports: [USER_LOOKUP, METRIC_PROVIDER, WORKFLOW, NUMBERING, BATCH_NUMBERING],
+  exports: [
+    USER_LOOKUP,
+    METRIC_PROVIDER,
+    WORKFLOW,
+    NUMBERING,
+    BATCH_NUMBERING,
+    STOCK,
+  ],
 })
 export class ContractsModule {}

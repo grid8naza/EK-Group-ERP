@@ -17,6 +17,7 @@ import { PurchaseOrderService } from './purchase-order.service';
 import {
   ActPurchaseOrderDto,
   CreatePurchaseOrderDto,
+  ReviewPurchaseOrderDto,
   UpdatePurchaseOrderDto,
 } from './purchase-order.dto';
 
@@ -99,6 +100,30 @@ export class PurchaseOrderController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.service.submit(user.id, id, !!user.isSuperAdmin);
+  }
+
+  /**
+   * Customer Relations' review: accepted quantity per line, and which lines are
+   * refused. Supplier company only, while they hold an editing task.
+   */
+  @Patch(':id/review')
+  review(
+    @CurrentUser() user: AuthUser,
+    @CompanyId() companyId: number | undefined,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ReviewPurchaseOrderDto,
+  ) {
+    return this.service.review(user.id, companyId ?? 0, id, dto);
+  }
+
+  /** Reserve stock (FEFO, company-wide) against the accepted quantities. */
+  @Post(':id/reserve')
+  reserve(
+    @CurrentUser() user: AuthUser,
+    @CompanyId() companyId: number | undefined,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.service.reserve(user.id, companyId ?? 0, id);
   }
 
   /** Act on the order's workflow task (forward / approve / reject / cancel). */

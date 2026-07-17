@@ -17,10 +17,12 @@ import {
   WorkflowStatus,
 } from '../../contracts/workflow.port';
 import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
+import { STOCK, StockPort } from '../../contracts/stock.port';
 import {
   ActPurchaseOrderDto,
   CreatePurchaseOrderDto,
   PurchaseOrderLineInput,
+  ReviewPurchaseOrderDto,
   UpdatePurchaseOrderDto,
 } from './purchase-order.dto';
 import { SalesOrderService } from './sales-order.service';
@@ -31,6 +33,8 @@ import { SalesOrderService } from './sales-order.service';
 // the same row and has no workflow of its own.
 const ICPO_MODULE_CODE = 'PURCHASE';
 const ICPO_ROUTE = '/purchase/icpo';
+// Namespaces this order's rows in the shared stock_reservations table.
+const PO_DOCUMENT_TYPE = 'PURCHASE_ORDER';
 // Document code the central numbering rules key on (see Document Master seed).
 const PO_IC_DOCUMENT_CODE = 'PURCHASE_ORDER_IC';
 
@@ -62,6 +66,7 @@ export class PurchaseOrderService {
     private readonly prisma: PrismaService,
     @Inject(WORKFLOW) private readonly workflow: WorkflowPort,
     @Inject(NUMBERING) private readonly numbering: NumberingPort,
+    @Inject(STOCK) private readonly stock: StockPort,
     // Same module, so a direct injection — the boundary rule forbids reaching
     // ACROSS modules, and the sales order is CRM's own document.
     private readonly salesOrders: SalesOrderService,
@@ -158,6 +163,16 @@ export class PurchaseOrderService {
         ? await this.priceLines(order.companyId, dto.lines)
         : await this.repriceInFlight(order.companyId, dto.lines, order.lines)
       : undefined;
+
+    // Replacing the lines destroys the ids stock reservations hang off, so any
+    // hold stops meaning anything — hand the stock back rather than strand it
+    // ACTIVE against a line that no longer exists, holding inventory nobody can
+    // see or free. Customer Relations re-reserves after the edit. (Their own
+    // review path never comes through here: it updates lines in place precisely
+    // so the holds survive.)
+    if (lines) {
+      await this.stock.releaseFor(PO_DOCUMENT_TYPE, id);
+    }
 
     await this.prisma.$transaction(async (tx) => {
       await tx.purchaseOrder.update({
@@ -291,6 +306,8 @@ export class PurchaseOrderService {
           where: { id },
           data: { status: 'CANCELLED', workflowStatus: null },
         });
+        // A withdrawn order must not keep holding the supplier's stock.
+        await this.stock.releaseFor(PO_DOCUMENT_TYPE, order.id);
         return this.findOne(userId, id, true);
       }
     }
@@ -311,13 +328,20 @@ export class PurchaseOrderService {
       },
     });
 
+    const outcome = STATUS_MAP[res.status];
+    // A rejected or cancelled order stops holding stock the moment it dies —
+    // otherwise a refused order quietly sterilises inventory nobody can use.
+    if (outcome === 'REJECTED' || outcome === 'CANCELLED') {
+      await this.stock.releaseFor(PO_DOCUMENT_TYPE, order.id);
+    }
+
     // A step configured as "Convert to ICSO" approves the order AND hands it to
     // the sales side — the engine reports the action, we do the work (it can't
     // import CRM). Best-effort on purpose: the approval genuinely happened and
     // must stand, so a failure here leaves the order APPROVED-but-unconverted,
     // which is exactly the state the manual Convert button on ICPO - Received
     // exists to recover from.
-    if (res.actedAction === 'CONVERT_ICSO' && STATUS_MAP[res.status] === 'APPROVED') {
+    if (res.actedAction === 'CONVERT_ICSO' && outcome === 'APPROVED') {
       try {
         await this.salesOrders.convertFromPurchaseOrder(
           userId,
@@ -332,6 +356,97 @@ export class PurchaseOrderService {
         );
       }
     }
+    return this.findOne(userId, id, true);
+  }
+
+  /**
+   * Customer Relations' review: how much of each line we'll supply, and which
+   * lines we refuse.
+   *
+   * A separate path from `update` on purpose. `update` rewrites the buyer's lines
+   * (delete + recreate), which would orphan every reservation hanging off a line
+   * id and silently hand the held stock back. A reviewer isn't editing the order
+   * anyway — the demand stays untouched; only the answer to it changes.
+   *
+   * Cancelling a line releases its hold immediately. Lowering an accepted
+   * quantity does NOT re-reserve on its own: reserving is a deliberate act, so
+   * the held quantity stands until Reserve is pressed again (which reallocates
+   * from scratch) — the screen shows both numbers, so a stale hold is visible
+   * rather than silent.
+   */
+  async review(
+    userId: number,
+    companyId: number,
+    id: number,
+    dto: ReviewPurchaseOrderDto,
+  ) {
+    const order = await this.ensureOrder(id);
+    assertUnlocked(order, 'purchase order', 'editing');
+    await this.assertSupplierMayReview(userId, companyId, order);
+
+    const byId = new Map(order.lines.map((l) => [l.id, l]));
+    for (const l of dto.lines) {
+      if (!byId.has(l.lineId)) {
+        throw new BadRequestException('That line is not on this order.');
+      }
+    }
+
+    const cancelledIds: number[] = [];
+    await this.prisma.$transaction(async (tx) => {
+      for (const l of dto.lines) {
+        const cancelled = !!l.cancelled;
+        if (cancelled) cancelledIds.push(l.lineId);
+        await tx.purchaseOrderLine.update({
+          where: { id: l.lineId },
+          data: {
+            cancelled,
+            acceptedQty: cancelled ? 0 : l.acceptedQty,
+          },
+        });
+      }
+    });
+    // A refused line must not keep holding stock others could use.
+    if (cancelledIds.length) {
+      await this.stock.releaseFor(PO_DOCUMENT_TYPE, order.id, cancelledIds);
+    }
+    return this.findOne(userId, id, true);
+  }
+
+  /**
+   * Reserve stock for the accepted quantities, oldest-expiry-first across the
+   * supplier company's stores.
+   *
+   * Reallocates from scratch every time (the port releases a line's own holds
+   * before competing for stock again), so pressing Reserve twice re-reserves
+   * rather than double-reserves. Accepting more than exists is not an error: it
+   * reserves what it can, and the rest is the balance to produce.
+   */
+  async reserve(userId: number, companyId: number, id: number) {
+    const order = await this.ensureOrder(id);
+    assertUnlocked(order, 'purchase order', 'editing');
+    await this.assertSupplierMayReview(userId, companyId, order);
+
+    const lines = order.lines.filter((l) => !l.cancelled);
+    if (!lines.length) {
+      throw new BadRequestException('Every line on this order is cancelled.');
+    }
+    // The ledger has no unit discipline — it stamps the master's stock unit on
+    // whatever it's given. So a hold may only be placed in that same unit; a line
+    // ordered in some other unit would reserve a silently wrong quantity.
+    await this.assertLinesInStockUnit(lines);
+
+    await this.stock.reserveFefo({
+      companyId: order.companyId,
+      userId,
+      documentType: PO_DOCUMENT_TYPE,
+      documentId: order.id,
+      lines: lines.map((l) => ({
+        lineId: l.id,
+        productId: l.productId,
+        // Not yet reviewed? Reserve against what they asked for.
+        quantity: l.acceptedQty ?? l.quantity,
+      })),
+    });
     return this.findOne(userId, id, true);
   }
 
@@ -399,6 +514,24 @@ export class PurchaseOrderService {
       select: { id: true, orderNo: true },
     });
 
+    // Stock only matters to the seller, and only while the order is live: the
+    // reviewer needs to see what they can promise before promising it.
+    const showStock = order.status !== 'DRAFT' && order.status !== 'CANCELLED';
+    const [onHand, reserved] = showStock
+      ? await Promise.all([
+          this.stock.onHandFor(
+            order.companyId,
+            order.lines.map((l) => l.productId),
+            // Exclude this order's own holds: `available` should say what THIS
+            // order may still take, not treat its own reservation as a rival.
+            { documentType: PO_DOCUMENT_TYPE, documentId: order.id },
+          ),
+          this.stock.reservedFor(PO_DOCUMENT_TYPE, order.id),
+        ])
+      : [[], []];
+    const stockOf = new Map(onHand.map((s) => [s.productId, s]));
+    const reservedOf = new Map(reserved.map((r) => [r.lineId, r.quantity]));
+
     const isCreator = order.placedByUserId === userId;
     const isDraft = order.status === 'DRAFT';
     const canEditDraft = isDraft && (isCreator || isSuperAdmin);
@@ -427,6 +560,26 @@ export class PurchaseOrderService {
 
     return {
       ...order,
+      // Each line, told from the seller's side: what was asked, what we accepted,
+      // what's actually held, and the gap that has to be produced.
+      lines: order.lines.map((l) => {
+        const s = stockOf.get(l.productId);
+        const reservedQty = reservedOf.get(l.id) ?? 0;
+        const accepted = l.cancelled ? 0 : (l.acceptedQty ?? null);
+        return {
+          ...l,
+          // Company-wide, every store. `available` nets off OTHER orders' holds
+          // but not this one's — re-reserving releases its own first, so they're
+          // still within reach and counting them as rivals would understate what
+          // the reviewer can promise.
+          stockOnHand: s?.onHand ?? 0,
+          stockAvailable: s?.available ?? 0,
+          reservedQty,
+          // Balance is the production gap: accepted but not covered by stock.
+          // Null accepted means unreviewed, so there's no gap to state yet.
+          balanceQty: accepted === null ? null : Math.max(0, accepted - reservedQty),
+        };
+      }),
       total: this.orderTotal(order.lines),
       salesOrderId: salesOrder?.id ?? null,
       salesOrderNo: salesOrder?.orderNo ?? null,
@@ -438,6 +591,8 @@ export class PurchaseOrderService {
         canSubmit: canEditDraft,
         canCancel,
         submitButtonText,
+        /** The seller may review/reserve while the order is theirs to answer. */
+        canReview: canActEdit && !isDraft,
       },
     };
   }
@@ -447,6 +602,63 @@ export class PurchaseOrderService {
   /** The order's value — what field-limit approval steps are tested against. */
   private orderTotal(lines: { quantity: number; rate: number }[]): number {
     return lines.reduce((s, l) => s + l.quantity * l.rate, 0);
+  }
+
+  /**
+   * Only the SUPPLIER company answers an order, and only while it holds a task
+   * whose step permits editing — the same gate that governs mid-workflow edits.
+   * Without the task check any supplier user could rewrite an order sitting with
+   * someone else.
+   */
+  private async assertSupplierMayReview(
+    userId: number,
+    companyId: number,
+    order: { id: number; companyId: number; status: PurchaseOrderStatus },
+  ): Promise<void> {
+    if (order.companyId !== companyId) {
+      throw new ForbiddenException(
+        'Only the supplier company can review this order.',
+      );
+    }
+    if (order.status === 'DRAFT') {
+      throw new BadRequestException(
+        'This order has not been submitted to you yet.',
+      );
+    }
+    const state = await this.workflow.docState(userId, await this.docRef(order.id));
+    if (!state.myTask?.canEdit) {
+      throw new ForbiddenException(
+        'You have no pending action on this order, or your step cannot edit it.',
+      );
+    }
+  }
+
+  /**
+   * A hold may only be placed in the product's own stock unit.
+   *
+   * The ledger stamps the master's unit on every row regardless of what it's
+   * given, so it has no unit discipline of its own — reserving a line ordered in
+   * Box against stock kept in Kg would hold a silently wrong quantity. Today the
+   * UI always sends the product's unit, so this guard costs nothing and stops the
+   * hole opening later. Ordering in another unit needs a real conversion layer,
+   * which the backend does not have.
+   */
+  private async assertLinesInStockUnit(
+    lines: { productId: number; unitId: number }[],
+  ): Promise<void> {
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: [...new Set(lines.map((l) => l.productId))] } },
+      select: { id: true, unitId: true, name: true },
+    });
+    const unitOf = new Map(products.map((p) => [p.id, p]));
+    for (const l of lines) {
+      const p = unitOf.get(l.productId);
+      if (p && p.unitId !== l.unitId) {
+        throw new BadRequestException(
+          `${p.name} is ordered in a different unit from the one it is stocked in; stock cannot be reserved against it.`,
+        );
+      }
+    }
   }
 
   /**

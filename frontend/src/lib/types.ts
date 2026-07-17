@@ -811,8 +811,22 @@ export interface PurchaseOrderLine {
   id: number;
   sequence: number;
   productId: number;
+  /** What the BUYER asked for. The supplier never edits this. */
   quantity: number;
   unitId: number;
+  /** The supplier's answer. null = not reviewed yet (distinct from a firm 0). */
+  acceptedQty?: number | null;
+  /** The supplier refused this line; it stays visible, holding nothing. */
+  cancelled?: boolean;
+  // --- seller-side, present on GET /purchase-orders/:id once submitted ---
+  /** Physical stock across every store of the supplier company. */
+  stockOnHand?: number;
+  /** onHand minus everyone's active holds — what's left to promise. */
+  stockAvailable?: number;
+  /** Actually held for this line, summed over the batches FEFO split it across. */
+  reservedQty?: number;
+  /** accepted - reserved: the gap to produce. null until reviewed. */
+  balanceQty?: number | null;
   /**
    * Transfer price per unit, snapshotted from the supplier's
    * Product.intercompanyPrice when the order was PLACED. Never user-entered (an
@@ -850,6 +864,8 @@ export interface PurchaseOrderViewer {
   /** The creator may withdraw (cancel) their own in-progress order. */
   canCancel: boolean;
   submitButtonText: string | null;
+  /** The seller may set accepted quantities and reserve stock right now. */
+  canReview?: boolean;
 }
 
 export interface PurchaseOrder {

@@ -610,3 +610,59 @@ model StockTransaction {
   @@index([companyId, branchId, type])
   @@map("stock_transactions")
 }
+
+// ---------------------------------------------------------------------------
+// Stock reservations — soft holds placed on batches before goods move.
+// ---------------------------------------------------------------------------
+
+enum StockReservationStatus {
+  ACTIVE // holding stock; counts against what others can reserve
+  RELEASED // given back (line cancelled, order rejected, re-reserved)
+  CONSUMED // the goods actually moved; the hold has served its purpose
+}
+
+/// A hold on a quantity of one BATCH at one STORE, for one document line.
+///
+/// Nothing here moves stock — a reservation is a promise, and the StockLedger
+/// stays the only record of physical movement. What it does is make the quantity
+/// invisible to everyone else: available = (ledger qtyIn - qtyOut) - SUM(ACTIVE
+/// reservations). Without that subtraction two orders would each "reserve" the
+/// same last 12 boxes and the clash would surface at dispatch.
+///
+/// One row PER BATCH: FEFO splits a single order line across as many batches as
+/// it takes to fill, so a line's reserved quantity is the SUM of its rows.
+///
+/// `quantity` is always in the product's own stock unit — the ledger has no unit
+/// discipline (it stamps the master's unit on every row regardless of what was
+/// passed), so a reservation must not invent one either.
+///
+/// Cross-domain rule: documentId points at another domain's row (a CRM purchase
+/// order line today), so it is a plain Int with no relation. batchId/storeId are
+/// plain ids too, matching StockLedger's own style.
+model StockReservation {
+  id        Int @id @default(autoincrement())
+  companyId Int // the owner of the stock — the supplier company
+  storeId   Int // where this held stock physically sits
+  productId Int
+  batchId   Int
+  quantity  Float // in the product's stock unit
+
+  // What the hold is for. documentType keeps this reusable beyond the ICPO
+  // (a sales order, a work order) without a column per document kind.
+  documentType   String // e.g. 'PURCHASE_ORDER'
+  documentId     Int // the order header id
+  documentLineId Int // the order line id — a line reserves independently
+
+  status          StockReservationStatus @default(ACTIVE)
+  createdByUserId Int
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  // Available-stock maths filters on (product, status) and nets off per batch.
+  @@index([companyId, productId, status])
+  @@index([batchId, status])
+  // Release/consume sweep a whole document, or one line of it.
+  @@index([documentType, documentId, status])
+  @@index([documentLineId])
+  @@map("stock_reservations")
+}

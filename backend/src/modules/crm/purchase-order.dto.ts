@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayNotEmpty,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsInt,
   IsISO8601,
@@ -10,6 +11,7 @@ import {
   IsPositive,
   IsString,
   MaxLength,
+  Min,
   ValidateNested,
 } from 'class-validator';
 
@@ -66,6 +68,42 @@ export class UpdatePurchaseOrderDto {
   @ValidateNested({ each: true })
   @Type(() => PurchaseOrderLineInput)
   lines?: PurchaseOrderLineInput[];
+}
+
+/**
+ * The supplier's answer to one line, set by Customer Relations while the order
+ * is with them.
+ *
+ * Only these two fields move. The product, the unit, the rate and the buyer's
+ * quantity are all off-limits — the demand has to stay legible beside what was
+ * committed, and the rate is what the buyer's approver signed off.
+ */
+export class ReviewLineInput {
+  /** Identifies the line. Lines can't be added or removed by a reviewer. */
+  @IsInt()
+  lineId!: number;
+
+  /**
+   * What we'll supply. MAY exceed stock — reserve takes what exists and the rest
+   * is produced. Ignored when `cancelled`.
+   */
+  @IsNumber()
+  @Min(0)
+  acceptedQty!: number;
+
+  /** Refuse the line: accepted forced to 0 and any hold released. */
+  @IsOptional()
+  @IsBoolean()
+  cancelled?: boolean;
+}
+
+/** Customer Relations' review of an incoming order. */
+export class ReviewPurchaseOrderDto {
+  @IsArray()
+  @ArrayNotEmpty()
+  @ValidateNested({ each: true })
+  @Type(() => ReviewLineInput)
+  lines!: ReviewLineInput[];
 }
 
 /** Act on an order's workflow task: forward / approve / reject / cancel. */

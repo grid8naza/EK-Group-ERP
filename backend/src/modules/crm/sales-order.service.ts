@@ -96,8 +96,18 @@ export class SalesOrderService {
         `This purchase order was already converted (${existing.orderNo}).`,
       );
     }
-    if (!po.lines.length) {
-      throw new BadRequestException('That purchase order has no lines.');
+    // Only what the supplier actually agreed to supply crosses over: a line they
+    // refused isn't sold, and a line's accepted quantity is the commitment. An
+    // unreviewed line (acceptedQty null) falls back to what was asked — an order
+    // approved without review means "yes, all of it".
+    const supplying = po.lines
+      .filter((l) => !l.cancelled)
+      .map((l) => ({ ...l, supplyQty: l.acceptedQty ?? l.quantity }))
+      .filter((l) => l.supplyQty > 0);
+    if (!supplying.length) {
+      throw new BadRequestException(
+        'Every line on that purchase order was cancelled or accepted at zero — there is nothing to sell.',
+      );
     }
 
     const order = await this.withOrderNoRetry(companyId, (orderNo) =>
@@ -119,11 +129,11 @@ export class SalesOrderService {
           createdByUserId: userId,
           status: 'DRAFT',
           lines: {
-            create: po.lines.map((l, i) => ({
+            create: supplying.map((l, i) => ({
               sequence: i,
               productId: l.productId,
               orderedQty: l.quantity, // what was asked — never edited
-              quantity: l.quantity, // what we'll supply — the editable one
+              quantity: l.supplyQty, // what Customer Relations accepted
               unitId: l.unitId,
               rate: l.rate, // the rate the buyer's approver signed off
             })),

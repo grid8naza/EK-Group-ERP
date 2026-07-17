@@ -13,6 +13,7 @@ import {
   X,
   Ban,
   ClipboardList,
+  Package,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
@@ -24,6 +25,10 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Input, Select, Textarea } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import { PurchaseOrderDoc } from '@/components/crm/PurchaseOrderDoc';
+import {
+  PurchaseOrderReview,
+  type ReviewLine,
+} from '@/components/crm/PurchaseOrderReview';
 import { resolveIcon } from '@/lib/icons';
 import type {
   Branch,
@@ -254,6 +259,7 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
   const loadOrder = async (id: number) => {
     const full = await api.get<PurchaseOrder>(`/purchase-orders/${id}`);
     setCurrent(full);
+    seedReview(full);
     setComment('');
     setSupplierId(String(full.companyId));
     setDeliveryAt(toLocalInput(full.deliveryAt));
@@ -375,6 +381,82 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
     }
   };
 
+  // ---- Customer Relations' review (Received side, while we hold the task) ----
+  // Seeded from the order: an unreviewed line defaults to the buyer's ask, so
+  // "accept it all" needs no typing.
+  const [review, setReview] = useState<ReviewLine[]>([]);
+  const [reviewing, setReviewing] = useState(false);
+  const [reserving, setReserving] = useState(false);
+  const seedReview = (o: PurchaseOrder) =>
+    setReview(
+      o.lines.map((l) => ({
+        lineId: l.id,
+        acceptedQty: String(l.acceptedQty ?? l.quantity),
+        cancelled: !!l.cancelled,
+      })),
+    );
+  const setAccepted = (lineId: number, acceptedQty: string) =>
+    setReview((ls) =>
+      ls.map((l) => (l.lineId === lineId ? { ...l, acceptedQty } : l)),
+    );
+  const toggleCancel = (lineId: number) =>
+    setReview((ls) =>
+      ls.map((l) => (l.lineId === lineId ? { ...l, cancelled: !l.cancelled } : l)),
+    );
+
+  const saveReview = async (): Promise<PurchaseOrder | null> => {
+    if (!current) return null;
+    setReviewing(true);
+    try {
+      const saved = await api.patch<PurchaseOrder>(
+        `/purchase-orders/${current.id}/review`,
+        {
+          lines: review.map((l) => ({
+            lineId: l.lineId,
+            acceptedQty: Number(l.acceptedQty) || 0,
+            cancelled: l.cancelled,
+          })),
+        },
+      );
+      setCurrent(saved);
+      seedReview(saved);
+      return saved;
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
+      return null;
+    } finally {
+      setReviewing(false);
+    }
+  };
+
+  // Save first, then reserve: reserving allocates against the accepted
+  // quantities, so sending them separately would hold stock for whatever was
+  // saved last rather than what's on screen.
+  const doReserve = async () => {
+    if (!current) return;
+    const saved = await saveReview();
+    if (!saved) return;
+    setReserving(true);
+    try {
+      const after = await api.post<PurchaseOrder>(
+        `/purchase-orders/${current.id}/reserve`,
+        {},
+      );
+      setCurrent(after);
+      seedReview(after);
+      const short = after.lines.filter((l) => (l.balanceQty ?? 0) > 0).length;
+      toast.success(
+        short
+          ? `Stock reserved. ${short} line${short === 1 ? '' : 's'} short — the balance needs producing.`
+          : 'Stock reserved in full.',
+      );
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Failed to reserve.');
+    } finally {
+      setReserving(false);
+    }
+  };
+
   // Turn an approved order into our own sales order. Supplier side only — we're
   // the seller — and deliberate rather than automatic, because the point of the
   // step is checking the quantities we can actually commit to.
@@ -419,6 +501,13 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
     }
     setActing(true);
     try {
+      // Forwarding hands the order to the next approver, so whatever the reviewer
+      // typed has to be on it first — otherwise Operations approves quantities
+      // that were never saved. Reject/cancel discard the review anyway.
+      if (action === 'FORWARD' && current.viewer?.canReview) {
+        const saved = await saveReview();
+        if (!saved) return;
+      }
       await api.post(`/purchase-orders/${current.id}/act`, {
         action,
         comment: comment.trim() || undefined,
@@ -514,6 +603,8 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
     // the privilege to create the sales order it produces.
     const showConvert =
       !isSent && current?.status === 'APPROVED' && can('/crm/icso', 'add');
+    // The seller answers the order while it sits with them on an editing step.
+    const canReview = !isSent && !!current?.viewer?.canReview;
     return (
       <div className="mx-auto flex h-full max-w-4xl flex-col gap-4 overflow-y-auto pb-6">
         {/* action bar */}
@@ -576,11 +667,31 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
                   <X className="h-4 w-4" /> Reject
                 </button>
               )}
+              {/* The reviewer's own actions, before they hand the order on. */}
+              {canReview && (
+                <>
+                  <button
+                    className="btn-secondary"
+                    onClick={saveReview}
+                    disabled={reviewing || reserving}
+                  >
+                    Save
+                  </button>
+                  <button
+                    className="btn-secondary"
+                    onClick={doReserve}
+                    disabled={reviewing || reserving}
+                  >
+                    <Package className="h-4 w-4" />{' '}
+                    {reserving ? 'Reserving…' : 'Reserve stock'}
+                  </button>
+                </>
+              )}
               {myTask && (
                 <button
                   className="btn-primary"
                   onClick={() => doAct('FORWARD')}
-                  disabled={acting}
+                  disabled={acting || reviewing || reserving}
                 >
                   <Check className="h-4 w-4" /> {myTask.buttonText}
                 </button>
@@ -640,6 +751,17 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
                 productName={productName}
                 unitLabel={unitLabel}
               />
+              {canReview && (
+                <PurchaseOrderReview
+                  order={current}
+                  lines={review}
+                  productName={productName}
+                  unitLabel={unitLabel}
+                  onAccepted={setAccepted}
+                  onToggleCancel={toggleCancel}
+                  disabled={reviewing || reserving}
+                />
+              )}
               {myTask && (
                 <div className="mx-auto w-full max-w-3xl">
                   <Textarea

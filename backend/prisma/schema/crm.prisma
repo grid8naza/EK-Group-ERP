@@ -53,8 +53,19 @@ model PurchaseOrderLine {
   orderId   Int
   sequence  Int   @default(0)
   productId Int // -> inventory Product (plain cross-domain id)
+  // What the BUYER asked for. Never touched by the supplier — the demand must
+  // stay legible next to what was actually committed.
   quantity  Float
   unitId    Int // -> Unit (plain cross-domain id)
+  // The supplier's answer, set by Customer Relations while the order is in their
+  // hands. null = not reviewed yet (distinct from a deliberate 0). May EXCEED
+  // what's in stock: reserve takes what exists and the rest is produced, which is
+  // the whole reason a manufacturer accepts an order it can't ship today.
+  acceptedQty Float?
+  // A line the supplier refuses. Kept on the order rather than deleted so the
+  // buyer can see their line was declined instead of watching it vanish;
+  // acceptedQty is forced to 0 and any reservation released.
+  cancelled Boolean @default(false)
   // Transfer price per unit, snapshotted from the SUPPLIER's
   // Product.intercompanyPrice when the draft is saved. Unlike an LPO's rate this
   // is never user-entered — an intercompany price is group policy, not
