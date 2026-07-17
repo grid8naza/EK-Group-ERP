@@ -362,6 +362,14 @@ export class PurchaseOrderService {
     const ref = await this.docRef(order.id);
     const workflow = await this.workflow.docState(userId, ref);
 
+    // Whether the supplier has already turned this into their sales order. The
+    // convert action is one-shot (SalesOrder.purchaseOrderId is unique), so the
+    // screen needs to know rather than discovering it from a 409.
+    const salesOrder = await this.prisma.salesOrder.findUnique({
+      where: { purchaseOrderId: order.id },
+      select: { id: true, orderNo: true },
+    });
+
     const isCreator = order.placedByUserId === userId;
     const isDraft = order.status === 'DRAFT';
     const canEditDraft = isDraft && (isCreator || isSuperAdmin);
@@ -391,6 +399,8 @@ export class PurchaseOrderService {
     return {
       ...order,
       total: this.orderTotal(order.lines),
+      salesOrderId: salesOrder?.id ?? null,
+      salesOrderNo: salesOrder?.orderNo ?? null,
       workflow,
       viewer: {
         isCreator,

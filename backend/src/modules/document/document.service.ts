@@ -17,6 +17,7 @@ const SYSTEM_DOCUMENTS: { code: string; name: string }[] = [
   // Code stays *_IC (numbering rules key on its id; the seeder upserts by code).
   { code: 'PURCHASE_ORDER_IC', name: 'Inter-Company Purchase Order (ICPO)' },
   { code: 'PURCHASE_ORDER_LOCAL', name: 'Local Purchase Order (LPO)' },
+  { code: 'SALES_ORDER_IC', name: 'Inter-Company Sales Order (ICSO)' },
   { code: 'GOODS_RECEIPT_NOTE', name: 'Goods Receipt Note' },
   { code: 'DELIVERY_NOTE', name: 'Delivery Note' },
   { code: 'SALES_RETURN', name: 'Sales Return' },

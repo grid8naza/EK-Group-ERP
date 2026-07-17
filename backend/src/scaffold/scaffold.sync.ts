@@ -354,6 +354,22 @@ async function migrateCrmPurchaseOrderRoutes(
     data: { route: '/crm/icpo-received', subMenuName: 'ICPO - Received' },
   });
 
+  // ---- the Sales Orders placeholder becomes the ICSO screen ----
+  // Renamed in place like everything else here, so the privileges already
+  // granted on it follow. LSO joins it once the Customer master exists.
+  await prisma.objectMaster.updateMany({
+    where: { route: '/crm/sales-orders' },
+    data: {
+      route: '/crm/icso',
+      objectName: 'ICSO',
+      nameInMenu: 'ICSO',
+    },
+  });
+  await prisma.subMenu.updateMany({
+    where: { route: '/crm/sales-orders' },
+    data: { route: '/crm/icso', subMenuName: 'ICSO' },
+  });
+
   // ---- the Document Master entry (user-visible in Document Numbering) ----
   // Guarded on the old name so an admin's own rename is left alone. The CODE
   // stays PURCHASE_ORDER_IC: numbering rules key on documentId, but the seeder
@@ -440,6 +456,7 @@ async function migrateCrmPurchaseOrderRoutes(
   // row left to key off, so a twin would otherwise survive forever.
   await dedupeScreenRows(prisma, SENT_ROUTE, { repointToModuleId: purchase.id });
   await dedupeScreenRows(prisma, '/crm/icpo-received');
+  await dedupeScreenRows(prisma, '/crm/icso');
 
   // ---- keep everyone's reach ----
   // Module access is granted per group, and the screen just changed module: a
@@ -463,15 +480,15 @@ async function migrateCrmPurchaseOrderRoutes(
   }
 
   // With the buyer's screen gone to Purchase, CRM leads with ICPO - Received (1)
-  // then Sales Orders (2). The additive sync only sets sortOrder on create — and
-  // Received was seeded at 2 back when Sent held 1 — so pin both or they tie and
-  // order arbitrarily.
+  // then ICSO (2). The additive sync only sets sortOrder on create — and Received
+  // was seeded at 2 back when Sent held 1 — so pin both or they tie and order
+  // arbitrarily.
   await prisma.subMenu.updateMany({
     where: { route: '/crm/icpo-received' },
     data: { sortOrder: 1 },
   });
   await prisma.subMenu.updateMany({
-    where: { route: '/crm/sales-orders' },
+    where: { route: '/crm/icso' },
     data: { sortOrder: 2 },
   });
 }

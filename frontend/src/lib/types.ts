@@ -873,6 +873,62 @@ export interface PurchaseOrder {
   /** Order value (sum of quantity x rate) — computed by the API. */
   total?: number;
   // Present on the single-order response (GET /purchase-orders/:id).
+  /** The sales order the supplier converted this into; null until they do. */
+  salesOrderId?: number | null;
+  salesOrderNo?: string | null;
+  workflow?: PurchaseOrderWorkflow;
+  viewer?: PurchaseOrderViewer;
+}
+
+// ---- CRM: Sales Orders (ICSO today; LSO joins once Customers exist) ----
+export type SalesOrderStatus =
+  | 'DRAFT'
+  | 'PLACED'
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'CANCELLED';
+
+export interface SalesOrderLine {
+  id: number;
+  sequence: number;
+  productId: number;
+  /** What the ICPO asked for — carried over, never edited. */
+  orderedQty: number;
+  /** What the seller commits to supply — the editable one. 0 drops the line. */
+  quantity: number;
+  unitId: number;
+  /** Transfer price carried from the ICPO line's placed rate. */
+  rate: number;
+}
+
+export interface SalesOrder {
+  id: number;
+  companyId: number; // the SELLER — owns the order
+  /** The group company that raised the ICPO (an ICSO always has one). */
+  buyerCompanyId?: number | null;
+  buyerBranchId?: number | null;
+  /** The ICPO this was converted from. */
+  purchaseOrderId?: number | null;
+  // The origin PO, snapshotted at conversion.
+  poNumber?: string | null;
+  poDate?: string | null;
+  poDeliveryAt?: string | null;
+  poNotes?: string | null;
+  orderNo: string;
+  orderDate: string;
+  /** What the seller commits to (seeded from the buyer's requested date). */
+  deliveryAt?: string | null;
+  createdByUserId: number;
+  status: SalesOrderStatus;
+  workflowStatus?: string | null;
+  notes?: string | null;
+  workflowInstanceId?: number | null;
+  createdAt: string;
+  updatedAt?: string;
+  lines: SalesOrderLine[];
+  /** Order value (sum of quantity x rate) — computed by the API. */
+  total?: number;
+  // Present on the single-order response (GET /sales-orders/:id).
   workflow?: PurchaseOrderWorkflow;
   viewer?: PurchaseOrderViewer;
 }

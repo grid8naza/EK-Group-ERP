@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   ShoppingCart,
   Inbox,
@@ -11,6 +12,7 @@ import {
   Check,
   X,
   Ban,
+  ClipboardList,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
@@ -98,6 +100,7 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
   const { can, activeCompanyId } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
+  const router = useRouter();
 
   const { data: companies } = useFetch<Company[]>('/companies');
   const { data: branches } = useFetch<Branch[]>('/branches');
@@ -372,6 +375,33 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
     }
   };
 
+  // Turn an approved order into our own sales order. Supplier side only — we're
+  // the seller — and deliberate rather than automatic, because the point of the
+  // step is checking the quantities we can actually commit to.
+  const [converting, setConverting] = useState(false);
+  const doConvert = async () => {
+    if (!current) return;
+    const ok = await confirm({
+      title: 'Convert to sales order',
+      message: `Create a sales order from ${current.orderNo}? It opens as a draft with the quantities ${counterpartyName(current)} asked for — trim them before submitting.`,
+      confirmText: 'Convert',
+    });
+    if (!ok) return;
+    setConverting(true);
+    try {
+      const so = await api.post<{ id: number; orderNo: string }>(
+        `/sales-orders/from-purchase-order/${current.id}`,
+        {},
+      );
+      toast.success(`Sales order ${so.orderNo} created.`);
+      router.push('/crm/icso');
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Failed to convert.');
+    } finally {
+      setConverting(false);
+    }
+  };
+
   // Approver action on a routed order (forward / approve / reject / cancel).
   const doAct = async (action: 'FORWARD' | 'REJECT' | 'CANCEL') => {
     if (!current) return;
@@ -480,6 +510,10 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
   if (mode !== 'list') {
     const isEditing = mode === 'edit';
     const submitLabel = current?.viewer?.submitButtonText ?? 'Forward';
+    // Only the supplier converts, only once the order is approved, and only with
+    // the privilege to create the sales order it produces.
+    const showConvert =
+      !isSent && current?.status === 'APPROVED' && can('/crm/icso', 'add');
     return (
       <div className="mx-auto flex h-full max-w-4xl flex-col gap-4 overflow-y-auto pb-6">
         {/* action bar */}
@@ -520,8 +554,8 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
                 <Send className="h-4 w-4" /> {submitLabel}
               </button>
             </div>
-          ) : myTask || current?.viewer?.canCancel ? (
-            <div className="flex flex-wrap gap-2">
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
               {/* Cancel: the acting approver's step, or the creator withdrawing
                   their own in-progress order. */}
               {(myTask?.canCancel || current?.viewer?.canCancel) && (
@@ -551,8 +585,28 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
                   <Check className="h-4 w-4" /> {myTask.buttonText}
                 </button>
               )}
+              {/* Convert: ours to make only once the order is approved, and only
+                  on the Received side — we're the seller. Converting twice is
+                  blocked outright, so say so rather than offer a button. */}
+              {showConvert &&
+                (current?.salesOrderId ? (
+                  <span className="text-sm text-slate-500">
+                    Converted to{' '}
+                    <span className="font-medium text-slate-700 dark:text-slate-200">
+                      {current.salesOrderNo}
+                    </span>
+                  </span>
+                ) : (
+                  <button
+                    className="btn-primary"
+                    onClick={doConvert}
+                    disabled={converting}
+                  >
+                    <ClipboardList className="h-4 w-4" /> Convert to Sales Order
+                  </button>
+                ))}
             </div>
-          ) : null}
+          )}
         </div>
 
         {isEditing ? (

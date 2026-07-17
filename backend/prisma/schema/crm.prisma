@@ -1,12 +1,15 @@
-// CRM domain — inter-company Purchase Orders (Purchase Order - IC).
+// CRM domain — the intercompany order flow, both sides of it.
 //
-// A requester (an intercompany branch, e.g. a branch of EK Bake House) raises a
-// Purchase Order - IC on a SUPPLIER company (EK Food Products / Regency Bakers).
-// The order is OWNED by the supplier (companyId) and reviewed by that company's
-// CRM staff via the workflow engine, who later convert it into a Sales Order (a
-// separate document, added in a later phase). Per the schema-ownership rule,
-// every cross-domain reference (company, branch, user, product, unit, workflow)
-// is a plain Int id with NO @relation.
+// A requester (a branch of e.g. EK Bake House) raises an ICPO on a SUPPLIER
+// company (EK Food Products / Regency Bakers). The order is OWNED by the
+// supplier (PurchaseOrder.companyId) and reviewed by that company's CRM staff
+// via the workflow engine — they see it as "ICPO - Received". Once approved they
+// CONVERT it into a SalesOrder (below), checking quantities on the way.
+//
+// Per the schema-ownership rule, every cross-domain reference (company, branch,
+// user, product, unit, workflow) is a plain Int id with NO @relation — including
+// SalesOrder.purchaseOrderId, which points at a row in this same file but is
+// kept plain for consistency with the rest of the domain.
 
 /// Lifecycle of a Purchase Order - IC.
 enum PurchaseOrderStatus {
@@ -68,4 +71,92 @@ model PurchaseOrderLine {
 
   @@index([orderId])
   @@map("purchase_order_lines")
+}
+
+// ---------------------------------------------------------------------------
+// Sales Orders — the selling side.
+// ---------------------------------------------------------------------------
+
+/// Lifecycle of a Sales Order. Mirrors PurchaseOrderStatus: the seller's own CRM
+/// staff raise it and it travels their approval chain.
+enum SalesOrderStatus {
+  DRAFT // converted / created, not yet submitted into the approval workflow
+  PLACED // submitted; travelling through the approval workflow
+  APPROVED // approval workflow complete — the order stands
+  REJECTED
+  CANCELLED
+}
+
+/// An order to SUPPLY goods, owned by the selling company.
+///
+/// Two flavours share this model, told apart by which counterparty is set:
+///  - ICSO (inter-company): `buyerCompanyId` — converted from an approved ICPO,
+///    which `purchaseOrderId` points back at.
+///  - LSO (local/external): `customerId` — raised on an external customer. NOT
+///    BUILT YET; the Customer master doesn't exist. It joins this model rather
+///    than getting its own, because unlike ICPO vs LPO nothing inverts here:
+///    `companyId` is the SELLER either way, so the unique constraint, the
+///    numbering key and the company scoping all keep working. Adding it is one
+///    nullable column plus an XOR guard.
+model SalesOrder {
+  id        Int @id @default(autoincrement())
+  companyId Int // the SELLER — owns the order, its numbering and its visibility
+
+  // Counterparty — exactly one, enforced in SalesOrderService (Prisma has no XOR).
+  buyerCompanyId Int? // -> Company (the group company that raised the ICPO)
+  buyerBranchId  Int? // -> Branch of that company
+  // customerId  Int?  <- added with the Customer master, for the LSO
+
+  // The ICPO this was converted from. Unique: an ICPO converts once.
+  purchaseOrderId Int?      @unique
+  // The origin PO as it stood AT CONVERSION. Snapshotted, not joined: the sales
+  // order is the seller's own record of what was asked for, and must keep saying
+  // so even if the ICPO is later edited by an approver whose step allows it.
+  poNumber        String?
+  poDate          DateTime?
+  poDeliveryAt    DateTime? // delivery date & time the buyer asked for
+  poNotes         String? // the buyer's instructions
+
+  orderNo         String // per-seller sequential number (SO-#####)
+  orderDate       DateTime  @default(now())
+  deliveryAt      DateTime? // what the seller commits to (seeded from poDeliveryAt)
+  createdByUserId Int // -> User (the CRM staffer who converted / raised it)
+
+  status             SalesOrderStatus @default(DRAFT)
+  workflowStatus     String? // human-readable status from the step that last acted
+  notes              String?
+  workflowInstanceId Int? // -> WorkflowInstance (approval routing)
+  isLocked           Boolean          @default(false)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  lines SalesOrderLine[]
+
+  @@unique([companyId, orderNo])
+  @@index([companyId, status])
+  @@index([buyerCompanyId])
+  @@map("sales_orders")
+}
+
+/// One line of a Sales Order: what we will actually supply, against what was asked.
+model SalesOrderLine {
+  id         Int   @id @default(autoincrement())
+  orderId    Int
+  sequence   Int   @default(0)
+  productId  Int // -> inventory Product (plain cross-domain id)
+  // What the ICPO asked for, carried over unchanged so the seller can always see
+  // the gap between demand and what was committed. 0 on a directly-raised order.
+  orderedQty Float @default(0)
+  // What the seller commits to supply — the editable one. A line set to 0 is
+  // dropped from the order entirely rather than stored as a zero.
+  quantity   Float
+  unitId     Int // -> Unit (plain cross-domain id)
+  // Transfer price per unit, carried from the ICPO line's placed rate, so the
+  // sales order values at exactly what the buyer's approver signed off.
+  rate       Float @default(0)
+
+  order SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("sales_order_lines")
 }
