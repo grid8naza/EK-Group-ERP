@@ -17,9 +17,31 @@ import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/u
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import type { Product, Group, Unit, HsnCode, Company, Branch } from '@/lib/types';
+import type {
+  Product,
+  Group,
+  Unit,
+  HsnCode,
+  Company,
+  Branch,
+  Lookup,
+  LookupValue,
+} from '@/lib/types';
 
 const ROUTE = '/inventory/products-packed';
+// Delivery trips are configurable (Inventory > Lookups), so the Delivery
+// Schedule offers whatever is defined rather than a hard-coded Trip 1-4.
+const DELIVERY_TRIP_LOOKUP_CODE = 'DELIVERY_TRIP';
+// Production days are fixed by the calendar, so these stay in code.
+const PRODUCTION_DAYS = [
+  { key: 'prodSun', label: 'Sun' },
+  { key: 'prodMon', label: 'Mon' },
+  { key: 'prodTue', label: 'Tue' },
+  { key: 'prodWed', label: 'Wed' },
+  { key: 'prodThu', label: 'Thu' },
+  { key: 'prodFri', label: 'Fri' },
+  { key: 'prodSat', label: 'Sat' },
+] as const;
 
 // Per-branch stocking parameters, kept as strings while editing (like every
 // other numeric field on this form). Keyed by branchId in the form state.
@@ -64,6 +86,17 @@ const empty = {
   hasRecipe: false,
   hasPacking: true,
   isIngredient: false,
+  // Production schedule — the days this product is made on.
+  prodSun: false,
+  prodMon: false,
+  prodTue: false,
+  prodWed: false,
+  prodThu: false,
+  prodFri: false,
+  prodSat: false,
+  prodOccasional: false,
+  // Delivery Schedule — LookupValue ids from the DELIVERY_TRIP lookup.
+  deliveryTripIds: [] as number[],
   allCompanies: true,
   companyIds: [] as number[],
   // Per-branch stock levels, keyed by branchId (built from the product's saved
@@ -104,6 +137,32 @@ export default function ProductsPage() {
   const { data: hsnCodes } = useFetch<HsnCode[]>('/hsn-codes');
   const { data: companies } = useFetch<Company[]>('/companies');
   const { data: branches } = useFetch<Branch[]>('/branches');
+  const { data: lookups } = useFetch<Lookup[]>('/lookups');
+
+  // Delivery Trip lookup values for the Delivery Schedule: find the lookup by
+  // code, then fetch its values (mirrors the Production Process pattern).
+  const [tripValues, setTripValues] = useState<LookupValue[]>([]);
+  useEffect(() => {
+    const lookup = (lookups ?? []).find(
+      (l) => l.code === DELIVERY_TRIP_LOOKUP_CODE,
+    );
+    if (!lookup) {
+      setTripValues([]);
+      return;
+    }
+    let cancelled = false;
+    api
+      .get<LookupValue[]>(`/lookups/${lookup.id}/values`)
+      .then((vals) => {
+        if (!cancelled) setTripValues((vals ?? []).filter((v) => v.isActive));
+      })
+      .catch(() => {
+        if (!cancelled) setTripValues([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lookups]);
   const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<Product>({
     endpoint: '/products',
     route: ROUTE,
@@ -250,6 +309,15 @@ export default function ProductsPage() {
     hasRecipe: false,
     hasPacking: true,
     isIngredient: false,
+    prodSun: !!p.prodSun,
+    prodMon: !!p.prodMon,
+    prodTue: !!p.prodTue,
+    prodWed: !!p.prodWed,
+    prodThu: !!p.prodThu,
+    prodFri: !!p.prodFri,
+    prodSat: !!p.prodSat,
+    prodOccasional: !!p.prodOccasional,
+    deliveryTripIds: p.deliveryTripIds ?? [],
     allCompanies: p.allCompanies,
     companyIds: p.companyIds ?? [],
     branchStocks: Object.fromEntries(
@@ -298,6 +366,14 @@ export default function ProductsPage() {
     return () => document.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canAdd, open]);
+
+  const toggleTrip = (id: number) =>
+    setForm((f) => ({
+      ...f,
+      deliveryTripIds: f.deliveryTripIds.includes(id)
+        ? f.deliveryTripIds.filter((x) => x !== id)
+        : [...f.deliveryTripIds, id],
+    }));
 
   const toggleCompany = (id: number) =>
     setForm((f) => ({
@@ -398,6 +474,15 @@ export default function ProductsPage() {
       hasRecipe: form.hasRecipe,
       hasPacking: form.hasPacking,
       isIngredient: form.isIngredient,
+      prodSun: form.prodSun,
+      prodMon: form.prodMon,
+      prodTue: form.prodTue,
+      prodWed: form.prodWed,
+      prodThu: form.prodThu,
+      prodFri: form.prodFri,
+      prodSat: form.prodSat,
+      prodOccasional: form.prodOccasional,
+      deliveryTripIds: form.deliveryTripIds,
       allCompanies: form.allCompanies,
       companyIds: form.allCompanies ? [] : form.companyIds,
       // Only send when the branch list has loaded, so a failed/empty fetch can't
@@ -1075,6 +1160,53 @@ export default function ProductsPage() {
             {/* Capabilities are fixed on the Packed screen (packing required,
                 no recipe, not an ingredient), so the whole block is hidden and
                 forced — see `empty` / `formFrom`. */}
+
+            {/* Production schedule — fixed weekdays, so they live in code. */}
+            <div className="flex flex-col gap-2 sm:col-span-2">
+              <span className="label !mb-0">Production schedule</span>
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                {PRODUCTION_DAYS.map((d) => (
+                  <Checkbox
+                    key={d.key}
+                    label={d.label}
+                    checked={form[d.key]}
+                    onChange={(e) => setForm({ ...form, [d.key]: e.target.checked })}
+                  />
+                ))}
+                {/* Made to order: no fixed day, so it is set apart from them. */}
+                <span className="mx-1 hidden h-5 w-px bg-slate-200 dark:bg-slate-700 sm:inline-block" />
+                <Checkbox
+                  label="Occasional"
+                  checked={form.prodOccasional}
+                  onChange={(e) =>
+                    setForm({ ...form, prodOccasional: e.target.checked })
+                  }
+                />
+              </div>
+            </div>
+
+            {/* Delivery Schedule — trips come from the Inventory lookup, so they
+                can be renamed or added to without a code change. */}
+            <div className="flex flex-col gap-2 sm:col-span-2">
+              <span className="label !mb-0">Delivery Schedule</span>
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                {tripValues.length === 0 ? (
+                  <p className="text-sm text-slate-400">
+                    No delivery trips defined — add them under Inventory &gt; Lookups
+                    (Delivery Trip).
+                  </p>
+                ) : (
+                  tripValues.map((t) => (
+                    <Checkbox
+                      key={t.id}
+                      label={t.alias || t.label}
+                      checked={form.deliveryTripIds.includes(t.id)}
+                      onChange={() => toggleTrip(t.id)}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
 
             {/* Availability */}
             <div className="flex flex-col gap-2 sm:col-span-2">

@@ -442,6 +442,55 @@ export async function seedInventoryDefaults(
 ): Promise<void> {
   await seedDefaultUnits(prisma);
   await seedDefaultHsnCodes(prisma);
+  await seedDeliveryTrips(prisma);
+}
+
+/** The delivery-trip lookup a packed product's Delivery Schedule chooses from. */
+const DELIVERY_TRIP_LOOKUP = { code: 'DELIVERY_TRIP', name: 'Delivery Trip' };
+const DEFAULT_DELIVERY_TRIPS = ['Trip 1', 'Trip 2', 'Trip 3', 'Trip 4'];
+
+/**
+ * Seed the Delivery Trip lookup and its four starting values.
+ *
+ * The trips are a lookup rather than fixed columns because they're the user's to
+ * name — "Morning run", a fifth trip — and renaming or adding one shouldn't need
+ * a developer. (The production days are the opposite: fixed by the calendar, so
+ * they're plain flags on Product.)
+ *
+ * The VALUES are seeded only when the lookup is first created. After that they
+ * are the user's: re-running must not resurrect a trip they deleted or undo a
+ * rename.
+ */
+export async function seedDeliveryTrips(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  const inv = await prisma.module.findUnique({
+    where: { code: 'INVENTORY' },
+    select: { id: true },
+  });
+  const existing = await prisma.lookup.findUnique({
+    where: { code: DELIVERY_TRIP_LOOKUP.code },
+    select: { id: true },
+  });
+  if (existing) return;
+
+  const lookup = await prisma.lookup.create({
+    data: {
+      code: DELIVERY_TRIP_LOOKUP.code,
+      name: DELIVERY_TRIP_LOOKUP.name,
+      moduleId: inv?.id ?? null,
+      isSystem: true,
+    },
+  });
+  await prisma.lookupValue.createMany({
+    data: DEFAULT_DELIVERY_TRIPS.map((label, i) => ({
+      lookupId: lookup.id,
+      value: label.toUpperCase().replace(/\s+/g, '_'),
+      label,
+      sortOrder: i + 1,
+    })),
+    skipDuplicates: true,
+  });
 }
 
 export async function seedDefaultUnits(

@@ -789,6 +789,23 @@ export interface Product {
   hasPacking: boolean;
   /** This product can be used as an ingredient in another product. */
   isIngredient: boolean;
+  // Production schedule — the days this product is made on. Fixed by the
+  // calendar, so they're plain flags; `prodOccasional` means made to order, with
+  // no fixed day.
+  prodSun?: boolean;
+  prodMon?: boolean;
+  prodTue?: boolean;
+  prodWed?: boolean;
+  prodThu?: boolean;
+  prodFri?: boolean;
+  prodSat?: boolean;
+  prodOccasional?: boolean;
+  /**
+   * Delivery Schedule — LookupValue ids from the DELIVERY_TRIP lookup. Ids, not
+   * names: a trip can be renamed under Lookups, and a saved product should
+   * follow the rename rather than point at a label that no longer exists.
+   */
+  deliveryTripIds?: number[];
   allCompanies: boolean;
   companyIds: number[];
   isActive: boolean;

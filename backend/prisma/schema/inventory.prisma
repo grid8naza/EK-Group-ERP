@@ -303,6 +303,20 @@ model Product {
   hasRecipe    Boolean  @default(false) // a production (recipe) BOM can be created
   hasPacking   Boolean  @default(false) // a packing BOM can be created
   isIngredient Boolean  @default(false) // usable as an ingredient in another product
+  // Production schedule — the days this product is made on. Flat flags, not a
+  // list: the days of the week are fixed by nature and never need configuring,
+  // and it matches how every other checkbox set on this model is stored. Delivery
+  // trips are the opposite case — the user names those — so they live in a lookup
+  // (see ProductDeliveryTrip).
+  prodSun        Boolean @default(false)
+  prodMon        Boolean @default(false)
+  prodTue        Boolean @default(false)
+  prodWed        Boolean @default(false)
+  prodThu        Boolean @default(false)
+  prodFri        Boolean @default(false)
+  prodSat        Boolean @default(false)
+  /// Made to order — no fixed day, so it stands apart from the weekdays.
+  prodOccasional Boolean @default(false)
   allCompanies Boolean  @default(false)
   isActive     Boolean  @default(true)
   isLocked     Boolean  @default(false) // when locked, must be unlocked before edit/delete
@@ -317,6 +331,7 @@ model Product {
   hsnCode  HsnCode?  @relation("HsnProducts", fields: [hsnCodeId], references: [id], onDelete: Restrict)
 
   companies ProductCompany[]
+  deliveryTrips ProductDeliveryTrip[]
   bomLines  ProductBomLine[]
   processes ProductProcess[]
   packSources  ProductPackSource[] @relation("PackSources")  // unpacked products this pack is made from
@@ -417,6 +432,25 @@ model ProductBomLine {
 /// ProductCompany.companyId — no cross-domain FK). Edited on Products - Packed;
 /// new branches are picked up automatically because the editor renders from the
 /// live branch list, not from stored rows.
+/// Which delivery trips a product goes out on.
+///
+/// The trips themselves are LookupValues (lookup code DELIVERY_TRIP, Inventory
+/// module), not an enum, so they can be renamed and added to from the Lookups
+/// screen without a code change — unlike the production days, which are fixed by
+/// the calendar. Per the cross-domain rule the LookupValue lives in Cpanel, so
+/// it is referenced by a plain id with no relation.
+model ProductDeliveryTrip {
+  id            Int @id @default(autoincrement())
+  productId     Int
+  lookupValueId Int // -> Cpanel LookupValue (a DELIVERY_TRIP value)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, lookupValueId])
+  @@index([productId])
+  @@map("product_delivery_trips")
+}
+
 model ProductBranchStock {
   id           Int   @id @default(autoincrement())
   productId    Int

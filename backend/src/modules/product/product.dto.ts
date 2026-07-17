@@ -258,6 +258,28 @@ export class CreateProductDto {
   @IsBoolean()
   isIngredient?: boolean;
 
+  // ---- Production schedule: the days this product is made on. ----
+  @IsOptional() @IsBoolean() prodSun?: boolean;
+  @IsOptional() @IsBoolean() prodMon?: boolean;
+  @IsOptional() @IsBoolean() prodTue?: boolean;
+  @IsOptional() @IsBoolean() prodWed?: boolean;
+  @IsOptional() @IsBoolean() prodThu?: boolean;
+  @IsOptional() @IsBoolean() prodFri?: boolean;
+  @IsOptional() @IsBoolean() prodSat?: boolean;
+  /** Made to order — no fixed day. */
+  @IsOptional() @IsBoolean() prodOccasional?: boolean;
+
+  /**
+   * Delivery Schedule: LookupValue ids from the DELIVERY_TRIP lookup. Ids rather
+   * than names because the user may rename a trip, and a saved product should
+   * follow the rename rather than point at a label that no longer exists.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsInt({ each: true })
+  deliveryTripIds?: number[];
+
   @IsOptional()
   @IsBoolean()
   allCompanies?: boolean;
@@ -458,6 +480,28 @@ export class UpdateProductDto {
   @IsOptional()
   @IsBoolean()
   isIngredient?: boolean;
+
+  // ---- Production schedule: the days this product is made on. ----
+  @IsOptional() @IsBoolean() prodSun?: boolean;
+  @IsOptional() @IsBoolean() prodMon?: boolean;
+  @IsOptional() @IsBoolean() prodTue?: boolean;
+  @IsOptional() @IsBoolean() prodWed?: boolean;
+  @IsOptional() @IsBoolean() prodThu?: boolean;
+  @IsOptional() @IsBoolean() prodFri?: boolean;
+  @IsOptional() @IsBoolean() prodSat?: boolean;
+  /** Made to order — no fixed day. */
+  @IsOptional() @IsBoolean() prodOccasional?: boolean;
+
+  /**
+   * Delivery Schedule: LookupValue ids from the DELIVERY_TRIP lookup. Ids rather
+   * than names because the user may rename a trip, and a saved product should
+   * follow the rename rather than point at a label that no longer exists.
+   */
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsInt({ each: true })
+  deliveryTripIds?: number[];
 
   @IsOptional()
   @IsBoolean()

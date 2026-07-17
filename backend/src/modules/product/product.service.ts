@@ -43,6 +43,7 @@ const withRelations = {
   yieldUnit: { select: { id: true, code: true, name: true, symbol: true } },
   hsnCode: { select: { id: true, code: true, description: true } },
   companies: { select: { companyId: true } },
+  deliveryTrips: { select: { lookupValueId: true } },
   packSources: {
     orderBy: { sequence: 'asc' },
     select: { id: true, sourceProductId: true, quantity: true, sequence: true },
@@ -170,9 +171,22 @@ export class ProductService {
           hasRecipe: dto.hasRecipe ?? false,
           hasPacking: dto.hasPacking ?? false,
           isIngredient: dto.isIngredient ?? false,
+          prodSun: dto.prodSun ?? false,
+          prodMon: dto.prodMon ?? false,
+          prodTue: dto.prodTue ?? false,
+          prodWed: dto.prodWed ?? false,
+          prodThu: dto.prodThu ?? false,
+          prodFri: dto.prodFri ?? false,
+          prodSat: dto.prodSat ?? false,
+          prodOccasional: dto.prodOccasional ?? false,
           allCompanies,
           isActive: dto.isActive ?? true,
           companies: { create: companyIds.map((companyId) => ({ companyId })) },
+          deliveryTrips: {
+            create: (dto.deliveryTripIds ?? []).map((lookupValueId) => ({
+              lookupValueId,
+            })),
+          },
           bomLines: { create: this.bomCreate(dto.recipe, dto.packing) },
           processes: { create: this.processCreate(dto.processes) },
           packSources: { create: this.packSourceCreate(dto.packSources) },
@@ -312,8 +326,28 @@ export class ProductService {
           hasRecipe: dto.hasRecipe,
           hasPacking: dto.hasPacking,
           isIngredient: dto.isIngredient,
+          prodSun: dto.prodSun,
+          prodMon: dto.prodMon,
+          prodTue: dto.prodTue,
+          prodWed: dto.prodWed,
+          prodThu: dto.prodThu,
+          prodFri: dto.prodFri,
+          prodSat: dto.prodSat,
+          prodOccasional: dto.prodOccasional,
           allCompanies,
           isActive: dto.isActive,
+          // Only rewrite the trips when the caller sent them: omitting the field
+          // must leave the schedule alone, not silently clear it.
+          ...(dto.deliveryTripIds !== undefined
+            ? {
+                deliveryTrips: {
+                  deleteMany: {},
+                  create: dto.deliveryTripIds.map((lookupValueId) => ({
+                    lookupValueId,
+                  })),
+                },
+              }
+            : {}),
           ...(companyIds
             ? {
                 companies: {
@@ -383,7 +417,7 @@ export class ProductService {
   // --- helpers ---
 
   private flatten(row: ProductRow) {
-    const { companies, bomLines, ...rest } = row;
+    const { companies, deliveryTrips, bomLines, ...rest } = row;
     const toLine = (l: ProductRow['bomLines'][number]) => ({
       id: l.id,
       itemId: l.itemId,
@@ -396,6 +430,7 @@ export class ProductService {
     return {
       ...rest,
       companyIds: companies.map((c) => c.companyId),
+      deliveryTripIds: deliveryTrips.map((t) => t.lookupValueId),
       recipe: bomLines.filter((l) => l.kind === BomKind.RECIPE).map(toLine),
       packing: bomLines.filter((l) => l.kind === BomKind.PACKING).map(toLine),
     };
