@@ -40,6 +40,15 @@ type DraftLine = {
   expiry: string;
 };
 
+/** A line's value at cost — the same maths the listing's Amount column reports. */
+const lineTotal = (l: DraftLine) =>
+  (Number(l.quantity) || 0) * (Number(l.unitPrice) || 0);
+const money = (n: number) =>
+  n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
 const todayInput = () => {
   const d = new Date();
   const p = (n: number) => String(n).padStart(2, '0');
@@ -171,6 +180,8 @@ export function OpeningStockScreen({
   // on its item picker for uninterrupted, mouse-free data entry.
   const focusId = (id: string) =>
     setTimeout(() => document.getElementById(id)?.focus(), 0);
+  const grandTotal = lines.reduce((s, l) => s + lineTotal(l), 0);
+
   const addLine = () => {
     const newIndex = lines.length;
     setLines((ls) => [...ls, blankLine()]);
@@ -181,7 +192,7 @@ export function OpeningStockScreen({
   const removeLine = (i: number) =>
     setLines((ls) => ls.filter((_, idx) => idx !== i));
 
-  // Picking a product defaults its rate (cost) + the three selling prices from
+  // Picking a product defaults its cost price + the three selling prices from
   // the product master — same values as the Products - Packed screen. Editable
   // afterwards. Items have no such prices, so only the key is set.
   const s0 = (n?: number) => (n ? String(n) : '');
@@ -584,7 +595,8 @@ export function OpeningStockScreen({
                     <th className="w-32 py-2 px-1">Expiry</th>
                     <th className="w-24 py-2 px-1">Qty</th>
                     <th className="w-12 py-2 px-1">Unit</th>
-                    <th className="w-28 py-2 px-1">Rate</th>
+                    <th className="w-28 py-2 px-1">Cost Price</th>
+                    <th className="w-28 py-2 px-1">Total</th>
                     {!isItem && (
                       <>
                         <th className="w-28 py-2 px-1">Inter-Co</th>
@@ -598,7 +610,7 @@ export function OpeningStockScreen({
                 <tbody>
                   {lines.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="py-4 text-center text-xs text-slate-400">
+                      <td colSpan={13} className="py-4 text-center text-xs text-slate-400">
                         No lines.
                       </td>
                     </tr>
@@ -703,6 +715,13 @@ export function OpeningStockScreen({
                               />
                             )}
                           </td>
+                          {/* Line value at cost — derived, never entered, and the
+                              same maths the listing's Amount column reports. */}
+                          <td className="px-1">
+                            <span className="block text-right tabular-nums text-slate-600 dark:text-slate-300">
+                              {money(lineTotal(l))}
+                            </span>
+                          </td>
                           {!isItem && (
                             <>
                               <td className="px-1">
@@ -783,6 +802,28 @@ export function OpeningStockScreen({
                     })
                   )}
                 </tbody>
+                {lines.length > 0 && (
+                  // Sticks to the bottom like the headings stick to the top, so
+                  // the grand total stays in view while long vouchers scroll.
+                  <tfoot className="sticky bottom-0 z-10 bg-slate-50 dark:bg-slate-900">
+                    <tr className="border-t-2 border-slate-300 font-semibold dark:border-slate-600">
+                      {/* Spans everything up to and including Cost Price:
+                          #, Product, [Batch No — view only], Supplier Batch,
+                          Expiry, Qty, Unit, Cost Price. */}
+                      <td
+                        colSpan={viewMode ? 8 : 7}
+                        className="py-2 pr-2 text-right text-xs uppercase tracking-wide text-slate-500"
+                      >
+                        Grand total
+                      </td>
+                      <td className="px-1 py-2 text-right tabular-nums text-slate-900 dark:text-slate-100">
+                        {money(grandTotal)}
+                      </td>
+                      {!isItem && <td colSpan={3} />}
+                      {!viewMode && <td />}
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
             {!viewMode && (
