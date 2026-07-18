@@ -492,6 +492,19 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
     }
   };
 
+  // Does the acting user still have a further action on this same order? Two
+  // ways the workflow can hand someone consecutive steps: another routed task
+  // lands back on them (workflow.myTask), or an approval unlocks the supplier's
+  // manual convert-to-sales-order step. When either holds we keep the form open
+  // on the refreshed order rather than closing it — the operations manager who
+  // gives final approval then converts straight away, no reopen.
+  const hasFollowUpAction = (o: PurchaseOrder) =>
+    !!o.workflow?.myTask ||
+    (!isSent &&
+      o.status === 'APPROVED' &&
+      !o.salesOrderId &&
+      can('/crm/icso', 'add'));
+
   // Approver action on a routed order (forward / approve / reject / cancel).
   const doAct = async (action: 'FORWARD' | 'REJECT' | 'CANCEL') => {
     if (!current) return;
@@ -516,18 +529,34 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
         const saved = await saveReview();
         if (!saved) return;
       }
-      await api.post(`/purchase-orders/${current.id}/act`, {
-        action,
-        comment: comment.trim() || undefined,
-      });
-      toast.success(
-        action === 'REJECT'
-          ? 'Order rejected.'
-          : action === 'CANCEL'
-            ? 'Order cancelled.'
-            : 'Done — moved to the next level.',
+      // `act` returns the freshly recomputed order for THIS user at the new
+      // workflow position — including whether they still hold the next step.
+      const updated = await api.post<PurchaseOrder>(
+        `/purchase-orders/${current.id}/act`,
+        {
+          action,
+          comment: comment.trim() || undefined,
+        },
       );
-      backToList();
+      // Approving may leave the same user with the very next action. Stay on the
+      // document, refreshed, so they act again without reopening it. Reject and
+      // cancel are terminal for the actor, so those always return to the list.
+      if (action === 'FORWARD' && hasFollowUpAction(updated)) {
+        setCurrent(updated);
+        seedReview(updated);
+        setComment('');
+        refetch();
+        toast.success('Done — this order still needs your next step.');
+      } else {
+        toast.success(
+          action === 'REJECT'
+            ? 'Order rejected.'
+            : action === 'CANCEL'
+              ? 'Order cancelled.'
+              : 'Done — moved to the next level.',
+        );
+        backToList();
+      }
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Action failed.');
     } finally {
