@@ -56,6 +56,7 @@ export default function WorkOrdersPage() {
   const canView = can(ROUTE, 'view');
   const canDelete = can(ROUTE, 'delete');
   const canEdit = can(ROUTE, 'edit');
+  const canRecord = can('/production/receipts', 'add');
 
   const productById = useMemo(
     () => new Map((products ?? []).map((p) => [p.id, p])),
@@ -111,6 +112,35 @@ export default function WorkOrdersPage() {
       refetch();
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to update.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Record production: bank the work order's products into stock as new batches
+  // and complete the order.
+  const recordProduction = async () => {
+    if (!current) return;
+    const ok = await confirm({
+      title: 'Record production?',
+      message: `Bank the products of ${current.orderNo} into store stock as new batches and complete the work order?`,
+      confirmText: 'Yes',
+      cancelText: 'No',
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await api.post(
+        `/production-receipts/from-work-order/${current.id}`,
+        {},
+      );
+      toast.success('Production recorded — finished goods banked to stock.');
+      setCurrent({ ...current, status: 'COMPLETED' });
+      refetch();
+    } catch (e) {
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to record production.',
+      );
     } finally {
       setBusy(false);
     }
@@ -246,13 +276,13 @@ export default function WorkOrdersPage() {
                       Start production
                     </button>
                   )}
-                  {current.status === 'IN_PROGRESS' && (
+                  {canRecord && (
                     <button
                       className="btn-primary"
-                      onClick={() => setStatus('COMPLETED')}
+                      onClick={recordProduction}
                       disabled={busy}
                     >
-                      Mark completed
+                      Record production
                     </button>
                   )}
                   <button

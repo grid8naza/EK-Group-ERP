@@ -20,6 +20,9 @@ import { WorkOrderAdapter } from '../modules/production/work-order.adapter';
 import { WorkOrderService } from '../modules/production/work-order.service';
 import { RECIPE } from './recipe.port';
 import { RecipeAdapter } from '../modules/product/recipe.adapter';
+import { STOCK_POSTING } from './stock-posting.port';
+import { StockPostingAdapter } from '../modules/stock-transaction/stock-posting.adapter';
+import { StockTransactionService } from '../modules/stock-transaction/stock-transaction.service';
 
 /**
  * Composition root for cross-module contracts (ports & adapters).
@@ -71,6 +74,10 @@ import { RecipeAdapter } from '../modules/product/recipe.adapter';
     // Recipe (BOM) explosion for the Production Plan — implemented by the product
     // module which owns recipes; Production reaches it through the port.
     { provide: RECIPE, useClass: RecipeAdapter },
+    // Production receipt stock-in — implemented by the stock-transaction module
+    // (the ledger writer); Production banks finished goods through the port.
+    StockTransactionService,
+    { provide: STOCK_POSTING, useClass: StockPostingAdapter },
     CpanelMetricsAdapter,
     ProductionMetricsAdapter,
     InventoryMetricsAdapter,
@@ -97,6 +104,7 @@ import { RecipeAdapter } from '../modules/product/recipe.adapter';
     STOCK,
     WORK_ORDER,
     RECIPE,
+    STOCK_POSTING,
   ],
 })
 export class ContractsModule {}

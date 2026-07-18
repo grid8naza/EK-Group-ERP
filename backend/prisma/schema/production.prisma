@@ -67,12 +67,58 @@ model WorkOrder {
   updatedAt       DateTime        @updatedAt
 
   lines          WorkOrderLine[]
-  productionPlan ProductionPlan? @relation(fields: [productionPlanId], references: [id], onDelete: SetNull)
+  productionPlan ProductionPlan?    @relation(fields: [productionPlanId], references: [id], onDelete: SetNull)
+  receipt        ProductionReceipt?
 
   @@unique([companyId, orderNo])
   @@index([companyId, status])
   @@index([productionPlanId])
   @@map("work_orders")
+}
+
+/// A Production Receipt — finished goods banked into stock. Recording production
+/// against a Work Order creates one receipt: each product becomes a new stock
+/// batch (PRODUCTION stock-in) at the store, and the work order is completed.
+model ProductionReceipt {
+  id              Int      @id @default(autoincrement())
+  companyId       Int
+  branchId        Int?
+  receiptNo       String // PR-#### per company
+  workOrderId     Int?     @unique // one receipt per work order
+  workOrderNo     String? // snapshot
+  storeId         Int? // -> inventory Store the goods were banked into
+  storeName       String? // snapshot
+  receiptDate     DateTime @default(now())
+  notes           String?
+  isLocked        Boolean  @default(false)
+  createdByUserId Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  lines     ProductionReceiptLine[]
+  workOrder WorkOrder?              @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, receiptNo])
+  @@index([companyId])
+  @@map("production_receipts")
+}
+
+/// One produced line: the product, quantity, and the stock batch it became.
+model ProductionReceiptLine {
+  id          Int    @id @default(autoincrement())
+  receiptId   Int
+  productId   Int // -> inventory Product (plain id)
+  productName String // snapshot
+  quantity    Float
+  unitId      Int // -> Unit (plain id)
+  batchId     Int? // -> inventory StockBatch (the batch this became)
+  batchNo     String? // snapshot
+  expiryDate  DateTime?
+
+  receipt ProductionReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+
+  @@index([receiptId])
+  @@map("production_receipt_lines")
 }
 
 /// One line of a Work Order — a product to produce and how much.

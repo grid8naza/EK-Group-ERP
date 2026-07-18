@@ -21,6 +21,7 @@ const SYSTEM_DOCUMENTS: { code: string; name: string }[] = [
   { code: 'WORK_ORDER', name: 'Work Order' },
   { code: 'PRODUCTION_PLAN', name: 'Production Plan' },
   { code: 'MATERIAL_REQUEST', name: 'Material Request' },
+  { code: 'PRODUCTION_RECEIPT', name: 'Production Receipt' },
   { code: 'GOODS_RECEIPT_NOTE', name: 'Goods Receipt Note' },
   { code: 'DELIVERY_NOTE', name: 'Delivery Note' },
   { code: 'SALES_RETURN', name: 'Sales Return' },

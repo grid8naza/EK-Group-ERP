@@ -77,12 +77,14 @@ export const PRODUCTION_SUBS = [
   { name: 'Production Plan', route: '/production/plans', icon: 'clipboard-list', order: 5 },
   // Material Request — the store requisition for each division's raw materials.
   { name: 'Material Request', route: '/production/material-requests', icon: 'clipboard-check', order: 6 },
+  // Production Receipt — finished goods banked into stock from a work order.
+  { name: 'Production Receipt', route: '/production/receipts', icon: 'package-plus', order: 7 },
   // Per-module reference data. Super-admin-only; isolated from other modules.
   {
     name: 'Lookups',
     route: '/production/lookups',
     icon: 'list',
-    order: 7,
+    order: 8,
     superAdminOnly: true,
   },
 ];

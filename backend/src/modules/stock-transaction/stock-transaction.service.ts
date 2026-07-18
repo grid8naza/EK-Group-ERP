@@ -15,6 +15,10 @@ import { assertUnlocked } from '../../common/assert-unlocked';
 import { assertBatchesFree } from '../../common/assert-batches-free';
 import { STOCK, StockPort } from '../../contracts/stock.port';
 import {
+  ProducedBatch,
+  ProductionReceiptPosting,
+} from '../../contracts/stock-posting.port';
+import {
   CreateStockTransactionDto,
   StockTransactionLineInput,
   UpdateStockTransactionDto,
@@ -76,6 +80,116 @@ export class StockTransactionService {
     date: Date,
   ): Promise<string[] | null> {
     return this.batchNumbering.nextRange(companyId, branchId, count, date);
+  }
+
+  /**
+   * Bank produced finished goods into stock — the PRODUCTION stock-in. One new
+   * batch per line and a qtyIn ledger row at the given store, reusing this
+   * module's classify / batch-numbering / snapshot logic. Prices are snapshotted
+   * from the product master so the batch can be sold at its current price.
+   *
+   * Called through the STOCK_POSTING port by the Production module. Atomic.
+   */
+  async postProductionReceipt(
+    input: ProductionReceiptPosting,
+  ): Promise<ProducedBatch[]> {
+    const { companyId, branchId, storeId, documentId, documentNo, date, lines } =
+      input;
+    if (!lines.length) return [];
+
+    const docDate = new Date(date);
+    const companyCode = await this.companyCode(companyId);
+    const ymd = this.ymd(date);
+    const ruleBatchNos = await this.ruleBatchNumbers(
+      companyId,
+      branchId,
+      lines.length,
+      docDate,
+    );
+    // Fallback sequence continues after today's existing batches for the company.
+    const base = await this.prisma.stockBatch.count({
+      where: { companyId, batchNo1: { startsWith: `${companyCode}-${ymd}-` } },
+    });
+
+    const productIds = [...new Set(lines.map((l) => l.productId))];
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: {
+        id: true,
+        categoryId: true,
+        groupId: true,
+        unitId: true,
+        shelfLife: true,
+        costPrice: true,
+        intercompanyPrice: true,
+        wholesalePrice: true,
+        retailPrice: true,
+      },
+    });
+    const prodById = new Map(products.map((p) => [p.id, p]));
+
+    return this.prisma.$transaction(async (tx) => {
+      const out: ProducedBatch[] = [];
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const p = prodById.get(line.productId);
+        if (!p) throw new BadRequestException('Product not found.');
+        const primaryGroupId = await this.primaryGroup(p.groupId);
+        // Expiry: explicit, else derived from the product's shelf life (days).
+        const expiry = line.expiryDate
+          ? new Date(line.expiryDate)
+          : p.shelfLife > 0
+            ? new Date(docDate.getTime() + p.shelfLife * 86400000)
+            : null;
+        const batchNo1 =
+          ruleBatchNos?.[i] ??
+          `${companyCode}-${ymd}-${String(base + i + 1).padStart(4, '0')}`;
+
+        const batch = await tx.stockBatch.create({
+          data: {
+            companyId,
+            batchNo1,
+            productId: line.productId,
+            expiryDate: expiry,
+          },
+        });
+        await tx.stockLedger.create({
+          data: {
+            date: docDate,
+            companyId,
+            branchId,
+            storeId,
+            transactionType: StockTxnType.PRODUCTION,
+            documentId,
+            documentNo,
+            categoryId: p.categoryId,
+            primaryGroupId,
+            parentGroupId: p.groupId,
+            productId: line.productId,
+            batchId: batch.id,
+            batchNo1,
+            expiryDate: expiry,
+            qtyIn: line.quantity,
+            qtyOut: 0,
+            unitId: p.unitId,
+            unitPrice: p.costPrice,
+            costPrice: p.costPrice,
+            intercompanyPrice: p.intercompanyPrice,
+            wholesalePrice: p.wholesalePrice,
+            retailPrice: p.retailPrice,
+          },
+        });
+        out.push({
+          productId: line.productId,
+          batchId: batch.id,
+          batchNo: batchNo1,
+          quantity: line.quantity,
+          unitId: p.unitId,
+          expiryDate: expiry ? expiry.toISOString() : null,
+        });
+      }
+      return out;
+    });
   }
 
   // ---- reads ----

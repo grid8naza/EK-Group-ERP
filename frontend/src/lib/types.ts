@@ -1018,6 +1018,36 @@ export interface ProductionPlan {
   workOrders?: { id: number; orderNo: string; soNumber?: string | null }[];
 }
 
+// ---- Production: Production Receipt ----
+export interface ProductionReceiptLine {
+  id: number;
+  productId: number;
+  productName: string;
+  quantity: number;
+  unitId: number;
+  batchId?: number | null;
+  batchNo?: string | null;
+  expiryDate?: string | null;
+}
+
+/** Finished goods banked into stock from a work order (one batch per product). */
+export interface ProductionReceipt {
+  id: number;
+  companyId: number;
+  branchId?: number | null;
+  receiptNo: string;
+  workOrderId?: number | null;
+  workOrderNo?: string | null;
+  storeId?: number | null;
+  storeName?: string | null;
+  receiptDate: string;
+  notes?: string | null;
+  isLocked?: boolean;
+  createdByUserId: number;
+  createdAt: string;
+  lines: ProductionReceiptLine[];
+}
+
 // ---- Production: Material Request ----
 export type MaterialRequestStatus = 'DRAFT' | 'ISSUED' | 'CANCELLED';
 
