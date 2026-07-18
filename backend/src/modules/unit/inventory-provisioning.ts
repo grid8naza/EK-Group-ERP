@@ -69,12 +69,14 @@ export const INVENTORY_TXN_MENU = {
 export const PRODUCTION_SUBS = [
   { name: 'Recipe Master', route: '/production/recipe-master', icon: 'list-tree', order: 1 },
   { name: 'Packing Master', route: '/production/packing-master', icon: 'package-check', order: 2 },
+  // Work Orders — what must be made to fulfil approved sales orders.
+  { name: 'Work Order', route: '/production/work-orders', icon: 'hammer', order: 3 },
   // Per-module reference data. Super-admin-only; isolated from other modules.
   {
     name: 'Lookups',
     route: '/production/lookups',
     icon: 'list',
-    order: 3,
+    order: 4,
     superAdminOnly: true,
   },
 ];

@@ -974,6 +974,43 @@ export interface SalesOrder {
   // Present on the single-order response (GET /sales-orders/:id).
   workflow?: PurchaseOrderWorkflow;
   viewer?: PurchaseOrderViewer;
+  /** The production work order raised from this order (once approved), if any. */
+  workOrderId?: number | null;
+  workOrderNo?: string | null;
+}
+
+// ---- Production: Work Orders ----
+export type WorkOrderStatus =
+  | 'PENDING'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'CANCELLED';
+
+export interface WorkOrderLine {
+  id: number;
+  sequence: number;
+  productId: number;
+  quantity: number;
+  unitId: number;
+}
+
+/** A production Work Order — what must be made to fulfil a sales order. */
+export interface WorkOrder {
+  id: number;
+  companyId: number;
+  branchId?: number | null;
+  orderNo: string;
+  /** The sales order this fulfils. */
+  salesOrderId?: number | null;
+  soNumber?: string | null;
+  soDeliveryAt?: string | null;
+  status: WorkOrderStatus;
+  notes?: string | null;
+  isLocked?: boolean;
+  createdByUserId: number;
+  createdAt: string;
+  updatedAt?: string;
+  lines: WorkOrderLine[];
 }
 
 // ---- Purchase: Local Purchase Orders (external suppliers) ----

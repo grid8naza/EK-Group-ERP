@@ -82,6 +82,16 @@ export class SalesOrderController {
     return this.service.submit(user.id, id, !!user.isSuperAdmin);
   }
 
+  /** Raise the production Work Order for an approved order (one per order). */
+  @Post(':id/work-order')
+  createWorkOrder(
+    @CurrentUser() user: AuthUser,
+    @CompanyId() companyId: number | undefined,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.service.createWorkOrder(user.id, companyId ?? 0, id);
+  }
+
   /** Act on the order's workflow task (forward / approve / reject / cancel). */
   @Post(':id/act')
   act(

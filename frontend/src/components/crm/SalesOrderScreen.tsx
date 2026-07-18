@@ -9,6 +9,7 @@ import {
   Check,
   X,
   Ban,
+  Hammer,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
@@ -137,6 +138,7 @@ export function SalesOrderScreen() {
   const [saving, setSaving] = useState(false);
   const [comment, setComment] = useState('');
   const [acting, setActing] = useState(false);
+  const [creatingWO, setCreatingWO] = useState(false);
   const myTask = current?.workflow?.myTask ?? null;
 
   // ---- editable draft form ----
@@ -313,6 +315,34 @@ export function SalesOrderScreen() {
     }
   };
 
+  // Raise the production work order for an approved order. Stays on the document
+  // and reloads it, so the button becomes the "work order created" note.
+  const doCreateWorkOrder = async () => {
+    if (!current) return;
+    const ok = await confirm({
+      title: 'Create work order?',
+      message: `Raise a production work order for ${current.orderNo}? It lists the products on this order that must be made.`,
+      confirmText: 'Yes',
+      cancelText: 'No',
+    });
+    if (!ok) return;
+    setCreatingWO(true);
+    try {
+      const wo = await api.post<{ id: number; orderNo: string }>(
+        `/sales-orders/${current.id}/work-order`,
+        {},
+      );
+      toast.success(`Work order ${wo.orderNo} created.`);
+      await loadOrder(current.id);
+    } catch (e) {
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to create the work order.',
+      );
+    } finally {
+      setCreatingWO(false);
+    }
+  };
+
   // ---- list columns ----
   const columns: Column<SalesOrder>[] = [
     { key: 'orderNo', header: 'Order No', accessor: (r) => r.orderNo },
@@ -412,8 +442,8 @@ export function SalesOrderScreen() {
                 <Send className="h-4 w-4" /> {submitLabel}
               </button>
             </div>
-          ) : myTask || current?.viewer?.canCancel ? (
-            <div className="flex flex-wrap gap-2">
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
               {(myTask?.canCancel || current?.viewer?.canCancel) && (
                 <button
                   className="btn-ghost text-slate-600"
@@ -441,8 +471,30 @@ export function SalesOrderScreen() {
                   <Check className="h-4 w-4" /> {myTask.buttonText}
                 </button>
               )}
+              {/* Once approved, raise the production work order (one per order).
+                  Converting twice is blocked, so show the created one instead. */}
+              {current?.status === 'APPROVED' &&
+                (current.workOrderId ? (
+                  <span className="text-sm text-slate-500">
+                    Work order{' '}
+                    <span className="font-medium text-slate-700 dark:text-slate-200">
+                      {current.workOrderNo}
+                    </span>{' '}
+                    created
+                  </span>
+                ) : (
+                  can('/production/work-orders', 'add') && (
+                    <button
+                      className="btn-primary"
+                      onClick={doCreateWorkOrder}
+                      disabled={creatingWO}
+                    >
+                      <Hammer className="h-4 w-4" /> Create Work Order
+                    </button>
+                  )
+                ))}
             </div>
-          ) : null}
+          )}
         </div>
 
         {isEditing && current ? (

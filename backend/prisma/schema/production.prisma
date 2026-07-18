@@ -33,3 +33,55 @@ model ProductionOrder {
   @@index([companyId])
   @@map("production_orders")
 }
+
+/// Lifecycle of a Work Order — a production execution document.
+enum WorkOrderStatus {
+  PENDING // created from a sales order, awaiting production planning
+  IN_PROGRESS // being produced
+  COMPLETED // produced and banked to stock
+  CANCELLED
+}
+
+/// A production Work Order — what the seller must MAKE to fulfil a sales order.
+/// Created from an APPROVED ICSO (one per order), covering only the lines that
+/// need producing (nothing in stock backs them). Cross-domain ids (companyId ->
+/// Company, salesOrderId -> CRM SalesOrder, productId / unitId -> inventory,
+/// createdByUserId -> User) are PLAIN ids with no @relation, so Production stays
+/// self-contained.
+model WorkOrder {
+  id              Int             @id @default(autoincrement())
+  companyId       Int // -> Cpanel Company (the producing / selling company)
+  branchId        Int? // -> Cpanel Branch (optional)
+  orderNo         String // WO-#### per company (system-generated)
+  // The sales order this fulfils. Unique: an ICSO raises one work order.
+  salesOrderId    Int?            @unique // -> CRM SalesOrder (plain id)
+  soNumber        String? // snapshot of the source order number
+  soDeliveryAt    DateTime? // delivery date the sales order committed to
+  status          WorkOrderStatus @default(PENDING)
+  notes           String?
+  isLocked        Boolean         @default(false)
+  createdByUserId Int // -> Cpanel User
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  lines WorkOrderLine[]
+
+  @@unique([companyId, orderNo])
+  @@index([companyId, status])
+  @@map("work_orders")
+}
+
+/// One line of a Work Order — a product to produce and how much.
+model WorkOrderLine {
+  id          Int   @id @default(autoincrement())
+  workOrderId Int
+  sequence    Int   @default(0)
+  productId   Int // -> inventory Product (plain id)
+  quantity    Float
+  unitId      Int // -> Unit (plain id)
+
+  workOrder WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+
+  @@index([workOrderId])
+  @@map("work_order_lines")
+}

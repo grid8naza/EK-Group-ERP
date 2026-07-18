@@ -15,6 +15,9 @@ import { BatchNumberingService } from '../modules/batch-numbering/batch-numberin
 import { STOCK } from './stock.port';
 import { StockAdapter } from '../modules/stock/stock.adapter';
 import { StockService } from '../modules/stock/stock.service';
+import { WORK_ORDER } from './work-order.port';
+import { WorkOrderAdapter } from '../modules/production/work-order.adapter';
+import { WorkOrderService } from '../modules/production/work-order.service';
 
 /**
  * Composition root for cross-module contracts (ports & adapters).
@@ -59,6 +62,10 @@ import { StockService } from '../modules/stock/stock.service';
     // reaching it through the port.
     StockService,
     { provide: STOCK, useClass: StockAdapter },
+    // Work Order creation from a sales order — CRM raises one through the port
+    // without importing Production. Its own stateless instance here.
+    WorkOrderService,
+    { provide: WORK_ORDER, useClass: WorkOrderAdapter },
     CpanelMetricsAdapter,
     ProductionMetricsAdapter,
     InventoryMetricsAdapter,
@@ -83,6 +90,7 @@ import { StockService } from '../modules/stock/stock.service';
     NUMBERING,
     BATCH_NUMBERING,
     STOCK,
+    WORK_ORDER,
   ],
 })
 export class ContractsModule {}

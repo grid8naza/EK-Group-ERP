@@ -18,6 +18,7 @@ import {
 } from '../../contracts/workflow.port';
 import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
 import { STOCK, StockPort } from '../../contracts/stock.port';
+import { WORK_ORDER, WorkOrderPort } from '../../contracts/work-order.port';
 import {
   ActSalesOrderDto,
   SalesOrderLineInput,
@@ -53,6 +54,7 @@ export class SalesOrderService {
     @Inject(WORKFLOW) private readonly workflow: WorkflowPort,
     @Inject(NUMBERING) private readonly numbering: NumberingPort,
     @Inject(STOCK) private readonly stock: StockPort,
+    @Inject(WORK_ORDER) private readonly workOrders: WorkOrderPort,
   ) {}
 
   /**
@@ -141,6 +143,53 @@ export class SalesOrderService {
       }),
     );
     return this.findOne(userId, order.id, true);
+  }
+
+  /**
+   * Raise the production Work Order for an APPROVED sales order — what the seller
+   * must MAKE to fulfil it. Only the lines with no stock behind them (batchId
+   * null) need producing; the rest ship from existing batches. Delegated to the
+   * Production module through the WORK_ORDER port (one work order per sales
+   * order, enforced there).
+   */
+  async createWorkOrder(userId: number, companyId: number, id: number) {
+    if (!companyId) throw new BadRequestException('No active company.');
+    const order = await this.prisma.salesOrder.findUnique({
+      where: { id },
+      include: withLines,
+    });
+    if (!order) throw new NotFoundException('Sales order not found.');
+    if (order.companyId !== companyId) {
+      throw new ForbiddenException(
+        'Only the selling company can raise this order’s work order.',
+      );
+    }
+    if (order.status !== 'APPROVED') {
+      throw new BadRequestException(
+        'Only an approved sales order can raise a work order.',
+      );
+    }
+    const toProduce = order.lines
+      .filter((l) => l.batchId == null && l.quantity > 0)
+      .map((l) => ({
+        productId: l.productId,
+        quantity: l.quantity,
+        unitId: l.unitId,
+      }));
+    if (!toProduce.length) {
+      throw new BadRequestException(
+        'Every line on this order ships from stock — there is nothing to produce.',
+      );
+    }
+    return this.workOrders.createFromSalesOrder({
+      userId,
+      companyId,
+      branchId: null,
+      salesOrderId: order.id,
+      soNumber: order.orderNo,
+      soDeliveryAt: order.deliveryAt,
+      lines: toProduce,
+    });
   }
 
   /** Whether the current user may act on the sales-order form (workflow-governed). */
@@ -350,9 +399,15 @@ export class SalesOrderService {
       : null;
     const canCancel = isCreatorWithdraw && !!firstStep?.canCancel;
 
+    // The production work order this order has raised (once approved), so the
+    // screen can show "Work order WO-#### created" instead of the convert button.
+    const workOrder = await this.workOrders.getForSalesOrder(order.id);
+
     return {
       ...order,
       total: this.orderTotal(order.lines),
+      workOrderId: workOrder?.id ?? null,
+      workOrderNo: workOrder?.orderNo ?? null,
       workflow,
       viewer: {
         isCreator,
