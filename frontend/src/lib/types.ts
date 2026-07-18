@@ -979,6 +979,20 @@ export interface SalesOrder {
   workOrderNo?: string | null;
 }
 
+// ---- Production: Divisions ----
+/** A production division (Bakery, Pastry, …) that owns primary product groups. */
+export interface ProductionDivision {
+  id: number;
+  companyId: number;
+  code: string;
+  name: string;
+  description?: string | null;
+  isActive: boolean;
+  isLocked?: boolean;
+  /** Primary product groups assigned to this division. */
+  groups?: { id: number; primaryGroupId: number }[];
+}
+
 // ---- Production: Work Orders ----
 export type WorkOrderStatus =
   | 'PENDING'

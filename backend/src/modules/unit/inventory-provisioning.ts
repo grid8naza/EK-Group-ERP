@@ -69,14 +69,16 @@ export const INVENTORY_TXN_MENU = {
 export const PRODUCTION_SUBS = [
   { name: 'Recipe Master', route: '/production/recipe-master', icon: 'list-tree', order: 1 },
   { name: 'Packing Master', route: '/production/packing-master', icon: 'package-check', order: 2 },
+  // Production divisions — org units (Bakery, Pastry, …) that own primary groups.
+  { name: 'Production Division', route: '/production/divisions', icon: 'factory', order: 3 },
   // Work Orders — what must be made to fulfil approved sales orders.
-  { name: 'Work Order', route: '/production/work-orders', icon: 'hammer', order: 3 },
+  { name: 'Work Order', route: '/production/work-orders', icon: 'hammer', order: 4 },
   // Per-module reference data. Super-admin-only; isolated from other modules.
   {
     name: 'Lookups',
     route: '/production/lookups',
     icon: 'list',
-    order: 4,
+    order: 5,
     superAdminOnly: true,
   },
 ];

@@ -85,3 +85,43 @@ model WorkOrderLine {
   @@index([workOrderId])
   @@map("work_order_lines")
 }
+
+/// A production division — an org unit of the manufacturing company that makes a
+/// family of products (e.g. Bakery, Pastry, Sweets, Savories). Each PRIMARY
+/// (level-1) product group is assigned to a division, so demand can be grouped by
+/// division for planning and per-division performance tracing. companyId is a
+/// plain cross-domain id.
+model ProductionDivision {
+  id          Int      @id @default(autoincrement())
+  companyId   Int // -> Cpanel Company (the manufacturing company)
+  code        String // DIV-### per company (system-generated)
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  isLocked    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  groups ProductionDivisionGroup[]
+
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@map("production_divisions")
+}
+
+/// Assigns a PRIMARY (level-1) product group to a production division.
+/// primaryGroupId is a plain cross-domain id (-> inventory Group). Unique per
+/// company, so a primary group is produced by exactly one division. companyId is
+/// denormalized from the division to scope that uniqueness.
+model ProductionDivisionGroup {
+  id                   Int @id @default(autoincrement())
+  companyId            Int // denormalized from the division for per-company uniqueness
+  productionDivisionId Int
+  primaryGroupId       Int // -> inventory Group (level 1), plain id
+
+  division ProductionDivision @relation(fields: [productionDivisionId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, primaryGroupId])
+  @@index([productionDivisionId])
+  @@map("production_division_groups")
+}
