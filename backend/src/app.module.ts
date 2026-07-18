@@ -27,6 +27,7 @@ import { HsnModule } from './modules/hsn/hsn.module';
 import { ItemModule } from './modules/item/item.module';
 import { ProductModule } from './modules/product/product.module';
 import { StoreModule } from './modules/store/store.module';
+import { RackModule } from './modules/rack/rack.module';
 import { OpeningStockModule } from './modules/opening-stock/opening-stock.module';
 import { StockTransactionModule } from './modules/stock-transaction/stock-transaction.module';
 import { SupplierModule } from './modules/supplier/supplier.module';
@@ -74,6 +75,7 @@ import { ScaffoldModule } from './scaffold/scaffold.module';
     ItemModule,
     ProductModule,
     StoreModule,
+    RackModule,
     OpeningStockModule,
     StockTransactionModule,
     SupplierModule,

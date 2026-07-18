@@ -52,6 +52,15 @@ export class ProductBranchStockInput {
   @IsInt()
   @Min(0)
   leadTimeDays?: number;
+
+  /** Default put-away location for this product in this branch. */
+  @IsOptional()
+  @IsInt()
+  defaultStoreId?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  defaultRackId?: number | null;
 }
 
 /** One BOM line — `quantity` of `itemId`, measured in `unitId`. */

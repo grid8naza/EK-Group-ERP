@@ -772,6 +772,9 @@ export interface Product {
     maxStock: number;
     reorderLevel: number;
     leadTimeDays: number;
+    /** Default put-away location for this product in this branch. */
+    defaultStoreId?: number | null;
+    defaultRackId?: number | null;
   }[];
   // BOM costing inputs (material cost is computed from the recipe).
   labourCost: number;
@@ -1288,6 +1291,18 @@ export interface Store {
   code: string;
   name: string;
   address?: string | null;
+  isDefault?: boolean;
+  isActive: boolean;
+  isLocked?: boolean;
+}
+
+/** A rack / shelf / bin inside a store — a product's default put-away location. */
+export interface Rack {
+  id: number;
+  companyId: number;
+  storeId: number;
+  code: string;
+  name: string;
   isDefault?: boolean;
   isActive: boolean;
   isLocked?: boolean;

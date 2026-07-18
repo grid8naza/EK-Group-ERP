@@ -22,12 +22,14 @@ export const INVENTORY_SUBS = [
   // Stock locations. The Opening Stock entry screens live in their own main
   // menu (OPENING_STOCK_MENU below), not under the master-data Inventory menu.
   { name: 'Store Master', route: '/inventory/stores', icon: 'warehouse', order: 8 },
+  // Racks / shelves / bins inside a store — a product's default put-away location.
+  { name: 'Rack Master', route: '/inventory/racks', icon: 'columns-3', order: 9 },
   // Per-module reference data. Super-admin-only; isolated from other modules.
   {
     name: 'Lookups',
     route: '/inventory/lookups',
     icon: 'list',
-    order: 9,
+    order: 10,
     superAdminOnly: true,
   },
 ];

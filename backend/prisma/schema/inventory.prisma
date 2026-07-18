@@ -459,6 +459,11 @@ model ProductBranchStock {
   maxStock     Float @default(0)
   reorderLevel Float @default(0)
   leadTimeDays Int   @default(0)
+  // Where this product is put away in this branch: its default store and the
+  // rack within it. Plain ids (-> Store / Rack) — the product's home location
+  // for production put-away, transfers and delivery.
+  defaultStoreId Int?
+  defaultRackId  Int?
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
@@ -521,9 +526,36 @@ model Store {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  racks Rack[]
+
   @@unique([companyId, code])
   @@index([companyId])
   @@map("stores")
+}
+
+/// A rack / shelf / bin inside a Store — the finest stock location. A product is
+/// given a default store + rack per branch (see ProductBranchStock), so produced
+/// and received goods have a home to be put away in. `storeId` is a real relation
+/// (same domain); `companyId` is denormalized from the store for per-company
+/// scoping. `code` is RK-#### per store (system-generated).
+model Rack {
+  id        Int      @id @default(autoincrement())
+  companyId Int // -> Cpanel Company (plain id); denormalized from the store
+  storeId   Int
+  code      String // RK-#### per store (system-generated)
+  name      String
+  isDefault Boolean  @default(false) // the store's default rack (auto-picked in combos)
+  isActive  Boolean  @default(true)
+  isLocked  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, code])
+  @@index([storeId])
+  @@index([companyId])
+  @@map("racks")
 }
 
 /// A stock batch / lot. `batchNo1` is our system code

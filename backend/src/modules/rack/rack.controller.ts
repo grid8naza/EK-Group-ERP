@@ -11,33 +11,32 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { StoreService } from './store.service';
+import { RackService } from './rack.service';
 import { CompanyId } from '../../auth/company.decorator';
-import { BranchId } from '../../auth/branch.decorator';
 import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
 import { LockDto } from '../../common/lock.dto';
-import { CreateStoreDto, UpdateStoreDto } from './store.dto';
+import { CreateRackDto, UpdateRackDto } from './rack.dto';
 
-/** Store / Warehouse Master (Inventory) — stock locations, company-scoped. */
-@ApiTags('stores')
+/** Rack Master (Inventory) — sub-locations (rack / shelf / bin) inside a store. */
+@ApiTags('racks')
 @ApiBearerAuth()
-@Controller('stores')
-export class StoreController {
-  constructor(private readonly service: StoreService) {}
+@Controller('racks')
+export class RackController {
+  constructor(private readonly service: RackService) {}
 
   @Get()
   findAll(
     @CompanyId() companyId: number | undefined,
-    @BranchId() branchId: number | undefined,
+    @Query('storeId') storeId?: string,
     @Query('search') search?: string,
-    // `all` returns every store across companies/branches — for cross-company
-    // forms (e.g. the Product master's per-branch default location pickers).
+    // `all` returns every rack across companies — for cross-company forms
+    // (e.g. the Product master's per-branch default location pickers).
     @Query('all') all?: string,
   ) {
     const unscoped = all === 'true' || all === '1';
     return this.service.findAll(
       unscoped ? undefined : companyId,
-      unscoped ? undefined : branchId,
+      Number(storeId) || undefined,
       search,
     );
   }
@@ -50,14 +49,13 @@ export class StoreController {
   @Post()
   create(
     @CompanyId() companyId: number | undefined,
-    @BranchId() branchId: number | undefined,
-    @Body() dto: CreateStoreDto,
+    @Body() dto: CreateRackDto,
   ) {
-    return this.service.create(companyId, branchId, dto);
+    return this.service.create(companyId, dto);
   }
 
   @Patch(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateStoreDto) {
+  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateRackDto) {
     return this.service.update(id, dto);
   }
 
@@ -66,7 +64,7 @@ export class StoreController {
     return this.service.remove(id);
   }
 
-  @UseGuards(LockPrivilegeGuard('/inventory/stores'))
+  @UseGuards(LockPrivilegeGuard('/inventory/racks'))
   @Patch(':id/lock')
   setLock(@Param('id', ParseIntPipe) id: number, @Body() dto: LockDto) {
     return this.service.setLock(id, dto.locked);

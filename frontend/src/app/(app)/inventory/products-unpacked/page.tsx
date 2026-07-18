@@ -17,7 +17,16 @@ import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/u
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import type { Product, Group, Unit, HsnCode, Company, Branch } from '@/lib/types';
+import type {
+  Product,
+  Group,
+  Unit,
+  HsnCode,
+  Company,
+  Branch,
+  Store,
+  Rack,
+} from '@/lib/types';
 
 const ROUTE = '/inventory/products-unpacked';
 
@@ -28,12 +37,16 @@ type BranchStockForm = {
   maxStock: string;
   reorderLevel: string;
   leadTimeDays: string;
+  defaultStoreId: string;
+  defaultRackId: string;
 };
 const EMPTY_BS: BranchStockForm = {
   minStock: '',
   maxStock: '',
   reorderLevel: '',
   leadTimeDays: '',
+  defaultStoreId: '',
+  defaultRackId: '',
 };
 
 const empty = {
@@ -103,6 +116,11 @@ export default function ProductsPage() {
   const { data: hsnCodes } = useFetch<HsnCode[]>('/hsn-codes');
   const { data: companies } = useFetch<Company[]>('/companies');
   const { data: branches } = useFetch<Branch[]>('/branches');
+  // All stores/racks across companies — the per-branch default location pickers
+  // span every company the product is available in, so they can't be scoped to
+  // the active branch.
+  const { data: stores } = useFetch<Store[]>('/stores?all=true');
+  const { data: racks } = useFetch<Rack[]>('/racks?all=true');
   const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<Product>({
     endpoint: '/products',
     route: ROUTE,
@@ -258,6 +276,8 @@ export default function ProductsPage() {
           maxStock: bs.maxStock ? String(bs.maxStock) : '',
           reorderLevel: bs.reorderLevel ? String(bs.reorderLevel) : '',
           leadTimeDays: bs.leadTimeDays ? String(bs.leadTimeDays) : '',
+          defaultStoreId: bs.defaultStoreId ? String(bs.defaultStoreId) : '',
+          defaultRackId: bs.defaultRackId ? String(bs.defaultRackId) : '',
         },
       ]),
     ) as Record<number, BranchStockForm>,
@@ -335,6 +355,43 @@ export default function ProductsPage() {
       },
     }));
 
+  // Setting a branch's default store clears any rack chosen from the old store.
+  const setBranchStore = (branchId: number, storeId: string) =>
+    setForm((f) => ({
+      ...f,
+      branchStocks: {
+        ...f.branchStocks,
+        [branchId]: {
+          ...(f.branchStocks[branchId] ?? EMPTY_BS),
+          defaultStoreId: storeId,
+          defaultRackId: '',
+        },
+      },
+    }));
+
+  // Stores for a company+branch (branchless stores show for every branch); racks
+  // within the chosen store. A currently-selected id is always kept as an option
+  // so an inactive/hidden store or rack still displays instead of vanishing.
+  const storeOptions = (companyId: number, branchId: number, current: string) =>
+    (stores ?? [])
+      .filter(
+        (s) =>
+          s.companyId === companyId &&
+          (s.branchId === branchId || s.branchId == null) &&
+          (s.isActive || String(s.id) === current),
+      )
+      .map((s) => ({ value: String(s.id), label: s.name }));
+  const rackOptions = (storeId: string, current: string) =>
+    !storeId
+      ? []
+      : (racks ?? [])
+          .filter(
+            (r) =>
+              String(r.storeId) === storeId &&
+              (r.isActive || String(r.id) === current),
+          )
+          .map((r) => ({ value: String(r.id), label: r.name }));
+
   const save = async (mode: SaveMode = 'saveClose') => {
     if (!form.name.trim()) {
       toast.error('Name is required.');
@@ -367,6 +424,8 @@ export default function ProductsPage() {
           maxStock: num(v.maxStock),
           reorderLevel: num(v.reorderLevel),
           leadTimeDays: num(v.leadTimeDays),
+          defaultStoreId: idOrNull(v.defaultStoreId),
+          defaultRackId: idOrNull(v.defaultRackId),
         };
       });
     // Note: recipe/packing are intentionally omitted — the BOM is edited under
@@ -1133,7 +1192,9 @@ export default function ProductsPage() {
                                 <th className="pb-1 pr-2 font-medium">Min</th>
                                 <th className="pb-1 pr-2 font-medium">Max</th>
                                 <th className="pb-1 pr-2 font-medium">Reorder</th>
-                                <th className="pb-1 font-medium">Lead (days)</th>
+                                <th className="pb-1 pr-2 font-medium">Lead (days)</th>
+                                <th className="pb-1 pr-2 font-medium">Default store</th>
+                                <th className="pb-1 font-medium">Default rack</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1192,7 +1253,7 @@ export default function ProductsPage() {
                                         }
                                       />
                                     </td>
-                                    <td className="py-1">
+                                    <td className="py-1 pr-2">
                                       <input
                                         type="number"
                                         min={0}
@@ -1206,6 +1267,40 @@ export default function ProductsPage() {
                                             e.target.value,
                                           )
                                         }
+                                      />
+                                    </td>
+                                    <td className="py-1 pr-2">
+                                      <Select
+                                        value={v.defaultStoreId}
+                                        onChange={(e) =>
+                                          setBranchStore(b.id, e.target.value)
+                                        }
+                                        placeholder="—"
+                                        wrapClassName="w-40"
+                                        options={storeOptions(
+                                          g.company.id,
+                                          b.id,
+                                          v.defaultStoreId,
+                                        )}
+                                      />
+                                    </td>
+                                    <td className="py-1">
+                                      <Select
+                                        value={v.defaultRackId}
+                                        onChange={(e) =>
+                                          setBranchStock(
+                                            b.id,
+                                            'defaultRackId',
+                                            e.target.value,
+                                          )
+                                        }
+                                        placeholder="—"
+                                        wrapClassName="w-36"
+                                        disabled={!v.defaultStoreId}
+                                        options={rackOptions(
+                                          v.defaultStoreId,
+                                          v.defaultRackId,
+                                        )}
                                       />
                                     </td>
                                   </tr>

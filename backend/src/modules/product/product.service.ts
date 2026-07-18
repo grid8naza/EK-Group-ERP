@@ -57,6 +57,8 @@ const withRelations = {
       maxStock: true,
       reorderLevel: true,
       leadTimeDays: true,
+      defaultStoreId: true,
+      defaultRackId: true,
     },
   },
   bomLines: {
@@ -485,7 +487,11 @@ export class ProductService {
           (r.minStock ?? 0) > 0 ||
           (r.maxStock ?? 0) > 0 ||
           (r.reorderLevel ?? 0) > 0 ||
-          (r.leadTimeDays ?? 0) > 0
+          (r.leadTimeDays ?? 0) > 0 ||
+          // Keep a row that only sets a put-away location — the default store /
+          // rack is worth persisting even with no stock levels configured.
+          r.defaultStoreId != null ||
+          r.defaultRackId != null
         );
       })
       .map((r) => ({
@@ -494,6 +500,8 @@ export class ProductService {
         maxStock: r.maxStock ?? 0,
         reorderLevel: r.reorderLevel ?? 0,
         leadTimeDays: r.leadTimeDays ?? 0,
+        defaultStoreId: r.defaultStoreId ?? null,
+        defaultRackId: r.defaultRackId ?? null,
       }));
   }
 
