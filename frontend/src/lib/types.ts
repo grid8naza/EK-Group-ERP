@@ -979,6 +979,45 @@ export interface SalesOrder {
   workOrderNo?: string | null;
 }
 
+// ---- Production: Production Plan ----
+export type ProductionPlanStatus = 'DRAFT' | 'CONFIRMED' | 'CANCELLED';
+
+export interface ProductionPlanLine {
+  id: number;
+  productId: number;
+  productName: string;
+  quantity: number;
+  unitId: number;
+  primaryGroupId?: number | null;
+  divisionId?: number | null;
+  divisionName?: string | null;
+}
+
+export interface ProductionPlanMaterial {
+  id: number;
+  itemId: number;
+  itemName: string;
+  quantity: number;
+  unitId: number;
+}
+
+/** A production plan clubbing pending work orders, grouped by division. */
+export interface ProductionPlan {
+  id: number;
+  companyId: number;
+  branchId?: number | null;
+  planNo: string;
+  planDate: string;
+  status: ProductionPlanStatus;
+  notes?: string | null;
+  isLocked?: boolean;
+  createdByUserId: number;
+  createdAt: string;
+  lines: ProductionPlanLine[];
+  materials: ProductionPlanMaterial[];
+  workOrders?: { id: number; orderNo: string; soNumber?: string | null }[];
+}
+
 // ---- Production: Divisions ----
 /** A production division (Bakery, Pastry, …) that owns primary product groups. */
 export interface ProductionDivision {

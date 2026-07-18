@@ -61,13 +61,17 @@ model WorkOrder {
   notes           String?
   isLocked        Boolean         @default(false)
   createdByUserId Int // -> Cpanel User
+  // The production plan that clubbed this order (null = not yet planned).
+  productionPlanId Int?
   createdAt       DateTime        @default(now())
   updatedAt       DateTime        @updatedAt
 
-  lines WorkOrderLine[]
+  lines          WorkOrderLine[]
+  productionPlan ProductionPlan? @relation(fields: [productionPlanId], references: [id], onDelete: SetNull)
 
   @@unique([companyId, orderNo])
   @@index([companyId, status])
+  @@index([productionPlanId])
   @@map("work_orders")
 }
 
@@ -107,6 +111,74 @@ model ProductionDivision {
   @@unique([companyId, code])
   @@index([companyId])
   @@map("production_divisions")
+}
+
+/// Lifecycle of a Production Plan.
+enum ProductionPlanStatus {
+  DRAFT // built from pending work orders, under review
+  CONFIRMED // released to the shop floor / material request
+  CANCELLED
+}
+
+/// A Production Plan clubs the pending Work Orders into one buildable plan:
+/// demand aggregated per product, grouped by the producing division, with the
+/// raw-material requirement exploded from recipes. Cross-domain ids are plain.
+model ProductionPlan {
+  id              Int                  @id @default(autoincrement())
+  companyId       Int
+  branchId        Int?
+  planNo          String // PP-#### per company (system-generated)
+  planDate        DateTime             @default(now())
+  status          ProductionPlanStatus @default(DRAFT)
+  notes           String?
+  isLocked        Boolean              @default(false)
+  createdByUserId Int
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  lines      ProductionPlanLine[]
+  materials  ProductionPlanMaterial[]
+  workOrders WorkOrder[]
+
+  @@unique([companyId, planNo])
+  @@index([companyId, status])
+  @@map("production_plans")
+}
+
+/// One planned product line: aggregated demand across the clubbed work orders,
+/// tagged with the division that will make it (resolved from its primary group
+/// at build time and snapshotted).
+model ProductionPlanLine {
+  id             Int    @id @default(autoincrement())
+  planId         Int
+  productId      Int // -> inventory Product (plain id)
+  productName    String // snapshot
+  quantity       Float // aggregated demand
+  unitId         Int // -> Unit (plain id)
+  primaryGroupId Int? // -> inventory Group (level 1), resolved at build
+  divisionId     Int? // -> ProductionDivision (null = unassigned)
+  divisionName   String? // snapshot
+
+  plan ProductionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+  @@map("production_plan_lines")
+}
+
+/// One raw-material requirement line: the item quantity needed across the whole
+/// plan, exploded from product recipes and aggregated. Feeds the Material Request.
+model ProductionPlanMaterial {
+  id       Int    @id @default(autoincrement())
+  planId   Int
+  itemId   Int // -> inventory Item (plain id)
+  itemName String // snapshot
+  quantity Float
+  unitId   Int // -> Unit (plain id)
+
+  plan ProductionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId])
+  @@map("production_plan_materials")
 }
 
 /// Assigns a PRIMARY (level-1) product group to a production division.

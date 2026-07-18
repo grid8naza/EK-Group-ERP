@@ -18,6 +18,8 @@ import { StockService } from '../modules/stock/stock.service';
 import { WORK_ORDER } from './work-order.port';
 import { WorkOrderAdapter } from '../modules/production/work-order.adapter';
 import { WorkOrderService } from '../modules/production/work-order.service';
+import { RECIPE } from './recipe.port';
+import { RecipeAdapter } from '../modules/product/recipe.adapter';
 
 /**
  * Composition root for cross-module contracts (ports & adapters).
@@ -66,6 +68,9 @@ import { WorkOrderService } from '../modules/production/work-order.service';
     // without importing Production. Its own stateless instance here.
     WorkOrderService,
     { provide: WORK_ORDER, useClass: WorkOrderAdapter },
+    // Recipe (BOM) explosion for the Production Plan — implemented by the product
+    // module which owns recipes; Production reaches it through the port.
+    { provide: RECIPE, useClass: RecipeAdapter },
     CpanelMetricsAdapter,
     ProductionMetricsAdapter,
     InventoryMetricsAdapter,
@@ -91,6 +96,7 @@ import { WorkOrderService } from '../modules/production/work-order.service';
     BATCH_NUMBERING,
     STOCK,
     WORK_ORDER,
+    RECIPE,
   ],
 })
 export class ContractsModule {}
