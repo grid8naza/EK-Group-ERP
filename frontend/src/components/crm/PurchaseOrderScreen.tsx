@@ -215,6 +215,23 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
   const [acting, setActing] = useState(false);
   const myTask = current?.workflow?.myTask ?? null;
 
+  // Unsaved edits (draft fields or the reviewer's accepted quantities). Set by
+  // every edit path, cleared on load and after a successful save — so leaving
+  // the form or closing the tab can warn before the work is lost.
+  const [dirty, setDirty] = useState(false);
+  const markDirty = () => setDirty(true);
+  // Native prompt for a browser refresh / tab close while edits are pending —
+  // the in-app Back button gets our own Yes/No dialog (see requestBackToList).
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+
   // ---- editable draft form ----
   const [supplierId, setSupplierId] = useState('');
   const [deliveryAt, setDeliveryAt] = useState('');
@@ -245,11 +262,18 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
   );
   const productName = (id: number) => productById.get(id)?.name ?? `#${id}`;
 
-  const addLine = () => setLines((ls) => [...ls, { productId: '', quantity: '' }]);
-  const setLine = (i: number, patch: Partial<DraftLine>) =>
+  const addLine = () => {
+    markDirty();
+    setLines((ls) => [...ls, { productId: '', quantity: '' }]);
+  };
+  const setLine = (i: number, patch: Partial<DraftLine>) => {
+    markDirty();
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
-  const removeLine = (i: number) =>
+  };
+  const removeLine = (i: number) => {
+    markDirty();
     setLines((ls) => ls.filter((_, idx) => idx !== i));
+  };
 
   // ---- navigation ----
   const openNew = () => {
@@ -258,6 +282,7 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
     setDeliveryAt('');
     setLines([]);
     setNotes('');
+    setDirty(false);
     setMode('edit');
   };
 
@@ -275,6 +300,7 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
       })),
     );
     setNotes(full.notes ?? '');
+    setDirty(false);
     return full;
   };
 
@@ -294,7 +320,26 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
   const backToList = () => {
     setMode('list');
     setCurrent(null);
+    setDirty(false);
     refetch();
+  };
+
+  // The Back button: warn before discarding unsaved edits. Programmatic returns
+  // (after a save / action) go straight through backToList — by then there is
+  // nothing pending, so they never reach this prompt.
+  const requestBackToList = async () => {
+    if (dirty) {
+      const ok = await confirm({
+        title: 'Discard changes?',
+        message: 'You have unsaved changes. Leave without saving?',
+        confirmText: 'Yes',
+        cancelText: 'No',
+        danger: true,
+        defaultCancel: true,
+      });
+      if (!ok) return;
+    }
+    backToList();
   };
 
   const del = async (row: PurchaseOrder) => {
@@ -354,9 +399,19 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
       toast.error(err);
       return;
     }
+    const ok = await confirm({
+      title: current ? 'Save changes?' : 'Save draft?',
+      message: current
+        ? 'Save the changes to this order?'
+        : 'Save this order as a draft?',
+      confirmText: 'Yes',
+      cancelText: 'No',
+    });
+    if (!ok) return;
     setSaving(true);
     try {
       const saved = await persist();
+      setDirty(false);
       toast.success(current ? 'Draft saved.' : 'Draft created.');
       if (close) {
         backToList();
@@ -376,10 +431,18 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
       toast.error(err);
       return;
     }
+    const ok = await confirm({
+      title: 'Submit for approval?',
+      message: 'Submit this order into the approval workflow?',
+      confirmText: 'Yes',
+      cancelText: 'No',
+    });
+    if (!ok) return;
     setSaving(true);
     try {
       const saved = await persist();
       await api.post(`/purchase-orders/${saved.id}/submit`, {});
+      setDirty(false);
       toast.success('Order submitted for approval.');
       backToList();
     } catch (e) {
@@ -403,14 +466,18 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
         cancelled: !!l.cancelled,
       })),
     );
-  const setAccepted = (lineId: number, acceptedQty: string) =>
+  const setAccepted = (lineId: number, acceptedQty: string) => {
+    markDirty();
     setReview((ls) =>
       ls.map((l) => (l.lineId === lineId ? { ...l, acceptedQty } : l)),
     );
-  const toggleCancel = (lineId: number) =>
+  };
+  const toggleCancel = (lineId: number) => {
+    markDirty();
     setReview((ls) =>
       ls.map((l) => (l.lineId === lineId ? { ...l, cancelled: !l.cancelled } : l)),
     );
+  };
 
   const saveReview = async (): Promise<PurchaseOrder | null> => {
     if (!current) return null;
@@ -428,6 +495,7 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
       );
       setCurrent(saved);
       seedReview(saved);
+      setDirty(false);
       return saved;
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
@@ -437,11 +505,33 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
     }
   };
 
+  // The review Save BUTTON confirms first; the internal saveReview() that
+  // Forward and Reserve call ahead of their own action deliberately does not,
+  // so those flows prompt once, not twice.
+  const confirmSaveReview = async () => {
+    const ok = await confirm({
+      title: 'Save accepted quantities?',
+      message: 'Save the accepted quantities on this order?',
+      confirmText: 'Yes',
+      cancelText: 'No',
+    });
+    if (!ok) return;
+    await saveReview();
+  };
+
   // Save first, then reserve: reserving allocates against the accepted
   // quantities, so sending them separately would hold stock for whatever was
   // saved last rather than what's on screen.
   const doReserve = async () => {
     if (!current) return;
+    const ok = await confirm({
+      title: 'Reserve stock?',
+      message:
+        'Save the accepted quantities and reserve stock against them (FEFO)?',
+      confirmText: 'Yes',
+      cancelText: 'No',
+    });
+    if (!ok) return;
     const saved = await saveReview();
     if (!saved) return;
     setReserving(true);
@@ -472,9 +562,10 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
   const doConvert = async () => {
     if (!current) return;
     const ok = await confirm({
-      title: 'Convert to sales order',
+      title: 'Convert to sales order?',
       message: `Create a sales order from ${current.orderNo}? It opens as a draft with the quantities ${counterpartyName(current)} asked for — trim them before submitting.`,
-      confirmText: 'Convert',
+      confirmText: 'Yes',
+      cancelText: 'No',
     });
     if (!ok) return;
     setConverting(true);
@@ -512,14 +603,27 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
       toast.error('A reason is required to reject.');
       return;
     }
-    if (action === 'CANCEL') {
-      const ok = await confirm({
-        title: 'Cancel order',
-        message: `Cancel ${current.orderNo}? This withdraws it from the approval workflow and cannot be undone.`,
-        confirmText: 'Cancel order',
-      });
-      if (!ok) return;
-    }
+    // Every workflow action is confirmed Yes/No before it fires — each one moves
+    // the order through approval and can't be undone.
+    const actLabel =
+      action === 'REJECT'
+        ? 'Reject'
+        : action === 'CANCEL'
+          ? 'Cancel order'
+          : (myTask?.buttonText ?? current.viewer?.submitButtonText ?? 'Forward');
+    const ok = await confirm({
+      title: `${actLabel}?`,
+      message:
+        action === 'CANCEL'
+          ? `Cancel ${current.orderNo}? This withdraws it from the approval workflow and cannot be undone.`
+          : action === 'REJECT'
+            ? `Reject ${current.orderNo}? It returns to the requester and cannot be undone.`
+            : `${actLabel} ${current.orderNo}? This moves it to the next level.`,
+      confirmText: 'Yes',
+      cancelText: 'No',
+      danger: action !== 'FORWARD',
+    });
+    if (!ok) return;
     setActing(true);
     try {
       // Forwarding hands the order to the next approver, so whatever the reviewer
@@ -652,7 +756,7 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
             translucent backdrop keeps the lines from showing through as they pass
             underneath. */}
         <div className="sticky top-0 z-20 -mt-1 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 bg-[#f0f2f5]/90 py-3 backdrop-blur dark:border-slate-800/60 dark:bg-slate-950/90">
-          <button className="btn-ghost" onClick={backToList}>
+          <button className="btn-ghost" onClick={requestBackToList}>
             <ArrowLeft className="h-4 w-4" /> Back to list
           </button>
           {isEditing ? (
@@ -715,7 +819,7 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
                 <>
                   <button
                     className="btn-secondary"
-                    onClick={saveReview}
+                    onClick={confirmSaveReview}
                     disabled={reviewing || reserving}
                   >
                     Save
@@ -787,12 +891,16 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
             creating={!current}
             supplierId={supplierId}
             onSupplier={(v) => {
+              markDirty();
               setSupplierId(v);
               setLines([]);
             }}
             suppliers={suppliers}
             deliveryAt={deliveryAt}
-            onDelivery={setDeliveryAt}
+            onDelivery={(v) => {
+              markDirty();
+              setDeliveryAt(v);
+            }}
             lines={lines}
             products={products}
             productById={productById}
@@ -800,7 +908,10 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
             setLine={setLine}
             removeLine={removeLine}
             notes={notes}
-            onNotes={setNotes}
+            onNotes={(v) => {
+              markDirty();
+              setNotes(v);
+            }}
             orderNo={current?.orderNo}
           />
         ) : (
