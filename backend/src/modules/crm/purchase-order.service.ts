@@ -423,12 +423,16 @@ export class PurchaseOrderService {
    *
    * Both scopes are company-scoped, super admins included — otherwise the two
    * screens would mix for exactly the users most likely to be checking them.
+   * The `sent` screen is additionally scoped to the active branch that raised
+   * the order, so a branch only sees the orders it placed; `received` is not,
+   * because its branch belongs to the requester, not the viewing supplier.
    * Access to each screen is governed by its own privilege (they are separate
    * Object Master rows), so no further per-row filtering happens here.
    */
   async findAll(
     userId: number,
     companyId: number,
+    branchId: number | undefined,
     scope: 'sent' | 'received',
     isSuperAdmin: boolean,
   ) {
@@ -439,6 +443,9 @@ export class PurchaseOrderService {
       scope === 'sent'
         ? {
             orderingCompanyId: companyId,
+            // Only the branch that raised the order sees it; company-wide when
+            // no branch is active.
+            ...(branchId ? { orderingBranchId: branchId } : {}),
             ...(isSuperAdmin
               ? {}
               : {

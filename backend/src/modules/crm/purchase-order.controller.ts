@@ -56,10 +56,17 @@ export class PurchaseOrderController {
   findAll(
     @CurrentUser() user: AuthUser,
     @CompanyId() companyId: number | undefined,
+    @BranchId() branchId: number | undefined,
     @Query('scope') scope?: string,
   ) {
     const s = scope === 'received' ? 'received' : 'sent';
-    return this.service.findAll(user.id, companyId ?? 0, s, !!user.isSuperAdmin);
+    return this.service.findAll(
+      user.id,
+      companyId ?? 0,
+      branchId,
+      s,
+      !!user.isSuperAdmin,
+    );
   }
 
   /** Whether the current user may raise a new order (workflow-governed). */
