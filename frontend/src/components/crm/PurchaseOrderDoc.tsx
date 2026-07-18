@@ -49,6 +49,15 @@ export function PurchaseOrderDoc({
   // labelled at an old price can't be sold at a new one — so a figure here would
   // be a guess the goods then contradict. The priced document is the sales order.
   const totalQty = order.lines.reduce((s, l) => s + l.quantity, 0);
+  // The supplier's acceptance writes `acceptedQty` onto each line (0 for a
+  // cancelled one). Until that happens every line is null, so we surface the
+  // Accepted column only once the order has been processed — the requester's
+  // branch manager then sees exactly what was confirmed against what they asked.
+  const hasAccepted = order.lines.some((l) => l.acceptedQty != null);
+  const totalAccepted = order.lines.reduce(
+    (s, l) => s + (l.cancelled ? 0 : (l.acceptedQty ?? 0)),
+    0,
+  );
   const timeline = order.workflow?.timeline ?? [];
 
   return (
@@ -98,7 +107,12 @@ export function PurchaseOrderDoc({
             <tr className="border-b-2 border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700">
               <th className="w-10 py-2 pr-2">#</th>
               <th className="py-2 pr-2">Product</th>
-              <th className="w-24 py-2 text-right">Quantity</th>
+              <th className="w-24 py-2 text-right">
+                {hasAccepted ? 'Ordered' : 'Quantity'}
+              </th>
+              {hasAccepted && (
+                <th className="w-24 py-2 text-right">Accepted</th>
+              )}
               <th className="w-14 py-2 pl-2">Unit</th>
             </tr>
           </thead>
@@ -117,6 +131,25 @@ export function PurchaseOrderDoc({
                 <td className="py-2 text-right tabular-nums">
                   {l.quantity.toLocaleString()}
                 </td>
+                {hasAccepted && (
+                  <td className="py-2 text-right tabular-nums">
+                    {l.cancelled ? (
+                      <span className="text-rose-500">Cancelled</span>
+                    ) : l.acceptedQty == null ? (
+                      <span className="text-slate-400">—</span>
+                    ) : (
+                      <span
+                        className={
+                          l.acceptedQty < l.quantity
+                            ? 'font-medium text-amber-600 dark:text-amber-400'
+                            : 'font-medium text-emerald-600 dark:text-emerald-400'
+                        }
+                      >
+                        {l.acceptedQty.toLocaleString()}
+                      </span>
+                    )}
+                  </td>
+                )}
                 <td className="py-2 pl-2 text-slate-500">
                   {unitLabel(l.unitId)}
                 </td>
@@ -133,6 +166,11 @@ export function PurchaseOrderDoc({
               <td className="py-2 text-right tabular-nums">
                 {totalQty.toLocaleString()}
               </td>
+              {hasAccepted && (
+                <td className="py-2 text-right tabular-nums">
+                  {totalAccepted.toLocaleString()}
+                </td>
+              )}
               <td className="py-2" />
             </tr>
           </tfoot>
