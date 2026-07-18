@@ -11,6 +11,8 @@ import { MaterialRequestController } from './material-request.controller';
 import { MaterialRequestService } from './material-request.service';
 import { ProductionReceiptController } from './production-receipt.controller';
 import { ProductionReceiptService } from './production-receipt.service';
+import { PackingController } from './packing.controller';
+import { PackingService } from './packing.service';
 
 // USER_LOOKUP is injected from the @Global ContractsModule, so no import of the
 // User module is needed here — that keeps Production independently extractable.
@@ -24,6 +26,7 @@ import { ProductionReceiptService } from './production-receipt.service';
     ProductionPlanController,
     MaterialRequestController,
     ProductionReceiptController,
+    PackingController,
   ],
   providers: [
     ProductionService,
@@ -32,6 +35,7 @@ import { ProductionReceiptService } from './production-receipt.service';
     ProductionPlanService,
     MaterialRequestService,
     ProductionReceiptService,
+    PackingService,
   ],
 })
 export class ProductionModule {}

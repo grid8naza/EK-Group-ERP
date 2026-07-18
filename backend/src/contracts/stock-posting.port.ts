@@ -38,6 +38,33 @@ export interface ProductionReceiptPosting {
   lines: ProduceStockLine[];
 }
 
+/** A product consumed out of stock (e.g. a packed product's unpacked source). */
+export interface ConsumeProductLine {
+  productId: number;
+  quantity: number;
+}
+
+/** A raw/packing-material item consumed out of stock. */
+export interface ConsumeItemLine {
+  itemId: number;
+  quantity: number;
+}
+
+export interface PackingPosting {
+  companyId: number;
+  branchId: number | null;
+  storeId: number;
+  documentId: number;
+  documentNo: string;
+  date: string;
+  /** Packed products produced (new batches in). */
+  produce: ProduceStockLine[];
+  /** Unpacked source products consumed (out). */
+  consumeProducts: ConsumeProductLine[];
+  /** Packing-material items consumed (out). */
+  consumeItems: ConsumeItemLine[];
+}
+
 export interface StockPostingPort {
   /**
    * Bank produced finished goods into stock: one new batch per line, a
@@ -47,4 +74,11 @@ export interface StockPostingPort {
   postProductionReceipt(
     input: ProductionReceiptPosting,
   ): Promise<ProducedBatch[]>;
+
+  /**
+   * Post a packing operation: consume the unpacked source products and packing
+   * materials (stock-out, availability-checked), and produce the packed products
+   * as new batches (stock-in). Atomic — everything posts or nothing does.
+   */
+  postPacking(input: PackingPosting): Promise<ProducedBatch[]>;
 }

@@ -69,6 +69,8 @@ export const INVENTORY_TXN_MENU = {
 export const PRODUCTION_SUBS = [
   { name: 'Recipe Master', route: '/production/recipe-master', icon: 'list-tree', order: 1 },
   { name: 'Packing Master', route: '/production/packing-master', icon: 'package-check', order: 2 },
+  // Packing operations — pack unpacked products into packed ones (consumes source).
+  { name: 'Packing', route: '/production/packing', icon: 'box', order: 9 },
   // Production divisions — org units (Bakery, Pastry, …) that own primary groups.
   { name: 'Production Division', route: '/production/divisions', icon: 'factory', order: 3 },
   // Work Orders — what must be made to fulfil approved sales orders.

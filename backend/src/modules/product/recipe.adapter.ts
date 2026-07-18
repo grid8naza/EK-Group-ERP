@@ -2,6 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   MaterialNeed,
+  PackConsumeItem,
+  PackConsumeProduct,
+  PackingExplosion,
   PlannedProduct,
   RecipeDemand,
   RecipeExplosion,
@@ -92,6 +95,100 @@ export class RecipeAdapter implements RecipePort {
     }));
 
     return { products: plannedProducts, materials };
+  }
+
+  async explodePacking(
+    _companyId: number,
+    demand: RecipeDemand[],
+  ): Promise<PackingExplosion> {
+    const productIds = [...new Set(demand.map((d) => d.productId))];
+    if (!productIds.length)
+      return { produce: [], consumeProducts: [], consumeItems: [] };
+
+    const [products, packSources, packBom] = await Promise.all([
+      this.prisma.product.findMany({
+        where: { id: { in: productIds } },
+        select: { id: true, name: true, unitId: true, yieldQty: true },
+      }),
+      this.prisma.productPackSource.findMany({
+        where: { productId: { in: productIds } },
+        select: { productId: true, sourceProductId: true, quantity: true },
+      }),
+      // Packing materials — the PACKING bill of materials (not RECIPE).
+      this.prisma.productBomLine.findMany({
+        where: { productId: { in: productIds }, kind: 'PACKING' },
+        select: { productId: true, itemId: true, quantity: true, unitId: true },
+      }),
+    ]);
+
+    const qtyOf = new Map(demand.map((d) => [d.productId, d.quantity]));
+    const batchesOf = new Map(
+      products.map((p) => [p.id, (qtyOf.get(p.id) ?? 0) / (p.yieldQty || 1)]),
+    );
+
+    const produce = products.map((p) => ({
+      productId: p.id,
+      productName: p.name,
+      quantity: qtyOf.get(p.id) ?? 0,
+      unitId: p.unitId,
+    }));
+
+    // Aggregate source-product consumption by source product.
+    const srcMap = new Map<number, number>();
+    for (const s of packSources) {
+      const batches = batchesOf.get(s.productId) ?? 0;
+      if (batches <= 0) continue;
+      srcMap.set(
+        s.sourceProductId,
+        (srcMap.get(s.sourceProductId) ?? 0) + s.quantity * batches,
+      );
+    }
+    const srcIds = [...srcMap.keys()];
+    const srcProducts = srcIds.length
+      ? await this.prisma.product.findMany({
+          where: { id: { in: srcIds } },
+          select: { id: true, name: true, unitId: true },
+        })
+      : [];
+    const srcById = new Map(srcProducts.map((p) => [p.id, p]));
+    const consumeProducts: PackConsumeProduct[] = srcIds.map((id) => ({
+      productId: id,
+      productName: srcById.get(id)?.name ?? `#${id}`,
+      quantity: srcMap.get(id) ?? 0,
+      unitId: srcById.get(id)?.unitId ?? 0,
+    }));
+
+    // Aggregate packing-material consumption by item + unit.
+    const itemMap = new Map<string, PackConsumeItem>();
+    for (const b of packBom) {
+      const batches = batchesOf.get(b.productId) ?? 0;
+      if (batches <= 0) continue;
+      const key = `${b.itemId}:${b.unitId}`;
+      const cur = itemMap.get(key);
+      const need = b.quantity * batches;
+      if (cur) cur.quantity += need;
+      else
+        itemMap.set(key, {
+          itemId: b.itemId,
+          itemName: '',
+          quantity: need,
+          unitId: b.unitId,
+        });
+    }
+    const itemIds = [...new Set([...itemMap.values()].map((m) => m.itemId))];
+    const items = itemIds.length
+      ? await this.prisma.item.findMany({
+          where: { id: { in: itemIds } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const itemName = new Map(items.map((i) => [i.id, i.name]));
+    const consumeItems = [...itemMap.values()].map((m) => ({
+      ...m,
+      itemName: itemName.get(m.itemId) ?? `#${m.itemId}`,
+    }));
+
+    return { produce, consumeProducts, consumeItems };
   }
 
   /** Map each leaf groupId to its root (level-1 / no-parent) group by walking up. */

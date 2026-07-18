@@ -159,6 +159,48 @@ model ProductionDivision {
   @@map("production_divisions")
 }
 
+/// A Packing operation — turns unpacked products into packed, sellable ones.
+/// Each packed line consumes its unpacked source(s) and packing materials from
+/// stock and banks the packed product as a new batch. Cross-domain ids are plain.
+model Packing {
+  id              Int      @id @default(autoincrement())
+  companyId       Int
+  branchId        Int?
+  packingNo       String // PK-#### per company
+  storeId         Int? // -> inventory Store (source consumed / packed banked)
+  storeName       String? // snapshot
+  packingDate     DateTime @default(now())
+  notes           String?
+  isLocked        Boolean  @default(false)
+  createdByUserId Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  lines PackingLine[]
+
+  @@unique([companyId, packingNo])
+  @@index([companyId])
+  @@map("packings")
+}
+
+/// One packed product produced by a packing operation, and the batch it became.
+model PackingLine {
+  id          Int       @id @default(autoincrement())
+  packingId   Int
+  productId   Int // the packed product (plain id -> inventory Product)
+  productName String // snapshot
+  quantity    Float
+  unitId      Int // -> Unit (plain id)
+  batchId     Int? // -> inventory StockBatch (the packed batch)
+  batchNo     String? // snapshot
+  expiryDate  DateTime?
+
+  packing Packing @relation(fields: [packingId], references: [id], onDelete: Cascade)
+
+  @@index([packingId])
+  @@map("packing_lines")
+}
+
 /// Lifecycle of a Production Plan.
 enum ProductionPlanStatus {
   DRAFT // built from pending work orders, under review

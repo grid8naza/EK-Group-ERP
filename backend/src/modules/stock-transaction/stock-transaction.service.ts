@@ -15,6 +15,7 @@ import { assertUnlocked } from '../../common/assert-unlocked';
 import { assertBatchesFree } from '../../common/assert-batches-free';
 import { STOCK, StockPort } from '../../contracts/stock.port';
 import {
+  PackingPosting,
   ProducedBatch,
   ProductionReceiptPosting,
 } from '../../contracts/stock-posting.port';
@@ -189,6 +190,195 @@ export class StockTransactionService {
         });
       }
       return out;
+    });
+  }
+
+  /**
+   * Post a packing operation: consume the unpacked source products and packing
+   * materials (stock-out, availability-checked), then produce the packed
+   * products as new batches (stock-in). Atomic.
+   */
+  async postPacking(input: PackingPosting): Promise<ProducedBatch[]> {
+    const {
+      companyId,
+      branchId,
+      storeId,
+      documentId,
+      documentNo,
+      date,
+      produce,
+      consumeProducts,
+      consumeItems,
+    } = input;
+    if (!produce.length) return [];
+
+    const docDate = new Date(date);
+    const companyCode = await this.companyCode(companyId);
+    const ymd = this.ymd(date);
+    const ruleBatchNos = await this.ruleBatchNumbers(
+      companyId,
+      branchId,
+      produce.length,
+      docDate,
+    );
+    const base = await this.prisma.stockBatch.count({
+      where: { companyId, batchNo1: { startsWith: `${companyCode}-${ymd}-` } },
+    });
+    const productIds = [...new Set(produce.map((l) => l.productId))];
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: {
+        id: true,
+        categoryId: true,
+        groupId: true,
+        unitId: true,
+        shelfLife: true,
+        costPrice: true,
+        intercompanyPrice: true,
+        wholesalePrice: true,
+        retailPrice: true,
+      },
+    });
+    const prodById = new Map(products.map((p) => [p.id, p]));
+
+    return this.prisma.$transaction(async (tx) => {
+      // CONSUME the unpacked source products and packing materials.
+      for (const c of consumeProducts) {
+        await this.consumeStock(tx, {
+          companyId,
+          branchId,
+          storeId,
+          documentId,
+          documentNo,
+          docDate,
+          productId: c.productId,
+          itemId: null,
+          quantity: c.quantity,
+        });
+      }
+      for (const c of consumeItems) {
+        await this.consumeStock(tx, {
+          companyId,
+          branchId,
+          storeId,
+          documentId,
+          documentNo,
+          docDate,
+          productId: null,
+          itemId: c.itemId,
+          quantity: c.quantity,
+        });
+      }
+
+      // PRODUCE the packed products (new batch each).
+      const out: ProducedBatch[] = [];
+      for (let i = 0; i < produce.length; i++) {
+        const line = produce[i];
+        const p = prodById.get(line.productId);
+        if (!p) throw new BadRequestException('Product not found.');
+        const primaryGroupId = await this.primaryGroup(p.groupId);
+        const expiry = line.expiryDate
+          ? new Date(line.expiryDate)
+          : p.shelfLife > 0
+            ? new Date(docDate.getTime() + p.shelfLife * 86400000)
+            : null;
+        const batchNo1 =
+          ruleBatchNos?.[i] ??
+          `${companyCode}-${ymd}-${String(base + i + 1).padStart(4, '0')}`;
+        const batch = await tx.stockBatch.create({
+          data: {
+            companyId,
+            batchNo1,
+            productId: line.productId,
+            expiryDate: expiry,
+          },
+        });
+        await tx.stockLedger.create({
+          data: {
+            date: docDate,
+            companyId,
+            branchId,
+            storeId,
+            transactionType: StockTxnType.PRODUCTION,
+            documentId,
+            documentNo,
+            categoryId: p.categoryId,
+            primaryGroupId,
+            parentGroupId: p.groupId,
+            productId: line.productId,
+            batchId: batch.id,
+            batchNo1,
+            expiryDate: expiry,
+            qtyIn: line.quantity,
+            qtyOut: 0,
+            unitId: p.unitId,
+            unitPrice: p.costPrice,
+            costPrice: p.costPrice,
+            intercompanyPrice: p.intercompanyPrice,
+            wholesalePrice: p.wholesalePrice,
+            retailPrice: p.retailPrice,
+          },
+        });
+        out.push({
+          productId: line.productId,
+          batchId: batch.id,
+          batchNo: batchNo1,
+          quantity: line.quantity,
+          unitId: p.unitId,
+          expiryDate: expiry ? expiry.toISOString() : null,
+        });
+      }
+      return out;
+    });
+  }
+
+  /** Post one CONSUMPTION stock-out line, availability-checked at the store. */
+  private async consumeStock(
+    tx: Prisma.TransactionClient,
+    o: {
+      companyId: number;
+      branchId: number | null;
+      storeId: number;
+      documentId: number;
+      documentNo: string;
+      docDate: Date;
+      productId: number | null;
+      itemId: number | null;
+      quantity: number;
+    },
+  ): Promise<void> {
+    if (o.quantity <= 0) return;
+    const cls = await this.classify(o.itemId, o.productId);
+    const avail = await this.availableStock(
+      tx,
+      o.companyId,
+      o.storeId,
+      o.itemId,
+      o.productId,
+    );
+    if (o.quantity > avail) {
+      throw new BadRequestException(
+        `Insufficient stock to consume: ${avail} available, ${o.quantity} needed.`,
+      );
+    }
+    await tx.stockLedger.create({
+      data: {
+        date: o.docDate,
+        companyId: o.companyId,
+        branchId: o.branchId,
+        storeId: o.storeId,
+        transactionType: StockTxnType.CONSUMPTION,
+        documentId: o.documentId,
+        documentNo: o.documentNo,
+        categoryId: cls.categoryId,
+        primaryGroupId: cls.primaryGroupId,
+        parentGroupId: cls.parentGroupId,
+        itemId: o.itemId,
+        productId: o.productId,
+        qtyIn: 0,
+        qtyOut: o.quantity,
+        unitId: cls.unitId,
+      },
     });
   }
 

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import {
+  PackingPosting,
   ProducedBatch,
   ProductionReceiptPosting,
   StockPostingPort,
@@ -19,5 +20,9 @@ export class StockPostingAdapter implements StockPostingPort {
     input: ProductionReceiptPosting,
   ): Promise<ProducedBatch[]> {
     return this.service.postProductionReceipt(input);
+  }
+
+  postPacking(input: PackingPosting): Promise<ProducedBatch[]> {
+    return this.service.postPacking(input);
   }
 }

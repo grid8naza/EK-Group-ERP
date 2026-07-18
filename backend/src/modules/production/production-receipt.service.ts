@@ -10,6 +10,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
 import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
 import {
+  ProducedBatch,
   STOCK_POSTING,
   StockPostingPort,
 } from '../../contracts/stock-posting.port';
@@ -129,15 +130,22 @@ export class ProductionReceiptService {
       }),
     );
 
-    const batches = await this.posting.postProductionReceipt({
-      companyId,
-      branchId: branchId ?? null,
-      storeId: store.id,
-      documentId: header.id,
-      documentNo: header.receiptNo,
-      date: new Date().toISOString(),
-      lines: produce,
-    });
+    let batches: ProducedBatch[];
+    try {
+      batches = await this.posting.postProductionReceipt({
+        companyId,
+        branchId: branchId ?? null,
+        storeId: store.id,
+        documentId: header.id,
+        documentNo: header.receiptNo,
+        date: new Date().toISOString(),
+        lines: produce,
+      });
+    } catch (e) {
+      // Don't leave an empty receipt behind if the stock posting fails.
+      await this.prisma.productionReceipt.delete({ where: { id: header.id } });
+      throw e;
+    }
     const batchOf = new Map(batches.map((b) => [b.productId, b]));
 
     const nameById = new Map(

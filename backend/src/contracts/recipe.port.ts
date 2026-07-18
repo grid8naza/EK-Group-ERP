@@ -36,6 +36,36 @@ export interface RecipeExplosion {
   materials: MaterialNeed[];
 }
 
+/** A packed product to produce by packing. */
+export interface PackProduce {
+  productId: number;
+  productName: string;
+  quantity: number;
+  unitId: number;
+}
+
+/** An unpacked source product consumed by packing. */
+export interface PackConsumeProduct {
+  productId: number;
+  productName: string;
+  quantity: number;
+  unitId: number;
+}
+
+/** A packing-material item consumed by packing. */
+export interface PackConsumeItem {
+  itemId: number;
+  itemName: string;
+  quantity: number;
+  unitId: number;
+}
+
+export interface PackingExplosion {
+  produce: PackProduce[];
+  consumeProducts: PackConsumeProduct[];
+  consumeItems: PackConsumeItem[];
+}
+
 export interface RecipePort {
   /**
    * Explode the demand: for each product, take its recipe BOM scaled by
@@ -44,4 +74,14 @@ export interface RecipePort {
    * level — recipe ingredients are Items, not sub-manufactured products.
    */
   explode(companyId: number, demand: RecipeDemand[]): Promise<RecipeExplosion>;
+
+  /**
+   * Explode a PACKING demand: for each packed product, scale its pack sources
+   * (unpacked products) and packing BOM (materials) by quantity / yield, and
+   * aggregate what must be consumed to produce the packed quantity.
+   */
+  explodePacking(
+    companyId: number,
+    demand: RecipeDemand[],
+  ): Promise<PackingExplosion>;
 }

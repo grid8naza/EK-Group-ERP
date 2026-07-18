@@ -1018,6 +1018,34 @@ export interface ProductionPlan {
   workOrders?: { id: number; orderNo: string; soNumber?: string | null }[];
 }
 
+// ---- Production: Packing ----
+export interface PackingLine {
+  id: number;
+  productId: number;
+  productName: string;
+  quantity: number;
+  unitId: number;
+  batchId?: number | null;
+  batchNo?: string | null;
+  expiryDate?: string | null;
+}
+
+/** A packing operation — packed products banked, unpacked source consumed. */
+export interface Packing {
+  id: number;
+  companyId: number;
+  branchId?: number | null;
+  packingNo: string;
+  storeId?: number | null;
+  storeName?: string | null;
+  packingDate: string;
+  notes?: string | null;
+  isLocked?: boolean;
+  createdByUserId: number;
+  createdAt: string;
+  lines: PackingLine[];
+}
+
 // ---- Production: Production Receipt ----
 export interface ProductionReceiptLine {
   id: number;
