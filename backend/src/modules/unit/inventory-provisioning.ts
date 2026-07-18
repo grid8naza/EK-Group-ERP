@@ -75,12 +75,14 @@ export const PRODUCTION_SUBS = [
   { name: 'Work Order', route: '/production/work-orders', icon: 'hammer', order: 4 },
   // Production Plan — clubs pending work orders, grouped by division.
   { name: 'Production Plan', route: '/production/plans', icon: 'clipboard-list', order: 5 },
+  // Material Request — the store requisition for each division's raw materials.
+  { name: 'Material Request', route: '/production/material-requests', icon: 'clipboard-check', order: 6 },
   // Per-module reference data. Super-admin-only; isolated from other modules.
   {
     name: 'Lookups',
     route: '/production/lookups',
     icon: 'list',
-    order: 6,
+    order: 7,
     superAdminOnly: true,
   },
 ];

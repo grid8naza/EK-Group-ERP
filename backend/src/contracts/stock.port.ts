@@ -21,6 +21,15 @@ export interface StockOnHand {
   unitId: number;
 }
 
+/** What a company holds of one raw-material Item, optionally at one store. */
+export interface ItemStockOnHand {
+  itemId: number;
+  /** Physical quantity (SUM qtyIn - qtyOut), across the store(s) asked about. */
+  onHand: number;
+  /** The item's stock unit, or null if the item is unknown. */
+  unitId: number | null;
+}
+
 /** A line asking to hold `quantity` of `productId`. */
 export interface ReserveRequestLine {
   /** The caller's line id — reservations are keyed to it, and released by it. */
@@ -105,6 +114,17 @@ export interface StockPort {
     productIds: number[],
     forDocument?: { documentType: string; documentId: number },
   ): Promise<StockOnHand[]>;
+
+  /**
+   * On-hand per raw-material Item for a company, optionally scoped to one store.
+   * Raw materials carry no reservations, so on-hand is what is available. Items
+   * with no ledger history come back as zero, so the caller gets a row per item.
+   */
+  onHandForItems(
+    companyId: number,
+    itemIds: number[],
+    storeId?: number,
+  ): Promise<ItemStockOnHand[]>;
 
   /**
    * Hold stock for a document's lines, oldest-expiry-first across every store of

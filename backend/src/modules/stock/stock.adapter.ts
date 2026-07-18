@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   BatchHold,
+  ItemStockOnHand,
   ReservationDetail,
   ReserveRequest,
   ReserveResultLine,
@@ -26,6 +27,14 @@ export class StockAdapter implements StockPort {
     forDocument?: { documentType: string; documentId: number },
   ): Promise<StockOnHand[]> {
     return this.stock.onHandFor(companyId, productIds, forDocument);
+  }
+
+  onHandForItems(
+    companyId: number,
+    itemIds: number[],
+    storeId?: number,
+  ): Promise<ItemStockOnHand[]> {
+    return this.stock.onHandForItems(companyId, itemIds, storeId);
   }
 
   reserveFefo(input: ReserveRequest): Promise<ReserveResultLine[]> {

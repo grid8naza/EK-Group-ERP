@@ -1018,6 +1018,39 @@ export interface ProductionPlan {
   workOrders?: { id: number; orderNo: string; soNumber?: string | null }[];
 }
 
+// ---- Production: Material Request ----
+export type MaterialRequestStatus = 'DRAFT' | 'ISSUED' | 'CANCELLED';
+
+export interface MaterialRequestLine {
+  id: number;
+  itemId: number;
+  itemName: string;
+  requiredQty: number;
+  /** On-hand at the store when the request was raised (snapshot). */
+  availableQty: number;
+  unitId: number;
+}
+
+/** A store requisition for one division's raw materials, raised from a plan. */
+export interface MaterialRequest {
+  id: number;
+  companyId: number;
+  branchId?: number | null;
+  requestNo: string;
+  productionPlanId?: number | null;
+  planNo?: string | null;
+  divisionId?: number | null;
+  divisionName?: string | null;
+  storeId?: number | null;
+  storeName?: string | null;
+  status: MaterialRequestStatus;
+  notes?: string | null;
+  isLocked?: boolean;
+  createdByUserId: number;
+  createdAt: string;
+  lines: MaterialRequestLine[];
+}
+
 // ---- Production: Divisions ----
 /** A production division (Bakery, Pastry, …) that owns primary product groups. */
 export interface ProductionDivision {

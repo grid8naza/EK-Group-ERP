@@ -56,10 +56,12 @@ export default function ProductionPlansPage() {
   const [open, setOpen] = useState(false);
   const [current, setCurrent] = useState<ProductionPlan | null>(null);
   const [creating, setCreating] = useState(false);
+  const [raising, setRaising] = useState(false);
 
   const canAdd = can(ROUTE, 'add');
   const canView = can(ROUTE, 'view');
   const canDelete = can(ROUTE, 'delete');
+  const canRaiseMR = can('/production/material-requests', 'add');
 
   const unitById = useMemo(
     () => new Map((units ?? []).map((u) => [u.id, u])),
@@ -105,6 +107,33 @@ export default function ProductionPlansPage() {
       toast.error(e instanceof ApiError ? e.message : 'Failed to create plan.');
     } finally {
       setCreating(false);
+    }
+  };
+
+  const raiseMaterialRequests = async () => {
+    if (!current) return;
+    const ok = await confirm({
+      title: 'Raise material requests?',
+      message: `Raise the store material requests for ${current.planNo} — one per division, listing the raw materials each needs?`,
+      confirmText: 'Yes',
+      cancelText: 'No',
+    });
+    if (!ok) return;
+    setRaising(true);
+    try {
+      const mrs = await api.post<unknown[]>(
+        `/material-requests/from-plan/${current.id}`,
+        {},
+      );
+      toast.success(
+        `${mrs.length} material request${mrs.length === 1 ? '' : 's'} raised — see the Material Request screen.`,
+      );
+    } catch (e) {
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to raise material requests.',
+      );
+    } finally {
+      setRaising(false);
     }
   };
 
@@ -245,6 +274,18 @@ export default function ProductionPlansPage() {
               />
               <Field label="Created" value={fmt(current.createdAt)} />
             </div>
+
+            {canRaiseMR && (
+              <div>
+                <button
+                  className="btn-primary"
+                  onClick={raiseMaterialRequests}
+                  disabled={raising}
+                >
+                  <ClipboardList className="h-4 w-4" /> Raise Material Requests
+                </button>
+              </div>
+            )}
 
             {/* Products to make, grouped by division */}
             <div>

@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   BatchHold,
+  ItemStockOnHand,
   ReservationDetail,
   ReserveRequest,
   ReserveResultLine,
@@ -103,6 +104,47 @@ export class StockService {
         unitId: unitOf.get(productId) ?? 0,
       };
     });
+  }
+
+  /**
+   * On-hand per raw-material Item, optionally at one store. Raw materials carry
+   * no reservations, so on-hand IS available. Mirrors onHandFor but keyed on the
+   * item side of the ledger (StockBatch/StockLedger carry itemId OR productId).
+   */
+  async onHandForItems(
+    companyId: number,
+    itemIds: number[],
+    storeId?: number,
+  ): Promise<ItemStockOnHand[]> {
+    const ids = [...new Set(itemIds)];
+    if (!ids.length) return [];
+
+    const [ledger, items] = await Promise.all([
+      this.prisma.stockLedger.groupBy({
+        by: ['itemId'],
+        where: {
+          companyId,
+          itemId: { in: ids },
+          ...(storeId ? { storeId } : {}),
+        },
+        _sum: { qtyIn: true, qtyOut: true },
+      }),
+      this.prisma.item.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, unitId: true },
+      }),
+    ]);
+
+    const onHandOf = new Map(
+      ledger.map((r) => [r.itemId!, (r._sum.qtyIn ?? 0) - (r._sum.qtyOut ?? 0)]),
+    );
+    const unitOf = new Map(items.map((i) => [i.id, i.unitId]));
+
+    return ids.map((itemId) => ({
+      itemId,
+      onHand: onHandOf.get(itemId) ?? 0,
+      unitId: unitOf.get(itemId) ?? null,
+    }));
   }
 
   /**

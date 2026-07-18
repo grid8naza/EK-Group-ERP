@@ -7,6 +7,8 @@ import { ProductionDivisionController } from './production-division.controller';
 import { ProductionDivisionService } from './production-division.service';
 import { ProductionPlanController } from './production-plan.controller';
 import { ProductionPlanService } from './production-plan.service';
+import { MaterialRequestController } from './material-request.controller';
+import { MaterialRequestService } from './material-request.service';
 
 // USER_LOOKUP is injected from the @Global ContractsModule, so no import of the
 // User module is needed here — that keeps Production independently extractable.
@@ -18,12 +20,14 @@ import { ProductionPlanService } from './production-plan.service';
     WorkOrderController,
     ProductionDivisionController,
     ProductionPlanController,
+    MaterialRequestController,
   ],
   providers: [
     ProductionService,
     WorkOrderService,
     ProductionDivisionService,
     ProductionPlanService,
+    MaterialRequestService,
   ],
 })
 export class ProductionModule {}

@@ -136,13 +136,68 @@ model ProductionPlan {
   createdAt       DateTime             @default(now())
   updatedAt       DateTime             @updatedAt
 
-  lines      ProductionPlanLine[]
-  materials  ProductionPlanMaterial[]
-  workOrders WorkOrder[]
+  lines            ProductionPlanLine[]
+  materials        ProductionPlanMaterial[]
+  workOrders       WorkOrder[]
+  materialRequests MaterialRequest[]
 
   @@unique([companyId, planNo])
   @@index([companyId, status])
   @@map("production_plans")
+}
+
+/// Lifecycle of a Material Request (store requisition).
+enum MaterialRequestStatus {
+  DRAFT // raised from a plan, awaiting store issue
+  ISSUED // store has issued the materials to the factory
+  CANCELLED
+}
+
+/// A Material Request — the requisition operations sends to the store for the
+/// raw materials one production division needs. Raised from a Production Plan,
+/// one per division, aggregating that division's products' recipe materials.
+model MaterialRequest {
+  id               Int                   @id @default(autoincrement())
+  companyId        Int
+  branchId         Int?
+  requestNo        String // MR-#### per company
+  productionPlanId Int?
+  planNo           String? // snapshot
+  divisionId       Int? // -> ProductionDivision (null = unassigned products)
+  divisionName     String? // snapshot
+  storeId          Int? // -> inventory Store the materials are requested from
+  storeName        String? // snapshot
+  status           MaterialRequestStatus @default(DRAFT)
+  notes            String?
+  isLocked         Boolean               @default(false)
+  createdByUserId  Int
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  lines MaterialRequestLine[]
+  plan  ProductionPlan?       @relation(fields: [productionPlanId], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, requestNo])
+  @@index([companyId, status])
+  @@index([productionPlanId])
+  @@map("material_requests")
+}
+
+/// One requested raw-material line: how much is needed and how much the store
+/// had on hand when the request was raised (snapshot, for the shortfall).
+model MaterialRequestLine {
+  id           Int    @id @default(autoincrement())
+  requestId    Int
+  itemId       Int // -> inventory Item (plain id)
+  itemName     String // snapshot
+  requiredQty  Float
+  availableQty Float  @default(0) // on-hand at the store when raised (snapshot)
+  unitId       Int // -> Unit (plain id)
+
+  request MaterialRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+  @@map("material_request_lines")
 }
 
 /// One planned product line: aggregated demand across the clubbed work orders,
