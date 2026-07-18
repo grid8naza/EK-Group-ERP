@@ -180,3 +180,67 @@ model SalesOrderLine {
   @@index([orderId])
   @@map("sales_order_lines")
 }
+
+/// Lifecycle of a Dispatch (goods shipped against a sales order).
+enum DispatchStatus {
+  DISPATCHED // shipped from the seller; documents generated
+  RECEIVED // the buyer confirmed receipt (intercompany only)
+  CANCELLED
+}
+
+/// A Dispatch — the seller ships goods against an approved sales order (ICSO).
+/// Stock goes OUT of the source store and the documents that travel with the
+/// goods (tax invoice, delivery note, e-way bill) are generated. For an
+/// intercompany buyer the goods are later received (GRN + stock-in) on the buyer
+/// side; for an external customer it is stock-out only. Cross-domain ids plain.
+model Dispatch {
+  id              Int            @id @default(autoincrement())
+  companyId       Int // the SELLER (owns the sales order)
+  branchId        Int?
+  dispatchNo      String // DSP-#### per company
+  salesOrderId    Int            @unique // the ICSO dispatched (one dispatch per order)
+  soNumber        String? // snapshot
+  buyerCompanyId  Int? // internal EK Group buyer; null = external customer
+  buyerBranchId   Int?
+  storeId         Int? // source store shipped from
+  storeName       String? // snapshot
+  // Documents that accompany the goods (driver carries them).
+  invoiceNo       String?
+  deliveryNoteNo  String?
+  ewayBillNo      String?
+  driverName      String?
+  vehicleNo       String?
+  dispatchDate    DateTime       @default(now())
+  subtotal        Float          @default(0) // sum(qty x rate); GST wired later
+  status          DispatchStatus @default(DISPATCHED)
+  notes           String?
+  isLocked        Boolean        @default(false)
+  createdByUserId Int
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  lines DispatchLine[]
+
+  @@unique([companyId, dispatchNo])
+  @@index([companyId, status])
+  @@map("dispatches")
+}
+
+/// One shipped line of a Dispatch.
+model DispatchLine {
+  id          Int     @id @default(autoincrement())
+  dispatchId  Int
+  productId   Int // -> inventory Product (plain id)
+  productName String // snapshot
+  quantity    Float
+  unitId      Int // -> Unit (plain id)
+  rate        Float   @default(0)
+  amount      Float   @default(0) // quantity x rate
+  batchId     Int? // -> inventory StockBatch (the batch that ships, if known)
+  batchNo     String? // snapshot
+
+  dispatch Dispatch @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
+
+  @@index([dispatchId])
+  @@map("dispatch_lines")
+}

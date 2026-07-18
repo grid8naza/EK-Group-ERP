@@ -19,6 +19,7 @@ import {
 import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
 import { STOCK, StockPort } from '../../contracts/stock.port';
 import { WORK_ORDER, WorkOrderPort } from '../../contracts/work-order.port';
+import { DispatchService } from './dispatch.service';
 import {
   ActSalesOrderDto,
   SalesOrderLineInput,
@@ -55,6 +56,7 @@ export class SalesOrderService {
     @Inject(NUMBERING) private readonly numbering: NumberingPort,
     @Inject(STOCK) private readonly stock: StockPort,
     @Inject(WORK_ORDER) private readonly workOrders: WorkOrderPort,
+    private readonly dispatch: DispatchService,
   ) {}
 
   /**
@@ -402,12 +404,17 @@ export class SalesOrderService {
     // The production work order this order has raised (once approved), so the
     // screen can show "Work order WO-#### created" instead of the convert button.
     const workOrder = await this.workOrders.getForSalesOrder(order.id);
+    // The dispatch raised for this order, so the screen can show "Dispatched"
+    // instead of the dispatch button.
+    const dispatch = await this.dispatch.getForSalesOrder(order.id);
 
     return {
       ...order,
       total: this.orderTotal(order.lines),
       workOrderId: workOrder?.id ?? null,
       workOrderNo: workOrder?.orderNo ?? null,
+      dispatchId: dispatch?.id ?? null,
+      dispatchNo: dispatch?.dispatchNo ?? null,
       workflow,
       viewer: {
         isCreator,

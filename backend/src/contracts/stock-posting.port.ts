@@ -65,6 +65,22 @@ export interface PackingPosting {
   consumeItems: ConsumeItemLine[];
 }
 
+/** A product shipped out on a dispatch. */
+export interface DispatchStockLine {
+  productId: number;
+  quantity: number;
+}
+
+export interface DispatchPosting {
+  companyId: number;
+  branchId: number | null;
+  storeId: number;
+  documentId: number;
+  documentNo: string;
+  date: string;
+  lines: DispatchStockLine[];
+}
+
 export interface StockPostingPort {
   /**
    * Bank produced finished goods into stock: one new batch per line, a
@@ -81,4 +97,10 @@ export interface StockPostingPort {
    * as new batches (stock-in). Atomic — everything posts or nothing does.
    */
   postPacking(input: PackingPosting): Promise<ProducedBatch[]>;
+
+  /**
+   * Ship goods out on a dispatch: a SALE stock-out per product at the source
+   * store, availability-checked. Atomic.
+   */
+  postDispatch(input: DispatchPosting): Promise<void>;
 }

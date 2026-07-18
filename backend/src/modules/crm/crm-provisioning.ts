@@ -19,4 +19,6 @@
 export const CRM_SUBS = [
   { name: 'ICPO - Received', route: '/crm/icpo-received', icon: 'inbox', order: 1 },
   { name: 'ICSO', route: '/crm/icso', icon: 'clipboard-list', order: 2 },
+  // Dispatch — ship an approved sales order; invoice + delivery note + e-way bill.
+  { name: 'Dispatch', route: '/crm/dispatch', icon: 'truck', order: 3 },
 ];

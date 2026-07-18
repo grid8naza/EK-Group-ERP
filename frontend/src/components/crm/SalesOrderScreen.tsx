@@ -10,6 +10,7 @@ import {
   X,
   Ban,
   Hammer,
+  Truck,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
@@ -139,6 +140,7 @@ export function SalesOrderScreen() {
   const [comment, setComment] = useState('');
   const [acting, setActing] = useState(false);
   const [creatingWO, setCreatingWO] = useState(false);
+  const [dispatching, setDispatching] = useState(false);
   const myTask = current?.workflow?.myTask ?? null;
 
   // ---- editable draft form ----
@@ -343,6 +345,32 @@ export function SalesOrderScreen() {
     }
   };
 
+  // Ship the goods against an approved order. Stays on the document and reloads,
+  // so the button becomes the "dispatched" note.
+  const doDispatch = async () => {
+    if (!current) return;
+    const ok = await confirm({
+      title: 'Dispatch order?',
+      message: `Ship ${current.orderNo}? Stock leaves the store and the invoice, delivery note and e-way bill are generated.`,
+      confirmText: 'Yes',
+      cancelText: 'No',
+    });
+    if (!ok) return;
+    setDispatching(true);
+    try {
+      const d = await api.post<{ dispatchNo: string }>(
+        `/dispatches/from-sales-order/${current.id}`,
+        {},
+      );
+      toast.success(`Dispatch ${d.dispatchNo} created.`);
+      await loadOrder(current.id);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Failed to dispatch.');
+    } finally {
+      setDispatching(false);
+    }
+  };
+
   // ---- list columns ----
   const columns: Column<SalesOrder>[] = [
     { key: 'orderNo', header: 'Order No', accessor: (r) => r.orderNo },
@@ -490,6 +518,26 @@ export function SalesOrderScreen() {
                       disabled={creatingWO}
                     >
                       <Hammer className="h-4 w-4" /> Create Work Order
+                    </button>
+                  )
+                ))}
+              {/* Once approved, ship the goods (stock-out + travelling docs). */}
+              {current?.status === 'APPROVED' &&
+                (current.dispatchId ? (
+                  <span className="text-sm text-slate-500">
+                    Dispatched{' '}
+                    <span className="font-medium text-slate-700 dark:text-slate-200">
+                      {current.dispatchNo}
+                    </span>
+                  </span>
+                ) : (
+                  can('/crm/dispatch', 'add') && (
+                    <button
+                      className="btn-primary"
+                      onClick={doDispatch}
+                      disabled={dispatching}
+                    >
+                      <Truck className="h-4 w-4" /> Dispatch
                     </button>
                   )
                 ))}

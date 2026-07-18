@@ -15,6 +15,7 @@ import { assertUnlocked } from '../../common/assert-unlocked';
 import { assertBatchesFree } from '../../common/assert-batches-free';
 import { STOCK, StockPort } from '../../contracts/stock.port';
 import {
+  DispatchPosting,
   PackingPosting,
   ProducedBatch,
   ProductionReceiptPosting,
@@ -332,7 +333,34 @@ export class StockTransactionService {
     });
   }
 
-  /** Post one CONSUMPTION stock-out line, availability-checked at the store. */
+  /**
+   * Ship goods out on a dispatch — a SALE stock-out per product at the source
+   * store, availability-checked. Atomic.
+   */
+  async postDispatch(input: DispatchPosting): Promise<void> {
+    const { companyId, branchId, storeId, documentId, documentNo, date, lines } =
+      input;
+    if (!lines.length) return;
+    const docDate = new Date(date);
+    await this.prisma.$transaction(async (tx) => {
+      for (const l of lines) {
+        await this.consumeStock(tx, {
+          companyId,
+          branchId,
+          storeId,
+          documentId,
+          documentNo,
+          docDate,
+          productId: l.productId,
+          itemId: null,
+          quantity: l.quantity,
+          txnType: StockTxnType.SALE,
+        });
+      }
+    });
+  }
+
+  /** Post one stock-out line (CONSUMPTION by default), availability-checked. */
   private async consumeStock(
     tx: Prisma.TransactionClient,
     o: {
@@ -345,6 +373,7 @@ export class StockTransactionService {
       productId: number | null;
       itemId: number | null;
       quantity: number;
+      txnType?: StockTxnType;
     },
   ): Promise<void> {
     if (o.quantity <= 0) return;
@@ -358,7 +387,7 @@ export class StockTransactionService {
     );
     if (o.quantity > avail) {
       throw new BadRequestException(
-        `Insufficient stock to consume: ${avail} available, ${o.quantity} needed.`,
+        `Insufficient stock to ship: ${avail} available, ${o.quantity} needed.`,
       );
     }
     await tx.stockLedger.create({
@@ -367,7 +396,7 @@ export class StockTransactionService {
         companyId: o.companyId,
         branchId: o.branchId,
         storeId: o.storeId,
-        transactionType: StockTxnType.CONSUMPTION,
+        transactionType: o.txnType ?? StockTxnType.CONSUMPTION,
         documentId: o.documentId,
         documentNo: o.documentNo,
         categoryId: cls.categoryId,

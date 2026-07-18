@@ -977,6 +977,51 @@ export interface SalesOrder {
   /** The production work order raised from this order (once approved), if any. */
   workOrderId?: number | null;
   workOrderNo?: string | null;
+  /** The dispatch raised for this order, if any. */
+  dispatchId?: number | null;
+  dispatchNo?: string | null;
+}
+
+// ---- CRM: Dispatch ----
+export type DispatchStatus = 'DISPATCHED' | 'RECEIVED' | 'CANCELLED';
+
+export interface DispatchLine {
+  id: number;
+  productId: number;
+  productName: string;
+  quantity: number;
+  unitId: number;
+  rate: number;
+  amount: number;
+  batchId?: number | null;
+  batchNo?: string | null;
+}
+
+/** A dispatch — goods shipped against a sales order, with travelling documents. */
+export interface Dispatch {
+  id: number;
+  companyId: number;
+  branchId?: number | null;
+  dispatchNo: string;
+  salesOrderId: number;
+  soNumber?: string | null;
+  buyerCompanyId?: number | null;
+  buyerBranchId?: number | null;
+  storeId?: number | null;
+  storeName?: string | null;
+  invoiceNo?: string | null;
+  deliveryNoteNo?: string | null;
+  ewayBillNo?: string | null;
+  driverName?: string | null;
+  vehicleNo?: string | null;
+  dispatchDate: string;
+  subtotal: number;
+  status: DispatchStatus;
+  notes?: string | null;
+  isLocked?: boolean;
+  createdByUserId: number;
+  createdAt: string;
+  lines: DispatchLine[];
 }
 
 // ---- Production: Production Plan ----
