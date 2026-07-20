@@ -13,6 +13,9 @@ export default function GoodsReceiptNotePage() {
       showSupplier
       showClassification
       showRate={false}
+      // Intercompany shipments are received here too: pick the dispatch and the
+      // goods it carried are banked into this company's store.
+      showIncomingDispatch
     />
   );
 }

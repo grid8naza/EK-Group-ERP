@@ -21,6 +21,11 @@ import {
   ProductionReceiptPosting,
 } from '../../contracts/stock-posting.port';
 import {
+  DISPATCH,
+  DispatchPort,
+  IncomingDispatch,
+} from '../../contracts/dispatch.port';
+import {
   CreateStockTransactionDto,
   StockTransactionLineInput,
   UpdateStockTransactionDto,
@@ -71,6 +76,9 @@ export class StockTransactionService {
     // Batches are regenerated on every edit and dropped on delete, so this
     // service must ask whether anything is holding them first.
     @Inject(STOCK) private readonly stock: StockPort,
+    // A Goods Receipt Note can receive an intercompany dispatch; CRM owns that
+    // row, so it is read and closed through the port.
+    @Inject(DISPATCH) private readonly dispatch: DispatchPort,
   ) {}
 
   /** Batch numbers from the configured rule, or null to fall back to the
@@ -622,6 +630,13 @@ export class StockTransactionService {
     }
     const txnBranchId = store.branchId ?? branchId ?? null;
 
+    // Receiving an intercompany shipment: the dispatch dictates what may be
+    // received, and closes once the goods are banked.
+    const incoming =
+      type === 'PURCHASE' && dto.dispatchId
+        ? await this.assertReceivable(dto.dispatchId, companyId, dto.lines)
+        : null;
+
     const resolved = await this.resolveLines(dto.lines);
     const docDate = new Date(dto.docDate);
     const ymd = this.ymd(dto.docDate);
@@ -631,11 +646,11 @@ export class StockTransactionService {
       ? await this.ruleBatchNumbers(companyId, txnBranchId, dto.lines.length, docDate)
       : null;
 
-    return this.prisma.$transaction(async (tx) => {
+    const header = await this.prisma.$transaction(async (tx) => {
       const base = await tx.stockBatch.count({
         where: { companyId, batchNo1: { startsWith: `${companyCode}-${ymd}-` } },
       });
-      const header = await tx.stockTransaction.create({
+      const created = await tx.stockTransaction.create({
         data: {
           companyId,
           branchId: txnBranchId,
@@ -647,6 +662,8 @@ export class StockTransactionService {
           supplierId: type === 'PURCHASE' ? dto.supplierId ?? null : null,
           purchaseOrderRef:
             type === 'PURCHASE' ? dto.purchaseOrderRef?.trim() || null : null,
+          dispatchId: incoming?.id ?? null,
+          dispatchNo: incoming?.dispatchNo ?? null,
           reference: dto.reference?.trim() || null,
           notes: dto.notes?.trim() || null,
           status: 'POSTED',
@@ -654,7 +671,7 @@ export class StockTransactionService {
       });
       await this.writeLines(tx, {
         type,
-        header,
+        header: created,
         companyId,
         branchId: txnBranchId,
         storeId: dto.storeId,
@@ -668,8 +685,20 @@ export class StockTransactionService {
         lines: dto.lines,
         resolved,
       });
-      return header;
+      return created;
     });
+
+    // The goods are in stock — close the shipment. If CRM refuses, the receipt
+    // must not survive as an unlinked stock-in.
+    if (incoming) {
+      try {
+        await this.dispatch.markReceived(incoming.id);
+      } catch (e) {
+        await this.remove(header.id);
+        throw e;
+      }
+    }
+    return header;
   }
 
   async update(
@@ -698,6 +727,11 @@ export class StockTransactionService {
       throw new BadRequestException('Choose a valid store for this branch.');
     }
     const txnBranchId = store.branchId ?? existing.branchId ?? null;
+
+    // A receipt against a dispatch stays bounded by it, however it is re-edited.
+    if (dto.lines && existing.dispatchId) {
+      await this.assertReceivable(existing.dispatchId, effCompany, dto.lines, true);
+    }
 
     const docDate = dto.docDate ? new Date(dto.docDate) : existing.docDate;
     const ymd = this.ymd(docDate.toISOString());
@@ -795,6 +829,11 @@ export class StockTransactionService {
       }
       await tx.stockTransaction.delete({ where: { id } });
     });
+    // The shipment was never received after all — hand it back to the buyer's
+    // incoming list.
+    if (existing.dispatchId) {
+      await this.dispatch.markDispatched(existing.dispatchId);
+    }
     return { success: true };
   }
 
@@ -805,6 +844,111 @@ export class StockTransactionService {
       where: { id },
       data: { isLocked: locked },
     });
+  }
+
+  // ---- incoming intercompany shipments ----
+
+  /**
+   * Dispatches shipped to this company that are still awaiting receipt, each
+   * line carrying the shipped batch's expiry — the goods are physically the same
+   * batch, so the buyer's own batch must expire on the same day or FEFO would
+   * treat freshly-received stock as ageless.
+   */
+  async incomingDispatches(
+    companyId: number | undefined,
+    branchId: number | undefined,
+  ): Promise<(IncomingDispatch & { lines: { expiryDate: string | null }[] })[]> {
+    if (!companyId) return [];
+    const dispatches = await this.dispatch.incomingFor(
+      companyId,
+      branchId ?? null,
+    );
+    const batchIds = [
+      ...new Set(
+        dispatches.flatMap((d) =>
+          d.lines.map((l) => l.batchId).filter((b): b is number => b != null),
+        ),
+      ),
+    ];
+    const batches = batchIds.length
+      ? await this.prisma.stockBatch.findMany({
+          where: { id: { in: batchIds } },
+          select: { id: true, expiryDate: true },
+        })
+      : [];
+    const expiryById = new Map(batches.map((b) => [b.id, b.expiryDate]));
+    return dispatches.map((d) => ({
+      ...d,
+      lines: d.lines.map((l) => ({
+        ...l,
+        expiryDate:
+          (l.batchId ? expiryById.get(l.batchId) : null)?.toISOString() ?? null,
+      })),
+    }));
+  }
+
+  /**
+   * Guard a goods receipt raised against an intercompany dispatch: it must be
+   * addressed to this company, still open, and receive only products it shipped
+   * — never more than was shipped. Accepting LESS is allowed and expected: that
+   * is the short/damaged case, and the difference simply never enters stock.
+   */
+  private async assertReceivable(
+    dispatchId: number,
+    companyId: number,
+    lines: StockTransactionLineInput[],
+    reopening = false,
+  ): Promise<IncomingDispatch> {
+    const incoming = await this.dispatch.findIncoming(dispatchId, companyId);
+    if (!incoming) {
+      throw new BadRequestException('That dispatch was not shipped to this company.');
+    }
+    // On a re-edit the dispatch is already closed by this very receipt.
+    if (incoming.received && !reopening) {
+      throw new BadRequestException(
+        `Dispatch ${incoming.dispatchNo} has already been received.`,
+      );
+    }
+    // A product ships once per batch, so it can appear on several lines — the
+    // ceiling is what was shipped in TOTAL.
+    const shippedByProduct = new Map<number, number>();
+    for (const l of incoming.lines) {
+      shippedByProduct.set(
+        l.productId,
+        (shippedByProduct.get(l.productId) ?? 0) + l.quantity,
+      );
+    }
+    // Accepted quantity is per PRODUCT, not per line — a product split across
+    // two lines must still not add up to more than arrived.
+    const accepted = new Map<number, number>();
+    for (const line of lines) {
+      if (line.itemId || !line.productId) {
+        throw new BadRequestException(
+          'A dispatch receipt can only receive the products that were shipped.',
+        );
+      }
+      if (!shippedByProduct.has(line.productId)) {
+        throw new BadRequestException(
+          `Dispatch ${incoming.dispatchNo} did not ship that product.`,
+        );
+      }
+      accepted.set(
+        line.productId,
+        (accepted.get(line.productId) ?? 0) + line.quantity,
+      );
+    }
+    for (const [productId, qty] of accepted) {
+      const shipped = shippedByProduct.get(productId) ?? 0;
+      if (qty > shipped) {
+        const name =
+          incoming.lines.find((l) => l.productId === productId)?.productName ??
+          `#${productId}`;
+        throw new BadRequestException(
+          `Cannot accept ${qty} of ${name} — only ${shipped} was dispatched.`,
+        );
+      }
+    }
+    return incoming;
   }
 
   // ---- helpers ----

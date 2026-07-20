@@ -26,6 +26,8 @@ import type {
   Item,
   Product,
   Supplier,
+  Company,
+  IncomingDispatch,
 } from '@/lib/types';
 
 type DraftLine = {
@@ -34,6 +36,8 @@ type DraftLine = {
   unitPrice: string;
   batchNo2: string;
   expiry: string;
+  /** Set when the line came off a dispatch: what the seller shipped. */
+  dispatchedQty?: number;
 };
 
 const todayInput = () => {
@@ -54,6 +58,7 @@ export function StockTransactionScreen({
   showSupplier = false,
   showClassification = false,
   showRate = true,
+  showIncomingDispatch = false,
 }: {
   type: StockTxnKind;
   /** IN types (receipt/return) capture batches; OUT types (delivery/issue) decrement stock. */
@@ -67,6 +72,12 @@ export function StockTransactionScreen({
   showClassification?: boolean;
   /** Show the per-line rate/price input + column. */
   showRate?: boolean;
+  /**
+   * Offer the intercompany shipments waiting to be received (GRN). Picking one
+   * fills the lines with what was dispatched; quantities stay editable so short
+   * or damaged goods are received for what actually arrived.
+   */
+  showIncomingDispatch?: boolean;
 }) {
   const { can } = useAuth();
   const toast = useToast();
@@ -80,6 +91,12 @@ export function StockTransactionScreen({
   const { data: products } = useFetch<Product[]>('/products');
   const { data: suppliers } = useFetch<Supplier[]>(
     showSupplier ? '/suppliers' : null,
+  );
+  const { data: incoming, refetch: refetchIncoming } = useFetch<IncomingDispatch[]>(
+    showIncomingDispatch ? '/stock-transactions/incoming-dispatches' : null,
+  );
+  const { data: companies } = useFetch<Company[]>(
+    showIncomingDispatch ? '/companies' : null,
   );
 
   const canAdd = can(route, 'add');
@@ -114,6 +131,19 @@ export function StockTransactionScreen({
         .map((s) => ({ value: String(s.id), label: s.name })),
     [suppliers],
   );
+  const companyName = (id: number) =>
+    (companies ?? []).find((c) => c.id === id)?.name ?? `#${id}`;
+  const incomingOptions = useMemo(
+    () =>
+      (incoming ?? []).map((d) => ({
+        value: String(d.id),
+        label: `${d.dispatchNo} — ${companyName(d.sellerCompanyId)}${
+          d.invoiceNo ? ` — ${d.invoiceNo}` : ''
+        }`,
+      })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [incoming, companies],
+  );
   const pickById = useMemo(
     () => new Map(pickable.map((p) => [p.key, p])),
     [pickable],
@@ -142,6 +172,7 @@ export function StockTransactionScreen({
   const [storeId, setStoreId] = useState('');
   const [docDate, setDocDate] = useState(todayInput());
   const [supplierId, setSupplierId] = useState('');
+  const [dispatchId, setDispatchId] = useState('');
   const [poRef, setPoRef] = useState('');
   const [reference, setReference] = useState('');
   const [notes, setNotes] = useState('');
@@ -168,6 +199,34 @@ export function StockTransactionScreen({
   const removeLine = (i: number) =>
     setLines((ls) => ls.filter((_, idx) => idx !== i));
 
+  /**
+   * Receive an intercompany shipment: the dispatch's own lines become the
+   * receipt's, at the quantity and price that were shipped. The quantities stay
+   * editable — what actually arrived is what gets banked, and anything accepted
+   * short simply never enters stock.
+   */
+  const pickDispatch = (id: string) => {
+    setDispatchId(id);
+    const d = (incoming ?? []).find((x) => String(x.id) === id);
+    if (!d) {
+      setLines([blankLine()]);
+      return;
+    }
+    setSupplierId(''); // the goods came from a group company, not a supplier
+    setPoRef(d.soNumber ?? '');
+    setReference(d.invoiceNo ?? d.dispatchNo);
+    setLines(
+      d.lines.map((l) => ({
+        key: `product:${l.productId}`,
+        quantity: String(l.quantity),
+        unitPrice: String(l.rate),
+        batchNo2: l.batchNo ?? '',
+        expiry: dateInput(l.expiryDate),
+        dispatchedQty: l.quantity,
+      })),
+    );
+  };
+
   // Enter in a line field moves to the next; Enter on a line's LAST field jumps
   // to the next line's item (adding a line when on the last row).
   const enterTo = (nextId: string) => (e: React.KeyboardEvent) => {
@@ -189,6 +248,7 @@ export function StockTransactionScreen({
     setStoreId(defaultStoreId ? String(defaultStoreId) : '');
     setDocDate(todayInput());
     setSupplierId('');
+    setDispatchId('');
     setPoRef('');
     setReference('');
     setNotes('');
@@ -203,6 +263,7 @@ export function StockTransactionScreen({
     setStoreId(String(full.storeId));
     setDocDate(dateInput(full.docDate));
     setSupplierId(full.supplierId ? String(full.supplierId) : '');
+    setDispatchId(full.dispatchId ? String(full.dispatchId) : '');
     setPoRef(full.purchaseOrderRef ?? '');
     setReference(full.reference ?? '');
     setNotes(full.notes ?? '');
@@ -266,6 +327,7 @@ export function StockTransactionScreen({
     setStoreId('');
     setDocDate(todayInput());
     setSupplierId('');
+    setDispatchId('');
     setPoRef('');
     setReference('');
     setNotes('');
@@ -289,6 +351,10 @@ export function StockTransactionScreen({
               purchaseOrderRef: poRef.trim() || null,
             }
           : {}),
+        // The dispatch link is set when the receipt is raised and never moves.
+        ...(showIncomingDispatch && !editingDoc && dispatchId
+          ? { dispatchId: Number(dispatchId) }
+          : {}),
         reference: reference.trim() || undefined,
         notes: notes.trim() || undefined,
         lines: buildLines(),
@@ -307,6 +373,8 @@ export function StockTransactionScreen({
         toast.success('Transaction posted.');
       }
       await refetch();
+      // A received shipment drops off the incoming list.
+      if (showIncomingDispatch) await refetchIncoming();
       if (mode === 'saveNew') {
         resetForm();
       } else if (mode === 'save') {
@@ -352,6 +420,8 @@ export function StockTransactionScreen({
       await api.delete(`/stock-transactions/${r.id}`);
       toast.success('Transaction deleted.');
       refetch();
+      // Deleting a dispatch receipt hands the shipment back to the incoming list.
+      if (showIncomingDispatch) refetchIncoming();
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to delete.');
     }
@@ -375,6 +445,17 @@ export function StockTransactionScreen({
       toast.error(e instanceof ApiError ? e.message : 'Failed to update lock.');
     }
   };
+
+  // Receiving a shipment shows what was sent beside what is being accepted, so
+  // a shortage is visible while it is still being keyed.
+  const showDispatched =
+    showIncomingDispatch && lines.some((l) => l.dispatchedQty !== undefined);
+  const shortLines = lines.filter(
+    (l) => l.dispatchedQty !== undefined && Number(l.quantity) < l.dispatchedQty,
+  );
+  // The GRN hides rates normally, but a received shipment came priced — that is
+  // what the goods cost this company, so it is shown (read-only: the seller set it).
+  const showRateCol = showRate || showDispatched;
 
   const columns: Column<StockDocumentRow>[] = [
     {
@@ -491,7 +572,37 @@ export function StockTransactionScreen({
         <div className="mx-auto flex h-full w-full max-w-[1400px] flex-col gap-4">
           {/* Frozen header pane — stays put while the lines scroll. */}
           <div className="flex-none space-y-4">
-            {showSupplier && (
+            {showIncomingDispatch &&
+              (editingDoc ? (
+                editingDoc.dispatchNo && (
+                  <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+                    Received against intercompany dispatch{' '}
+                    <span className="font-medium text-slate-800 dark:text-slate-100">
+                      {editingDoc.dispatchNo}
+                    </span>
+                  </p>
+                )
+              ) : (
+                <div>
+                  <Select
+                    label="Incoming dispatch"
+                    value={dispatchId}
+                    onChange={(e) => pickDispatch(e.target.value)}
+                    placeholder={
+                      incomingOptions.length
+                        ? 'Receive an intercompany shipment (optional)'
+                        : 'No shipments awaiting receipt'
+                    }
+                    options={incomingOptions}
+                  />
+                  <p className="mt-1 text-xs text-slate-400">
+                    Fills the lines with what was dispatched. Reduce a quantity
+                    to receive short or damaged goods — only what you accept
+                    enters stock.
+                  </p>
+                </div>
+              ))}
+            {showSupplier && !dispatchId && (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Select
                   label="Supplier"
@@ -550,9 +661,16 @@ export function StockTransactionScreen({
                     {inbound && viewMode && <th className="py-2 px-1">Batch No</th>}
                     {inbound && <th className="py-2 px-1">Supplier Batch</th>}
                     {inbound && <th className="w-32 py-2 px-1">Expiry</th>}
-                    <th className="w-24 py-2 px-1 text-right">Qty</th>
+                    {showDispatched && (
+                      <th className="w-24 py-2 px-1 text-right">Dispatched</th>
+                    )}
+                    <th className="w-24 py-2 px-1 text-right">
+                      {showDispatched ? 'Accepted' : 'Qty'}
+                    </th>
                     <th className="w-12 py-2 px-1">Unit</th>
-                    {showRate && <th className="w-28 py-2 px-1 text-right">Rate</th>}
+                    {showRateCol && (
+                      <th className="w-28 py-2 px-1 text-right">Rate</th>
+                    )}
                     {!viewMode && <th className="w-10 py-2" />}
                   </tr>
                 </thead>
@@ -633,6 +751,11 @@ export function StockTransactionScreen({
                               )}
                             </td>
                           )}
+                          {showDispatched && (
+                            <td className="px-1 text-right tabular-nums text-slate-500">
+                              {l.dispatchedQty?.toLocaleString() ?? '—'}
+                            </td>
+                          )}
                           <td className="px-1">
                             {viewMode ? (
                               <span className="block text-right tabular-nums">
@@ -647,7 +770,7 @@ export function StockTransactionScreen({
                                 value={l.quantity}
                                 onChange={(e) => setLine(i, { quantity: e.target.value })}
                                 onKeyDown={
-                                  showRate
+                                  showRateCol && l.dispatchedQty === undefined
                                     ? enterTo(`stl-${i}-rate`)
                                     : enterNextLine(i)
                                 }
@@ -656,9 +779,9 @@ export function StockTransactionScreen({
                             )}
                           </td>
                           <td className="px-1 text-slate-500">{p?.unit ?? ''}</td>
-                          {showRate && (
+                          {showRateCol && (
                             <td className="px-1">
-                              {viewMode ? (
+                              {viewMode || l.dispatchedQty !== undefined ? (
                                 <span className="block text-right tabular-nums">
                                   {Number(l.unitPrice || 0).toLocaleString()}
                                 </span>
@@ -694,6 +817,12 @@ export function StockTransactionScreen({
                 </tbody>
               </table>
             </div>
+            {showDispatched && shortLines.length > 0 && (
+              <p className="mt-2 text-xs text-amber-600 dark:text-amber-500">
+                {shortLines.length} line{shortLines.length > 1 ? 's' : ''} short
+                of what was dispatched — only the accepted quantity enters stock.
+              </p>
+            )}
             {!viewMode && (
               <p className="mt-2 text-xs text-slate-400">
                 Enter moves to the next field; from the last field it starts a

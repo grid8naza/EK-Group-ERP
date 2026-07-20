@@ -23,6 +23,9 @@ import { RecipeAdapter } from '../modules/product/recipe.adapter';
 import { STOCK_POSTING } from './stock-posting.port';
 import { StockPostingAdapter } from '../modules/stock-transaction/stock-posting.adapter';
 import { StockTransactionService } from '../modules/stock-transaction/stock-transaction.service';
+import { DISPATCH } from './dispatch.port';
+import { DispatchLinkAdapter } from '../modules/crm/dispatch-link.adapter';
+import { DispatchLinkService } from '../modules/crm/dispatch-link.service';
 
 /**
  * Composition root for cross-module contracts (ports & adapters).
@@ -78,6 +81,12 @@ import { StockTransactionService } from '../modules/stock-transaction/stock-tran
     // (the ledger writer); Production banks finished goods through the port.
     StockTransactionService,
     { provide: STOCK_POSTING, useClass: StockPostingAdapter },
+    // The buyer's view of an intercompany Dispatch — implemented by CRM (which
+    // owns the row) so the Goods Receipt Note can list incoming shipments and
+    // close them. Its service touches dispatch rows only, which is what keeps
+    // this from cycling back into STOCK_POSTING above.
+    DispatchLinkService,
+    { provide: DISPATCH, useClass: DispatchLinkAdapter },
     CpanelMetricsAdapter,
     ProductionMetricsAdapter,
     InventoryMetricsAdapter,
@@ -105,6 +114,7 @@ import { StockTransactionService } from '../modules/stock-transaction/stock-tran
     WORK_ORDER,
     RECIPE,
     STOCK_POSTING,
+    DISPATCH,
   ],
 })
 export class ContractsModule {}

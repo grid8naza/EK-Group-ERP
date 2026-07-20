@@ -1630,6 +1630,9 @@ export interface StockTransaction {
   /** Goods Receipt Note only. */
   supplierId?: number | null;
   purchaseOrderRef?: string | null;
+  /** Goods Receipt Note only: the intercompany dispatch these goods arrived on. */
+  dispatchId?: number | null;
+  dispatchNo?: string | null;
   reference?: string | null;
   notes?: string | null;
   status: string;
@@ -1661,6 +1664,35 @@ export interface StockDocumentRow {
   transactionType?: string | null;
   transactionSubtype?: string | null;
   isLocked: boolean;
+}
+
+/** One product line on a dispatch heading for us, as the receiving side sees it. */
+export interface IncomingDispatchLine {
+  productId: number;
+  productName: string;
+  /** What the seller shipped — the ceiling on what can be accepted. */
+  quantity: number;
+  unitId: number;
+  rate: number;
+  batchNo: string | null;
+  batchId: number | null;
+  /** The shipped batch's expiry — the received batch inherits it (FEFO). */
+  expiryDate: string | null;
+}
+
+/** An intercompany shipment awaiting receipt at our store. */
+export interface IncomingDispatch {
+  id: number;
+  dispatchNo: string;
+  dispatchDate: string;
+  sellerCompanyId: number;
+  soNumber: string | null;
+  invoiceNo: string | null;
+  deliveryNoteNo: string | null;
+  ewayBillNo: string | null;
+  driverName: string | null;
+  vehicleNo: string | null;
+  lines: IncomingDispatchLine[];
 }
 
 export type OpeningStockType =

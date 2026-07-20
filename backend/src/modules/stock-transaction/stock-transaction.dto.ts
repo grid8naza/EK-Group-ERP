@@ -60,6 +60,15 @@ export class CreateStockTransactionDto {
   @MaxLength(120)
   purchaseOrderRef?: string | null;
 
+  /**
+   * Goods Receipt Note only: receive an intercompany Dispatch. Every line must
+   * be a product the dispatch shipped, and no line may accept more than was
+   * shipped — accepting less is the short/damaged case.
+   */
+  @IsOptional()
+  @IsInt()
+  dispatchId?: number | null;
+
   @IsOptional()
   @IsString()
   @MaxLength(200)

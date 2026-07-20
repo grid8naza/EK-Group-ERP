@@ -68,6 +68,18 @@ export class StockTransactionController {
     return this.service.documents(companyId, branchId, parseType(type));
   }
 
+  /**
+   * Intercompany shipments heading for this company that have not been received
+   * yet — the Goods Receipt Note picks one to receive against.
+   */
+  @Get('incoming-dispatches')
+  incomingDispatches(
+    @CompanyId() companyId: number | undefined,
+    @BranchId() branchId: number | undefined,
+  ) {
+    return this.service.incomingDispatches(companyId, branchId);
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id);

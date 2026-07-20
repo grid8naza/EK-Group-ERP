@@ -665,6 +665,12 @@ model StockTransaction {
   // purchaseOrderRef is free text for now (later a real PO link).
   supplierId       Int?
   purchaseOrderRef String?
+  // Goods Receipt Note only: the intercompany Dispatch these goods arrived on
+  // (-> CRM Dispatch, plain cross-domain id). Unique — a shipment is received
+  // once; deleting the receipt reopens the dispatch. Null on an ordinary
+  // external-supplier receipt.
+  dispatchId       Int?         @unique
+  dispatchNo       String? // snapshot
   reference String?
   notes     String?
   status    String       @default("POSTED") // DRAFT | POSTED
