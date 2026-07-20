@@ -207,23 +207,17 @@ export class DispatchService {
   // --- helpers ---
 
   /** dispatch / invoice / delivery-note / e-way-bill numbers for the company. */
-  private async docNumbers(
+  private docNumbers(
     companyId: number,
   ): Promise<[string, string, string, string]> {
-    const count = await this.prisma.dispatch.count({ where: { companyId } });
-    const seq = String(count + 1).padStart(4, '0');
-    const [d, i, dn, e] = await Promise.all([
-      this.numbering.next(companyId, DISPATCH_CODE),
-      this.numbering.next(companyId, INVOICE_CODE),
-      this.numbering.next(companyId, DELIVERY_NOTE_CODE),
-      this.numbering.next(companyId, EWAY_BILL_CODE),
+    const next = (code: string, prefix: string) =>
+      this.numbering.nextOrDefault(companyId, code, { prefix, padding: 4 });
+    return Promise.all([
+      next(DISPATCH_CODE, 'DSP-'),
+      next(INVOICE_CODE, 'INV-'),
+      next(DELIVERY_NOTE_CODE, 'DN-'),
+      next(EWAY_BILL_CODE, 'EWB-'),
     ]);
-    return [
-      d ?? `DSP-${seq}`,
-      i ?? `INV-${seq}`,
-      dn ?? `DN-${seq}`,
-      e ?? `EWB-${seq}`,
-    ];
   }
 
   private async resolveStore(

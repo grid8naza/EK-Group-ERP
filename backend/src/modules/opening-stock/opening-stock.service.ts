@@ -19,6 +19,7 @@ import {
   OpeningStockLineInput,
   UpdateOpeningStockDto,
 } from './opening-stock.dto';
+import { maxBatchSeq } from '../../common/max-batch-seq';
 
 /** Item/product classification denormalized onto each ledger line. */
 interface LineClass {
@@ -370,9 +371,7 @@ export class OpeningStockService {
     );
 
     return this.prisma.$transaction(async (tx) => {
-      const base = await tx.stockBatch.count({
-        where: { companyId, batchNo1: { startsWith: `${companyCode}-${ymd}-` } },
-      });
+      const base = await maxBatchSeq(tx, companyId, `${companyCode}-${ymd}-`);
       const header = await tx.openingStock.create({
         data: {
           companyId,
@@ -460,12 +459,11 @@ export class OpeningStockService {
         if (batchIds.length) {
           await tx.stockBatch.deleteMany({ where: { id: { in: batchIds } } });
         }
-        const base = await tx.stockBatch.count({
-          where: {
-            companyId: effCompany,
-            batchNo1: { startsWith: `${companyCode}-${ymd}-` },
-          },
-        });
+        const base = await maxBatchSeq(
+          tx,
+          effCompany,
+          `${companyCode}-${ymd}-`,
+        );
         await this.writeLines(tx, {
           header: existing,
           companyId: effCompany,
@@ -674,9 +672,11 @@ export class OpeningStockService {
   private async nextDocNo(companyId: number, date: Date): Promise<string> {
     // Use the company's configured numbering rule when present; otherwise fall
     // back to the built-in OS-##### scheme.
-    const configured = await this.numbering.next(companyId, 'OPENING_STOCK', date);
-    if (configured) return configured;
-    const n = await this.prisma.openingStock.count({ where: { companyId } });
-    return `OS-${String(n + 1).padStart(5, '0')}`;
+    return this.numbering.nextOrDefault(
+      companyId,
+      'OPENING_STOCK',
+      { prefix: 'OS-', padding: 5 },
+      date,
+    );
   }
 }

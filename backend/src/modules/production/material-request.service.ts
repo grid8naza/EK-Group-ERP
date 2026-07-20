@@ -388,27 +388,22 @@ export class MaterialRequestService {
 
   /** The goods-issue number for this store issue (GIN-#### when no rule set). */
   private async nextIssueNo(companyId: number): Promise<string> {
-    const configured = await this.numbering.next(
-      companyId,
-      GOODS_ISSUE_DOCUMENT_CODE,
-    );
-    if (configured) return configured;
-    const n = await this.prisma.materialRequest.count({
-      where: { companyId, status: 'ISSUED' },
+    return this.numbering.nextOrDefault(companyId, GOODS_ISSUE_DOCUMENT_CODE, {
+      prefix: 'GIN-',
+      padding: 4,
     });
-    return `GIN-${String(n + 1).padStart(4, '0')}`;
   }
 
   private async nextRequestNo(
     companyId: number,
     attempt: number,
   ): Promise<string> {
-    const configured = await this.numbering.next(
+    return this.numbering.nextOrDefault(
       companyId,
       MATERIAL_REQUEST_DOCUMENT_CODE,
+      { prefix: 'MR-', padding: 4 },
+      undefined,
+      attempt,
     );
-    if (configured) return configured;
-    const n = await this.prisma.materialRequest.count({ where: { companyId } });
-    return `MR-${String(n + 1 + attempt).padStart(4, '0')}`;
   }
 }

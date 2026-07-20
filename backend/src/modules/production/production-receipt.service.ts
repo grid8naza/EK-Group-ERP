@@ -250,12 +250,12 @@ export class ProductionReceiptService {
     companyId: number,
     attempt: number,
   ): Promise<string> {
-    const configured = await this.numbering.next(
+    return this.numbering.nextOrDefault(
       companyId,
       PRODUCTION_RECEIPT_DOCUMENT_CODE,
+      { prefix: 'PR-', padding: 4 },
+      undefined,
+      attempt,
     );
-    if (configured) return configured;
-    const n = await this.prisma.productionReceipt.count({ where: { companyId } });
-    return `PR-${String(n + 1 + attempt).padStart(4, '0')}`;
   }
 }

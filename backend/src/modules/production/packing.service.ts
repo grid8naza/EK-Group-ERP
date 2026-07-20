@@ -235,12 +235,12 @@ export class PackingService {
     companyId: number,
     attempt: number,
   ): Promise<string> {
-    const configured = await this.numbering.next(
+    return this.numbering.nextOrDefault(
       companyId,
       PACKING_DOCUMENT_CODE,
+      { prefix: 'PK-', padding: 4 },
+      undefined,
+      attempt,
     );
-    if (configured) return configured;
-    const n = await this.prisma.packing.count({ where: { companyId } });
-    return `PK-${String(n + 1 + attempt).padStart(4, '0')}`;
   }
 }

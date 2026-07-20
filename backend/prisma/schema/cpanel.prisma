@@ -744,10 +744,10 @@ model DocumentNumberingRule {
   renumber       NumberingRenumber       @default(NEVER)
   periodPosition NumberingPeriodPosition @default(BEFORE_SUFFIX)
   isLocked       Boolean                 @default(false)
-  // Running counter state: the last period generated in and its last number,
-  // so MONTHLY / YEARLY renumbering resets when the period rolls over.
-  lastPeriodKey String?
-  lastNumber    Int               @default(0)
+  // No running counter is stored: the next number is read back from the
+  // documents themselves (MAX + 1, per period), so clearing a company's
+  // documents restarts its numbering instead of stranding a counter nothing
+  // backs. See DocumentNumberingService.
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
 

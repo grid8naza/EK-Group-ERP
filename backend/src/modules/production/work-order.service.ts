@@ -174,12 +174,12 @@ export class WorkOrderService {
 
   /** Next WO number: the company's configured rule, else built-in WO-#####. */
   private async nextOrderNo(companyId: number, attempt: number): Promise<string> {
-    const configured = await this.numbering.next(
+    return this.numbering.nextOrDefault(
       companyId,
       WORK_ORDER_DOCUMENT_CODE,
+      { prefix: 'WO-', padding: 5 },
+      undefined,
+      attempt,
     );
-    if (configured) return configured;
-    const n = await this.prisma.workOrder.count({ where: { companyId } });
-    return `WO-${String(n + 1 + attempt).padStart(5, '0')}`;
   }
 }

@@ -644,9 +644,12 @@ export class SalesOrderService {
    * no rule is set for this document.
    */
   private async nextOrderNo(companyId: number, attempt: number): Promise<string> {
-    const configured = await this.numbering.next(companyId, ICSO_DOCUMENT_CODE);
-    if (configured) return configured;
-    const n = await this.prisma.salesOrder.count({ where: { companyId } });
-    return `SO-${String(n + 1 + attempt).padStart(5, '0')}`;
+    return this.numbering.nextOrDefault(
+      companyId,
+      ICSO_DOCUMENT_CODE,
+      { prefix: 'SO-', padding: 5 },
+      undefined,
+      attempt,
+    );
   }
 }

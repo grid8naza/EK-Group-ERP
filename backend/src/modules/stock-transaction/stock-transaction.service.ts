@@ -13,6 +13,7 @@ import {
 } from '../../contracts/batch-numbering.port';
 import { assertUnlocked } from '../../common/assert-unlocked';
 import { assertBatchesFree } from '../../common/assert-batches-free';
+import { maxBatchSeq } from '../../common/max-batch-seq';
 import { STOCK, StockPort } from '../../contracts/stock.port';
 import {
   DispatchPosting,
@@ -118,9 +119,11 @@ export class StockTransactionService {
       docDate,
     );
     // Fallback sequence continues after today's existing batches for the company.
-    const base = await this.prisma.stockBatch.count({
-      where: { companyId, batchNo1: { startsWith: `${companyCode}-${ymd}-` } },
-    });
+    const base = await maxBatchSeq(
+      this.prisma,
+      companyId,
+      `${companyCode}-${ymd}-`,
+    );
 
     const productIds = [...new Set(lines.map((l) => l.productId))];
     const products = await this.prisma.product.findMany({
@@ -231,9 +234,11 @@ export class StockTransactionService {
       produce.length,
       docDate,
     );
-    const base = await this.prisma.stockBatch.count({
-      where: { companyId, batchNo1: { startsWith: `${companyCode}-${ymd}-` } },
-    });
+    const base = await maxBatchSeq(
+      this.prisma,
+      companyId,
+      `${companyCode}-${ymd}-`,
+    );
     const productIds = [...new Set(produce.map((l) => l.productId))];
     const products = await this.prisma.product.findMany({
       where: { id: { in: productIds } },
@@ -682,9 +687,7 @@ export class StockTransactionService {
       : null;
 
     const header = await this.prisma.$transaction(async (tx) => {
-      const base = await tx.stockBatch.count({
-        where: { companyId, batchNo1: { startsWith: `${companyCode}-${ymd}-` } },
-      });
+      const base = await maxBatchSeq(tx, companyId, `${companyCode}-${ymd}-`);
       const created = await tx.stockTransaction.create({
         data: {
           companyId,
@@ -815,12 +818,11 @@ export class StockTransactionService {
         if (batchIds.length) {
           await tx.stockBatch.deleteMany({ where: { id: { in: batchIds } } });
         }
-        const base = await tx.stockBatch.count({
-          where: {
-            companyId: effCompany,
-            batchNo1: { startsWith: `${companyCode}-${ymd}-` },
-          },
-        });
+        const base = await maxBatchSeq(
+          tx,
+          effCompany,
+          `${companyCode}-${ymd}-`,
+        );
         await this.writeLines(tx, {
           type: existing.type as TxnType,
           header: existing,
@@ -1208,11 +1210,11 @@ export class StockTransactionService {
     date: Date,
   ): Promise<string> {
     const cfg = TXN_CONFIG[type];
-    const configured = await this.numbering.next(companyId, cfg.documentCode, date);
-    if (configured) return configured;
-    const n = await this.prisma.stockTransaction.count({
-      where: { companyId, type: type as StockTxnType },
-    });
-    return `${cfg.prefix}-${String(n + 1).padStart(5, '0')}`;
+    return this.numbering.nextOrDefault(
+      companyId,
+      cfg.documentCode,
+      { prefix: `${cfg.prefix}-`, padding: 5 },
+      date,
+    );
   }
 }

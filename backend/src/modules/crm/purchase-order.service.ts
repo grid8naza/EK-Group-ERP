@@ -700,9 +700,12 @@ export class PurchaseOrderService {
    * no rule is set for this document.
    */
   private async nextOrderNo(companyId: number, attempt: number): Promise<string> {
-    const configured = await this.numbering.next(companyId, PO_IC_DOCUMENT_CODE);
-    if (configured) return configured;
-    const n = await this.prisma.purchaseOrder.count({ where: { companyId } });
-    return `PO-${String(n + 1 + attempt).padStart(5, '0')}`;
+    return this.numbering.nextOrDefault(
+      companyId,
+      PO_IC_DOCUMENT_CODE,
+      { prefix: 'PO-', padding: 5 },
+      undefined,
+      attempt,
+    );
   }
 }

@@ -523,10 +523,13 @@ export class LpoService {
    * set for this document.
    */
   private async nextOrderNo(companyId: number, attempt: number): Promise<string> {
-    const configured = await this.numbering.next(companyId, LPO_DOCUMENT_CODE);
-    if (configured) return configured;
-    const n = await this.prisma.localPurchaseOrder.count({ where: { companyId } });
-    return `LPO-${String(n + 1 + attempt).padStart(5, '0')}`;
+    return this.numbering.nextOrDefault(
+      companyId,
+      LPO_DOCUMENT_CODE,
+      { prefix: 'LPO-', padding: 5 },
+      undefined,
+      attempt,
+    );
   }
 }
 

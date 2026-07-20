@@ -222,12 +222,12 @@ export class ProductionPlanService {
   }
 
   private async nextPlanNo(companyId: number, attempt: number): Promise<string> {
-    const configured = await this.numbering.next(
+    return this.numbering.nextOrDefault(
       companyId,
       PRODUCTION_PLAN_DOCUMENT_CODE,
+      { prefix: 'PP-', padding: 4 },
+      undefined,
+      attempt,
     );
-    if (configured) return configured;
-    const n = await this.prisma.productionPlan.count({ where: { companyId } });
-    return `PP-${String(n + 1 + attempt).padStart(4, '0')}`;
   }
 }
