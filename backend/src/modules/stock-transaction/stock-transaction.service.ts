@@ -14,6 +14,7 @@ import {
 import { assertUnlocked } from '../../common/assert-unlocked';
 import { assertBatchesFree } from '../../common/assert-batches-free';
 import { maxBatchSeq } from '../../common/max-batch-seq';
+import { withNumberRetry } from '../../common/with-number-retry';
 import { STOCK, StockPort } from '../../contracts/stock.port';
 import {
   DispatchPosting,
@@ -680,51 +681,58 @@ export class StockTransactionService {
     const resolved = await this.resolveLines(dto.lines);
     const docDate = new Date(dto.docDate);
     const ymd = this.ymd(dto.docDate);
-    const docNo = await this.nextDocNo(companyId, type, docDate);
     // Only IN types create batches → only they need rule batch numbers.
     const ruleBatchNos = isInbound(type)
       ? await this.ruleBatchNumbers(companyId, txnBranchId, dto.lines.length, docDate)
       : null;
 
-    const header = await this.prisma.$transaction(async (tx) => {
-      const base = await maxBatchSeq(tx, companyId, `${companyCode}-${ymd}-`);
-      const created = await tx.stockTransaction.create({
-        data: {
-          companyId,
-          branchId: txnBranchId,
-          type: type as StockTxnType,
-          docNo,
-          docDate,
-          storeId: dto.storeId,
-          // Supplier + PO apply to Goods Receipt only.
-          supplierId: type === 'PURCHASE' ? dto.supplierId ?? null : null,
-          purchaseOrderRef:
-            type === 'PURCHASE' ? dto.purchaseOrderRef?.trim() || null : null,
-          dispatchId: incoming?.id ?? null,
-          dispatchNo: incoming?.dispatchNo ?? null,
-          reference: dto.reference?.trim() || null,
-          notes: dto.notes?.trim() || null,
-          status: 'POSTED',
-        },
-      });
-      await this.writeLines(tx, {
-        type,
-        header: created,
-        companyId,
-        branchId: txnBranchId,
-        storeId: dto.storeId,
-        docDate,
-        docNo,
-        reference: dto.reference?.trim() || null,
-        companyCode,
-        ymd,
-        base,
-        ruleBatchNos,
-        lines: dto.lines,
-        resolved,
-      });
-      return created;
-    });
+    // The document number is derived, so an entry posted at the same instant can
+    // take it; retry with the next one rather than failing the post.
+    const header = await withNumberRetry(
+      (attempt) => this.nextDocNo(companyId, type, docDate, attempt),
+      (docNo) =>
+        this.prisma.$transaction(async (tx) => {
+          const base = await maxBatchSeq(tx, companyId, `${companyCode}-${ymd}-`);
+          const created = await tx.stockTransaction.create({
+            data: {
+              companyId,
+              branchId: txnBranchId,
+              type: type as StockTxnType,
+              docNo,
+              docDate,
+              storeId: dto.storeId,
+              // Supplier + PO apply to Goods Receipt only.
+              supplierId: type === 'PURCHASE' ? dto.supplierId ?? null : null,
+              purchaseOrderRef:
+                type === 'PURCHASE'
+                  ? dto.purchaseOrderRef?.trim() || null
+                  : null,
+              dispatchId: incoming?.id ?? null,
+              dispatchNo: incoming?.dispatchNo ?? null,
+              reference: dto.reference?.trim() || null,
+              notes: dto.notes?.trim() || null,
+              status: 'POSTED',
+            },
+          });
+          await this.writeLines(tx, {
+            type,
+            header: created,
+            companyId,
+            branchId: txnBranchId,
+            storeId: dto.storeId,
+            docDate,
+            docNo,
+            reference: dto.reference?.trim() || null,
+            companyCode,
+            ymd,
+            base,
+            ruleBatchNos,
+            lines: dto.lines,
+            resolved,
+          });
+          return created;
+        }),
+    );
 
     // The goods are in stock — close the shipment. If CRM refuses, the receipt
     // must not survive as an unlinked stock-in.
@@ -1208,6 +1216,7 @@ export class StockTransactionService {
     companyId: number,
     type: TxnType,
     date: Date,
+    attempt = 0,
   ): Promise<string> {
     const cfg = TXN_CONFIG[type];
     return this.numbering.nextOrDefault(
@@ -1215,6 +1224,7 @@ export class StockTransactionService {
       cfg.documentCode,
       { prefix: `${cfg.prefix}-`, padding: 5 },
       date,
+      attempt,
     );
   }
 }

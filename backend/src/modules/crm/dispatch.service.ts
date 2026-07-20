@@ -9,6 +9,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
+import { withNumberRetry } from '../../common/with-number-retry';
 import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
 import {
   STOCK_POSTING,
@@ -134,45 +135,47 @@ export class DispatchService {
 
     const subtotal = shipLines.reduce((s, l) => s + l.quantity * l.rate, 0);
 
-    // Document numbers (each falls back to a built-in prefix when no rule set).
-    const [dispatchNo, invoiceNo, deliveryNoteNo, ewayBillNo] =
-      await this.docNumbers(companyId);
-
-    // Header first — the document the stock movements belong to.
-    const header = await this.prisma.dispatch.create({
-      data: {
-        companyId,
-        branchId: branchId ?? null,
-        dispatchNo,
-        salesOrderId: order.id,
-        soNumber: order.orderNo,
-        buyerCompanyId: order.buyerCompanyId,
-        buyerBranchId: order.buyerBranchId,
-        storeId: store.id,
-        storeName: store.name,
-        invoiceNo,
-        deliveryNoteNo,
-        ewayBillNo,
-        driverName: dto.driverName?.trim() || null,
-        vehicleNo: dto.vehicleNo?.trim() || null,
-        subtotal,
-        status: 'DISPATCHED',
-        notes: dto.notes?.trim() || null,
-        createdByUserId: userId,
-        lines: {
-          create: shipLines.map((l) => ({
-            productId: l.productId,
-            productName: nameById.get(l.productId) ?? `#${l.productId}`,
-            quantity: l.quantity,
-            unitId: l.unitId,
-            rate: l.rate,
-            amount: l.quantity * l.rate,
-            batchId: l.batchId,
-            batchNo: l.batchNo,
-          })),
-        },
-      },
-    });
+    // Header first — the document the stock movements belong to. Its numbers are
+    // derived, so a dispatch raised at the same instant can take the ones we
+    // computed; retry with the next rather than failing the shipment.
+    const header = await withNumberRetry(
+      (attempt) => this.docNumbers(companyId, attempt),
+      ([dispatchNo, invoiceNo, deliveryNoteNo, ewayBillNo]) =>
+        this.prisma.dispatch.create({
+          data: {
+            companyId,
+            branchId: branchId ?? null,
+            dispatchNo,
+            salesOrderId: order.id,
+            soNumber: order.orderNo,
+            buyerCompanyId: order.buyerCompanyId,
+            buyerBranchId: order.buyerBranchId,
+            storeId: store.id,
+            storeName: store.name,
+            invoiceNo,
+            deliveryNoteNo,
+            ewayBillNo,
+            driverName: dto.driverName?.trim() || null,
+            vehicleNo: dto.vehicleNo?.trim() || null,
+            subtotal,
+            status: 'DISPATCHED',
+            notes: dto.notes?.trim() || null,
+            createdByUserId: userId,
+            lines: {
+              create: shipLines.map((l) => ({
+                productId: l.productId,
+                productName: nameById.get(l.productId) ?? `#${l.productId}`,
+                quantity: l.quantity,
+                unitId: l.unitId,
+                rate: l.rate,
+                amount: l.quantity * l.rate,
+                batchId: l.batchId,
+                batchNo: l.batchNo,
+              })),
+            },
+          },
+        }),
+    );
 
     // Ship the goods out of the source store. Roll back the header on failure.
     try {
@@ -209,9 +212,16 @@ export class DispatchService {
   /** dispatch / invoice / delivery-note / e-way-bill numbers for the company. */
   private docNumbers(
     companyId: number,
+    attempt = 0,
   ): Promise<[string, string, string, string]> {
     const next = (code: string, prefix: string) =>
-      this.numbering.nextOrDefault(companyId, code, { prefix, padding: 4 });
+      this.numbering.nextOrDefault(
+        companyId,
+        code,
+        { prefix, padding: 4 },
+        undefined,
+        attempt,
+      );
     return Promise.all([
       next(DISPATCH_CODE, 'DSP-'),
       next(INVOICE_CODE, 'INV-'),
