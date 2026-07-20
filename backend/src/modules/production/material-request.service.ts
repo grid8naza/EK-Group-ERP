@@ -10,13 +10,26 @@ import { assertUnlocked } from '../../common/assert-unlocked';
 import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
 import { RECIPE, RecipePort } from '../../contracts/recipe.port';
 import { STOCK, StockPort } from '../../contracts/stock.port';
-import { GenerateMaterialRequestsDto } from './material-request.dto';
+import {
+  STOCK_POSTING,
+  StockPostingPort,
+} from '../../contracts/stock-posting.port';
+import {
+  GenerateMaterialRequestsDto,
+  IssueMaterialRequestDto,
+} from './material-request.dto';
 
 const MATERIAL_REQUEST_DOCUMENT_CODE = 'MATERIAL_REQUEST';
+/** The store's goods issue — the same note the Inventory module issues under. */
+const GOODS_ISSUE_DOCUMENT_CODE = 'GOODS_ISSUE_NOTE';
 
 const withLines = {
   lines: { orderBy: { itemName: 'asc' as const } },
 };
+
+/** "An issued" / "A cancelled" — for a status named in a sentence. */
+const article = (status: MaterialRequestStatus) =>
+  `${'AEIOU'.includes(status[0]) ? 'An' : 'A'} ${status.toLowerCase()}`;
 
 /**
  * Material Requests — the requisition operations sends to the store for the raw
@@ -31,6 +44,7 @@ export class MaterialRequestService {
     @Inject(NUMBERING) private readonly numbering: NumberingPort,
     @Inject(RECIPE) private readonly recipe: RecipePort,
     @Inject(STOCK) private readonly stock: StockPort,
+    @Inject(STOCK_POSTING) private readonly posting: StockPostingPort,
   ) {}
 
   findAll(companyId: number | undefined, search?: string) {
@@ -166,13 +180,128 @@ export class MaterialRequestService {
     });
   }
 
-  /** Advance the request's status (store issue / cancel). */
+  /**
+   * The store issues the requisition: the materials LEAVE stock here. This is
+   * the only point in the pipeline where raw materials are consumed — the
+   * production receipt banks output only, so without this the ledger would keep
+   * showing materials that were long since baked.
+   *
+   * A line may be issued short (the store hands over what it has); only the
+   * issued quantity moves. Issuing nothing of every line is refused — that is a
+   * cancellation, not an issue.
+   */
+  async issue(
+    companyId: number | undefined,
+    branchId: number | undefined,
+    id: number,
+    dto: IssueMaterialRequestDto,
+  ) {
+    if (!companyId) throw new BadRequestException('No active company.');
+    const mr = await this.findOne(id);
+    assertUnlocked(mr, 'material request', 'editing');
+    if (mr.companyId !== companyId) {
+      throw new BadRequestException('That request belongs to another company.');
+    }
+    if (mr.status !== 'DRAFT') {
+      throw new BadRequestException(
+        `${article(mr.status)} material request cannot be issued.`,
+      );
+    }
+    if (!mr.storeId) {
+      throw new BadRequestException(
+        'This request has no store to issue from. Set a default store and raise it again.',
+      );
+    }
+
+    // Default: issue every line in full. A line named in the payload is issued
+    // at that quantity instead.
+    const askedFor = new Map(
+      (dto.lines ?? []).map((l) => [l.lineId, l.issuedQty]),
+    );
+    for (const lineId of askedFor.keys()) {
+      if (!mr.lines.some((l) => l.id === lineId)) {
+        throw new BadRequestException('That line is not on this request.');
+      }
+    }
+    const issue = mr.lines.map((l) => ({
+      lineId: l.id,
+      itemId: l.itemId,
+      itemName: l.itemName,
+      quantity: askedFor.has(l.id) ? askedFor.get(l.id)! : l.requiredQty,
+      requiredQty: l.requiredQty,
+    }));
+    const over = issue.find((l) => l.quantity > l.requiredQty);
+    if (over) {
+      throw new BadRequestException(
+        `Cannot issue ${over.quantity} of ${over.itemName} — only ${over.requiredQty} was requested.`,
+      );
+    }
+    const moving = issue.filter((l) => l.quantity > 0);
+    if (!moving.length) {
+      throw new BadRequestException(
+        'Nothing to issue. Cancel the request instead.',
+      );
+    }
+
+    const issueNo = await this.nextIssueNo(companyId);
+
+    // Record the issue, then move the stock. The store either hands over the
+    // whole requisition or none of it, so a posting failure puts the request
+    // back exactly as it was.
+    await this.prisma.$transaction(async (tx) => {
+      for (const l of issue) {
+        await tx.materialRequestLine.update({
+          where: { id: l.lineId },
+          data: { issuedQty: l.quantity },
+        });
+      }
+      await tx.materialRequest.update({
+        where: { id },
+        data: { status: 'ISSUED', issueNo, issuedAt: new Date() },
+      });
+    });
+
+    try {
+      await this.posting.postMaterialIssue({
+        companyId,
+        branchId: branchId ?? mr.branchId ?? null,
+        storeId: mr.storeId,
+        documentId: mr.id,
+        documentNo: issueNo,
+        date: new Date().toISOString(),
+        lines: moving.map((l) => ({ itemId: l.itemId, quantity: l.quantity })),
+      });
+    } catch (e) {
+      await this.prisma.$transaction(async (tx) => {
+        for (const l of issue) {
+          await tx.materialRequestLine.update({
+            where: { id: l.lineId },
+            data: { issuedQty: 0 },
+          });
+        }
+        await tx.materialRequest.update({
+          where: { id },
+          data: { status: 'DRAFT', issueNo: null, issuedAt: null },
+        });
+      });
+      throw e;
+    }
+
+    return this.findOne(id);
+  }
+
+  /** Advance the request's status. Issuing goes through issue() — it moves stock. */
   async setStatus(id: number, status: MaterialRequestStatus) {
     const mr = await this.findOne(id);
     assertUnlocked(mr, 'material request', 'editing');
     if (mr.status === 'CANCELLED' || mr.status === 'ISSUED') {
       throw new BadRequestException(
-        `A ${mr.status.toLowerCase()} material request cannot change status.`,
+        `${article(mr.status)} material request cannot change status.`,
+      );
+    }
+    if (status === 'ISSUED') {
+      throw new BadRequestException(
+        'Issue the request from the store so the materials leave stock.',
       );
     }
     return this.prisma.materialRequest.update({
@@ -255,6 +384,19 @@ export class MaterialRequestService {
         throw e;
       }
     }
+  }
+
+  /** The goods-issue number for this store issue (GIN-#### when no rule set). */
+  private async nextIssueNo(companyId: number): Promise<string> {
+    const configured = await this.numbering.next(
+      companyId,
+      GOODS_ISSUE_DOCUMENT_CODE,
+    );
+    if (configured) return configured;
+    const n = await this.prisma.materialRequest.count({
+      where: { companyId, status: 'ISSUED' },
+    });
+    return `GIN-${String(n + 1).padStart(4, '0')}`;
   }
 
   private async nextRequestNo(

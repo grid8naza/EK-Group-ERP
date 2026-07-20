@@ -65,6 +65,20 @@ export interface PackingPosting {
   consumeItems: ConsumeItemLine[];
 }
 
+/** The store issuing raw materials against a requisition. */
+export interface MaterialIssuePosting {
+  companyId: number;
+  branchId: number | null;
+  /** The store the materials leave. */
+  storeId: number;
+  /** The material request being fulfilled. */
+  documentId: number;
+  /** The goods-issue number the ledger rows carry. */
+  documentNo: string;
+  date: string;
+  lines: ConsumeItemLine[];
+}
+
 /** A product shipped out on a dispatch. */
 export interface DispatchStockLine {
   productId: number;
@@ -97,6 +111,13 @@ export interface StockPostingPort {
    * as new batches (stock-in). Atomic — everything posts or nothing does.
    */
   postPacking(input: PackingPosting): Promise<ProducedBatch[]>;
+
+  /**
+   * Issue raw materials to production: a CONSUMPTION stock-out per item at the
+   * issuing store, availability-checked. This is where materials actually leave
+   * stock — production receipts bank output only. Atomic.
+   */
+  postMaterialIssue(input: MaterialIssuePosting): Promise<void>;
 
   /**
    * Ship goods out on a dispatch: a SALE stock-out per product at the source

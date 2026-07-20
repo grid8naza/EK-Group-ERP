@@ -256,6 +256,10 @@ model MaterialRequest {
   storeId          Int? // -> inventory Store the materials are requested from
   storeName        String? // snapshot
   status           MaterialRequestStatus @default(DRAFT)
+  // The goods issue that fulfilled it: the GIN number the stock-out ledger rows
+  // carry, and when the store handed the materials over.
+  issueNo          String?
+  issuedAt         DateTime?
   notes            String?
   isLocked         Boolean               @default(false)
   createdByUserId  Int
@@ -280,6 +284,9 @@ model MaterialRequestLine {
   itemName     String // snapshot
   requiredQty  Float
   availableQty Float  @default(0) // on-hand at the store when raised (snapshot)
+  // What the store actually handed over. May be LESS than required (a short
+  // issue); only this quantity leaves stock.
+  issuedQty    Float  @default(0)
   unitId       Int // -> Unit (plain id)
 
   request MaterialRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)

@@ -1131,6 +1131,8 @@ export interface MaterialRequestLine {
   requiredQty: number;
   /** On-hand at the store when the request was raised (snapshot). */
   availableQty: number;
+  /** What the store actually handed over — may be less than required. */
+  issuedQty: number;
   unitId: number;
 }
 
@@ -1147,6 +1149,9 @@ export interface MaterialRequest {
   storeId?: number | null;
   storeName?: string | null;
   status: MaterialRequestStatus;
+  /** The goods issue that fulfilled it (GIN), and when the store handed over. */
+  issueNo?: string | null;
+  issuedAt?: string | null;
   notes?: string | null;
   isLocked?: boolean;
   createdByUserId: number;

@@ -16,6 +16,7 @@ import { assertBatchesFree } from '../../common/assert-batches-free';
 import { STOCK, StockPort } from '../../contracts/stock.port';
 import {
   DispatchPosting,
+  MaterialIssuePosting,
   PackingPosting,
   ProducedBatch,
   ProductionReceiptPosting,
@@ -342,6 +343,34 @@ export class StockTransactionService {
   }
 
   /**
+   * Issue raw materials to production — a CONSUMPTION stock-out per item at the
+   * issuing store, availability-checked. Atomic: a store either hands over the
+   * whole requisition or none of it.
+   */
+  async postMaterialIssue(input: MaterialIssuePosting): Promise<void> {
+    const { companyId, branchId, storeId, documentId, documentNo, date, lines } =
+      input;
+    if (!lines.length) return;
+    const docDate = new Date(date);
+    await this.prisma.$transaction(async (tx) => {
+      for (const l of lines) {
+        await this.consumeStock(tx, {
+          companyId,
+          branchId,
+          storeId,
+          documentId,
+          documentNo,
+          docDate,
+          productId: null,
+          itemId: l.itemId,
+          quantity: l.quantity,
+          action: 'issue',
+        });
+      }
+    });
+  }
+
+  /**
    * Ship goods out on a dispatch — a SALE stock-out per product at the source
    * store, availability-checked. Atomic.
    */
@@ -382,6 +411,8 @@ export class StockTransactionService {
       itemId: number | null;
       quantity: number;
       txnType?: StockTxnType;
+      /** Verb for the short-stock message ("ship" by default). */
+      action?: string;
     },
   ): Promise<void> {
     if (o.quantity <= 0) return;
@@ -394,8 +425,12 @@ export class StockTransactionService {
       o.productId,
     );
     if (o.quantity > avail) {
+      // Name the stockable — a bare quantity says nothing when a document moves
+      // a dozen of them. Only on the failure path.
+      const named = await this.stockableName(o.itemId, o.productId);
       throw new BadRequestException(
-        `Insufficient stock to ship: ${avail} available, ${o.quantity} needed.`,
+        `Insufficient stock to ${o.action ?? 'ship'}${named ? ` ${named}` : ''}: ` +
+          `${avail} available, ${o.quantity} needed.`,
       );
     }
     await tx.stockLedger.create({
@@ -1044,6 +1079,28 @@ export class StockTransactionService {
         },
       });
     }
+  }
+
+  /** The item's or product's name, for a message. Empty when it can't be read. */
+  private async stockableName(
+    itemId: number | null,
+    productId: number | null,
+  ): Promise<string> {
+    if (itemId) {
+      const it = await this.prisma.item.findUnique({
+        where: { id: itemId },
+        select: { name: true },
+      });
+      return it?.name ?? '';
+    }
+    if (productId) {
+      const p = await this.prisma.product.findUnique({
+        where: { id: productId },
+        select: { name: true },
+      });
+      return p?.name ?? '';
+    }
+    return '';
   }
 
   /** On-hand quantity for one stockable at a store (SUM qtyIn - qtyOut). */

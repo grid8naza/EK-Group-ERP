@@ -19,6 +19,7 @@ import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
 import { LockDto } from '../../common/lock.dto';
 import {
   GenerateMaterialRequestsDto,
+  IssueMaterialRequestDto,
   SetMaterialRequestStatusDto,
 } from './material-request.dto';
 
@@ -58,6 +59,17 @@ export class MaterialRequestController {
       planId,
       dto,
     );
+  }
+
+  /** The store issues the requisition — this is where the materials leave stock. */
+  @Post(':id/issue')
+  issue(
+    @CompanyId() companyId: number | undefined,
+    @BranchId() branchId: number | undefined,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: IssueMaterialRequestDto,
+  ) {
+    return this.service.issue(companyId, branchId, id, dto);
   }
 
   @Patch(':id/status')
