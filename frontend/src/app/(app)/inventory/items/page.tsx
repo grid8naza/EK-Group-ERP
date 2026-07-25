@@ -416,7 +416,9 @@ export default function ItemsPage() {
               wrapClassName="w-40"
               placeholder="All categories"
               options={(categories ?? [])
-                .filter((c) => c.forItem)
+                // Packing material is a kind of item, so a packing category
+                // holds items too even when "Item" itself isn't ticked.
+                .filter((c) => c.forItem || c.forPacking)
                 .map((c) => ({
                   value: String(c.id),
                   label: c.name,
@@ -546,7 +548,8 @@ export default function ItemsPage() {
                   }
                   placeholder="— None —"
                   options={(categories ?? [])
-                    .filter((c) => c.isActive && c.forItem)
+                    // See the filter above: packing categories hold items.
+                    .filter((c) => c.isActive && (c.forItem || c.forPacking))
                     .map((c) => ({ value: c.id, label: c.name }))}
                 />
                 <Select

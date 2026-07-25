@@ -46,10 +46,12 @@ export default function PackingPage() {
   const canAdd = can(ROUTE, 'add');
   const canView = can(ROUTE, 'view');
 
-  const packedProducts = useMemo(
+  // Packable products: the Has Packing capability is the only criterion, the
+  // same rule Packing Master lists on — not the old `packed` form factor.
+  const packableProducts = useMemo(
     () =>
       (products ?? [])
-        .filter((p) => p.packed)
+        .filter((p) => p.hasPacking)
         .sort((a, b) => a.name.localeCompare(b.name)),
     [products],
   );
@@ -91,7 +93,7 @@ export default function PackingPage() {
       (l) => l.productId && Number(l.quantity) > 0,
     );
     if (!clean.length) {
-      toast.error('Add at least one packed product with a quantity.');
+      toast.error('Add at least one product with a quantity.');
       return;
     }
     setSaving(true);
@@ -128,7 +130,7 @@ export default function PackingPage() {
     <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="Packing"
-        description="Pack unpacked products into packed ones — consumes the source, banks the packed batch"
+        description="Pack products that have a packing BOM — consumes the source products and packing materials, banks the packed batch"
         icon={<Box className="h-5 w-5" />}
         actions={
           canAdd && (
@@ -189,18 +191,18 @@ export default function PackingPage() {
         {mode === 'new' ? (
           <div className="flex flex-col gap-3">
             <p className="text-sm text-slate-500">
-              Choose the packed products to make. Each consumes its unpacked
-              source and packing materials from the default store.
+              Choose the products to pack. Each consumes its source products
+              and packing materials from the default store.
             </p>
             {lines.map((l, i) => (
               <div key={i} className="flex items-end gap-2">
                 <Select
-                  label={i === 0 ? 'Packed product' : undefined}
+                  label={i === 0 ? 'Product' : undefined}
                   value={l.productId}
                   onChange={(e) => setLine(i, { productId: e.target.value })}
-                  placeholder="Select a packed product"
+                  placeholder="Select a product"
                   wrapClassName="flex-1"
-                  options={packedProducts.map((p) => ({
+                  options={packableProducts.map((p) => ({
                     value: String(p.id),
                     label: p.name,
                   }))}

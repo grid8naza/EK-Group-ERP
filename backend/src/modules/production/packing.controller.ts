@@ -18,7 +18,7 @@ import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
 import { LockDto } from '../../common/lock.dto';
 import { CreatePackingDto } from './packing.dto';
 
-/** Packing operations — pack unpacked products into packed, sellable ones. */
+/** Packing operations — pack products that carry a packing BOM (Has Packing). */
 @ApiTags('packing')
 @ApiBearerAuth()
 @Controller('packing')

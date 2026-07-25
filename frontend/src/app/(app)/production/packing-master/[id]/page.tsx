@@ -189,10 +189,13 @@ export default function PackingMasterEditorPage() {
     () => new Map((allProducts ?? []).map((p) => [p.id, p])),
     [allProducts],
   );
-  // A pack is made from an unpacked product, so the source list is the unpacked ones.
-  const unpackedProducts = useMemo(
-    () => (allProducts ?? []).filter((p) => p.unpacked),
-    [allProducts],
+  // Source products a pack is made from. Not narrowed by form factor (the old
+  // `unpacked` flag): what a product can do is declared by its capabilities, and
+  // Has Packing alone decides what Packing Master handles. Any product but the
+  // one being packed may be a source.
+  const sourceProducts = useMemo(
+    () => (allProducts ?? []).filter((p) => String(p.id) !== id),
+    [allProducts, id],
   );
   // The material picker lists only items in packing-material categories (those
   // flagged forPacking). Falls back to all items when no category is flagged yet.
@@ -874,10 +877,10 @@ export default function PackingMasterEditorPage() {
           </div>
         </div>
 
-        {/* Packed From — the unpacked source products this pack is made from. */}
+        {/* Packed From — the source products this pack is made from. */}
         <div className="card flex flex-col border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
           <SectionHeader
-            title="Packed From (Unpacked Products)"
+            title="Packed From (Source Products)"
             onAdd={!view ? openAddSrc : undefined}
             addLabel="Add product"
           />
@@ -885,7 +888,7 @@ export default function PackingMasterEditorPage() {
             <thead>
               <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700">
                 <th className="w-8 py-2 pr-1 text-center">#</th>
-                <th className="py-2 pr-2">Unpacked Product</th>
+                <th className="py-2 pr-2">Source Product</th>
                 <th className="w-24 py-2 px-1 text-right">Qty</th>
                 <th className="w-14 py-2 px-1">Unit</th>
                 <th className="w-28 py-2 px-1 text-right">Cost Price</th>
@@ -1945,7 +1948,7 @@ export default function PackingMasterEditorPage() {
         {srcForm && (
           <div key={srcSeq} className="space-y-4">
             <Select
-              label="Unpacked Product"
+              label="Source Product"
               required
               id="src-product"
               autoFocus={srcForm.index == null}
@@ -1957,8 +1960,8 @@ export default function PackingMasterEditorPage() {
                   f ? { ...f, draft: { ...f.draft, productId: e.target.value } } : f,
                 )
               }
-              placeholder="Select unpacked product"
-              options={unpackedProducts
+              placeholder="Select source product"
+              options={sourceProducts
                 .filter(
                   (p) =>
                     !packSources.some((s) => Number(s.productId) === p.id) ||

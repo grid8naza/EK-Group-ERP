@@ -196,4 +196,13 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     menu: { name: 'Purchase', icon: 'shopping-cart' },
     subs: PURCHASE_SUBS,
   },
+  {
+    code: 'STAFF_MESS',
+    name: 'Staff Mess',
+    icon: 'utensils',
+    sortOrder: 10,
+    description: 'Staff mess / canteen management.',
+    // Placeholder: registered in Module Master so admins can enable it per
+    // company. No menu or screens yet — they arrive when the module is built.
+  },
 ];

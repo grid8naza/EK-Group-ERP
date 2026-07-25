@@ -76,6 +76,7 @@ import {
   MapPin,
   UserCheck,
   Briefcase,
+  Utensils,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -229,6 +230,9 @@ const MAP: Record<string, LucideIcon> = {
   location: MapPin,
   'user-check': UserCheck,
   briefcase: Briefcase,
+  utensils: Utensils,
+  mess: Utensils,
+  canteen: Utensils,
 };
 
 export function resolveIcon(name?: string | null): LucideIcon {
@@ -323,6 +327,7 @@ export const ICON_OPTIONS: IconOption[] = [
   { name: 'credit-card', label: 'Credit card', Icon: CreditCard },
   { name: 'calendar', label: 'Calendar', Icon: Calendar },
   { name: 'briefcase', label: 'Briefcase', Icon: Briefcase },
+  { name: 'utensils', label: 'Mess / Canteen', Icon: Utensils },
   { name: 'user-check', label: 'User check', Icon: UserCheck },
   { name: 'star', label: 'Star', Icon: Star },
   { name: 'bookmark', label: 'Bookmark', Icon: Bookmark },

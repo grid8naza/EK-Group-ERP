@@ -16,7 +16,7 @@ import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/u
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import type { Group, Category, Company } from '@/lib/types';
+import type { Group, Category, Company, ProductStage } from '@/lib/types';
 
 const ROUTE = '/inventory/groups';
 const MAX_LEVEL = 5;
@@ -31,8 +31,16 @@ const empty = {
   companyIds: [] as number[],
   forItem: true,
   forProduct: false,
+  // '' = untagged; otherwise the production stage this primary product group
+  // holds, which is what binds it to a product screen.
+  productStage: '' as '' | ProductStage,
   isActive: true,
 };
+
+const STAGE_OPTIONS: { value: ProductStage; label: string }[] = [
+  { value: 'SEMI_FINISHED', label: 'Semi-finished' },
+  { value: 'FINISHED', label: 'Finished' },
+];
 
 export default function GroupsPage() {
   const { can } = useAuth();
@@ -92,6 +100,12 @@ export default function GroupsPage() {
     : undefined;
   const effectiveLevel = selectedParent ? selectedParent.level + 1 : 1;
   const canBeContainer = effectiveLevel < MAX_LEVEL;
+  // A production stage lives on a PRIMARY product group; sub-groups inherit it.
+  const stageApplicable =
+    form.forProduct && (editing ? editing.level : effectiveLevel) === 1;
+  // The other group already holding each stage, to warn before the save fails.
+  const stageHolder = (stage: ProductStage) =>
+    primaryGroups.find((g) => g.productStage === stage && g.id !== editing?.id);
   // Parent options for the form: active containers (level < 5) within the
   // chosen category.
   const formParentOptions = parentCandidates.filter(
@@ -114,6 +128,7 @@ export default function GroupsPage() {
     companyIds: g.companyIds ?? [],
     forItem: g.forItem,
     forProduct: g.forProduct,
+    productStage: (g.productStage ?? '') as '' | ProductStage,
     isActive: g.isActive,
   });
 
@@ -180,6 +195,18 @@ export default function GroupsPage() {
       toast.error('Select at least one company, or choose "All companies".');
       return;
     }
+    if (stageApplicable) {
+      // Mandatory: a primary product group must declare which screen lists it.
+      if (!form.productStage) {
+        toast.error('Select a production stage (Semi-finished or Finished).');
+        return;
+      }
+      const held = stageHolder(form.productStage);
+      if (held) {
+        toast.error(`“${held.name}” already holds that production stage.`);
+        return;
+      }
+    }
 
     setSaving(true);
     try {
@@ -195,6 +222,8 @@ export default function GroupsPage() {
           companyIds: form.allCompanies ? [] : form.companyIds,
           forItem: form.forItem,
           forProduct: form.forProduct,
+          // null clears the tag; only a primary product group can hold one.
+          productStage: stageApplicable ? form.productStage || null : null,
           isActive: form.isActive,
         });
         toast.success('Group updated.');
@@ -209,6 +238,7 @@ export default function GroupsPage() {
           companyIds: form.allCompanies ? [] : form.companyIds,
           forItem: form.forItem,
           forProduct: form.forProduct,
+          productStage: stageApplicable ? form.productStage || null : null,
           isActive: form.isActive,
         });
         toast.success('Group created.');
@@ -685,6 +715,41 @@ export default function GroupsPage() {
                 />
               </div>
             </div>
+
+            {/* Production stage — required on a primary group that applies to
+                Products, and shown only there. This is what binds a group to a
+                product screen: Inventory → Products - Semifinished lists the
+                SEMI_FINISHED subtree and Products - Finished the FINISHED one,
+                so renaming the group is safe. Each stage can be held by only
+                one group. */}
+            {stageApplicable && (
+              <div className="flex flex-col gap-1 sm:col-span-2">
+                <Select
+                  label="Production stage"
+                  required
+                  value={form.productStage}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      productStage: e.target.value as '' | ProductStage,
+                    })
+                  }
+                  placeholder="— Select —"
+                  options={STAGE_OPTIONS.map((o) => {
+                    const held = stageHolder(o.value);
+                    return {
+                      value: o.value,
+                      label: held ? `${o.label} — held by ${held.name}` : o.label,
+                    };
+                  })}
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Products under this group are listed by the matching screen
+                  (Products - Semifinished / Products - Finished). Sub-groups
+                  inherit it.
+                </p>
+              </div>
+            )}
 
             {/* Availability — all companies or a chosen set */}
             <div className="flex flex-col gap-2 sm:col-span-2">

@@ -19,6 +19,7 @@ import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import type {
   Product,
+  ProductStage,
   Group,
   Unit,
   HsnCode,
@@ -29,6 +30,14 @@ import type {
 } from '@/lib/types';
 
 const ROUTE = '/inventory/products-unpacked';
+
+// The single primary product group this screen owns: the listing, the parent
+// filter and the drawer are all scoped to its subtree, so there is no primary
+// picker. The binding is the group's `productStage` tag (set in Group Master),
+// not its name, so renaming the group doesn't strand the screen. While no group
+// carries the tag the scope is dropped rather than leaving the screen
+// permanently empty.
+const STAGE: ProductStage = 'SEMI_FINISHED';
 
 // Per-branch stocking parameters, kept as strings while editing (like every
 // other numeric field on this form). Keyed by branchId in the form state.
@@ -72,7 +81,8 @@ const empty = {
   boxUnitId: '',
   hsnCodeId: '',
   shelfLife: '0',
-  // Unpacked products are always made from a recipe and never packed here.
+  // Defaults for a new semi-finished product: made from a recipe, not packed.
+  // Both are editable in the drawer.
   hasRecipe: true,
   hasPacking: false,
   isIngredient: false,
@@ -134,9 +144,9 @@ export default function ProductsPage() {
   const [view, setView] = useState(false);
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
-  // Drawer group cascade: primary group → parent group → leaf group (the saved
-  // `groupId`). Category is fixed to Products, so it is not shown.
-  const [drawerPrimary, setDrawerPrimary] = useState('');
+  // Drawer group cascade: parent group → leaf group (the saved `groupId`). The
+  // category is fixed to Products and the primary group to this screen's, so
+  // neither is picked.
   const [drawerParent, setDrawerParent] = useState('');
   const imageInput = useRef<HTMLInputElement>(null);
   const [imageUploading, setImageUploading] = useState(false);
@@ -155,7 +165,6 @@ export default function ProductsPage() {
       setImageUploading(false);
     }
   };
-  const [primaryFilter, setPrimaryFilter] = useState('');
   const [parentFilter, setParentFilter] = useState('');
   const [sellFilter, setSellFilter] = useState(''); // '' | 'yes' | 'no'
   const [status, setStatus] = useState(''); // '' | 'active' | 'inactive'
@@ -186,25 +195,26 @@ export default function ProductsPage() {
     () => productGroups.filter((g) => g.subGroupApplicable && g.level < 5),
     [productGroups],
   );
-  const primaryGroupCode = primaryFilter
-    ? productGroups.find((g) => String(g.id) === primaryFilter)?.code
-    : undefined;
+  // This screen's primary group and its CC+L1 code prefix (2+2 digits) — every
+  // group and product beneath it carries that prefix. Undefined until the group
+  // is created, which drops the scope instead of blanking the screen.
+  const screenPrimary = useMemo(
+    () => primaryGroups.find((g) => g.productStage === STAGE),
+    [primaryGroups],
+  );
+  const screenPrefix = screenPrimary?.code.slice(0, 4);
 
-  // Drawer cascade: the CC+L1 code prefix (2+2 digits) of the chosen primary
-  // group scopes the parent + leaf options to that primary's subtree.
-  const primaryPrefixOf = (id: string) =>
-    primaryGroups.find((p) => String(p.id) === id)?.code.slice(0, 4);
-  const drawerParentOptions = parentCandidates.filter((g) => {
-    const pref = primaryPrefixOf(drawerPrimary);
-    return !pref || g.code.startsWith(pref);
-  });
+  // Drawer cascade: the primary group is fixed to this screen's, so its prefix
+  // scopes the parent + leaf options.
+  const drawerParentOptions = parentCandidates.filter(
+    (g) => !screenPrefix || g.code.startsWith(screenPrefix),
+  );
   // Products attach to LEAF groups only (no sub-groups), scoped by the chosen
-  // parent (or, failing that, the chosen primary's subtree).
+  // parent (or, failing that, this screen's primary subtree).
   const drawerLeafOptions = productGroups.filter((g) => {
     if (g.subGroupApplicable || !g.isActive) return false;
     if (drawerParent) return String(g.parentGroupId) === drawerParent;
-    const pref = primaryPrefixOf(drawerPrimary);
-    return pref ? g.code.startsWith(pref) : true;
+    return screenPrefix ? g.code.startsWith(screenPrefix) : true;
   });
   // Resolve a leaf group's primary (level-1) + immediate parent names, for the
   // read-only classification shown when editing.
@@ -263,8 +273,9 @@ export default function ProductsPage() {
     boxUnitId: p.boxUnitId != null ? String(p.boxUnitId) : '',
     hsnCodeId: p.hsnCodeId != null ? String(p.hsnCodeId) : '',
     shelfLife: String(p.shelfLife ?? 0),
-    hasRecipe: true,
-    hasPacking: false,
+    // Editable in the drawer; `empty` holds this screen's default for new rows.
+    hasRecipe: p.hasRecipe ?? true,
+    hasPacking: p.hasPacking ?? false,
     isIngredient: p.isIngredient ?? false,
     allCompanies: p.allCompanies,
     companyIds: p.companyIds ?? [],
@@ -288,7 +299,6 @@ export default function ProductsPage() {
     setEditing(null);
     setView(false);
     setForm({ ...empty });
-    setDrawerPrimary('');
     setDrawerParent('');
     setOpen(true);
   };
@@ -526,12 +536,11 @@ export default function ProductsPage() {
 
   const visibleRows = useMemo(() => {
     let rows = [...(data ?? [])];
-    if (primaryFilter) {
-      const primary = (groups ?? []).find((g) => String(g.id) === primaryFilter);
-      if (primary) {
-        const prefix = primary.code.slice(0, 4);
-        rows = rows.filter((r) => groupById.get(r.groupId ?? -1)?.code.startsWith(prefix));
-      }
+    // Scoped to this screen's primary group (no picker — see PRIMARY_GROUP).
+    if (screenPrefix) {
+      rows = rows.filter((r) =>
+        groupById.get(r.groupId ?? -1)?.code.startsWith(screenPrefix),
+      );
     }
     if (parentFilter) {
       // The parent-group filter lists leaf groups (what products attach to), so
@@ -545,7 +554,7 @@ export default function ProductsPage() {
     if (status === 'active') rows = rows.filter((r) => r.isActive);
     else if (status === 'inactive') rows = rows.filter((r) => !r.isActive);
     return rows.sort((a, b) => a.code.localeCompare(b.code));
-  }, [data, sellFilter, status, primaryFilter, parentFilter, groups, groupById]);
+  }, [data, sellFilter, status, screenPrefix, parentFilter, groupById]);
 
   const columns: Column<Product>[] = [
     { key: 'code', header: 'Code', accessor: (r) => r.code },
@@ -598,8 +607,8 @@ export default function ProductsPage() {
   return (
     <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
-        title="Products - Unpacked"
-        description="Finished products — recipe & packing are set under Production → Recipe Master"
+        title="Products - Semifinished"
+        description="Semi-finished products — recipes are set under Production → Recipe Master"
         icon={<PackageOpen className="h-5 w-5" />}
         actions={
           canAdd && (
@@ -617,7 +626,7 @@ export default function ProductsPage() {
         columns={columns}
         rows={visibleRows}
         defaultSort={{ key: 'code', dir: 'asc' }}
-        key={`${primaryFilter}|${parentFilter}|${sellFilter}|${status}`}
+        key={`${parentFilter}|${sellFilter}|${status}`}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
@@ -625,19 +634,7 @@ export default function ProductsPage() {
         searchPlaceholder="Search products..."
         toolbar={
           <div className="flex flex-nowrap items-center gap-2">
-            <Select
-              value={primaryFilter}
-              onChange={(e) => {
-                setPrimaryFilter(e.target.value);
-                setParentFilter('');
-              }}
-              wrapClassName="w-36"
-              placeholder="All primary groups"
-              options={primaryGroups.map((g) => ({
-                value: String(g.id),
-                label: g.name,
-              }))}
-            />
+            {/* No primary-group filter: the screen is fixed to PRIMARY_GROUP. */}
             <Select
               value={parentFilter}
               onChange={(e) => setParentFilter(e.target.value)}
@@ -648,8 +645,7 @@ export default function ProductsPage() {
                   (g) =>
                     !g.subGroupApplicable &&
                     g.isActive &&
-                    (!primaryGroupCode ||
-                      g.code.startsWith(primaryGroupCode.slice(0, 4))),
+                    (!screenPrefix || g.code.startsWith(screenPrefix)),
                 )
                 .map((g) => ({ value: String(g.id), label: g.name }))}
             />
@@ -771,19 +767,16 @@ export default function ProductsPage() {
               // Drill down primary → parent → leaf group; the server derives the
               // category from the chosen leaf group.
               <>
-                <Select
+                {/* Fixed to this screen's primary group, so it is shown rather
+                    than picked — a product filed elsewhere would vanish from
+                    the listing that created it. */}
+                <Input
                   label="Primary Group"
-                  value={drawerPrimary}
-                  onChange={(e) => {
-                    setDrawerPrimary(e.target.value);
-                    setDrawerParent('');
-                    setForm({ ...form, groupId: '' });
-                  }}
-                  placeholder="— Select —"
-                  options={primaryGroups.map((g) => ({
-                    value: String(g.id),
-                    label: g.name,
-                  }))}
+                  value={
+                    screenPrimary?.name ??
+                    'Not set — tag a primary group “Semi-finished”'
+                  }
+                  disabled
                 />
                 <Select
                   label="Parent Group"
@@ -864,33 +857,62 @@ export default function ProductsPage() {
                 never packed), so the toggles are hidden and forced — see
                 `empty` / `formFrom`. */}
 
-            {/* Can Sell — gates the selling prices, profit %, and packing. */}
-            <div className="sm:col-span-2">
-              <Checkbox
-                label="Can Sell"
-                checked={form.canSell}
-                onChange={(e) => {
-                  const canSell = e.target.checked;
-                  // Unchecking clears the now-disabled selling fields.
-                  setForm((f) =>
-                    canSell
-                      ? { ...f, canSell }
-                      : {
-                          ...f,
-                          canSell,
-                          imageUrl: '',
-                          intercompanyPrice: '',
-                          intercompanyProfitPct: '',
-                          wholesalePrice: '',
-                          wholesaleProfitPct: '',
-                          retailPrice: '',
-                          retailProfitPct: '',
-                          boxQty: '',
-                          boxUnitId: '',
-                        },
-                  );
-                }}
-              />
+            {/* Capabilities — what may be built for this product and how it may
+                be used. Has Recipe puts it on Production → Recipe Master and Has
+                Packing on Packing Master; both are defaulted per screen (recipe
+                on here) but editable. Can Sell gates the selling prices, profit
+                %, picture and branch stock levels, so the group sits above them.
+                Kept together in one block ahead of the fields they govern. */}
+            <div className="flex flex-col gap-2 sm:col-span-2">
+              <span className="label !mb-0">Capabilities</span>
+              <div className="flex flex-wrap gap-x-8 gap-y-2">
+                <Checkbox
+                  label="Has Recipe"
+                  checked={form.hasRecipe}
+                  onChange={(e) =>
+                    setForm({ ...form, hasRecipe: e.target.checked })
+                  }
+                />
+                <Checkbox
+                  label="Has Packing"
+                  checked={form.hasPacking}
+                  onChange={(e) =>
+                    setForm({ ...form, hasPacking: e.target.checked })
+                  }
+                />
+                <Checkbox
+                  label="Can be Ingredient"
+                  checked={form.isIngredient}
+                  onChange={(e) =>
+                    setForm({ ...form, isIngredient: e.target.checked })
+                  }
+                />
+                <Checkbox
+                  label="Can Sell"
+                  checked={form.canSell}
+                  onChange={(e) => {
+                    const canSell = e.target.checked;
+                    // Unchecking clears the now-disabled selling fields.
+                    setForm((f) =>
+                      canSell
+                        ? { ...f, canSell }
+                        : {
+                            ...f,
+                            canSell,
+                            imageUrl: '',
+                            intercompanyPrice: '',
+                            intercompanyProfitPct: '',
+                            wholesalePrice: '',
+                            wholesaleProfitPct: '',
+                            retailPrice: '',
+                            retailProfitPct: '',
+                            boxQty: '',
+                            boxUnitId: '',
+                          },
+                    );
+                  }}
+                />
+              </div>
             </div>
 
             {/* Product picture — only for sellable products. */}
@@ -1116,22 +1138,9 @@ export default function ProductsPage() {
               onChange={(e) => setForm({ ...form, shelfLife: e.target.value })}
             />
 
-            {/* Capabilities — which BOMs may be built for this product, and
-                whether it can serve as an ingredient in another product. */}
-            <div className="flex flex-col gap-2 sm:col-span-2">
-              <span className="label !mb-0">Capabilities</span>
-              {/* Unpacked products always require a recipe and are never packed
-                  here, so those toggles are hidden and forced (see `empty`). */}
-              <div className="flex flex-wrap gap-x-8 gap-y-2">
-                <Checkbox
-                  label="Can be Ingredient"
-                  checked={form.isIngredient}
-                  onChange={(e) =>
-                    setForm({ ...form, isIngredient: e.target.checked })
-                  }
-                />
-              </div>
-            </div>
+            {/* Capabilities (Has Recipe / Has Packing / Can be Ingredient / Can
+                Sell) live in one block higher up, above the selling fields that
+                Can Sell gates. */}
 
             {/* Availability */}
             <div className="flex flex-col gap-2 sm:col-span-2">

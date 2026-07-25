@@ -222,6 +222,42 @@ async function migrateInventoryVoucherMenu(
 }
 
 /**
+ * One-time rename: the two product screens are now named after the production
+ * stage they hold rather than their packing state — "Products - Unpacked" →
+ * "Products - Semifinished" and "Products - Packed" → "Products - Finished".
+ * Routes (and therefore the rows themselves) are unchanged, so this is a pure
+ * label update on the SubMenu + ObjectMaster entries; privileges and workflow
+ * bindings hang off ids and are untouched. Guarded on the old name so an admin's
+ * own rename is left alone. Idempotent — a no-op once renamed.
+ */
+async function migrateProductScreenNames(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  const RENAMES = [
+    {
+      route: '/inventory/products-unpacked',
+      from: 'Products - Unpacked',
+      to: 'Products - Semifinished',
+    },
+    {
+      route: '/inventory/products-packed',
+      from: 'Products - Packed',
+      to: 'Products - Finished',
+    },
+  ];
+  for (const { route, from, to } of RENAMES) {
+    await prisma.subMenu.updateMany({
+      where: { route, subMenuName: from },
+      data: { subMenuName: to },
+    });
+    await prisma.objectMaster.updateMany({
+      where: { route, objectName: from },
+      data: { objectName: to, nameInMenu: to },
+    });
+  }
+}
+
+/**
  * Collapse duplicate rows for a screen, keeping the OLDEST — it's the original,
  * the one carrying privileges and workflow bindings; a twin is always the empty
  * newcomer.
@@ -545,6 +581,9 @@ export async function syncScaffold(
 
   // 0e) Rename the Accounts module's main menu → "Accounts Setup".
   await migrateAccountsMenuName(prisma);
+
+  // 0e2) Rename the product screens → Products - Semifinished / - Finished.
+  await migrateProductScreenNames(prisma);
 
   // 0f) Split Purchase Order - IC in two: Sent moves to the Purchase module,
   //     Received stays in CRM. Must run before the sync so the moved screen is

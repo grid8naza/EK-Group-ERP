@@ -121,8 +121,10 @@ export function LocalPurchaseOrderScreen() {
       ...(items ?? [])
         .filter((i) => i.isActive)
         .map((i) => ({ value: `item:${i.id}`, label: `${i.name} — Item` })),
+      // Products are offered by the Can Sell capability alone — never by group
+      // or form factor — the same rule the inter-company order uses.
       ...(products ?? [])
-        .filter((p) => p.isActive)
+        .filter((p) => p.isActive && p.canSell)
         .map((p) => ({ value: `product:${p.id}`, label: `${p.name} — Product` })),
     ],
     [items, products],

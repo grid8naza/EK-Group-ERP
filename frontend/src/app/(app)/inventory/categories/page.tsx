@@ -51,7 +51,6 @@ export default function CategoriesPage() {
   const [view, setView] = useState(false);
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
-  const [applies, setApplies] = useState(''); // '' | 'item' | 'product'
   const [status, setStatus] = useState(''); // '' | 'active' | 'inactive'
 
   const canAdd = can(ROUTE, 'add');
@@ -126,8 +125,8 @@ export default function CategoriesPage() {
       toast.error('Name is required.');
       return;
     }
-    if (!form.forItem && !form.forProduct) {
-      toast.error('Select Item, Product, or both.');
+    if (!form.forItem && !form.forProduct && !form.forPacking) {
+      toast.error('Select Item, Product or Packing material.');
       return;
     }
     if (!form.allCompanies && form.companyIds.length === 0) {
@@ -207,21 +206,23 @@ export default function CategoriesPage() {
 
   const sortedRows = useMemo(() => {
     let rows = [...(data ?? [])];
-    if (applies === 'item') rows = rows.filter((c) => c.forItem);
-    else if (applies === 'product') rows = rows.filter((c) => c.forProduct);
     if (status === 'active') rows = rows.filter((c) => c.isActive);
     else if (status === 'inactive') rows = rows.filter((c) => !c.isActive);
     return rows;
-  }, [data, applies, status]);
+  }, [data, status]);
 
   const availabilityText = (c: Category) =>
     c.companyIds.map((id) => nameById.get(id) ?? `#${id}`).join(', ');
 
+  // All three flags are independent, and a category may carry any combination
+  // (packing material on its own is valid — it holds items of that kind).
   const appliesTo = (c: Category) => {
-    if (c.forItem && c.forProduct) return 'Item + Product';
-    if (c.forItem) return 'Item';
-    if (c.forProduct) return 'Product';
-    return '-';
+    const parts = [
+      c.forItem && 'Item',
+      c.forProduct && 'Product',
+      c.forPacking && 'Packing material',
+    ].filter(Boolean);
+    return parts.length ? parts.join(' + ') : '-';
   };
 
   const columns: Column<Category>[] = [
@@ -302,7 +303,7 @@ export default function CategoriesPage() {
         columns={columns}
         rows={sortedRows}
         defaultSort={{ key: 'code', dir: 'asc' }}
-        key={`${applies}|${status}`}
+        key={status}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
@@ -310,16 +311,8 @@ export default function CategoriesPage() {
         searchPlaceholder="Search categories..."
         toolbar={
           <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={applies}
-              onChange={(e) => setApplies(e.target.value)}
-              wrapClassName="w-44"
-              placeholder="Applies to: All"
-              options={[
-                { value: 'item', label: 'Item-wise' },
-                { value: 'product', label: 'Product-wise' },
-              ]}
-            />
+            {/* No "Applies to" filter — there are only a handful of categories,
+                and the column already shows what each one applies to. */}
             <Select
               value={status}
               onChange={(e) => setStatus(e.target.value)}

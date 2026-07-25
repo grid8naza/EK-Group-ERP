@@ -17,6 +17,17 @@ enum BomKind {
   PACKING
 }
 
+/// The production stage a primary product group holds. Tagging a group is what
+/// binds it to a product screen — Products - Semifinished lists the
+/// SEMI_FINISHED subtree, Products - Finished the FINISHED one — so the screens
+/// survive a rename of the group. The user picks it: it is REQUIRED on a
+/// level-1 group that applies to Products, rejected on any other group, and at
+/// most one group may carry each stage. Nothing tags a group automatically.
+enum ProductStage {
+  SEMI_FINISHED
+  FINISHED
+}
+
 /// Unit of Measure master (global). A SIMPLE unit stands alone (e.g. Piece,
 /// Kilogram). A COMPOUND unit is defined as `conversionFactor` × a simple base
 /// unit (e.g. 1 Box = 12 Pieces), so quantities in a compound unit can be
@@ -143,6 +154,11 @@ model Group {
   allCompanies Boolean  @default(false) // true = available to every company
   forItem      Boolean  @default(true)
   forProduct   Boolean  @default(false)
+  // Production stage owned by this group, set on PRIMARY (level-1) product
+  // groups only and inherited by everything beneath them via the code prefix.
+  // Unique, so each stage names exactly one group; NULLs are not compared by
+  // Postgres, so untagged groups are unconstrained.
+  productStage ProductStage? @unique
   isActive     Boolean  @default(true)
   isLocked     Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt    DateTime @default(now())

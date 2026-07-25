@@ -1146,7 +1146,8 @@ function DraftEditor(props: {
                             setLine(i, { productId: e.target.value })
                           }
                           placeholder="Select product"
-                          // Only sellable products can be ordered.
+                          // Can Sell is the only criterion — any product
+                          // carrying it can be ordered, whatever its group.
                           options={products
                             .filter((pr) => pr.canSell)
                             .map((pr) => ({ value: pr.id, label: pr.name }))}

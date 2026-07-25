@@ -75,7 +75,7 @@ export class CategoryService {
     const forItem = dto.forItem ?? true;
     const forProduct = dto.forProduct ?? false;
     const forPacking = dto.forPacking ?? false;
-    this.assertAppliesToSomething(forItem, forProduct);
+    this.assertAppliesToSomething(forItem, forProduct, forPacking);
 
     // The code is system-generated (2-digit category segment); manual codes are
     // not accepted. Retry on the rare race where two categories grab the same
@@ -149,7 +149,7 @@ export class CategoryService {
     const forItem = dto.forItem ?? existing.forItem;
     const forProduct = dto.forProduct ?? existing.forProduct;
     const forPacking = dto.forPacking ?? existing.forPacking;
-    this.assertAppliesToSomething(forItem, forProduct);
+    this.assertAppliesToSomething(forItem, forProduct, forPacking);
 
     try {
       const updated = await this.prisma.category.update({
@@ -233,10 +233,20 @@ export class CategoryService {
     return ids;
   }
 
-  private assertAppliesToSomething(forItem: boolean, forProduct: boolean) {
-    if (!forItem && !forProduct) {
+  /**
+   * A category must apply to at least one thing. Packing material counts on its
+   * own: it is a kind of ITEM (the opening-stock and BOM screens split items by
+   * `category.forPacking`), so a packing-only category is a complete, valid
+   * choice — not an "applies to nothing" mistake.
+   */
+  private assertAppliesToSomething(
+    forItem: boolean,
+    forProduct: boolean,
+    forPacking: boolean,
+  ) {
+    if (!forItem && !forProduct && !forPacking) {
       throw new BadRequestException(
-        'A category must apply to Item, Product, or both.',
+        'A category must apply to Item, Product or Packing material.',
       );
     }
   }

@@ -208,7 +208,7 @@ export class StockTransactionService {
   }
 
   /**
-   * Post a packing operation: consume the unpacked source products and packing
+   * Post a packing operation: consume the source products and packing
    * materials (stock-out, availability-checked), then produce the packed
    * products as new batches (stock-in). Atomic.
    */
@@ -258,7 +258,7 @@ export class StockTransactionService {
     const prodById = new Map(products.map((p) => [p.id, p]));
 
     return this.prisma.$transaction(async (tx) => {
-      // CONSUME the unpacked source products and packing materials.
+      // CONSUME the source products and packing materials.
       for (const c of consumeProducts) {
         await this.consumeStock(tx, {
           companyId,

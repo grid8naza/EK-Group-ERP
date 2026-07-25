@@ -232,7 +232,7 @@ export default function PackingMasterPage() {
             onToggle={() => toggleLock(r)}
           />
         )}
-        emptyMessage="No packed products found — mark a product “Packed” under Inventory → Products - Packed"
+        emptyMessage="No packed products found — mark a product “Packed” under Inventory → Products - Finished"
       />
 
       <Drawer

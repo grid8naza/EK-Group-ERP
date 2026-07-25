@@ -23,10 +23,11 @@ const withLines = {
 };
 
 /**
- * Packing operations — turn unpacked products into packed, sellable ones. Each
- * packed line consumes its unpacked source(s) and packing materials from stock
- * (via the recipe/packing explosion) and banks the packed product as a new
- * batch (through the STOCK_POSTING port).
+ * Packing operations — pack products that carry a packing BOM (Has Packing is
+ * the only criterion, as in Packing Master). Each line consumes its source
+ * product(s) and packing materials from stock (via the recipe/packing
+ * explosion) and banks the packed product as a new batch (through the
+ * STOCK_POSTING port).
  */
 @Injectable()
 export class PackingService {
@@ -68,19 +69,21 @@ export class PackingService {
   ) {
     if (!companyId) throw new BadRequestException('No active company.');
 
-    // Every line must be a PACKED product.
+    // Every line must be a product that HAS PACKING — the capability flag is
+    // the single criterion, matching Packing Master (which lists on it too).
+    // The old `packed` form-factor flag no longer gates this.
     const productIds = [...new Set(dto.lines.map((l) => l.productId))];
     const products = await this.prisma.product.findMany({
       where: { id: { in: productIds } },
-      select: { id: true, packed: true, name: true },
+      select: { id: true, hasPacking: true, name: true },
     });
     const prodById = new Map(products.map((p) => [p.id, p]));
     for (const l of dto.lines) {
       const p = prodById.get(l.productId);
       if (!p) throw new BadRequestException('Product not found.');
-      if (!p.packed) {
+      if (!p.hasPacking) {
         throw new BadRequestException(
-          `"${p.name}" is not a packed product and cannot be packed.`,
+          `"${p.name}" is not marked “Has Packing”, so it cannot be packed.`,
         );
       }
     }
@@ -92,7 +95,7 @@ export class PackingService {
       );
     }
 
-    // What each packed quantity consumes (unpacked sources + packing materials).
+    // What each packed quantity consumes (source products + packing materials).
     const demand = dto.lines.map((l) => ({
       productId: l.productId,
       quantity: l.quantity,

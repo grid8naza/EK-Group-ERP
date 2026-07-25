@@ -1,7 +1,9 @@
+import { ProductStage } from '@prisma/client';
 import {
   ArrayUnique,
   IsArray,
   IsBoolean,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -60,6 +62,11 @@ export class CreateGroupDto {
   @IsBoolean()
   forProduct?: boolean;
 
+  /** Production stage this primary product group holds (null = untagged). */
+  @IsOptional()
+  @IsEnum(ProductStage)
+  productStage?: ProductStage | null;
+
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
@@ -109,6 +116,11 @@ export class UpdateGroupDto {
   @IsOptional()
   @IsBoolean()
   forProduct?: boolean;
+
+  /** Production stage; send null to clear the tag. */
+  @IsOptional()
+  @IsEnum(ProductStage)
+  productStage?: ProductStage | null;
 
   @IsOptional()
   @IsBoolean()

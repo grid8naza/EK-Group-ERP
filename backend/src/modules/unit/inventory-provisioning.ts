@@ -17,8 +17,8 @@ export const INVENTORY_SUBS = [
   { name: 'Item Master', route: '/inventory/items', icon: 'box', order: 5 },
   // Products are split across two screens that share the /products backend and
   // are told apart by the packed/unpacked flags on each product.
-  { name: 'Products - Unpacked', route: '/inventory/products-unpacked', icon: 'package-2', order: 6 },
-  { name: 'Products - Packed', route: '/inventory/products-packed', icon: 'package', order: 7 },
+  { name: 'Products - Semifinished', route: '/inventory/products-unpacked', icon: 'package-2', order: 6 },
+  { name: 'Products - Finished', route: '/inventory/products-packed', icon: 'package', order: 7 },
   // Stock locations. The Opening Stock entry screens live in their own main
   // menu (OPENING_STOCK_MENU below), not under the master-data Inventory menu.
   { name: 'Store Master', route: '/inventory/stores', icon: 'warehouse', order: 8 },

@@ -80,9 +80,10 @@ export default function RecipeMasterPage() {
   );
 
   const visibleRows = useMemo(() => {
-    // Recipes are built for unpacked products only (packed products carry no
-    // recipe); see [Products - Unpacked].
-    let rows = (data ?? []).filter((p) => p.unpacked);
+    // Recipes are built for products flagged "Has Recipe" on the product master
+    // — mirrors Packing Master, which lists on hasPacking. Semi-finished
+    // products default to it, but a finished product can opt in too.
+    let rows = (data ?? []).filter((p) => p.hasRecipe);
     if (categoryFilter)
       rows = rows.filter((p) => String(p.categoryId) === categoryFilter);
     if (groupFilter)
@@ -129,6 +130,7 @@ export default function RecipeMasterPage() {
   );
   const pickerProducts = (data ?? []).filter(
     (p) =>
+      p.hasRecipe &&
       (!pickCategory || String(p.categoryId) === pickCategory) &&
       (!pickGroup || String(p.groupId) === pickGroup),
   );

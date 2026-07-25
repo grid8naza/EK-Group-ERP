@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, ProductStage } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
 import {
@@ -143,6 +143,11 @@ export class GroupService {
 
     const allCompanies = dto.allCompanies ?? false;
     const companyIds = this.resolveCompanies(allCompanies, dto.companyIds);
+    const productStage = await this.resolveStage(
+      dto.productStage ?? null,
+      { level, forProduct },
+      null,
+    );
 
     return this.withCodeRetry(async () => {
       const n = await this.nextGroupNumber(categoryId, parentGroupId, level);
@@ -158,6 +163,7 @@ export class GroupService {
           allCompanies,
           forItem,
           forProduct,
+          productStage,
           isActive: dto.isActive ?? true,
           companies: { create: companyIds.map((companyId) => ({ companyId })) },
         },
@@ -212,6 +218,22 @@ export class GroupService {
       }
     }
 
+    // The stage tag: taken from the payload when sent, otherwise carried over.
+    // Re-validated either way, since toggling Product changes whether a stage is
+    // required or forbidden — an edit that leaves a primary product group
+    // untagged is rejected. Dropping Product drops the tag with it, rather than
+    // stranding it on an item-only group.
+    const requestedStage = !forProduct
+      ? null
+      : dto.productStage !== undefined
+        ? dto.productStage
+        : existing.productStage;
+    const productStage = await this.resolveStage(
+      requestedStage,
+      { level: existing.level, forProduct },
+      id,
+    );
+
     const allCompanies = dto.allCompanies ?? existing.allCompanies;
     const wantsLinkChange =
       dto.allCompanies !== undefined || dto.companyIds !== undefined;
@@ -232,6 +254,7 @@ export class GroupService {
         allCompanies,
         forItem,
         forProduct,
+        productStage,
         isActive: dto.isActive,
         ...(companyIds
           ? {
@@ -298,7 +321,11 @@ export class GroupService {
     return n;
   }
 
-  /** Re-run an allocate+insert if it loses the code-uniqueness race. */
+  /**
+   * Re-run an allocate+insert if it loses the CODE-uniqueness race. Other unique
+   * columns (productStage) must not be retried — the second attempt would fail
+   * the same way and then surface as a raw P2002, so they are rethrown at once.
+   */
   private async withCodeRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
     for (let i = 0; ; i++) {
       try {
@@ -307,13 +334,58 @@ export class GroupService {
         if (
           i < attempts &&
           e instanceof Prisma.PrismaClientKnownRequestError &&
-          e.code === 'P2002'
+          e.code === 'P2002' &&
+          String(e.meta?.target ?? '').includes('code')
         ) {
           continue;
         }
         throw e;
       }
     }
+  }
+
+  /**
+   * Validate a production-stage tag. It marks the one primary product group a
+   * product screen lists, so it is MANDATORY on a level-1 group that applies to
+   * products, forbidden anywhere else, and at most one group may hold each
+   * stage. Nothing sets it implicitly — the user chooses. The unique index is
+   * the real guard on the last rule; this check exists to fail with a message
+   * naming the group that already holds it. `selfId` is the row being updated.
+   */
+  private async resolveStage(
+    stage: ProductStage | null,
+    group: { level: number; forProduct: boolean },
+    selfId: number | null,
+  ): Promise<ProductStage | null> {
+    const applicable = group.forProduct && group.level === 1;
+    if (stage == null) {
+      if (applicable) {
+        throw new BadRequestException(
+          'Select a production stage (Semi-finished or Finished) — a primary group that applies to Products must declare one.',
+        );
+      }
+      return null;
+    }
+    if (!group.forProduct) {
+      throw new BadRequestException(
+        'Only a group that applies to Products can hold a production stage.',
+      );
+    }
+    if (group.level !== 1) {
+      throw new BadRequestException(
+        'Only a primary (level 1) group can hold a production stage — its sub-groups inherit it.',
+      );
+    }
+    const holder = await this.prisma.group.findUnique({
+      where: { productStage: stage },
+      select: { id: true, name: true },
+    });
+    if (holder && holder.id !== selfId) {
+      throw new ConflictException(
+        `“${holder.name}” already holds that production stage. Clear it there first.`,
+      );
+    }
+    return stage;
   }
 
   private flatten<

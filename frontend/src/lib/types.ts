@@ -594,9 +594,18 @@ export interface Group {
   companyIds: number[];
   forItem: boolean;
   forProduct: boolean;
+  /**
+   * Production stage held by this primary (level-1) product group — what binds
+   * a group to a product screen (Semifinished / Finished list its subtree).
+   * Required on such a group and chosen by the user; at most one group carries
+   * each stage; null on every other group.
+   */
+  productStage?: ProductStage | null;
   isActive: boolean;
   isLocked?: boolean;
 }
+
+export type ProductStage = 'SEMI_FINISHED' | 'FINISHED';
 
 // ---- Asset: Category Master (flat; no Item/Product applicability) ----
 export interface AssetCategory {
