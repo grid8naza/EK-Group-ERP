@@ -11,7 +11,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { Drawer } from '@/components/ui/Drawer';
-import { Input, Select } from '@/components/ui/Field';
+import { Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import type { Product, Category, Group } from '@/lib/types';
 
@@ -26,10 +26,16 @@ export default function PackingMasterPage() {
   const { data: groups } = useFetch<Group[]>('/groups');
 
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [primaryFilter, setPrimaryFilter] = useState('');
   const [groupFilter, setGroupFilter] = useState('');
   const [packingFilter, setPackingFilter] = useState(''); // '' | 'with' | 'without'
 
   const filterCategories = (categories ?? []).filter((c) => c.forProduct);
+  // The group hierarchy is two filters, not one: primary (level 1) and the leaf
+  // group a product attaches to. Leaf names repeat across primaries ("Bakery"
+  // under both Semi Finished and Finished), so the leaf list is scoped by the
+  // chosen primary's CC+L1 code prefix (2+2 digits, shared by its whole subtree)
+  // and, when none is chosen, each option names its primary.
   const productGroups = (groups ?? []).filter(
     (g) =>
       g.forProduct && (!categoryFilter || String(g.categoryId) === categoryFilter),
@@ -38,17 +44,31 @@ export default function PackingMasterPage() {
     () => new Map((groups ?? []).map((g) => [g.id, g])),
     [groups],
   );
-  // Packing is defined for FINISHED goods only, so the primary group is fixed to
-  // the one tagged that stage (Group Master) rather than picked — no primary
-  // filter here. Its CC+L1 code prefix (2+2 digits) is shared by the whole
-  // subtree, so it scopes both the rows and the leaf-group list. Until a group
-  // carries the tag the scope is dropped, rather than blanking the screen.
-  const stagePrimary = useMemo(
+  // Which primaries the dropdown offers. FINISHED is always there — packing is a
+  // finished-goods step, so it stands even before any product exists. Any other
+  // primary (Semi Finished) appears only once it actually holds a product this
+  // screen lists, so the filter never offers a choice that yields nothing.
+  const packableCodes = useMemo(
     () =>
-      (groups ?? []).find((g) => g.level === 1 && g.productStage === 'FINISHED'),
-    [groups],
+      (data ?? [])
+        .filter((p) => p.hasPacking)
+        .map((p) => groupById.get(p.groupId ?? -1)?.code)
+        .filter((c): c is string => !!c),
+    [data, groupById],
   );
-  const primaryPrefix = stagePrimary?.code.slice(0, 4);
+  const primaryGroups = productGroups.filter(
+    (g) =>
+      g.level === 1 &&
+      (g.productStage === 'FINISHED' ||
+        packableCodes.some((c) => c.startsWith(g.code.slice(0, 4)))),
+  );
+  const primaryPrefix = primaryFilter
+    ? primaryGroups.find((g) => String(g.id) === primaryFilter)?.code.slice(0, 4)
+    : undefined;
+  const primaryNameOf = (code: string) =>
+    (groups ?? []).find(
+      (p) => p.level === 1 && p.code.slice(0, 4) === code.slice(0, 4),
+    )?.name;
   const leafGroups = productGroups.filter(
     (g) =>
       !g.subGroupApplicable &&
@@ -63,11 +83,13 @@ export default function PackingMasterPage() {
   );
 
   const visibleRows = useMemo(() => {
-    // Two conditions: the product carries a packing BOM (Has Packing), and it
-    // sits under the FINISHED primary group — packing is a finished-goods step.
+    // Has Packing is the ONLY criterion for what this screen manages — group is
+    // a filter the user applies, never a condition of its own.
     let rows = (data ?? []).filter((p) => p.hasPacking);
     if (categoryFilter)
       rows = rows.filter((p) => String(p.categoryId) === categoryFilter);
+    // Primary = the whole subtree under it (matched on the code prefix of the
+    // product's own leaf group); group = that exact leaf.
     if (primaryPrefix)
       rows = rows.filter((p) =>
         groupById.get(p.groupId ?? -1)?.code.startsWith(primaryPrefix),
@@ -115,28 +137,40 @@ export default function PackingMasterPage() {
   // Products themselves are created under Inventory.
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickCategory, setPickCategory] = useState('');
+  const [pickPrimary, setPickPrimary] = useState('');
   const [pickGroup, setPickGroup] = useState('');
   const [pickProduct, setPickProduct] = useState('');
-  // Scoped to the FINISHED subtree like the listing, so the picker can only
-  // offer what this screen manages.
-  const pickerLeaves = (groups ?? []).filter(
+  // Same two-level split (and same primary-option rule) as the toolbar.
+  const pickerGroupPool = (groups ?? []).filter(
     (g) =>
-      g.forProduct &&
+      g.forProduct && (!pickCategory || String(g.categoryId) === pickCategory),
+  );
+  const pickerPrimaries = pickerGroupPool.filter(
+    (g) =>
+      g.level === 1 &&
+      (g.productStage === 'FINISHED' ||
+        packableCodes.some((c) => c.startsWith(g.code.slice(0, 4)))),
+  );
+  const pickPrimaryPrefix = pickPrimary
+    ? pickerPrimaries.find((g) => String(g.id) === pickPrimary)?.code.slice(0, 4)
+    : undefined;
+  const pickerLeaves = pickerGroupPool.filter(
+    (g) =>
       !g.subGroupApplicable &&
       g.isActive &&
-      (!pickCategory || String(g.categoryId) === pickCategory) &&
-      (!primaryPrefix || g.code.startsWith(primaryPrefix)),
+      (!pickPrimaryPrefix || g.code.startsWith(pickPrimaryPrefix)),
   );
   const pickerProducts = (data ?? []).filter(
     (p) =>
       p.hasPacking &&
       (!pickCategory || String(p.categoryId) === pickCategory) &&
-      (!primaryPrefix ||
-        groupById.get(p.groupId ?? -1)?.code.startsWith(primaryPrefix)) &&
+      (!pickPrimaryPrefix ||
+        groupById.get(p.groupId ?? -1)?.code.startsWith(pickPrimaryPrefix)) &&
       (!pickGroup || String(p.groupId) === pickGroup),
   );
   const openPicker = () => {
     setPickCategory('');
+    setPickPrimary('');
     setPickGroup('');
     setPickProduct('');
     setPickerOpen(true);
@@ -217,7 +251,7 @@ export default function PackingMasterPage() {
       <DataTable
         columns={columns}
         rows={visibleRows}
-        key={`${categoryFilter}|${groupFilter}|${packingFilter}`}
+        key={`${categoryFilter}|${primaryFilter}|${groupFilter}|${packingFilter}`}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
@@ -229,6 +263,7 @@ export default function PackingMasterPage() {
               value={categoryFilter}
               onChange={(e) => {
                 setCategoryFilter(e.target.value);
+                setPrimaryFilter('');
                 setGroupFilter('');
               }}
               wrapClassName="w-44"
@@ -238,8 +273,19 @@ export default function PackingMasterPage() {
                 label: c.name,
               }))}
             />
-            {/* No primary-group filter: this screen is fixed to the FINISHED
-                primary group, so its leaves are the only ones on offer. */}
+            <Select
+              value={primaryFilter}
+              onChange={(e) => {
+                setPrimaryFilter(e.target.value);
+                setGroupFilter('');
+              }}
+              wrapClassName="w-44"
+              placeholder="All primary groups"
+              options={primaryGroups.map((g) => ({
+                value: String(g.id),
+                label: g.name,
+              }))}
+            />
             <Select
               value={groupFilter}
               onChange={(e) => setGroupFilter(e.target.value)}
@@ -247,7 +293,9 @@ export default function PackingMasterPage() {
               placeholder="All groups"
               options={leafGroups.map((g) => ({
                 value: String(g.id),
-                label: g.name,
+                label: primaryFilter
+                  ? g.name
+                  : `${g.name} — ${primaryNameOf(g.code) ?? '?'}`,
               }))}
             />
             <Select
@@ -308,6 +356,7 @@ export default function PackingMasterPage() {
             value={pickCategory}
             onChange={(e) => {
               setPickCategory(e.target.value);
+              setPickPrimary('');
               setPickGroup('');
               setPickProduct('');
             }}
@@ -317,13 +366,19 @@ export default function PackingMasterPage() {
               label: c.name,
             }))}
           />
-          {/* Primary group is fixed to the FINISHED one — shown, not picked. */}
-          <Input
+          <Select
             label="Primary Group"
-            value={
-              stagePrimary?.name ?? 'Not set — tag a primary group “Finished”'
-            }
-            disabled
+            value={pickPrimary}
+            onChange={(e) => {
+              setPickPrimary(e.target.value);
+              setPickGroup('');
+              setPickProduct('');
+            }}
+            placeholder="All primary groups"
+            options={pickerPrimaries.map((g) => ({
+              value: String(g.id),
+              label: g.name,
+            }))}
           />
           <Select
             label="Group"
@@ -335,7 +390,9 @@ export default function PackingMasterPage() {
             placeholder="All groups"
             options={pickerLeaves.map((g) => ({
               value: String(g.id),
-              label: g.name,
+              label: pickPrimary
+                ? g.name
+                : `${g.name} — ${primaryNameOf(g.code) ?? '?'}`,
             }))}
           />
           <Select
