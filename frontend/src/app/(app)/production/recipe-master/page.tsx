@@ -70,13 +70,39 @@ export default function RecipeMasterPage() {
   };
 
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [primaryFilter, setPrimaryFilter] = useState('');
   const [groupFilter, setGroupFilter] = useState('');
   const [recipeFilter, setRecipeFilter] = useState(''); // '' | 'with' | 'without'
 
   const filterCategories = (categories ?? []).filter((c) => c.forProduct);
-  const filterGroups = (groups ?? []).filter(
+  // The group hierarchy is two filters, not one: primary (level 1) and the leaf
+  // group a product actually attaches to. Leaf names repeat across primaries
+  // ("Bakery" under both Semi Finished and Finished), so the leaf list is scoped
+  // by the chosen primary's CC+L1 code prefix (2+2 digits, shared by its whole
+  // subtree) and, when none is chosen, each option names its primary.
+  const productGroups = (groups ?? []).filter(
     (g) =>
       g.forProduct && (!categoryFilter || String(g.categoryId) === categoryFilter),
+  );
+  const groupById = useMemo(
+    () => new Map((groups ?? []).map((g) => [g.id, g])),
+    [groups],
+  );
+  const primaryGroups = productGroups.filter((g) => g.level === 1);
+  const primaryPrefix = primaryFilter
+    ? primaryGroups.find((g) => String(g.id) === primaryFilter)?.code.slice(0, 4)
+    : undefined;
+  // Name of the primary a group sits under. Read from the full group list, not
+  // the category-filtered pool, so it resolves for the picker too.
+  const primaryNameOf = (code: string) =>
+    (groups ?? []).find(
+      (p) => p.level === 1 && p.code.slice(0, 4) === code.slice(0, 4),
+    )?.name;
+  const leafGroups = productGroups.filter(
+    (g) =>
+      !g.subGroupApplicable &&
+      g.isActive &&
+      (!primaryPrefix || g.code.startsWith(primaryPrefix)),
   );
 
   const visibleRows = useMemo(() => {
@@ -86,13 +112,26 @@ export default function RecipeMasterPage() {
     let rows = (data ?? []).filter((p) => p.hasRecipe);
     if (categoryFilter)
       rows = rows.filter((p) => String(p.categoryId) === categoryFilter);
+    // Primary = the whole subtree under it (matched on the code prefix of the
+    // product's own leaf group); group = that exact leaf.
+    if (primaryPrefix)
+      rows = rows.filter((p) =>
+        groupById.get(p.groupId ?? -1)?.code.startsWith(primaryPrefix),
+      );
     if (groupFilter)
       rows = rows.filter((p) => String(p.groupId) === groupFilter);
     if (recipeFilter === 'with') rows = rows.filter((p) => p.recipe.length > 0);
     else if (recipeFilter === 'without')
       rows = rows.filter((p) => p.recipe.length === 0);
     return rows;
-  }, [data, categoryFilter, groupFilter, recipeFilter]);
+  }, [
+    data,
+    categoryFilter,
+    primaryPrefix,
+    groupFilter,
+    recipeFilter,
+    groupById,
+  ]);
 
   const canAdd = can(ROUTE, 'add');
   const canEdit = can(ROUTE, 'edit');
@@ -122,20 +161,35 @@ export default function RecipeMasterPage() {
   // the full-screen editor. Products themselves are created under Inventory.
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickCategory, setPickCategory] = useState('');
+  const [pickPrimary, setPickPrimary] = useState('');
   const [pickGroup, setPickGroup] = useState('');
   const [pickProduct, setPickProduct] = useState('');
-  const pickerGroups = (groups ?? []).filter(
+  // Same two-level split as the toolbar: primary group, then the leaf group.
+  const pickerGroupPool = (groups ?? []).filter(
     (g) =>
       g.forProduct && (!pickCategory || String(g.categoryId) === pickCategory),
+  );
+  const pickerPrimaries = pickerGroupPool.filter((g) => g.level === 1);
+  const pickPrimaryPrefix = pickPrimary
+    ? pickerPrimaries.find((g) => String(g.id) === pickPrimary)?.code.slice(0, 4)
+    : undefined;
+  const pickerLeaves = pickerGroupPool.filter(
+    (g) =>
+      !g.subGroupApplicable &&
+      g.isActive &&
+      (!pickPrimaryPrefix || g.code.startsWith(pickPrimaryPrefix)),
   );
   const pickerProducts = (data ?? []).filter(
     (p) =>
       p.hasRecipe &&
       (!pickCategory || String(p.categoryId) === pickCategory) &&
+      (!pickPrimaryPrefix ||
+        groupById.get(p.groupId ?? -1)?.code.startsWith(pickPrimaryPrefix)) &&
       (!pickGroup || String(p.groupId) === pickGroup),
   );
   const openPicker = () => {
     setPickCategory('');
+    setPickPrimary('');
     setPickGroup('');
     setPickProduct('');
     setPickerOpen(true);
@@ -207,7 +261,7 @@ export default function RecipeMasterPage() {
       <DataTable
         columns={columns}
         rows={visibleRows}
-        key={`${categoryFilter}|${groupFilter}|${recipeFilter}`}
+        key={`${categoryFilter}|${primaryFilter}|${groupFilter}|${recipeFilter}`}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
@@ -219,6 +273,7 @@ export default function RecipeMasterPage() {
               value={categoryFilter}
               onChange={(e) => {
                 setCategoryFilter(e.target.value);
+                setPrimaryFilter('');
                 setGroupFilter('');
               }}
               wrapClassName="w-44"
@@ -229,13 +284,28 @@ export default function RecipeMasterPage() {
               }))}
             />
             <Select
+              value={primaryFilter}
+              onChange={(e) => {
+                setPrimaryFilter(e.target.value);
+                setGroupFilter('');
+              }}
+              wrapClassName="w-44"
+              placeholder="All primary groups"
+              options={primaryGroups.map((g) => ({
+                value: String(g.id),
+                label: g.name,
+              }))}
+            />
+            <Select
               value={groupFilter}
               onChange={(e) => setGroupFilter(e.target.value)}
               wrapClassName="w-44"
               placeholder="All groups"
-              options={filterGroups.map((g) => ({
+              options={leafGroups.map((g) => ({
                 value: String(g.id),
-                label: g.name,
+                label: primaryFilter
+                  ? g.name
+                  : `${g.name} — ${primaryNameOf(g.code) ?? '?'}`,
               }))}
             />
             <Select
@@ -306,6 +376,7 @@ export default function RecipeMasterPage() {
             value={pickCategory}
             onChange={(e) => {
               setPickCategory(e.target.value);
+              setPickPrimary('');
               setPickGroup('');
               setPickProduct('');
             }}
@@ -316,6 +387,20 @@ export default function RecipeMasterPage() {
             }))}
           />
           <Select
+            label="Primary Group"
+            value={pickPrimary}
+            onChange={(e) => {
+              setPickPrimary(e.target.value);
+              setPickGroup('');
+              setPickProduct('');
+            }}
+            placeholder="All primary groups"
+            options={pickerPrimaries.map((g) => ({
+              value: String(g.id),
+              label: g.name,
+            }))}
+          />
+          <Select
             label="Group"
             value={pickGroup}
             onChange={(e) => {
@@ -323,9 +408,11 @@ export default function RecipeMasterPage() {
               setPickProduct('');
             }}
             placeholder="All groups"
-            options={pickerGroups.map((g) => ({
+            options={pickerLeaves.map((g) => ({
               value: String(g.id),
-              label: g.name,
+              label: pickPrimary
+                ? g.name
+                : `${g.name} — ${primaryNameOf(g.code) ?? '?'}`,
             }))}
           />
           <Select
