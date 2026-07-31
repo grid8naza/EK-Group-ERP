@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { BarChart3 } from 'lucide-react';
-import { useFetch } from '@/lib/hooks';
+import { useFetch, useLookupValues } from '@/lib/hooks';
 import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -37,6 +37,9 @@ export default function ProductsReportPage() {
   const { data: groups } = useFetch<Group[]>('/groups');
   const { data: units } = useFetch<Unit[]>('/units');
   const { data: companies } = useFetch<Company[]>('/companies');
+  // Discount authority levels, maintained in Inventory > Lookups. One report
+  // column per level.
+  const discountLevels = useLookupValues('DISCOUNT_LEVEL');
 
   const companyName = resolveCompanyName(
     companies,
@@ -127,6 +130,23 @@ export default function ProductsReportPage() {
         subHeader: '%',
         cell: (p) => money(p.retailProfitPct ?? 0),
       },
+      // One column per discount level, built from the live lookup rather than
+      // fixed — renaming a level or adding a fifth shows up here on its own.
+      // They share a group header, so they read as one matrix beside the
+      // prices. A level with no row means no discount, shown as "-" rather
+      // than 0 so it is distinguishable from a deliberate zero.
+      ...discountLevels.map((l) => ({
+        key: `discount:${l.id}`,
+        header: `${l.label} Discount %`,
+        weight: 9,
+        numeric: true,
+        group: 'Max Discount %',
+        subHeader: l.label,
+        cell: (p: Product) => {
+          const row = p.discounts?.find((d) => d.lookupValueId === l.id);
+          return row ? money(row.percentage) : '-';
+        },
+      })),
       {
         key: 'boxQty',
         header: 'Box Quantity',
@@ -148,7 +168,7 @@ export default function ProductsReportPage() {
         cell: (p) => (p.isActive ? 'Active' : 'Inactive'),
       },
     ],
-    [unitDecimalsById],
+    [unitDecimalsById, discountLevels],
   );
 
   const { hidden, toggle, selected } = useReportColumns(ROUTE, allColumns);
