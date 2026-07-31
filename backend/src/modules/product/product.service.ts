@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { BomKind, CategoryKind, Prisma } from '@prisma/client';
+import { BomKind, CategoryKind, Prisma, ProductSource } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
 import {
@@ -140,6 +140,15 @@ export class ProductService {
     // accepted): the group supplies the level digits, the category the CC ones.
     const group = await this.assertLeafGroup(dto.groupId);
     const category = await this.assertCategoryOfGroup(dto.categoryId, group);
+    const source = dto.source ?? 'MANUFACTURED';
+    this.assertSourceAllowsBoms(source, {
+      hasRecipe: dto.hasRecipe ?? false,
+      hasPacking: dto.hasPacking ?? false,
+      recipeLines: dto.recipe?.length ?? 0,
+      packingLines: dto.packing?.length ?? 0,
+      processes: dto.processes?.length ?? 0,
+      packSources: dto.packSources?.length ?? 0,
+    });
     const allCompanies = dto.allCompanies ?? false;
     const companyIds = this.resolveCompanies(allCompanies, dto.companyIds);
 
@@ -176,6 +185,7 @@ export class ProductService {
           bomMarginPct: dto.bomMarginPct ?? 0,
           actualCostPrice: dto.actualCostPrice ?? 0,
           actualSalesPrice: dto.actualSalesPrice ?? 0,
+          source,
           hasRecipe: dto.hasRecipe ?? false,
           hasPacking: dto.hasPacking ?? false,
           isIngredient: dto.isIngredient ?? false,
@@ -246,6 +256,46 @@ export class ProductService {
       );
     }
     return { ...group, productCategories };
+  }
+
+   /**
+   * Resale stock is bought ready-made, so a PURCHASED product may carry neither
+   * bill of materials: no recipe or packing capability, and no BOM line,
+   * process step or pack source. Rejecting it here is what keeps the flag
+   * meaningful — otherwise "traded good" would drift into "manufactured product
+   * someone forgot to give a recipe".
+   *
+   * `isIngredient` is deliberately NOT restricted: a bought-in filling or
+   * topping can legitimately go into another product's recipe.
+   */
+  private assertSourceAllowsBoms(
+    source: ProductSource,
+    has: {
+      hasRecipe: boolean;
+      hasPacking: boolean;
+      recipeLines: number;
+      packingLines: number;
+      processes: number;
+      packSources: number;
+    },
+  ) {
+    if (source !== 'PURCHASED') return;
+    if (has.hasRecipe || has.hasPacking) {
+      throw new BadRequestException(
+        'A purchased (resale) product cannot have a recipe or packing bill of materials. Set it to Manufactured, or clear those options.',
+      );
+    }
+    const held = [
+      has.recipeLines && 'recipe lines',
+      has.packingLines && 'packing lines',
+      has.processes && 'process steps',
+      has.packSources && 'packing sources',
+    ].filter((s): s is string => Boolean(s));
+    if (held.length) {
+      throw new BadRequestException(
+        `This product still has ${held.join(', ')}, so it cannot be marked as purchased (resale). Clear them under Production first.`,
+      );
+    }
   }
 
   /**
@@ -324,6 +374,20 @@ export class ProductService {
     const packing = (dto.packing ?? existing.packing).map(this.lineData);
     const wantsProcessChange = dto.processes !== undefined;
 
+    // Resale stock carries no bill of materials. Validate against what the row
+    // will actually look like after this patch — the caller may be setting the
+    // source and clearing the BOM in the same request, and an omitted field
+    // means "leave it alone", not "empty".
+    const source = dto.source ?? existing.source;
+    this.assertSourceAllowsBoms(source, {
+      hasRecipe: dto.hasRecipe ?? existing.hasRecipe,
+      hasPacking: dto.hasPacking ?? existing.hasPacking,
+      recipeLines: recipe.length,
+      packingLines: packing.length,
+      processes: (dto.processes ?? existing.processes).length,
+      packSources: (dto.packSources ?? existing.packSources).length,
+    });
+
     try {
       const updated = await this.prisma.product.update({
         where: { id },
@@ -360,6 +424,7 @@ export class ProductService {
           bomMarginPct: dto.bomMarginPct,
           actualCostPrice: dto.actualCostPrice,
           actualSalesPrice: dto.actualSalesPrice,
+          source: dto.source,
           hasRecipe: dto.hasRecipe,
           hasPacking: dto.hasPacking,
           isIngredient: dto.isIngredient,

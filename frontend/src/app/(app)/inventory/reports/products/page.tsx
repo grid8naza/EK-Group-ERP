@@ -24,6 +24,7 @@ import {
   type ReportColumn,
   type ReportSpec,
 } from '@/lib/reportDoc';
+import { PRODUCT_SOURCE_LABEL, PRODUCT_SOURCE_OPTIONS } from '@/lib/types';
 import type { Product, Group, Unit, Company } from '@/lib/types';
 
 const ROUTE = '/inventory/reports/products';
@@ -66,6 +67,12 @@ export default function ProductsReportPage() {
         cell: (p) => money(p.costPrice ?? 0),
       },
       { key: 'unit', header: 'Unit', weight: 7, cell: (p) => p.unit?.symbol ?? p.unit?.code ?? '-' },
+      {
+        key: 'source',
+        header: 'Source',
+        weight: 10,
+        cell: (p) => PRODUCT_SOURCE_LABEL[p.source] ?? '-',
+      },
       {
         key: 'intercoPrice',
         header: 'Intercompany Price',
@@ -147,6 +154,10 @@ export default function ProductsReportPage() {
   const { hidden, toggle, selected } = useReportColumns(ROUTE, allColumns);
 
   const [groupFilter, setGroupFilter] = useState('');
+  const [source, setSource] = useState(''); // '' | ProductSource
+  // What the report blocks are cut by. Grouping by source is what puts in-house
+  // production and traded goods in separate, separately-counted sections.
+  const [groupBy, setGroupBy] = useState<'group' | 'source'>('group');
   const [packing, setPacking] = useState(''); // '' | 'packed' | 'unpacked'
   const [ingredient, setIngredient] = useState(''); // '' | 'yes' | 'no'
   const [sellable, setSellable] = useState(''); // '' | 'yes' | 'no'
@@ -157,30 +168,38 @@ export default function ProductsReportPage() {
     [groups],
   );
 
-  // Report grouped by product group (heading), products sorted by name within
-  // each; groups ordered by code so they follow the hierarchy.
-  const blocks = useMemo<ReportBlock[]>(() => {
+  // The filtered product list, shared by the blocks and the source summary.
+  const filtered = useMemo(() => {
     let list = data ?? [];
     if (groupFilter)
       list = list.filter((p) => String(p.groupId) === groupFilter);
+    if (source) list = list.filter((p) => p.source === source);
     if (packing === 'packed') list = list.filter((p) => p.packed);
     else if (packing === 'unpacked') list = list.filter((p) => p.unpacked);
     if (ingredient === 'yes') list = list.filter((p) => p.isIngredient);
     else if (ingredient === 'no') list = list.filter((p) => !p.isIngredient);
     if (sellable === 'yes') list = list.filter((p) => p.canSell);
     else if (sellable === 'no') list = list.filter((p) => !p.canSell);
+    return list;
+  }, [data, groupFilter, source, packing, ingredient, sellable]);
 
-    const byGroup = new Map<string, { code: string; items: Product[] }>();
-    for (const p of list) {
-      const name = p.group?.name ?? UNGROUPED;
-      if (!byGroup.has(name))
-        byGroup.set(name, { code: p.group?.code ?? '￿', items: [] });
-      byGroup.get(name)!.items.push(p);
+  // Report cut into blocks by product group or by source, products sorted by
+  // name within each. Group blocks are ordered by code so they follow the
+  // hierarchy; source blocks put in-house production ahead of traded goods.
+  const blocks = useMemo<ReportBlock[]>(() => {
+    const keyed = new Map<string, { sort: string; items: Product[] }>();
+    for (const p of filtered) {
+      const [name, sort] =
+        groupBy === 'source'
+          ? [PRODUCT_SOURCE_LABEL[p.source] ?? UNGROUPED, p.source]
+          : [p.group?.name ?? UNGROUPED, p.group?.code ?? '￿'];
+      if (!keyed.has(name)) keyed.set(name, { sort, items: [] });
+      keyed.get(name)!.items.push(p);
     }
-    return [...byGroup.entries()]
-      .sort((a, b) => a[1].code.localeCompare(b[1].code))
-      .map(([groupName, { items }]) => ({
-        heading: groupName,
+    return [...keyed.entries()]
+      .sort((a, b) => a[1].sort.localeCompare(b[1].sort))
+      .map(([heading, { items }]) => ({
+        heading,
         count: items.length,
         tables: [
           {
@@ -190,16 +209,29 @@ export default function ProductsReportPage() {
           },
         ],
       }));
-  }, [data, groupFilter, packing, ingredient, sellable, selected]);
+  }, [filtered, groupBy, selected]);
 
   const total = blocks.reduce((n, b) => n + (b.count ?? 0), 0);
 
+  // The in-house / traded split is carried in the summary whichever way the
+  // report is cut, so the two never have to be counted by hand.
   const summary = useMemo(
     () => [
-      { label: 'Total Groups', value: blocks.length },
+      {
+        label: groupBy === 'source' ? 'Total Sources' : 'Total Groups',
+        value: blocks.length,
+      },
       { label: 'Total Products', value: total },
+      {
+        label: 'Manufactured',
+        value: filtered.filter((p) => p.source === 'MANUFACTURED').length,
+      },
+      {
+        label: 'Purchased',
+        value: filtered.filter((p) => p.source === 'PURCHASED').length,
+      },
     ],
-    [blocks.length, total],
+    [blocks.length, total, filtered, groupBy],
   );
 
   const spec: ReportSpec = {
@@ -258,6 +290,27 @@ export default function ProductsReportPage() {
               value: String(g.id),
               label: g.name,
             }))}
+          />
+          <Select
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            wrapClassName="w-44"
+            placeholder="Source: All"
+            options={PRODUCT_SOURCE_OPTIONS.map((o) => ({
+              value: o.value,
+              label: PRODUCT_SOURCE_LABEL[o.value],
+            }))}
+          />
+          <Select
+            value={groupBy}
+            onChange={(e) =>
+              setGroupBy(e.target.value === 'source' ? 'source' : 'group')
+            }
+            wrapClassName="w-44"
+            options={[
+              { value: 'group', label: 'Group by: Product group' },
+              { value: 'source', label: 'Group by: Source' },
+            ]}
           />
           <Select
             value={packing}

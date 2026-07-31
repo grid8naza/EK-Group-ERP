@@ -66,7 +66,7 @@ export default function PackingMasterPage() {
   const packableCodes = useMemo(
     () =>
       (data ?? [])
-        .filter((p) => p.hasPacking)
+        .filter((p) => p.source === 'MANUFACTURED' && p.hasPacking)
         .map((p) => groupById.get(p.groupId ?? -1)?.code)
         .filter((c): c is string => !!c),
     [data, groupById],
@@ -98,9 +98,14 @@ export default function PackingMasterPage() {
   );
 
   const visibleRows = useMemo(() => {
-    // Has Packing is the ONLY criterion for what this screen manages — group is
-    // a filter the user applies, never a condition of its own.
-    let rows = (data ?? []).filter((p) => p.hasPacking);
+    // Has Packing is the criterion for what this screen manages — group is a
+    // filter the user applies, never a condition of its own. Purchased (resale)
+    // stock is bought ready-packed, so it never appears here; the source test is
+    // redundant against the server rule that a purchased product cannot hold
+    // hasPacking, and is kept as the explicit statement of intent.
+    let rows = (data ?? []).filter(
+      (p) => p.source === 'MANUFACTURED' && p.hasPacking,
+    );
     if (categoryFilter)
       rows = rows.filter((p) => String(p.categoryId) === categoryFilter);
     // Primary = the whole subtree under it (matched on the code prefix of the
@@ -178,6 +183,7 @@ export default function PackingMasterPage() {
   );
   const pickerProducts = (data ?? []).filter(
     (p) =>
+      p.source === 'MANUFACTURED' &&
       p.hasPacking &&
       (!pickCategory || String(p.categoryId) === pickCategory) &&
       (!pickPrimaryPrefix ||

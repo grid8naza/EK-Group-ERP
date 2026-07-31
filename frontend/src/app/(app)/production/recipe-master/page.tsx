@@ -109,10 +109,16 @@ export default function RecipeMasterPage() {
   );
 
   const visibleRows = useMemo(() => {
-    // Recipes are built for products flagged "Has Recipe" on the product master
-    // — mirrors Packing Master, which lists on hasPacking. Semi-finished
-    // products default to it, but a finished product can opt in too.
-    let rows = (data ?? []).filter((p) => p.hasRecipe);
+    // Recipes are built for MANUFACTURED products flagged "Has Recipe" on the
+    // product master — mirrors Packing Master, which lists on hasPacking.
+    // Semi-finished products default to it, but a finished product can opt in
+    // too. Purchased (resale) stock is bought ready-made, so it never appears
+    // here; the source test is redundant against the server rule that a
+    // purchased product cannot hold hasRecipe, and is kept as the explicit
+    // statement of intent at the point of use.
+    let rows = (data ?? []).filter(
+      (p) => p.source === 'MANUFACTURED' && p.hasRecipe,
+    );
     if (categoryFilter)
       rows = rows.filter((p) => String(p.categoryId) === categoryFilter);
     // Primary = the whole subtree under it (matched on the code prefix of the
@@ -185,6 +191,7 @@ export default function RecipeMasterPage() {
   );
   const pickerProducts = (data ?? []).filter(
     (p) =>
+      p.source === 'MANUFACTURED' &&
       p.hasRecipe &&
       (!pickCategory || String(p.categoryId) === pickCategory) &&
       (!pickPrimaryPrefix ||

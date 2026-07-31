@@ -34,6 +34,18 @@ enum CategoryKind {
   FINISHED
 }
 
+/// Where a product comes from: made in-house, or bought in to resell.
+///
+/// This is DECLARED, not inferred. "Has no recipe" cannot stand in for it — a
+/// manufactured product whose recipe has not been entered yet looks exactly the
+/// same — so a traded good has to say so. It is what separates in-house
+/// production from resale stock on the production screens, the purchase
+/// screens and the reports.
+enum ProductSource {
+  MANUFACTURED // made in-house; may carry a recipe / packing BOM
+  PURCHASED // resale / traded goods; bought ready-made, never has a BOM
+}
+
 /// Unit of Measure master (global). A SIMPLE unit stands alone (e.g. Piece,
 /// Kilogram). A COMPOUND unit is defined as `conversionFactor` × a simple base
 /// unit (e.g. 1 Box = 12 Pieces), so quantities in a compound unit can be
@@ -354,6 +366,12 @@ model Product {
   // sales price is entered by the user (used later for the sales invoice).
   actualCostPrice  Float @default(0)
   actualSalesPrice Float @default(0)
+  /// Made in-house or bought in for resale. A PURCHASED product may not carry
+  /// either BOM (the service rejects hasRecipe/hasPacking on it, and refuses to
+  /// flip a product to PURCHASED while a BOM, process or pack source exists);
+  /// it may still be `isIngredient`, since a bought-in filling can go into
+  /// someone else's recipe.
+  source       ProductSource @default(MANUFACTURED)
   // Capability flags: which BOMs may be created for this product, and whether
   // it can itself be an ingredient in another product's recipe.
   hasRecipe    Boolean  @default(false) // a production (recipe) BOM can be created
@@ -396,6 +414,7 @@ model Product {
 
   @@index([categoryId])
   @@index([groupId])
+  @@index([source])
   @@map("products")
 }
 

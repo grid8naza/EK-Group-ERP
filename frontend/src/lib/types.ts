@@ -580,6 +580,27 @@ export const CATEGORY_KIND_LABEL: Record<CategoryKind, string> = {
 export const ITEM_KINDS: CategoryKind[] = ['INGREDIENT', 'PACKING_MATERIAL'];
 export const PRODUCT_KINDS: CategoryKind[] = ['SEMI_FINISHED', 'FINISHED'];
 
+/**
+ * Where a product comes from — declared, never inferred. "Has no recipe" is not
+ * the same thing: a manufactured product whose recipe isn't entered yet looks
+ * identical. This is what separates in-house production from resale stock on
+ * the production screens, the purchase screens and the reports.
+ */
+export type ProductSource = 'MANUFACTURED' | 'PURCHASED';
+
+export const PRODUCT_SOURCE_LABEL: Record<ProductSource, string> = {
+  MANUFACTURED: 'Manufactured',
+  PURCHASED: 'Purchased',
+};
+
+export const PRODUCT_SOURCE_OPTIONS: {
+  value: ProductSource;
+  label: string;
+}[] = [
+  { value: 'MANUFACTURED', label: 'Manufactured (made in-house)' },
+  { value: 'PURCHASED', label: 'Purchased (resale / traded goods)' },
+];
+
 // ---- Inventory: Category Master (one master for Items + Products) ----
 export interface Category {
   id: number;
@@ -826,6 +847,12 @@ export interface Product {
    * for the sales invoice). */
   actualCostPrice: number;
   actualSalesPrice: number;
+  /**
+   * Made in-house or bought in for resale. A Purchased product may carry
+   * neither BOM — the server rejects hasRecipe/hasPacking on it — but it may
+   * still be `isIngredient`, since a bought-in filling can go into a recipe.
+   */
+  source: ProductSource;
   /** A production (recipe) BOM can be created for this product. */
   hasRecipe: boolean;
   /** A packing BOM can be created for this product. */

@@ -14,7 +14,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ProcessTimeUnit } from '@prisma/client';
+import { ProcessTimeUnit, ProductSource } from '@prisma/client';
 
 /** One packing source line — `quantity` of an unpacked `sourceProductId`. */
 export class PackSourceInput {
@@ -255,6 +255,11 @@ export class CreateProductDto {
   @Type(() => ProductBranchStockInput)
   branchStocks?: ProductBranchStockInput[];
 
+  /** Made in-house (MANUFACTURED) or bought in for resale (PURCHASED). */
+  @IsOptional()
+  @IsEnum(ProductSource)
+  source?: ProductSource;
+
   /** A production (recipe) BOM can be created for this product. */
   @IsOptional()
   @IsBoolean()
@@ -480,6 +485,10 @@ export class UpdateProductDto {
   @ValidateNested({ each: true })
   @Type(() => ProductBranchStockInput)
   branchStocks?: ProductBranchStockInput[];
+
+  @IsOptional()
+  @IsEnum(ProductSource)
+  source?: ProductSource;
 
   @IsOptional()
   @IsBoolean()

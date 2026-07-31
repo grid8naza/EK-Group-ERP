@@ -17,8 +17,10 @@ import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/u
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
+import { PRODUCT_SOURCE_LABEL, PRODUCT_SOURCE_OPTIONS } from '@/lib/types';
 import type {
   Product,
+  ProductSource,
   Category,
   CategoryKind,
   Group,
@@ -99,6 +101,9 @@ const empty = {
   shelfLife: '0',
   // Defaults for a new finished product: packed, no recipe, and not usable as
   // an ingredient. The two BOM flags are editable in the drawer.
+  // Finished goods on this screen are made in-house by default; switch to
+  // Purchased for resale / traded stock.
+  source: 'MANUFACTURED' as ProductSource,
   hasRecipe: false,
   hasPacking: true,
   isIngredient: false,
@@ -220,6 +225,7 @@ export default function ProductsPage() {
     }
   };
   const [parentFilter, setParentFilter] = useState('');
+  const [sourceFilter, setSourceFilter] = useState(''); // '' | ProductSource
   const [sellFilter, setSellFilter] = useState(''); // '' | 'yes' | 'no'
   const [status, setStatus] = useState(''); // '' | 'active' | 'inactive'
   const codeRef = useRef<HTMLInputElement>(null);
@@ -351,6 +357,7 @@ export default function ProductsPage() {
     hsnCodeId: p.hsnCodeId != null ? String(p.hsnCodeId) : '',
     shelfLife: String(p.shelfLife ?? 0),
     // Editable in the drawer; `empty` holds this screen's default for new rows.
+    source: (p.source ?? "MANUFACTURED") as ProductSource,
     hasRecipe: p.hasRecipe ?? false,
     hasPacking: p.hasPacking ?? true,
     isIngredient: false,
@@ -561,6 +568,7 @@ export default function ProductsPage() {
       boxUnitId: idOrNull(form.boxUnitId),
       hsnCodeId: idOrNull(form.hsnCodeId),
       shelfLife: num(form.shelfLife),
+      source: form.source,
       hasRecipe: form.hasRecipe,
       hasPacking: form.hasPacking,
       isIngredient: form.isIngredient,
@@ -652,12 +660,13 @@ export default function ProductsPage() {
     }
     // This screen lists packed products only.
     rows = rows.filter((r) => r.packed);
+    if (sourceFilter) rows = rows.filter((r) => r.source === sourceFilter);
     if (sellFilter === 'yes') rows = rows.filter((r) => r.canSell);
     else if (sellFilter === 'no') rows = rows.filter((r) => !r.canSell);
     if (status === 'active') rows = rows.filter((r) => r.isActive);
     else if (status === 'inactive') rows = rows.filter((r) => !r.isActive);
     return rows.sort((a, b) => a.code.localeCompare(b.code));
-  }, [data, sellFilter, status, screenCategoryIds, parentFilter]);
+  }, [data, sellFilter, sourceFilter, status, screenCategoryIds, parentFilter]);
 
   const columns: Column<Product>[] = [
     { key: 'code', header: 'Code', accessor: (r) => r.code },
@@ -687,6 +696,16 @@ export default function ProductsPage() {
       ),
     },
     { key: 'unit', header: 'Unit', accessor: (r) => r.unit?.symbol ?? r.unit?.code ?? '-' },
+    {
+      key: 'source',
+      header: 'Source',
+      sortAccessor: (r) => PRODUCT_SOURCE_LABEL[r.source] ?? '',
+      render: (r) => (
+        <Badge color={r.source === 'PURCHASED' ? 'amber' : 'blue'}>
+          {PRODUCT_SOURCE_LABEL[r.source] ?? '-'}
+        </Badge>
+      ),
+    },
     {
       key: 'intercompanyPrice',
       header: 'Inter-Co',
@@ -742,7 +761,7 @@ export default function ProductsPage() {
         columns={columns}
         rows={visibleRows}
         defaultSort={{ key: 'code', dir: 'asc' }}
-        key={`${parentFilter}|${sellFilter}|${status}`}
+        key={`${parentFilter}|${sourceFilter}|${sellFilter}|${status}`}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
@@ -750,7 +769,7 @@ export default function ProductsPage() {
         searchPlaceholder="Search products..."
         toolbar={
           <div className="flex flex-nowrap items-center gap-2">
-            {/* No primary-group filter: the screen is fixed to PRIMARY_GROUP. */}
+            {/* No category filter: the screen is fixed to SCREEN_KIND. */}
             <Select
               value={parentFilter}
               onChange={(e) => setParentFilter(e.target.value)}
@@ -759,6 +778,16 @@ export default function ProductsPage() {
               options={productGroups
                 .filter((g) => !g.subGroupApplicable && g.isActive)
                 .map((g) => ({ value: String(g.id), label: g.name }))}
+            />
+            <Select
+              value={sourceFilter}
+              onChange={(e) => setSourceFilter(e.target.value)}
+              wrapClassName="w-40"
+              placeholder="Source: All"
+              options={PRODUCT_SOURCE_OPTIONS.map((o) => ({
+                value: o.value,
+                label: PRODUCT_SOURCE_LABEL[o.value],
+              }))}
             />
             <Select
               value={sellFilter}
@@ -996,18 +1025,48 @@ export default function ProductsPage() {
                 unpacked), so the toggles are hidden and forced — see `empty` /
                 `formFrom`. */}
 
+            {/* Source — in-house production vs resale/traded goods. Declared,
+                not inferred from a missing recipe, and it governs the two BOM
+                capabilities below: resale stock is bought ready-made, so
+                choosing Purchased clears and locks them. */}
+            <div className="flex flex-col gap-1 sm:col-span-2">
+              <Select
+                label="Source"
+                required
+                value={form.source}
+                onChange={(e) => {
+                  const source = e.target.value as ProductSource;
+                  // Resale stock carries no BOM — clear both rather than let
+                  // the server reject the save.
+                  setForm((f) =>
+                    source === 'PURCHASED'
+                      ? { ...f, source, hasRecipe: false, hasPacking: false }
+                      : { ...f, source },
+                  );
+                }}
+                options={PRODUCT_SOURCE_OPTIONS}
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {form.source === 'PURCHASED'
+                  ? 'Resale / traded goods — bought in ready-made and sold as-is, so it carries no recipe or packing BOM and stays off the production screens.'
+                  : 'Made in-house — it can carry a recipe and packing BOM and appears on the production screens.'}
+              </p>
+            </div>
+
             {/* Capabilities — what may be built for this product and how it may
                 be used. Has Packing puts it on Production → Packing Master and
                 Has Recipe on Recipe Master; both are defaulted per screen
-                (packing on here) but editable. Can Sell rides along for parity
-                with the Semifinished screen, but packed products are always
-                sellable, so it stays checked and the control is disabled. */}
+                (packing on here) but editable, and both are unavailable to a
+                Purchased product. Can Sell rides along for parity with the
+                Semifinished screen, but packed products are always sellable, so
+                it stays checked and the control is disabled. */}
             <div className="flex flex-col gap-2 sm:col-span-2">
               <span className="label !mb-0">Capabilities</span>
               <div className="flex flex-wrap gap-x-8 gap-y-2">
                 <Checkbox
                   label="Has Recipe"
                   checked={form.hasRecipe}
+                  disabled={form.source === 'PURCHASED'}
                   onChange={(e) =>
                     setForm({ ...form, hasRecipe: e.target.checked })
                   }
@@ -1015,6 +1074,7 @@ export default function ProductsPage() {
                 <Checkbox
                   label="Has Packing"
                   checked={form.hasPacking}
+                  disabled={form.source === 'PURCHASED'}
                   onChange={(e) =>
                     setForm({ ...form, hasPacking: e.target.checked })
                   }
