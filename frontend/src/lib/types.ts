@@ -784,6 +784,24 @@ export interface ProductProcess {
   manpower?: ProcessManpower[];
 }
 
+/**
+ * What one company does with a product, and the costing it is traced against
+ * there. The roles are not exclusive — a company can both produce and sell.
+ */
+export interface ProductCompanyLink {
+  companyId: number;
+  /** Makes it in-house. False means it buys the product in. */
+  canProduce: boolean;
+  canSell: boolean;
+  /** One per company — buying, making and selling there all hit this. */
+  costCenterId?: number | null;
+  /** Producer only, and only when the product has that BOM. */
+  recipeCostObjectId?: number | null;
+  packingCostObjectId?: number | null;
+  /** A company that only buys and sells names this single object instead. */
+  costObjectId?: number | null;
+}
+
 export interface Product {
   id: number;
   code: string;
@@ -891,7 +909,17 @@ export interface Product {
    * follow the rename rather than point at a label that no longer exists.
    */
   deliveryTripIds?: number[];
-  allCompanies: boolean;
+  /**
+   * Which companies handle this product, in what role, and the costing each
+   * traces it against. There is no `allCompanies` flag — costing has to be
+   * named per company, so a product is available exactly where it has a row.
+   *
+   * ONE cost centre per company covers buying, making and selling there; what
+   * varies is the ACTIVITY, so a producer carries a cost object per activity
+   * and a company that only buys and sells carries the single `costObjectId`.
+   */
+  companies: ProductCompanyLink[];
+  /** Convenience mirror of `companies` for screens that only need the ids. */
   companyIds: number[];
   isActive: boolean;
   isLocked?: boolean;

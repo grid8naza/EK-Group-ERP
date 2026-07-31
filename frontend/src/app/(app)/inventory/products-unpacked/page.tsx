@@ -23,6 +23,12 @@ import {
   discountPayload,
   type DiscountForm,
 } from '@/components/inventory/DiscountMatrix';
+import {
+  ProductCompanies,
+  companiesFormFrom,
+  companiesPayload,
+  type CompaniesForm,
+} from '@/components/inventory/ProductCompanies';
 import { PRODUCT_SOURCE_LABEL, PRODUCT_SOURCE_OPTIONS } from '@/lib/types';
 import type {
   Product,
@@ -33,6 +39,8 @@ import type {
   Unit,
   HsnCode,
   Company,
+  CostCenter,
+  CostObject,
   Branch,
   Store,
   Rack,
@@ -99,8 +107,9 @@ const empty = {
   hasRecipe: true,
   hasPacking: false,
   isIngredient: false,
-  allCompanies: true,
-  companyIds: [] as number[],
+  // Which companies make and/or sell this, and the costing each traces it
+  // against. Keyed by companyId; a missing key means the company isn't involved.
+  companies: {} as CompaniesForm,
   // Per-branch stock levels, keyed by branchId (built from the product's saved
   // rows; branches with no saved row start blank).
   branchStocks: {} as Record<number, BranchStockForm>,
@@ -136,6 +145,10 @@ export default function ProductsPage() {
   const { data, loading, refetch } = useFetch<Product[]>('/products');
   const { data: groups } = useFetch<Group[]>('/groups');
   const { data: categories } = useFetch<Category[]>('/categories');
+  // Cost centres / objects across ALL companies — the company grid needs each
+  // company's own, not just the active one's, so these go unscoped.
+  const { data: costCenters } = useFetch<CostCenter[]>('/cost-centers');
+  const { data: costObjects } = useFetch<CostObject[]>('/cost-objects');
   // Discount authority levels, maintained in Inventory > Lookups.
   const discountLevels = useLookupValues('DISCOUNT_LEVEL');
   const { data: units } = useFetch<Unit[]>('/units');
@@ -318,8 +331,7 @@ export default function ProductsPage() {
     hasRecipe: p.hasRecipe ?? true,
     hasPacking: p.hasPacking ?? false,
     isIngredient: p.isIngredient ?? false,
-    allCompanies: p.allCompanies,
-    companyIds: p.companyIds ?? [],
+    companies: companiesFormFrom(p.companies),
     branchStocks: Object.fromEntries(
       (p.branchStocks ?? []).map((bs) => [
         bs.branchId,
@@ -368,23 +380,11 @@ export default function ProductsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canAdd, open]);
 
-  const toggleCompany = (id: number) =>
-    setForm((f) => ({
-      ...f,
-      companyIds: f.companyIds.includes(id)
-        ? f.companyIds.filter((x) => x !== id)
-        : [...f.companyIds, id],
-    }));
-
   // Branches the product can be stocked at: every active branch of each company
-  // the product is available in (all companies, or the chosen set), grouped by
-  // company. New branches appear automatically because this reads the live
-  // branch list rather than the product's saved rows.
-  const availableCompanyIds = form.allCompanies
-    ? companyList.map((c) => c.id)
-    : form.companyIds;
+  // the product is in, grouped by company. New branches appear automatically
+  // because this reads the live branch list rather than the product's saved rows.
   const branchGroups = companyList
-    .filter((c) => availableCompanyIds.includes(c.id))
+    .filter((c) => form.companies[c.id] != null)
     .map((c) => ({
       company: c,
       branches: (branches ?? []).filter(
@@ -460,8 +460,8 @@ export default function ProductsPage() {
       toast.error('Select a unit.');
       return;
     }
-    if (!form.allCompanies && form.companyIds.length === 0) {
-      toast.error('Select at least one company, or choose "All companies".');
+    if (Object.keys(form.companies).length === 0) {
+      toast.error('Select at least one company that makes or sells this product.');
       return;
     }
 
@@ -514,8 +514,7 @@ export default function ProductsPage() {
       hasRecipe: form.hasRecipe,
       hasPacking: form.hasPacking,
       isIngredient: form.isIngredient,
-      allCompanies: form.allCompanies,
-      companyIds: form.allCompanies ? [] : form.companyIds,
+      companies: companiesPayload(form.companies),
       // Branch stock levels are a sellable-product attribute; cleared when not
       // sellable. Only sent when the branch list has loaded, so a failed/empty
       // fetch can't silently wipe saved rows (backend leaves them intact when
@@ -1262,33 +1261,18 @@ export default function ProductsPage() {
                 Sell) live in one block higher up, above the selling fields that
                 Can Sell gates. */}
 
-            {/* Availability */}
-            <div className="flex flex-col gap-2 sm:col-span-2">
-              <span className="label !mb-0">Availability</span>
-              <Checkbox
-                label="All companies (including ones added later)"
-                checked={form.allCompanies}
-                onChange={(e) =>
-                  setForm({ ...form, allCompanies: e.target.checked })
-                }
-              />
-              {!form.allCompanies && (
-                <div className="mt-1 max-h-52 space-y-1.5 overflow-y-auto rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                  {companyList.length === 0 ? (
-                    <p className="text-sm text-slate-400">No companies found.</p>
-                  ) : (
-                    companyList.map((co) => (
-                      <Checkbox
-                        key={co.id}
-                        label={`${co.name} (${co.code})`}
-                        checked={form.companyIds.includes(co.id)}
-                        onChange={() => toggleCompany(co.id)}
-                      />
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
+            {/* Companies — replaces the old flat "Availability" list: which
+                companies make and/or sell this, each with the cost centre its
+                production, purchases and sales here are traced against. */}
+            <ProductCompanies
+              companies={companyList}
+              costCenters={costCenters ?? []}
+              costObjects={costObjects ?? []}
+              value={form.companies}
+              onChange={(companies) => setForm((f) => ({ ...f, companies }))}
+              hasRecipe={form.hasRecipe}
+              hasPacking={form.hasPacking}
+            />
 
             {/* Discount matrix — sellable products only, for the same reason as
                 the branch levels below: a product that isn't sold has nothing
