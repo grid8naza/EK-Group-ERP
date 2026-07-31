@@ -28,6 +28,46 @@ export class PackSourceInput {
 }
 
 /**
+ * What one company does with this product, and the costing it is traced against
+ * there. The roles are not exclusive — a company can both produce and sell.
+ *
+ * ONE cost centre per company covers buying, making and selling alike; what
+ * varies is the ACTIVITY. A producer names a cost object per activity
+ * (`recipeCostObjectId` / `packingCostObjectId`); a company that only buys and
+ * sells names the single `costObjectId`. The service drops whichever don't
+ * apply to the role.
+ */
+export class ProductCompanyInput {
+  @IsInt()
+  companyId!: number;
+
+  /** Makes it in-house. False means it buys the product in. */
+  @IsOptional()
+  @IsBoolean()
+  canProduce?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  canSell?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  costCenterId?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  recipeCostObjectId?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  packingCostObjectId?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  costObjectId?: number | null;
+}
+
+/**
  * One cell of the discount matrix: the maximum discount percentage one
  * authority level may give on this product. `lookupValueId` is a DISCOUNT_LEVEL
  * LookupValue (ids, not names, so a renamed level keeps its saved percentages).
@@ -325,15 +365,16 @@ export class CreateProductDto {
   @Type(() => ProductDiscountInput)
   discounts?: ProductDiscountInput[];
 
-  @IsOptional()
-  @IsBoolean()
-  allCompanies?: boolean;
-
+  /**
+   * Which companies handle this product, in what role, and against which
+   * costing. A product is available exactly where it has a row here — there is
+   * no "all companies" flag, because each company needs its own costing.
+   */
   @IsOptional()
   @IsArray()
-  @ArrayUnique()
-  @IsInt({ each: true })
-  companyIds?: number[];
+  @ValidateNested({ each: true })
+  @Type(() => ProductCompanyInput)
+  companies?: ProductCompanyInput[];
 
   @IsOptional()
   @IsBoolean()
@@ -564,15 +605,16 @@ export class UpdateProductDto {
   @Type(() => ProductDiscountInput)
   discounts?: ProductDiscountInput[];
 
-  @IsOptional()
-  @IsBoolean()
-  allCompanies?: boolean;
-
+  /**
+   * Which companies handle this product, in what role, and against which
+   * costing. A product is available exactly where it has a row here — there is
+   * no "all companies" flag, because each company needs its own costing.
+   */
   @IsOptional()
   @IsArray()
-  @ArrayUnique()
-  @IsInt({ each: true })
-  companyIds?: number[];
+  @ValidateNested({ each: true })
+  @Type(() => ProductCompanyInput)
+  companies?: ProductCompanyInput[];
 
   @IsOptional()
   @IsBoolean()

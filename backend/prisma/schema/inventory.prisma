@@ -391,7 +391,10 @@ model Product {
   prodSat        Boolean @default(false)
   /// Made to order — no fixed day, so it stands apart from the weekdays.
   prodOccasional Boolean @default(false)
-  allCompanies Boolean  @default(false)
+  // No `allCompanies` here, unlike the other masters: every company this
+  // product touches needs its own roles and costing (see ProductCompany), so
+  // there is nothing a blanket flag could hang those on. A product is available
+  // exactly where it has a company row.
   isActive     Boolean  @default(true)
   isLocked     Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt    DateTime @default(now())
@@ -579,11 +582,32 @@ model ProductBranchStock {
   @@map("product_branch_stocks")
 }
 
-/// Links a product to a company it is available in (when not `allCompanies`).
+/// What one COMPANY does with this product, and the costing it is traced
+/// against there. A row's existence is what makes the product available in that
+/// company — there is no "all companies" shortcut, because costing has to be
+/// named per company and a blanket flag would leave nothing to hang it on.
+///
+/// The roles are not exclusive: EK Food Products both PRODUCES and SELLS (to
+/// Bake House and to outside customers), while a trading company only buys and
+/// sells. `canProduce` off therefore means "buys it in" rather than "doesn't
+/// handle it".
+///
+/// Costing: ONE cost centre per company — buying, making and selling in that
+/// company all hit the same one. What varies is the ACTIVITY, so a producer
+/// names a cost object per activity (recipe → Bakery, packing → Packing) while
+/// a company that only buys and sells names a single one. All are plain
+/// cross-domain ids -> Cpanel CostCenter / CostObject.
 model ProductCompany {
-  id        Int @id @default(autoincrement())
-  productId Int
-  companyId Int // -> Cpanel Company, by id (no cross-domain FK)
+  id         Int     @id @default(autoincrement())
+  productId  Int
+  companyId  Int // -> Cpanel Company, by id (no cross-domain FK)
+  canProduce Boolean @default(false) // makes it in-house; false = buys it in
+  canSell    Boolean @default(true)
+
+  costCenterId        Int? // the company's cost centre for this product
+  recipeCostObjectId  Int? // producer + product hasRecipe
+  packingCostObjectId Int? // producer + product hasPacking
+  costObjectId        Int? // non-producer (buy & sell): its single cost object
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 

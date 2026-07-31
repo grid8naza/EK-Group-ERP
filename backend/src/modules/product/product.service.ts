@@ -24,6 +24,7 @@ import {
   PackSourceInput,
   ProcessInput,
   ProductBranchStockInput,
+  ProductCompanyInput,
   UpdateProductDto,
 } from './product.dto';
 import { PRODUCT_UPLOAD_DIR, PRODUCT_URL_PREFIX } from './product.constants';
@@ -46,7 +47,17 @@ const withRelations = {
   boxUnit: { select: { id: true, code: true, name: true, symbol: true } },
   yieldUnit: { select: { id: true, code: true, name: true, symbol: true } },
   hsnCode: { select: { id: true, code: true, description: true } },
-  companies: { select: { companyId: true } },
+  companies: {
+    select: {
+      companyId: true,
+      canProduce: true,
+      canSell: true,
+      costCenterId: true,
+      recipeCostObjectId: true,
+      packingCostObjectId: true,
+      costObjectId: true,
+    },
+  },
   deliveryTrips: { select: { lookupValueId: true } },
   discounts: { select: { lookupValueId: true, percentage: true } },
   packSources: {
@@ -100,9 +111,12 @@ export class ProductService {
   }
 
   async findAll(companyId: number | undefined, search?: string) {
+    // A product is available exactly where it has a company row — there is no
+    // "all companies" shortcut, since each company carries its own roles and
+    // costing. With no active company nothing is in scope.
     const scopeFilter: Prisma.ProductWhereInput = companyId
-      ? { OR: [{ allCompanies: true }, { companies: { some: { companyId } } }] }
-      : { allCompanies: true };
+      ? { companies: { some: { companyId } } }
+      : { id: -1 };
     const rows = await this.prisma.product.findMany({
       where: {
         AND: [
@@ -150,8 +164,10 @@ export class ProductService {
       processes: dto.processes?.length ?? 0,
       packSources: dto.packSources?.length ?? 0,
     });
-    const allCompanies = dto.allCompanies ?? false;
-    const companyIds = this.resolveCompanies(allCompanies, dto.companyIds);
+    const companies = await this.resolveCompanies(dto.companies, {
+      hasRecipe: dto.hasRecipe ?? false,
+      hasPacking: dto.hasPacking ?? false,
+    });
     const discounts = await this.resolveDiscounts(
       dto.discounts,
       dto.canSell ?? true,
@@ -202,9 +218,8 @@ export class ProductService {
           prodFri: dto.prodFri ?? false,
           prodSat: dto.prodSat ?? false,
           prodOccasional: dto.prodOccasional ?? false,
-          allCompanies,
           isActive: dto.isActive ?? true,
-          companies: { create: companyIds.map((companyId) => ({ companyId })) },
+          companies: { create: companies },
           deliveryTrips: {
             create: (dto.deliveryTripIds ?? []).map((lookupValueId) => ({
               lookupValueId,
@@ -366,12 +381,16 @@ export class ProductService {
     assertUnlocked(existing, 'product', 'editing');
     await this.assertRefs(dto);
 
-    const allCompanies = dto.allCompanies ?? existing.allCompanies;
-    const wantsLinkChange =
-      dto.allCompanies !== undefined || dto.companyIds !== undefined;
-    const companyIds = wantsLinkChange
-      ? this.resolveCompanies(allCompanies, dto.companyIds ?? existing.companyIds)
-      : null;
+    // The company rows carry the costing, and the activity objects depend on the
+    // capability flags — so re-resolve against what the row will look like AFTER
+    // this patch, not what it looks like now.
+    const companies =
+      dto.companies !== undefined
+        ? await this.resolveCompanies(dto.companies, {
+            hasRecipe: dto.hasRecipe ?? existing.hasRecipe,
+            hasPacking: dto.hasPacking ?? existing.hasPacking,
+          })
+        : null;
 
     // Only touch the BOM / process flow when the caller sends them (Production
     // screen); the Inventory master screen omits them and leaves them intact.
@@ -451,7 +470,6 @@ export class ProductService {
           prodFri: dto.prodFri,
           prodSat: dto.prodSat,
           prodOccasional: dto.prodOccasional,
-          allCompanies,
           isActive: dto.isActive,
           // Only rewrite the trips when the caller sent them: omitting the field
           // must leave the schedule alone, not silently clear it.
@@ -471,13 +489,8 @@ export class ProductService {
           ...(discounts
             ? { discounts: { deleteMany: {}, create: discounts } }
             : {}),
-          ...(companyIds
-            ? {
-                companies: {
-                  deleteMany: {},
-                  create: companyIds.map((cid) => ({ companyId: cid })),
-                },
-              }
+          ...(companies
+            ? { companies: { deleteMany: {}, create: companies } }
             : {}),
           ...(wantsBomChange
             ? {
@@ -590,6 +603,8 @@ export class ProductService {
     });
     return {
       ...rest,
+      companies,
+      // Kept for the many screens that only ask "which companies is it in".
       companyIds: companies.map((c) => c.companyId),
       deliveryTripIds: deliveryTrips.map((t) => t.lookupValueId),
       discounts: discounts.map((d) => ({
@@ -689,10 +704,9 @@ export class ProductService {
   }
 
   private isVisible(
-    product: { allCompanies: boolean; companies: { companyId: number }[] },
+    product: { companies: { companyId: number }[] },
     companyId: number | undefined,
   ): boolean {
-    if (product.allCompanies) return true;
     return companyId != null
       ? product.companies.some((c) => c.companyId === companyId)
       : false;
@@ -747,18 +761,119 @@ export class ProductService {
     }
   }
 
-  private resolveCompanies(
-    allCompanies: boolean,
-    companyIds: number[] | undefined,
-  ): number[] {
-    if (allCompanies) return [];
-    const ids = Array.from(new Set(companyIds ?? [])).filter((n) => n > 0);
-    if (ids.length === 0) {
+  /**
+   * Validate + normalise the per-company rows: which companies handle this
+   * product, in what role, and against which costing.
+   *
+   * The costing rules follow the role rather than the transaction type — buying,
+   * making and selling in one company all hit the same cost centre, so only ONE
+   * is named per company. What varies is the ACTIVITY: a producer names a cost
+   * object per activity (recipe / packing), a company that only buys and sells
+   * names a single one. Objects that don't apply to the role are dropped rather
+   * than stored, so a company later switched from producer to trader doesn't
+   * keep stale activity objects.
+   *
+   * Every cost centre must belong to that same company, and every cost object
+   * must sit under the chosen centre — ids come from the client, so a mismatched
+   * pair would otherwise post cost against another company's books.
+   */
+  private async resolveCompanies(
+    rows: ProductCompanyInput[] | undefined,
+    caps: { hasRecipe: boolean; hasPacking: boolean },
+  ): Promise<Prisma.ProductCompanyCreateWithoutProductInput[]> {
+    const wanted = new Map<number, ProductCompanyInput>();
+    for (const r of rows ?? []) {
+      if (r.companyId > 0) wanted.set(r.companyId, r);
+    }
+    if (wanted.size === 0) {
       throw new BadRequestException(
-        'Select at least one company, or choose "All companies".',
+        'Select at least one company that produces or sells this product.',
       );
     }
-    return ids;
+    for (const r of wanted.values()) {
+      if (!r.canProduce && !r.canSell) {
+        throw new BadRequestException(
+          'Each company must either produce or sell the product (or both).',
+        );
+      }
+    }
+
+    // Resolve every referenced cost centre / object in one go, so the checks
+    // below are plain lookups.
+    const centreIds = [
+      ...new Set(
+        [...wanted.values()]
+          .map((r) => r.costCenterId)
+          .filter((n): n is number => n != null),
+      ),
+    ];
+    const objectIds = [
+      ...new Set(
+        [...wanted.values()]
+          .flatMap((r) => [
+            r.recipeCostObjectId,
+            r.packingCostObjectId,
+            r.costObjectId,
+          ])
+          .filter((n): n is number => n != null),
+      ),
+    ];
+    const [centres, objects] = await Promise.all([
+      this.prisma.costCenter.findMany({
+        where: { id: { in: centreIds } },
+        select: { id: true, companyId: true },
+      }),
+      this.prisma.costObject.findMany({
+        where: { id: { in: objectIds } },
+        select: { id: true, companyId: true, costCenterId: true },
+      }),
+    ]);
+    const centreById = new Map(centres.map((c) => [c.id, c]));
+    const objectById = new Map(objects.map((o) => [o.id, o]));
+
+    return [...wanted.values()].map((r) => {
+      if (r.costCenterId != null) {
+        const centre = centreById.get(r.costCenterId);
+        if (!centre || centre.companyId !== r.companyId) {
+          throw new BadRequestException(
+            'A cost centre does not belong to the company it was chosen for.',
+          );
+        }
+      }
+      const objectOf = (id: number | null | undefined) => {
+        if (id == null) return null;
+        const obj = objectById.get(id);
+        if (!obj || obj.companyId !== r.companyId) {
+          throw new BadRequestException(
+            'A cost object does not belong to the company it was chosen for.',
+          );
+        }
+        if (r.costCenterId != null && obj.costCenterId !== r.costCenterId) {
+          throw new BadRequestException(
+            'A cost object does not sit under the cost centre chosen for that company.',
+          );
+        }
+        return id;
+      };
+
+      return {
+        companyId: r.companyId,
+        canProduce: r.canProduce ?? false,
+        canSell: r.canSell ?? true,
+        costCenterId: r.costCenterId ?? null,
+        // Activity objects apply to a producer only, and only for the BOMs the
+        // product actually has.
+        recipeCostObjectId:
+          r.canProduce && caps.hasRecipe ? objectOf(r.recipeCostObjectId) : null,
+        packingCostObjectId:
+          r.canProduce && caps.hasPacking
+            ? objectOf(r.packingCostObjectId)
+            : null,
+        // A producer's costing is carried by the activity objects above; the
+        // single object is for a company that only buys and sells.
+        costObjectId: r.canProduce ? null : objectOf(r.costObjectId),
+      };
+    });
   }
 
   private asDuplicate(e: unknown, code?: string): unknown {
