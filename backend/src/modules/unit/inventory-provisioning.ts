@@ -89,6 +89,24 @@ export const PRODUCTION_SUBS = [
   },
 ];
 
+// A second main menu under the Production module for its reports (kept separate
+// from the operational "Production" menu).
+export const PRODUCTION_REPORT_MENUS = [
+  {
+    name: 'Production Report',
+    icon: 'bar-chart-3',
+    subs: [
+      {
+        name: 'Cost Centre Performance',
+        route: '/production/reports/cost-centres',
+        icon: 'target',
+        order: 1,
+        objectType: ObjectType.REPORT,
+      },
+    ],
+  },
+];
+
 // Lookup code the Recipe Master's Process combo reads (kept in sync with the
 // frontend PRODUCTION_PROCESS_LOOKUP_CODE constant). Module-scoped so admins
 // manage the process list from Production → Lookups.

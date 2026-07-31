@@ -70,6 +70,24 @@ interface LineClass {
   unitId: number;
 }
 
+/** The costing dimensions stamped on a ledger row. */
+interface LineCosting {
+  costCenterId: number | null;
+  costObjectId: number | null;
+}
+
+const NO_COSTING: LineCosting = { costCenterId: null, costObjectId: null };
+
+/**
+ * Which of a product's cost objects a movement belongs to. One cost centre
+ * serves the whole company, so only the OBJECT varies — by what is being done,
+ * not by whether stock is coming in or going out.
+ */
+type CostActivity =
+  | 'RECIPE' // making it: production receipts, and the materials that go in
+  | 'PACKING' // packing it, and the sources consumed doing so
+  | 'SALE'; // shipping it out
+
 @Injectable()
 export class StockTransactionService {
   constructor(
@@ -142,6 +160,8 @@ export class StockTransactionService {
       },
     });
     const prodById = new Map(products.map((p) => [p.id, p]));
+    // Banking output is the making of it, so it takes the recipe cost object.
+    const costing = await this.costingFor(companyId, productIds, 'RECIPE');
 
     return this.prisma.$transaction(async (tx) => {
       const out: ProducedBatch[] = [];
@@ -150,6 +170,7 @@ export class StockTransactionService {
         const p = prodById.get(line.productId);
         if (!p) throw new BadRequestException('Product not found.');
         const primaryGroupId = await this.primaryGroup(p.groupId);
+        const cost = costing.get(line.productId) ?? NO_COSTING;
         // Expiry: explicit, else derived from the product's shelf life (days).
         const expiry = line.expiryDate
           ? new Date(line.expiryDate)
@@ -180,6 +201,8 @@ export class StockTransactionService {
             categoryId: p.categoryId,
             primaryGroupId,
             parentGroupId: p.groupId,
+            costCenterId: cost.costCenterId,
+            costObjectId: cost.costObjectId,
             productId: line.productId,
             batchId: batch.id,
             batchNo1,
@@ -256,6 +279,13 @@ export class StockTransactionService {
       },
     });
     const prodById = new Map(products.map((p) => [p.id, p]));
+    // The whole operation is packing, so everything it moves — the packed
+    // output, the unpacked sources it eats and the packing materials — is
+    // traced against the PACKED product's packing cost object. The sources are
+    // charged to the pack they went into, not to their own recipe object, so
+    // the packing line's cost lands in one place.
+    const costing = await this.costingFor(companyId, productIds, 'PACKING');
+    const packCosting = costing.get(produce[0].productId) ?? NO_COSTING;
 
     return this.prisma.$transaction(async (tx) => {
       // CONSUME the source products and packing materials.
@@ -270,6 +300,7 @@ export class StockTransactionService {
           productId: c.productId,
           itemId: null,
           quantity: c.quantity,
+          costing: packCosting,
         });
       }
       for (const c of consumeItems) {
@@ -283,6 +314,7 @@ export class StockTransactionService {
           productId: null,
           itemId: c.itemId,
           quantity: c.quantity,
+          costing: packCosting,
         });
       }
 
@@ -293,6 +325,7 @@ export class StockTransactionService {
         const p = prodById.get(line.productId);
         if (!p) throw new BadRequestException('Product not found.');
         const primaryGroupId = await this.primaryGroup(p.groupId);
+        const cost = costing.get(line.productId) ?? NO_COSTING;
         const expiry = line.expiryDate
           ? new Date(line.expiryDate)
           : p.shelfLife > 0
@@ -321,6 +354,8 @@ export class StockTransactionService {
             categoryId: p.categoryId,
             primaryGroupId,
             parentGroupId: p.groupId,
+            costCenterId: cost.costCenterId,
+            costObjectId: cost.costObjectId,
             productId: line.productId,
             batchId: batch.id,
             batchNo1,
@@ -358,6 +393,11 @@ export class StockTransactionService {
       input;
     if (!lines.length) return;
     const docDate = new Date(date);
+    // Items have no costing of their own — it rides in from the requisition.
+    const costing: LineCosting = {
+      costCenterId: input.costCenterId ?? null,
+      costObjectId: input.costObjectId ?? null,
+    };
     await this.prisma.$transaction(async (tx) => {
       for (const l of lines) {
         await this.consumeStock(tx, {
@@ -370,6 +410,7 @@ export class StockTransactionService {
           productId: null,
           itemId: l.itemId,
           quantity: l.quantity,
+          costing,
           action: 'issue',
         });
       }
@@ -385,6 +426,13 @@ export class StockTransactionService {
       input;
     if (!lines.length) return;
     const docDate = new Date(date);
+    // A sale is traced against the selling company's own costing for the
+    // product — the same cost centre its purchases and production there use.
+    const costing = await this.costingFor(
+      companyId,
+      lines.map((l) => l.productId),
+      'SALE',
+    );
     await this.prisma.$transaction(async (tx) => {
       for (const l of lines) {
         await this.consumeStock(tx, {
@@ -397,6 +445,7 @@ export class StockTransactionService {
           productId: l.productId,
           itemId: null,
           quantity: l.quantity,
+          costing: costing.get(l.productId) ?? NO_COSTING,
           txnType: StockTxnType.SALE,
         });
       }
@@ -417,6 +466,8 @@ export class StockTransactionService {
       itemId: number | null;
       quantity: number;
       txnType?: StockTxnType;
+      /** Costing dimensions to stamp; omitted where the movement isn't traced. */
+      costing?: LineCosting;
       /** Verb for the short-stock message ("ship" by default). */
       action?: string;
     },
@@ -451,6 +502,8 @@ export class StockTransactionService {
         categoryId: cls.categoryId,
         primaryGroupId: cls.primaryGroupId,
         parentGroupId: cls.parentGroupId,
+        costCenterId: o.costing?.costCenterId ?? null,
+        costObjectId: o.costing?.costObjectId ?? null,
         itemId: o.itemId,
         productId: o.productId,
         qtyIn: 0,
@@ -1019,10 +1072,25 @@ export class StockTransactionService {
     },
   ) {
     const inbound = isInbound(ctx.type);
+    // Costing for the PRODUCT lines — whatever this company traces the product
+    // against (packing object if it has one, else recipe, else its single one).
+    // Item lines carry none of their own: a raw material is costed by the
+    // requisition that issues it, not by the item master.
+    const costing = await this.costingFor(
+      ctx.companyId,
+      ctx.lines
+        .map((l) => l.productId)
+        .filter((n): n is number => n != null),
+      'SALE',
+    );
     let batchSeq = 0;
     for (let i = 0; i < ctx.lines.length; i++) {
       const line = ctx.lines[i];
       const cls = ctx.resolved[i];
+      const cost =
+        line.productId != null
+          ? (costing.get(line.productId) ?? NO_COSTING)
+          : NO_COSTING;
       const expiry = line.expiryDate ? new Date(line.expiryDate) : null;
 
       let batchId: number | null = null;
@@ -1076,6 +1144,8 @@ export class StockTransactionService {
           categoryId: cls.categoryId,
           primaryGroupId: cls.primaryGroupId,
           parentGroupId: cls.parentGroupId,
+          costCenterId: cost.costCenterId,
+          costObjectId: cost.costObjectId,
           itemId: line.itemId ?? null,
           productId: line.productId ?? null,
           batchId,
@@ -1180,6 +1250,56 @@ export class StockTransactionService {
   }
 
   /** Walk up the group chain to the level-1 (primary) group. */
+  /**
+   * The costing dimensions for a set of products, as seen by ONE company.
+   *
+   * Costing hangs off the product's row for that company (ProductCompany), not
+   * off the product itself: the same product can be made by one company and
+   * bought by another, and each traces it against its own books. One cost
+   * centre serves buying, making and selling alike there, so only the OBJECT
+   * varies — by activity.
+   *
+   * A company that only buys and sells has no per-activity objects, so its
+   * single one answers for every activity. A product with no row in this
+   * company (or no costing set) yields nulls rather than failing: costing is a
+   * reporting dimension, and a movement must not be blocked for want of one.
+   */
+  private async costingFor(
+    companyId: number,
+    productIds: number[],
+    activity: CostActivity,
+  ): Promise<Map<number, LineCosting>> {
+    const out = new Map<number, LineCosting>();
+    const ids = [...new Set(productIds)];
+    if (!ids.length) return out;
+
+    const rows = await this.prisma.productCompany.findMany({
+      where: { companyId, productId: { in: ids } },
+      select: {
+        productId: true,
+        costCenterId: true,
+        recipeCostObjectId: true,
+        packingCostObjectId: true,
+        costObjectId: true,
+      },
+    });
+    for (const r of rows) {
+      // A sale follows what was actually sold: a packed product carries the
+      // packing object, an unpacked one the recipe object.
+      const byActivity =
+        activity === 'PACKING'
+          ? r.packingCostObjectId
+          : activity === 'SALE'
+            ? (r.packingCostObjectId ?? r.recipeCostObjectId)
+            : r.recipeCostObjectId;
+      out.set(r.productId, {
+        costCenterId: r.costCenterId,
+        costObjectId: byActivity ?? r.costObjectId ?? null,
+      });
+    }
+    return out;
+  }
+
   private async primaryGroup(groupId: number | null): Promise<number | null> {
     if (!groupId) return null;
     let g = await this.prisma.group.findUnique({

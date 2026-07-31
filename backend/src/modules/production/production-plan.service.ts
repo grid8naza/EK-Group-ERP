@@ -117,18 +117,25 @@ export class ProductionPlanService {
       explosion.products.map((p) => [p.productId, p]),
     );
 
-    // Lines carry the product's RECIPE cost centre / object (planning is about
-    // making, so the recipe side applies). The columns exist and are left null
-    // here until the product master carries the pair — see the note on
-    // ProductionPlanLine.
+    // Lines carry the product's RECIPE cost centre / object for this company —
+    // planning is about making, so the recipe side applies. A product with no
+    // costing set plans fine and simply groups as unassigned.
+    const costNames = await this.costingNames(explosion.products);
+
     const lines = demand.map((d) => {
       const planned = plannedById.get(d.productId);
+      const costCenterId = planned?.costCenterId ?? null;
+      const costObjectId = planned?.costObjectId ?? null;
       return {
         productId: d.productId,
         productName: planned?.productName ?? `#${d.productId}`,
         quantity: d.quantity,
         unitId: d.unitId,
         primaryGroupId: planned?.primaryGroupId ?? null,
+        costCenterId,
+        costCenterName: costCenterId != null ? (costNames.centres.get(costCenterId) ?? null) : null,
+        costObjectId,
+        costObjectName: costObjectId != null ? (costNames.objects.get(costObjectId) ?? null) : null,
       };
     });
 
@@ -176,6 +183,37 @@ export class ProductionPlanService {
   }
 
   // --- helpers ---
+
+  /**
+   * Names for the cost centres / objects a plan's products point at, so each
+   * line can snapshot them. Snapshotted rather than joined at read time: a
+   * later rename must not rewrite what a past plan was raised against.
+   *
+   * Cost centres live in Cpanel, hence plain id lookups here — no relation to
+   * traverse from the production side.
+   */
+  private async costingNames(products: { costCenterId: number | null; costObjectId: number | null }[]) {
+    const centreIds = [
+      ...new Set(products.map((p) => p.costCenterId).filter((n): n is number => n != null)),
+    ];
+    const objectIds = [
+      ...new Set(products.map((p) => p.costObjectId).filter((n): n is number => n != null)),
+    ];
+    const [centres, objects] = await Promise.all([
+      this.prisma.costCenter.findMany({
+        where: { id: { in: centreIds } },
+        select: { id: true, name: true },
+      }),
+      this.prisma.costObject.findMany({
+        where: { id: { in: objectIds } },
+        select: { id: true, name: true },
+      }),
+    ]);
+    return {
+      centres: new Map(centres.map((c) => [c.id, c.name])),
+      objects: new Map(objects.map((o) => [o.id, o.name])),
+    };
+  }
 
   private async withPlanNoRetry<T>(
     companyId: number,

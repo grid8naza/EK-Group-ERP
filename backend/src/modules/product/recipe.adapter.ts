@@ -21,7 +21,7 @@ export class RecipeAdapter implements RecipePort {
   constructor(private readonly prisma: PrismaService) {}
 
   async explode(
-    _companyId: number,
+    companyId: number,
     demand: RecipeDemand[],
   ): Promise<RecipeExplosion> {
     const productIds = [...new Set(demand.map((d) => d.productId))];
@@ -48,6 +48,28 @@ export class RecipeAdapter implements RecipePort {
     const qtyOf = new Map(demand.map((d) => [d.productId, d.quantity]));
     const primaryOf = await this.primaryGroupMap(
       products.map((p) => p.groupId).filter((g): g is number => g != null),
+    );
+    // Costing is per company: the same product can be made by one company and
+    // bought by another, so it hangs off the product's row for THIS one.
+    // Planning is about making, hence the recipe object; a company that only
+    // buys and sells falls back to its single one.
+    const costingRows = await this.prisma.productCompany.findMany({
+      where: { companyId, productId: { in: productIds } },
+      select: {
+        productId: true,
+        costCenterId: true,
+        recipeCostObjectId: true,
+        costObjectId: true,
+      },
+    });
+    const costingOf = new Map(
+      costingRows.map((r) => [
+        r.productId,
+        {
+          costCenterId: r.costCenterId,
+          costObjectId: r.recipeCostObjectId ?? r.costObjectId ?? null,
+        },
+      ]),
     );
 
     // Aggregate item requirement, keyed by item + unit.
@@ -92,6 +114,8 @@ export class RecipeAdapter implements RecipePort {
       productName: p.name,
       unitId: p.unitId,
       primaryGroupId: p.groupId != null ? (primaryOf.get(p.groupId) ?? null) : null,
+      costCenterId: costingOf.get(p.id)?.costCenterId ?? null,
+      costObjectId: costingOf.get(p.id)?.costObjectId ?? null,
     }));
 
     return { products: plannedProducts, materials };

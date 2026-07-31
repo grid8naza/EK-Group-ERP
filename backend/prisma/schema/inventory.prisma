@@ -724,6 +724,14 @@ model StockLedger {
   categoryId         Int? // denormalized snapshot from the item/product
   primaryGroupId     Int? // level-1 group in the item's group chain
   parentGroupId      Int? // the item's leaf group
+  // Costing dimensions, denormalized like the classification above so cost
+  // centre / object reporting is a plain ledger query. Resolved from the
+  // product's row for THIS company (ProductCompany), by activity: production
+  // and receipts take the recipe object, packing the packing one, and an issue
+  // takes them from the requisition it fulfils. Null where the product has no
+  // costing set, or for movements that aren't traced (opening stock, transfers).
+  costCenterId       Int?
+  costObjectId       Int?
   itemId             Int?
   productId          Int?
   batchId            Int?
@@ -752,6 +760,8 @@ model StockLedger {
   @@index([companyId, productId])
   @@index([transactionType, documentId])
   @@index([batchId])
+  // Drives the cost centre / object performance reporting.
+  @@index([companyId, costObjectId, date])
   @@map("stock_ledger")
 }
 

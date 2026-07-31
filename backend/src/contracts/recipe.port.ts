@@ -21,6 +21,14 @@ export interface PlannedProduct {
   unitId: number;
   /** Root (level-1) group of the product, or null if it has none. */
   primaryGroupId: number | null;
+  /**
+   * The costing this company traces making the product against — its cost
+   * centre and RECIPE cost object (planning is about making). Null where the
+   * product has no costing set in this company. Production groups plans and
+   * raises material requests by this pair.
+   */
+  costCenterId: number | null;
+  costObjectId: number | null;
 }
 
 /** An aggregated raw-material (Item) requirement across the demand. */

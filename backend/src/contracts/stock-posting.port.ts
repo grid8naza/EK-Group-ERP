@@ -76,6 +76,13 @@ export interface MaterialIssuePosting {
   /** The goods-issue number the ledger rows carry. */
   documentNo: string;
   date: string;
+  /**
+   * Costing the issue is traced against. Raw-material ITEMS carry no costing of
+   * their own, so it comes from the requisition being fulfilled — which took it
+   * from the products the materials are going into.
+   */
+  costCenterId?: number | null;
+  costObjectId?: number | null;
   lines: ConsumeItemLine[];
 }
 

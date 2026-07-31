@@ -10,6 +10,8 @@ import { MaterialRequestService } from './material-request.service';
 import { ProductionReceiptController } from './production-receipt.controller';
 import { ProductionReceiptService } from './production-receipt.service';
 import { PackingController } from './packing.controller';
+import { ProductionPerformanceController } from './production-performance.controller';
+import { ProductionPerformanceService } from './production-performance.service';
 import { PackingService } from './packing.service';
 
 // USER_LOOKUP is injected from the @Global ContractsModule, so no import of the
@@ -24,6 +26,7 @@ import { PackingService } from './packing.service';
     MaterialRequestController,
     ProductionReceiptController,
     PackingController,
+    ProductionPerformanceController,
   ],
   providers: [
     ProductionService,
@@ -32,6 +35,7 @@ import { PackingService } from './packing.service';
     MaterialRequestService,
     ProductionReceiptService,
     PackingService,
+    ProductionPerformanceService,
   ],
 })
 export class ProductionModule {}

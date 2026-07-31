@@ -281,6 +281,10 @@ export class MaterialRequestService {
         documentId: mr.id,
         documentNo: issueNo,
         date: new Date().toISOString(),
+        // Items carry no costing of their own, so the issue is traced against
+        // the requisition's — which came from the products being made.
+        costCenterId: mr.costCenterId,
+        costObjectId: mr.costObjectId,
         lines: moving.map((l) => ({ itemId: l.itemId, quantity: l.quantity })),
       });
     } catch (e) {

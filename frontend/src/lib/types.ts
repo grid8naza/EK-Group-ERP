@@ -1275,6 +1275,25 @@ export interface MaterialRequest {
   lines: MaterialRequestLine[];
 }
 
+/**
+ * One cost object's production activity over a period — the production-side
+ * view of the costing dimensions, aggregated from the stock ledger. Movements
+ * with no costing come back under "Unassigned" rather than being dropped.
+ */
+export interface CostObjectPerformance {
+  costCenterId?: number | null;
+  costCenterName: string;
+  costObjectId?: number | null;
+  costObjectName: string;
+  producedQty: number;
+  producedValue: number;
+  consumedQty: number;
+  consumedValue: number;
+  soldQty: number;
+  soldValue: number;
+  documentCount: number;
+}
+
 // ---- Production: Work Orders ----
 export type WorkOrderStatus =
   | 'PENDING'
