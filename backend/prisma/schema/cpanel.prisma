@@ -81,6 +81,7 @@ model LookupValue {
 
   docsAsTxnType    Document[] @relation("DocTxnType")
   docsAsTxnSubtype Document[] @relation("DocTxnSubtype")
+  userGroupsAsDiscountLevel UserGroup[] @relation("UserGroupDiscountLevel")
 
   @@unique([lookupId, value])
   @@map("lookup_values")
@@ -369,11 +370,19 @@ model UserGroup {
   companyId   Int
   name        String
   description String?
+  /// Discount authority of this group's members — a DISCOUNT_LEVEL LookupValue
+  /// (Inventory module). This is what lets billing turn a login into a discount
+  /// ceiling: the group gives the level, and the level indexes the product's
+  /// discount matrix (ProductDiscount) for the per-product percentage. Null =
+  /// the group may give no discount. Set here rather than per user so it is
+  /// maintained once per role; both live in Cpanel, so it is a real relation.
+  discountLevelId Int?
   isLocked    Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   company         Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  discountLevel   LookupValue?            @relation("UserGroupDiscountLevel", fields: [discountLevelId], references: [id], onDelete: SetNull)
   modules         UserGroupModule[]
   mainMenuAccess  GroupMainMenuAccess[]
   subMenuPrivs    GroupSubMenuPrivilege[]
@@ -381,6 +390,7 @@ model UserGroup {
   dashboardAccess GroupDashboard[]
 
   @@unique([companyId, name])
+  @@index([discountLevelId])
   @@map("user_groups")
 }
 

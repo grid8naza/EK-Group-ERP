@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, PackageOpen, Upload, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { mediaUrl } from '@/lib/login-screen';
-import { useFetch } from '@/lib/hooks';
+import { useFetch, useLookupValues } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
@@ -17,6 +17,12 @@ import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/u
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
+import {
+  DiscountMatrix,
+  discountFormFrom,
+  discountPayload,
+  type DiscountForm,
+} from '@/components/inventory/DiscountMatrix';
 import { PRODUCT_SOURCE_LABEL, PRODUCT_SOURCE_OPTIONS } from '@/lib/types';
 import type {
   Product,
@@ -101,6 +107,8 @@ const empty = {
   shelfLife: '0',
   // Defaults for a new finished product: packed, no recipe, and not usable as
   // an ingredient. The two BOM flags are editable in the drawer.
+  // Max discount % per authority level, keyed by DISCOUNT_LEVEL LookupValue id.
+  discounts: {} as DiscountForm,
   // Finished goods on this screen are made in-house by default; switch to
   // Purchased for resale / traded stock.
   source: 'MANUFACTURED' as ProductSource,
@@ -164,32 +172,11 @@ export default function ProductsPage() {
   // the active branch.
   const { data: stores } = useFetch<Store[]>('/stores?all=true');
   const { data: racks } = useFetch<Rack[]>('/racks?all=true');
-  const { data: lookups } = useFetch<Lookup[]>('/lookups');
 
-  // Delivery Trip lookup values for the Delivery Schedule: find the lookup by
-  // code, then fetch its values (mirrors the Production Process pattern).
-  const [tripValues, setTripValues] = useState<LookupValue[]>([]);
-  useEffect(() => {
-    const lookup = (lookups ?? []).find(
-      (l) => l.code === DELIVERY_TRIP_LOOKUP_CODE,
-    );
-    if (!lookup) {
-      setTripValues([]);
-      return;
-    }
-    let cancelled = false;
-    api
-      .get<LookupValue[]>(`/lookups/${lookup.id}/values`)
-      .then((vals) => {
-        if (!cancelled) setTripValues((vals ?? []).filter((v) => v.isActive));
-      })
-      .catch(() => {
-        if (!cancelled) setTripValues([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [lookups]);
+  // Both lists are lookup-driven, so they're fetched the same way: find the
+  // lookup by code, then its active values.
+  const tripValues = useLookupValues(DELIVERY_TRIP_LOOKUP_CODE);
+  const discountLevels = useLookupValues('DISCOUNT_LEVEL');
   const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<Product>({
     endpoint: '/products',
     route: ROUTE,
@@ -357,7 +344,8 @@ export default function ProductsPage() {
     hsnCodeId: p.hsnCodeId != null ? String(p.hsnCodeId) : '',
     shelfLife: String(p.shelfLife ?? 0),
     // Editable in the drawer; `empty` holds this screen's default for new rows.
-    source: (p.source ?? "MANUFACTURED") as ProductSource,
+    discounts: discountFormFrom(p.discounts),
+    source: (p.source ?? 'MANUFACTURED') as ProductSource,
     hasRecipe: p.hasRecipe ?? false,
     hasPacking: p.hasPacking ?? true,
     isIngredient: false,
@@ -568,6 +556,8 @@ export default function ProductsPage() {
       boxUnitId: idOrNull(form.boxUnitId),
       hsnCodeId: idOrNull(form.hsnCodeId),
       shelfLife: num(form.shelfLife),
+      // Sent whole; the server drops the zeros and clears it when not sellable.
+      discounts: discountPayload(discountLevels, form.discounts),
       source: form.source,
       hasRecipe: form.hasRecipe,
       hasPacking: form.hasPacking,
@@ -1107,6 +1097,21 @@ export default function ProductsPage() {
                 />
               </div>
             </div>
+
+            {/* Discount matrix — sellable products only: a product that isn't
+                sold has nothing to discount. */}
+            {form.canSell && (
+              <DiscountMatrix
+                levels={discountLevels}
+                value={form.discounts}
+                onChange={(levelId, percentage) =>
+                  setForm((f) => ({
+                    ...f,
+                    discounts: { ...f.discounts, [levelId]: percentage },
+                  }))
+                }
+              />
+            )}
 
             {/* Product picture — only for sellable products. */}
             {form.canSell && (

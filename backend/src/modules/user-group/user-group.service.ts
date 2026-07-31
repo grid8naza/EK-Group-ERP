@@ -27,6 +27,7 @@ export class UserGroupService {
       },
       include: {
         modules: { include: { module: true } },
+        discountLevel: { select: { id: true, label: true } },
         _count: { select: { userAssignments: true } },
       },
       orderBy: { name: 'asc' },
@@ -41,7 +42,10 @@ export class UserGroupService {
   async findOne(id: number) {
     const group = await this.prisma.userGroup.findUnique({
       where: { id },
-      include: { modules: { include: { module: true } } },
+      include: {
+        modules: { include: { module: true } },
+        discountLevel: { select: { id: true, label: true } },
+      },
     });
     if (!group) throw new NotFoundException('User group not found');
     return { ...group, modules: group.modules.map((m) => m.module) };

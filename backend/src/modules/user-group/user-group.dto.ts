@@ -18,6 +18,14 @@ export class CreateUserGroupDto {
 
   @IsOptional() @IsString() description?: string;
 
+  /**
+   * Discount authority of this group's members — a DISCOUNT_LEVEL LookupValue
+   * (Inventory > Lookups). Billing reads it to turn the logged-in user into a
+   * discount ceiling, then indexes the product's discount matrix by it. Null =
+   * this group may give no discount.
+   */
+  @IsOptional() @IsInt() discountLevelId?: number | null;
+
   // One or more modules this group can manage.
   @IsArray()
   @ArrayNotEmpty()

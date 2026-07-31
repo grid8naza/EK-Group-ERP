@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsPositive,
   IsString,
+  Max,
   Min,
   MaxLength,
   MinLength,
@@ -24,6 +25,21 @@ export class PackSourceInput {
   @IsNumber()
   @IsPositive()
   quantity!: number;
+}
+
+/**
+ * One cell of the discount matrix: the maximum discount percentage one
+ * authority level may give on this product. `lookupValueId` is a DISCOUNT_LEVEL
+ * LookupValue (ids, not names, so a renamed level keeps its saved percentages).
+ */
+export class ProductDiscountInput {
+  @IsInt()
+  lookupValueId!: number;
+
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  percentage!: number;
 }
 
 /** Per-branch stocking parameters for a product. `branchId` is a plain
@@ -297,6 +313,18 @@ export class CreateProductDto {
   @IsInt({ each: true })
   deliveryTripIds?: number[];
 
+  /**
+   * Discount matrix: the maximum discount percentage each authority level may
+   * give on this product at billing time. Only levels the user has set appear;
+   * a missing level means no discount. Cleared server-side when the product is
+   * not sellable, since the matrix is a selling attribute.
+   */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductDiscountInput)
+  discounts?: ProductDiscountInput[];
+
   @IsOptional()
   @IsBoolean()
   allCompanies?: boolean;
@@ -523,6 +551,18 @@ export class UpdateProductDto {
   @ArrayUnique()
   @IsInt({ each: true })
   deliveryTripIds?: number[];
+
+  /**
+   * Discount matrix: the maximum discount percentage each authority level may
+   * give on this product at billing time. Only levels the user has set appear;
+   * a missing level means no discount. Cleared server-side when the product is
+   * not sellable, since the matrix is a selling attribute.
+   */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ProductDiscountInput)
+  discounts?: ProductDiscountInput[];
 
   @IsOptional()
   @IsBoolean()

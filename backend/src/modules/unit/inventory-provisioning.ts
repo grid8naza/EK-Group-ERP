@@ -457,6 +457,60 @@ export async function seedInventoryDefaults(
   await seedDefaultUnits(prisma);
   await seedDefaultHsnCodes(prisma);
   await seedDeliveryTrips(prisma);
+  await seedDiscountLevels(prisma);
+}
+
+/** The authority levels a product's discount matrix is keyed by. */
+const DISCOUNT_LEVEL_LOOKUP = { code: 'DISCOUNT_LEVEL', name: 'Discount Level' };
+const DEFAULT_DISCOUNT_LEVELS = [
+  'Salesman',
+  'Branch Manager',
+  'Operations Manager',
+  'Directors',
+];
+
+/**
+ * Seed the Discount Level lookup and its four starting values.
+ *
+ * These are the user's org roles, not anything fixed by nature — a fifth tier
+ * or a rename shouldn't need a developer — so they're a lookup, like the
+ * delivery trips above. The PERCENTAGES are not held here: they vary per
+ * product, so they live on ProductDiscount.
+ *
+ * As with the trips, the VALUES are seeded only when the lookup is first
+ * created; re-running must not resurrect a level the user deleted or undo a
+ * rename.
+ */
+export async function seedDiscountLevels(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  const inv = await prisma.module.findUnique({
+    where: { code: 'INVENTORY' },
+    select: { id: true },
+  });
+  const existing = await prisma.lookup.findUnique({
+    where: { code: DISCOUNT_LEVEL_LOOKUP.code },
+    select: { id: true },
+  });
+  if (existing) return;
+
+  const lookup = await prisma.lookup.create({
+    data: {
+      code: DISCOUNT_LEVEL_LOOKUP.code,
+      name: DISCOUNT_LEVEL_LOOKUP.name,
+      moduleId: inv?.id ?? null,
+      isSystem: true,
+    },
+  });
+  await prisma.lookupValue.createMany({
+    data: DEFAULT_DISCOUNT_LEVELS.map((label, i) => ({
+      lookupId: lookup.id,
+      value: label.toUpperCase().replace(/\s+/g, '_'),
+      label,
+      sortOrder: i + 1,
+    })),
+    skipDuplicates: true,
+  });
 }
 
 /** The delivery-trip lookup a packed product's Delivery Schedule chooses from. */

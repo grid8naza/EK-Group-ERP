@@ -426,6 +426,14 @@ export interface UserGroup {
   /** Owning company (user groups are company-scoped). */
   companyId?: number;
   description?: string | null;
+  /**
+   * Discount authority of this group's members — a DISCOUNT_LEVEL LookupValue
+   * (Inventory > Lookups). Billing reads it to turn the logged-in user into a
+   * discount ceiling, then indexes the product's discount matrix by it.
+   * Null = this group may give no discount.
+   */
+  discountLevelId?: number | null;
+  discountLevel?: { id: number; label: string } | null;
   isLocked?: boolean;
   /** Modules this group can manage (many-to-many). */
   modules?: Module[];
@@ -853,6 +861,13 @@ export interface Product {
    * still be `isIngredient`, since a bought-in filling can go into a recipe.
    */
   source: ProductSource;
+  /**
+   * Discount matrix: the maximum discount percentage each authority level may
+   * give on this product at billing. Keyed by DISCOUNT_LEVEL LookupValue id.
+   * Only levels actually set are present — a missing level means no discount —
+   * and the whole matrix is cleared when the product is not sellable.
+   */
+  discounts?: { lookupValueId: number; percentage: number }[];
   /** A production (recipe) BOM can be created for this product. */
   hasRecipe: boolean;
   /** A packing BOM can be created for this product. */

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, PackageOpen, Upload, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { mediaUrl } from '@/lib/login-screen';
-import { useFetch } from '@/lib/hooks';
+import { useFetch, useLookupValues } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
@@ -17,6 +17,12 @@ import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/u
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
+import {
+  DiscountMatrix,
+  discountFormFrom,
+  discountPayload,
+  type DiscountForm,
+} from '@/components/inventory/DiscountMatrix';
 import { PRODUCT_SOURCE_LABEL, PRODUCT_SOURCE_OPTIONS } from '@/lib/types';
 import type {
   Product,
@@ -84,10 +90,12 @@ const empty = {
   boxUnitId: '',
   hsnCodeId: '',
   shelfLife: '0',
-  // Defaults for a new semi-finished product: made from a recipe, not packed.
-  // Both are editable in the drawer.
+  // Max discount % per authority level, keyed by DISCOUNT_LEVEL LookupValue id.
+  discounts: {} as DiscountForm,
   // In-house by default on this screen; switch to Purchased for resale stock.
   source: 'MANUFACTURED' as ProductSource,
+  // Defaults for a new semi-finished product: made from a recipe, not packed.
+  // Both are editable in the drawer.
   hasRecipe: true,
   hasPacking: false,
   isIngredient: false,
@@ -128,6 +136,8 @@ export default function ProductsPage() {
   const { data, loading, refetch } = useFetch<Product[]>('/products');
   const { data: groups } = useFetch<Group[]>('/groups');
   const { data: categories } = useFetch<Category[]>('/categories');
+  // Discount authority levels, maintained in Inventory > Lookups.
+  const discountLevels = useLookupValues('DISCOUNT_LEVEL');
   const { data: units } = useFetch<Unit[]>('/units');
   const { data: hsnCodes } = useFetch<HsnCode[]>('/hsn-codes');
   const { data: companies } = useFetch<Company[]>('/companies');
@@ -303,6 +313,7 @@ export default function ProductsPage() {
     hsnCodeId: p.hsnCodeId != null ? String(p.hsnCodeId) : '',
     shelfLife: String(p.shelfLife ?? 0),
     // Editable in the drawer; `empty` holds this screen's default for new rows.
+    discounts: discountFormFrom(p.discounts),
     source: (p.source ?? 'MANUFACTURED') as ProductSource,
     hasRecipe: p.hasRecipe ?? true,
     hasPacking: p.hasPacking ?? false,
@@ -497,6 +508,8 @@ export default function ProductsPage() {
       boxUnitId: idOrNull(form.boxUnitId),
       hsnCodeId: idOrNull(form.hsnCodeId),
       shelfLife: num(form.shelfLife),
+      // Sent whole; the server drops the zeros and clears it when not sellable.
+      discounts: discountPayload(discountLevels, form.discounts),
       source: form.source,
       hasRecipe: form.hasRecipe,
       hasPacking: form.hasPacking,
@@ -1276,6 +1289,22 @@ export default function ProductsPage() {
                 </div>
               )}
             </div>
+
+            {/* Discount matrix — sellable products only, for the same reason as
+                the branch levels below: a product that isn't sold has nothing
+                to discount. */}
+            {form.canSell && (
+              <DiscountMatrix
+                levels={discountLevels}
+                value={form.discounts}
+                onChange={(levelId, percentage) =>
+                  setForm((f) => ({
+                    ...f,
+                    discounts: { ...f.discounts, [levelId]: percentage },
+                  }))
+                }
+              />
+            )}
 
             {/* Per-branch stock levels — sellable products only. One row per
                 active branch of every company this product is available in.

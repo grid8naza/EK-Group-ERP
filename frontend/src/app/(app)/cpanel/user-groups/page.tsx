@@ -9,7 +9,7 @@ import {
   ChevronDown,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
-import { useFetch } from '@/lib/hooks';
+import { useFetch, useLookupValues } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
@@ -19,7 +19,7 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
-import { Input, Textarea } from '@/components/ui/Field';
+import { Input, Select, Textarea } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import { resolveIcon } from '@/lib/icons';
 import { cn } from '@/lib/utils';
@@ -35,6 +35,8 @@ const ROUTE = '/cpanel/user-groups';
 const empty = {
   name: '',
   description: '',
+  // DISCOUNT_LEVEL LookupValue id; '' = this group may give no discount.
+  discountLevelId: '',
   moduleIds: [] as number[],
 };
 
@@ -101,6 +103,8 @@ export default function UserGroupsPage() {
     reload: refetch,
   });
   const [modules, setModules] = useState<Module[]>([]);
+  // Discount authority levels, maintained in Inventory > Lookups.
+  const discountLevels = useLookupValues('DISCOUNT_LEVEL');
 
   const canAdd = can(ROUTE, 'add');
   const canEdit = can(ROUTE, 'edit');
@@ -158,6 +162,7 @@ export default function UserGroupsPage() {
     setForm({
       name: g.name,
       description: g.description ?? '',
+      discountLevelId: g.discountLevelId ? String(g.discountLevelId) : '',
       moduleIds: g.modules?.map((m) => m.id) ?? [],
     });
     setOpen(true);
@@ -169,6 +174,7 @@ export default function UserGroupsPage() {
     setForm({
       name: g.name,
       description: g.description ?? '',
+      discountLevelId: g.discountLevelId ? String(g.discountLevelId) : '',
       moduleIds: g.modules?.map((m) => m.id) ?? [],
     });
     setOpen(true);
@@ -194,6 +200,9 @@ export default function UserGroupsPage() {
       const payload = {
         name: form.name,
         description: form.description || null,
+        discountLevelId: form.discountLevelId
+          ? Number(form.discountLevelId)
+          : null,
         moduleIds: form.moduleIds,
       };
       let saved: UserGroup;
@@ -213,6 +222,9 @@ export default function UserGroupsPage() {
         setForm({
           name: saved.name,
           description: saved.description ?? '',
+          discountLevelId: saved.discountLevelId
+            ? String(saved.discountLevelId)
+            : '',
           moduleIds: saved.modules?.map((m) => m.id) ?? [],
         });
       } else setOpen(false);
@@ -412,6 +424,17 @@ export default function UserGroupsPage() {
           <span className="text-slate-400">—</span>
         ),
     },
+    {
+      key: 'discountLevel',
+      header: 'Discount Level',
+      sortAccessor: (r) => r.discountLevel?.label ?? '',
+      render: (r) =>
+        r.discountLevel ? (
+          <Badge color="violet">{r.discountLevel.label}</Badge>
+        ) : (
+          <span className="text-slate-400">—</span>
+        ),
+    },
     { key: 'description', header: 'Description', accessor: (r) => r.description },
   ];
 
@@ -530,6 +553,29 @@ export default function UserGroupsPage() {
                 })}
               </div>
             )}
+          </div>
+          {/* Discount authority — set once per role rather than per user. At
+              billing this turns the logged-in user into a ceiling: the level
+              indexes the product's discount matrix for the per-product
+              percentage. The levels themselves are maintained in
+              Inventory > Lookups (DISCOUNT_LEVEL). */}
+          <div>
+            <Select
+              label="Discount level"
+              value={form.discountLevelId}
+              onChange={(e) =>
+                setForm({ ...form, discountLevelId: e.target.value })
+              }
+              placeholder="— None (no discount allowed) —"
+              options={discountLevels.map((v) => ({
+                value: String(v.id),
+                label: v.label,
+              }))}
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              The maximum discount members of this group may give. The
+              percentage itself is set per product, on the product master.
+            </p>
           </div>
           <Textarea
             label="Description"

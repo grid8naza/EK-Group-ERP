@@ -406,6 +406,7 @@ model Product {
 
   companies ProductCompany[]
   deliveryTrips ProductDeliveryTrip[]
+  discounts ProductDiscount[]
   bomLines  ProductBomLine[]
   processes ProductProcess[]
   packSources  ProductPackSource[] @relation("PackSources")  // unpacked products this pack is made from
@@ -524,6 +525,36 @@ model ProductDeliveryTrip {
   @@unique([productId, lookupValueId])
   @@index([productId])
   @@map("product_delivery_trips")
+}
+
+/// One cell of a product's DISCOUNT MATRIX: the maximum discount `percentage`
+/// the holders of one authority level may give on this product at billing time.
+///
+/// The levels are LookupValues (lookup code DISCOUNT_LEVEL, Inventory module)
+/// rather than columns or an enum, for the same reason as the delivery trips —
+/// Salesman / Branch Manager / Operations Manager / Directors are the user's org
+/// roles, and adding a fifth or renaming one must not need a developer. Per the
+/// cross-domain rule the LookupValue lives in Cpanel, so it is referenced by a
+/// plain id with no relation.
+///
+/// The percentage is stored HERE, per product, because it varies per product;
+/// only rows the user has actually set exist, and a level with no row means no
+/// discount. Rows are kept only while the product `canSell` — the matrix is a
+/// selling attribute, so it is cleared with the rest of them.
+///
+/// Which level a given user holds is resolved from their UserGroup
+/// (UserGroup.discountLevelId), so a login maps to a ceiling.
+model ProductDiscount {
+  id            Int   @id @default(autoincrement())
+  productId     Int
+  lookupValueId Int // -> Cpanel LookupValue (a DISCOUNT_LEVEL value)
+  percentage    Float @default(0) // max discount % this level may give, 0-100
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, lookupValueId])
+  @@index([productId])
+  @@map("product_discounts")
 }
 
 model ProductBranchStock {

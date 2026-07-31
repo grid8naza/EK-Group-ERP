@@ -48,6 +48,7 @@ const withRelations = {
   hsnCode: { select: { id: true, code: true, description: true } },
   companies: { select: { companyId: true } },
   deliveryTrips: { select: { lookupValueId: true } },
+  discounts: { select: { lookupValueId: true, percentage: true } },
   packSources: {
     orderBy: { sequence: 'asc' },
     select: { id: true, sourceProductId: true, quantity: true, sequence: true },
@@ -151,6 +152,10 @@ export class ProductService {
     });
     const allCompanies = dto.allCompanies ?? false;
     const companyIds = this.resolveCompanies(allCompanies, dto.companyIds);
+    const discounts = await this.resolveDiscounts(
+      dto.discounts,
+      dto.canSell ?? true,
+    );
 
     return this.withCodeRetry(async () => {
       const seq = await this.nextLeafSeq(dto.groupId);
@@ -205,6 +210,7 @@ export class ProductService {
               lookupValueId,
             })),
           },
+          discounts: { create: discounts },
           bomLines: { create: this.bomCreate(dto.recipe, dto.packing) },
           processes: { create: this.processCreate(dto.processes) },
           packSources: { create: this.packSourceCreate(dto.packSources) },
@@ -378,6 +384,15 @@ export class ProductService {
     // will actually look like after this patch — the caller may be setting the
     // source and clearing the BOM in the same request, and an omitted field
     // means "leave it alone", not "empty".
+    // The matrix is rewritten when the caller sends one, and cleared outright
+    // when the product stops being sellable. null = leave it alone.
+    const canSell = dto.canSell ?? existing.canSell;
+    const discounts = !canSell
+      ? []
+      : dto.discounts !== undefined
+        ? await this.resolveDiscounts(dto.discounts, canSell)
+        : null;
+
     const source = dto.source ?? existing.source;
     this.assertSourceAllowsBoms(source, {
       hasRecipe: dto.hasRecipe ?? existing.hasRecipe,
@@ -450,6 +465,12 @@ export class ProductService {
                 },
               }
             : {}),
+          // Same rule for the discount matrix — except that turning Can Sell
+          // off clears it whether or not the caller sent one, since a product
+          // that isn't sold has nothing to discount.
+          ...(discounts
+            ? { discounts: { deleteMany: {}, create: discounts } }
+            : {}),
           ...(companyIds
             ? {
                 companies: {
@@ -518,8 +539,46 @@ export class ProductService {
 
   // --- helpers ---
 
+  /**
+   * Validate + normalise the discount matrix into rows ready to create.
+   *
+   * A product that isn't sold has nothing to discount, so a non-sellable
+   * product always resolves to an empty matrix regardless of what was sent.
+   * Zero-percent rows are dropped rather than stored: "no discount" is the
+   * absence of a row, which keeps the table to what the user actually set.
+   *
+   * Every level must be a live value of the DISCOUNT_LEVEL lookup — ids are
+   * accepted from the client, so a stale or foreign id must not be persisted as
+   * a discount nobody can see.
+   */
+  private async resolveDiscounts(
+    rows: { lookupValueId: number; percentage: number }[] | undefined,
+    canSell: boolean,
+  ): Promise<{ lookupValueId: number; percentage: number }[]> {
+    if (!canSell || !rows?.length) return [];
+
+    const wanted = new Map<number, number>();
+    for (const r of rows) wanted.set(r.lookupValueId, r.percentage);
+
+    const valid = await this.prisma.lookupValue.findMany({
+      where: {
+        id: { in: [...wanted.keys()] },
+        lookup: { code: 'DISCOUNT_LEVEL' },
+      },
+      select: { id: true },
+    });
+    if (valid.length !== wanted.size) {
+      throw new BadRequestException(
+        'One of the discount levels does not exist. Reload the screen and try again.',
+      );
+    }
+    return [...wanted.entries()]
+      .filter(([, percentage]) => percentage > 0)
+      .map(([lookupValueId, percentage]) => ({ lookupValueId, percentage }));
+  }
+
   private flatten(row: ProductRow) {
-    const { companies, deliveryTrips, bomLines, ...rest } = row;
+    const { companies, deliveryTrips, discounts, bomLines, ...rest } = row;
     const toLine = (l: ProductRow['bomLines'][number]) => ({
       id: l.id,
       itemId: l.itemId,
@@ -533,6 +592,10 @@ export class ProductService {
       ...rest,
       companyIds: companies.map((c) => c.companyId),
       deliveryTripIds: deliveryTrips.map((t) => t.lookupValueId),
+      discounts: discounts.map((d) => ({
+        lookupValueId: d.lookupValueId,
+        percentage: d.percentage,
+      })),
       recipe: bomLines.filter((l) => l.kind === BomKind.RECIPE).map(toLine),
       packing: bomLines.filter((l) => l.kind === BomKind.PACKING).map(toLine),
     };
