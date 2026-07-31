@@ -167,9 +167,14 @@ export default function MaterialRequestsPage() {
     { key: 'requestNo', header: 'Request', accessor: (r) => r.requestNo },
     { key: 'planNo', header: 'Plan', accessor: (r) => r.planNo ?? '—' },
     {
-      key: 'division',
-      header: 'Division',
-      accessor: (r) => r.divisionName ?? 'Unassigned',
+      key: 'costCenter',
+      header: 'Cost Centre',
+      accessor: (r) => r.costCenterName ?? 'Unassigned',
+    },
+    {
+      key: 'costObject',
+      header: 'Cost Object',
+      accessor: (r) => r.costObjectName ?? 'Unassigned',
     },
     { key: 'store', header: 'Store', accessor: (r) => r.storeName ?? '—' },
     {
@@ -202,7 +207,7 @@ export default function MaterialRequestsPage() {
     <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="Material Request"
-        description="Raw materials requested from the store for each division — raised from a production plan"
+        description="Raw materials requested from the store for each cost centre / object — raised from a production plan"
         icon={<ClipboardCheck className="h-5 w-5" />}
       />
 
@@ -242,8 +247,12 @@ export default function MaterialRequestsPage() {
           <div className="flex flex-col gap-5">
             <div className="grid grid-cols-2 gap-4 text-sm">
               <Field
-                label="Division"
-                value={current.divisionName ?? 'Unassigned'}
+                label="Cost Centre"
+                value={current.costCenterName ?? 'Unassigned'}
+              />
+              <Field
+                label="Cost Object"
+                value={current.costObjectName ?? 'Unassigned'}
               />
               <Field label="Plan" value={current.planNo ?? '—'} />
               <Field label="Store" value={current.storeName ?? '—'} />

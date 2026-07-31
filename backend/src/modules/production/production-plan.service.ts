@@ -14,14 +14,14 @@ import { CreateProductionPlanDto } from './production-plan.dto';
 const PRODUCTION_PLAN_DOCUMENT_CODE = 'PRODUCTION_PLAN';
 
 const withDetail = {
-  lines: { orderBy: [{ divisionName: 'asc' as const }, { productName: 'asc' as const }] },
+  lines: { orderBy: [{ costObjectName: 'asc' as const }, { productName: 'asc' as const }] },
   materials: { orderBy: { itemName: 'asc' as const } },
 };
 
 /**
  * Production Plans — the plan clubs the pending Work Orders into one buildable
- * document: demand aggregated per product, grouped by the division that makes
- * it, with the raw-material requirement exploded from recipes.
+ * document: demand aggregated per product, grouped by the cost centre / object
+ * that makes it, with the raw-material requirement exploded from recipes.
  */
 @Injectable()
 export class ProductionPlanService {
@@ -68,8 +68,8 @@ export class ProductionPlanService {
 
   /**
    * Build a plan from every pending, not-yet-planned Work Order in the company:
-   * aggregate demand per product, explode recipes for the material need, group
-   * each product under its division, and link the clubbed work orders.
+   * aggregate demand per product, explode recipes for the material need, and
+   * link the clubbed work orders.
    */
   async create(
     userId: number,
@@ -117,40 +117,18 @@ export class ProductionPlanService {
       explosion.products.map((p) => [p.productId, p]),
     );
 
-    // Resolve division for each product's primary group.
-    const primaryGroupIds = [
-      ...new Set(
-        explosion.products
-          .map((p) => p.primaryGroupId)
-          .filter((g): g is number => g != null),
-      ),
-    ];
-    const maps = primaryGroupIds.length
-      ? await this.prisma.productionDivisionGroup.findMany({
-          where: { companyId, primaryGroupId: { in: primaryGroupIds } },
-          select: {
-            primaryGroupId: true,
-            division: { select: { id: true, name: true } },
-          },
-        })
-      : [];
-    const divisionByGroup = new Map(
-      maps.map((m) => [m.primaryGroupId, m.division]),
-    );
-
+    // Lines carry the product's RECIPE cost centre / object (planning is about
+    // making, so the recipe side applies). The columns exist and are left null
+    // here until the product master carries the pair — see the note on
+    // ProductionPlanLine.
     const lines = demand.map((d) => {
       const planned = plannedById.get(d.productId);
-      const primaryGroupId = planned?.primaryGroupId ?? null;
-      const division =
-        primaryGroupId != null ? divisionByGroup.get(primaryGroupId) : null;
       return {
         productId: d.productId,
         productName: planned?.productName ?? `#${d.productId}`,
         quantity: d.quantity,
         unitId: d.unitId,
-        primaryGroupId,
-        divisionId: division?.id ?? null,
-        divisionName: division?.name ?? null,
+        primaryGroupId: planned?.primaryGroupId ?? null,
       };
     });
 

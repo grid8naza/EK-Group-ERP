@@ -18,6 +18,7 @@ const RETIRED_ROUTES: string[] = [
   '/inventory/opening-stock-products-packed', // renamed to opening-stock-packed-products
   '/inventory/opening-stock-products-unpacked', // renamed to opening-stock-unpacked-products
   '/inventory/goods-return-note', // split into sales-return + purchase-return
+  '/production/divisions', // dropped — cost centres/objects track production instead
 ];
 
 async function cleanupRetiredRoutes(

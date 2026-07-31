@@ -33,9 +33,10 @@ const article = (status: MaterialRequestStatus) =>
 
 /**
  * Material Requests — the requisition operations sends to the store for the raw
- * materials a production division needs. Raised from a Production Plan: one
- * request per division, aggregating that division's products' recipe materials,
- * with each line's on-hand at the store captured so shortfalls are visible.
+ * materials a cost centre / object needs. Raised from a Production Plan: one
+ * request per cost centre / object pair, aggregating that pair's products'
+ * recipe materials, with each line's on-hand at the store captured so
+ * shortfalls are visible.
  */
 @Injectable()
 export class MaterialRequestService {
@@ -57,7 +58,7 @@ export class MaterialRequestService {
               OR: [
                 { requestNo: { contains: search, mode: 'insensitive' } },
                 { planNo: { contains: search, mode: 'insensitive' } },
-                { divisionName: { contains: search, mode: 'insensitive' } },
+                { costObjectName: { contains: search, mode: 'insensitive' } },
               ],
             }
           : {}),
@@ -101,41 +102,50 @@ export class MaterialRequestService {
     // Target store: the caller's choice, else the company/branch default store.
     const store = await this.resolveStore(companyId, branchId, dto.storeId);
 
-    // Which divisions already have a request for this plan — don't duplicate.
+    // Which cost centre / object pairs already have a request for this plan —
+    // don't duplicate.
+    const keyOf = (cc: number | null, co: number | null) =>
+      `${cc ?? 'null'}:${co ?? 'null'}`;
     const existing = await this.prisma.materialRequest.findMany({
       where: { productionPlanId: planId },
-      select: { divisionId: true },
+      select: { costCenterId: true, costObjectId: true },
     });
-    const done = new Set(existing.map((e) => String(e.divisionId ?? 'null')));
+    const done = new Set(
+      existing.map((e) => keyOf(e.costCenterId, e.costObjectId)),
+    );
 
-    // Group the plan's product lines by division.
-    const byDivision = new Map<
+    // Group the plan's product lines by cost centre / object.
+    const byCosting = new Map<
       string,
       {
-        divisionId: number | null;
-        divisionName: string | null;
+        costCenterId: number | null;
+        costCenterName: string | null;
+        costObjectId: number | null;
+        costObjectName: string | null;
         demand: { productId: number; quantity: number }[];
       }
     >();
     for (const l of plan.lines) {
-      const key = String(l.divisionId ?? 'null');
+      const key = keyOf(l.costCenterId, l.costObjectId);
       const g =
-        byDivision.get(key) ??
-        byDivision
+        byCosting.get(key) ??
+        byCosting
           .set(key, {
-            divisionId: l.divisionId,
-            divisionName: l.divisionName,
+            costCenterId: l.costCenterId,
+            costCenterName: l.costCenterName,
+            costObjectId: l.costObjectId,
+            costObjectName: l.costObjectName,
             demand: [],
           })
           .get(key)!;
       g.demand.push({ productId: l.productId, quantity: l.quantity });
     }
 
-    for (const group of byDivision.values()) {
-      if (done.has(String(group.divisionId ?? 'null'))) continue;
-      // Explode this division's products into item requirements.
+    for (const group of byCosting.values()) {
+      if (done.has(keyOf(group.costCenterId, group.costObjectId))) continue;
+      // Explode this pair's products into item requirements.
       const { materials } = await this.recipe.explode(companyId, group.demand);
-      if (!materials.length) continue; // nothing to request for this division
+      if (!materials.length) continue; // nothing to request for this pair
 
       const itemIds = materials.map((m) => m.itemId);
       const onHand = await this.stock.onHandForItems(
@@ -161,8 +171,10 @@ export class MaterialRequestService {
             requestNo,
             productionPlanId: plan.id,
             planNo: plan.planNo,
-            divisionId: group.divisionId,
-            divisionName: group.divisionName,
+            costCenterId: group.costCenterId,
+            costCenterName: group.costCenterName,
+            costObjectId: group.costObjectId,
+            costObjectName: group.costObjectName,
             storeId: store?.id ?? null,
             storeName: store?.name ?? null,
             status: 'DRAFT',

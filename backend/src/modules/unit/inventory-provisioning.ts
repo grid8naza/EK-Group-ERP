@@ -71,13 +71,11 @@ export const PRODUCTION_SUBS = [
   { name: 'Packing Master', route: '/production/packing-master', icon: 'package-check', order: 2 },
   // Packing operations — pack unpacked products into packed ones (consumes source).
   { name: 'Packing', route: '/production/packing', icon: 'box', order: 9 },
-  // Production divisions — org units (Bakery, Pastry, …) that own primary groups.
-  { name: 'Production Division', route: '/production/divisions', icon: 'factory', order: 3 },
   // Work Orders — what must be made to fulfil approved sales orders.
   { name: 'Work Order', route: '/production/work-orders', icon: 'hammer', order: 4 },
-  // Production Plan — clubs pending work orders, grouped by division.
+  // Production Plan — clubs pending work orders, grouped by cost centre/object.
   { name: 'Production Plan', route: '/production/plans', icon: 'clipboard-list', order: 5 },
-  // Material Request — the store requisition for each division's raw materials.
+  // Material Request — the store requisition per cost centre/object.
   { name: 'Material Request', route: '/production/material-requests', icon: 'clipboard-check', order: 6 },
   // Production Receipt — finished goods banked into stock from a work order.
   { name: 'Production Receipt', route: '/production/receipts', icon: 'package-plus', order: 7 },

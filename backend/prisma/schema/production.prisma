@@ -136,28 +136,13 @@ model WorkOrderLine {
   @@map("work_order_lines")
 }
 
-/// A production division — an org unit of the manufacturing company that makes a
-/// family of products (e.g. Bakery, Pastry, Sweets, Savories). Each PRIMARY
-/// (level-1) product group is assigned to a division, so demand can be grouped by
-/// division for planning and per-division performance tracing. companyId is a
-/// plain cross-domain id.
-model ProductionDivision {
-  id          Int      @id @default(autoincrement())
-  companyId   Int // -> Cpanel Company (the manufacturing company)
-  code        String // DIV-### per company (system-generated)
-  name        String
-  description String?
-  isActive    Boolean  @default(true)
-  isLocked    Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  groups ProductionDivisionGroup[]
-
-  @@unique([companyId, code])
-  @@index([companyId])
-  @@map("production_divisions")
-}
+// Production divisions used to be their own master here, with each PRIMARY
+// product group assigned to one. They are gone: cost centres and cost objects
+// (Cpanel) do the same job across the whole group, so production, material
+// issues and sales can all be traced against one set of dimensions rather than
+// production having a private one. A product names its cost centre/object on
+// the product master — separately for its recipe and its packing — and the
+// documents below carry that forward.
 
 /// A Packing operation — turns unpacked products into packed, sellable ones.
 /// Each packed line consumes its unpacked source(s) and packing materials from
@@ -251,8 +236,15 @@ model MaterialRequest {
   requestNo        String // MR-#### per company
   productionPlanId Int?
   planNo           String? // snapshot
-  divisionId       Int? // -> ProductionDivision (null = unassigned products)
-  divisionName     String? // snapshot
+  // The cost centre / object this requisition is raised for — one request per
+  // pair, taken from the recipe side of the products being made. Plain
+  // cross-domain ids (-> Cpanel CostCenter / CostObject) with a name snapshot,
+  // so a later rename doesn't rewrite history. Null while the products involved
+  // have no cost centre set.
+  costCenterId     Int?
+  costCenterName   String? // snapshot
+  costObjectId     Int?
+  costObjectName   String? // snapshot
   storeId          Int? // -> inventory Store the materials are requested from
   storeName        String? // snapshot
   status           MaterialRequestStatus @default(DRAFT)
@@ -306,8 +298,13 @@ model ProductionPlanLine {
   quantity       Float // aggregated demand
   unitId         Int // -> Unit (plain id)
   primaryGroupId Int? // -> inventory Group (level 1), resolved at build
-  divisionId     Int? // -> ProductionDivision (null = unassigned)
-  divisionName   String? // snapshot
+  // The product's RECIPE cost centre / object, resolved at build and
+  // snapshotted. Planning is about making, so it is the recipe side that
+  // applies here; packing carries its own pair on the Packing document.
+  costCenterId   Int?
+  costCenterName String? // snapshot
+  costObjectId   Int?
+  costObjectName String? // snapshot
 
   plan ProductionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
@@ -331,19 +328,6 @@ model ProductionPlanMaterial {
   @@map("production_plan_materials")
 }
 
-/// Assigns a PRIMARY (level-1) product group to a production division.
-/// primaryGroupId is a plain cross-domain id (-> inventory Group). Unique per
-/// company, so a primary group is produced by exactly one division. companyId is
-/// denormalized from the division to scope that uniqueness.
-model ProductionDivisionGroup {
-  id                   Int @id @default(autoincrement())
-  companyId            Int // denormalized from the division for per-company uniqueness
-  productionDivisionId Int
-  primaryGroupId       Int // -> inventory Group (level 1), plain id
-
-  division ProductionDivision @relation(fields: [productionDivisionId], references: [id], onDelete: Cascade)
-
-  @@unique([companyId, primaryGroupId])
-  @@index([productionDivisionId])
-  @@map("production_division_groups")
-}
+// ProductionDivisionGroup (primary product group → division) went with the
+// division master above. The product itself now names its cost centre/object,
+// so nothing has to map groups to org units.

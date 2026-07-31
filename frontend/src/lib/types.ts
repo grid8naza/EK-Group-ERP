@@ -1116,8 +1116,11 @@ export interface ProductionPlanLine {
   quantity: number;
   unitId: number;
   primaryGroupId?: number | null;
-  divisionId?: number | null;
-  divisionName?: string | null;
+  /** Cost centre / object this is traced against (name snapshotted). */
+  costCenterId?: number | null;
+  costCenterName?: string | null;
+  costObjectId?: number | null;
+  costObjectName?: string | null;
 }
 
 export interface ProductionPlanMaterial {
@@ -1128,7 +1131,7 @@ export interface ProductionPlanMaterial {
   unitId: number;
 }
 
-/** A production plan clubbing pending work orders, grouped by division. */
+/** A production plan clubbing pending work orders, grouped by cost centre. */
 export interface ProductionPlan {
   id: number;
   companyId: number;
@@ -1218,7 +1221,7 @@ export interface MaterialRequestLine {
   unitId: number;
 }
 
-/** A store requisition for one division's raw materials, raised from a plan. */
+/** A store requisition for one cost centre/object's raw materials, from a plan. */
 export interface MaterialRequest {
   id: number;
   companyId: number;
@@ -1226,8 +1229,11 @@ export interface MaterialRequest {
   requestNo: string;
   productionPlanId?: number | null;
   planNo?: string | null;
-  divisionId?: number | null;
-  divisionName?: string | null;
+  /** Cost centre / object this is traced against (name snapshotted). */
+  costCenterId?: number | null;
+  costCenterName?: string | null;
+  costObjectId?: number | null;
+  costObjectName?: string | null;
   storeId?: number | null;
   storeName?: string | null;
   status: MaterialRequestStatus;
@@ -1239,20 +1245,6 @@ export interface MaterialRequest {
   createdByUserId: number;
   createdAt: string;
   lines: MaterialRequestLine[];
-}
-
-// ---- Production: Divisions ----
-/** A production division (Bakery, Pastry, …) that owns primary product groups. */
-export interface ProductionDivision {
-  id: number;
-  companyId: number;
-  code: string;
-  name: string;
-  description?: string | null;
-  isActive: boolean;
-  isLocked?: boolean;
-  /** Primary product groups assigned to this division. */
-  groups?: { id: number; primaryGroupId: number }[];
 }
 
 // ---- Production: Work Orders ----

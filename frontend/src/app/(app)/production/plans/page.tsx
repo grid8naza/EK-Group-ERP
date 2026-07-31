@@ -91,7 +91,7 @@ export default function ProductionPlansPage() {
     }
     const ok = await confirm({
       title: 'New production plan?',
-      message: `Club the ${pendingCount} pending work order${pendingCount === 1 ? '' : 's'} into a new plan? Demand is grouped by division and materials exploded from recipes.`,
+      message: `Club the ${pendingCount} pending work order${pendingCount === 1 ? '' : 's'} into a new plan? Demand is grouped by cost centre / object and materials exploded from recipes.`,
       confirmText: 'Yes',
       cancelText: 'No',
     });
@@ -114,7 +114,7 @@ export default function ProductionPlansPage() {
     if (!current) return;
     const ok = await confirm({
       title: 'Raise material requests?',
-      message: `Raise the store material requests for ${current.planNo} — one per division, listing the raw materials each needs?`,
+      message: `Raise the store material requests for ${current.planNo} — one per cost centre / object, listing the raw materials each needs?`,
       confirmText: 'Yes',
       cancelText: 'No',
     });
@@ -155,12 +155,12 @@ export default function ProductionPlansPage() {
     }
   };
 
-  // Group the plan's product lines by division for the document view.
+  // Group the plan's product lines by cost object for the document view.
   const grouped = useMemo(() => {
     if (!current) return [];
     const map = new Map<string, ProductionPlan['lines']>();
     for (const l of current.lines) {
-      const key = l.divisionName ?? 'Unassigned';
+      const key = l.costObjectName ?? 'Unassigned';
       (map.get(key) ?? map.set(key, []).get(key)!).push(l);
     }
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
@@ -192,7 +192,7 @@ export default function ProductionPlansPage() {
     <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="Production Plan"
-        description="Clubs the pending work orders, grouped by division, with materials from recipes"
+        description="Clubs the pending work orders, grouped by cost centre / object, with materials from recipes"
         icon={<ClipboardList className="h-5 w-5" />}
         actions={
           canAdd && (
@@ -287,16 +287,16 @@ export default function ProductionPlansPage() {
               </div>
             )}
 
-            {/* Products to make, grouped by division */}
+            {/* Products to make, grouped by cost object */}
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                To produce — by division
+                To produce — by cost object
               </p>
               <div className="space-y-4">
-                {grouped.map(([division, lines]) => (
-                  <div key={division}>
+                {grouped.map(([costObject, lines]) => (
+                  <div key={costObject}>
                     <div className="mb-1 text-sm font-medium text-slate-700 dark:text-slate-200">
-                      {division}
+                      {costObject}
                     </div>
                     <table className="w-full text-sm">
                       <tbody>
