@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { CategoryKind, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
 import {
@@ -12,8 +12,12 @@ import {
   itemSeqOf,
   lowestFree,
   MAX_ITEM_SEQ,
+  withCategory,
 } from '../../common/hierarchy-code';
 import { CreateItemDto, UpdateItemDto } from './item.dto';
+
+/** The category kinds an ITEM may be filed under. */
+const ITEM_KINDS: CategoryKind[] = ['INGREDIENT', 'PACKING_MATERIAL'];
 
 // Items are returned with their masters (for display) + company links flattened.
 const withRelations = {
@@ -66,9 +70,11 @@ export class ItemService {
 
   async create(dto: CreateItemDto) {
     await this.assertRefs(dto);
-    // Every item lives under a leaf group; its category is taken from that
-    // group, and its code is generated (manual codes are not accepted).
+    // Every item lives under a leaf group AND names one of that group's
+    // categories. The code is generated from both (manual codes are not
+    // accepted): the group supplies the level digits, the category the CC ones.
     const group = await this.assertLeafGroup(dto.groupId);
+    const category = await this.assertCategoryOfGroup(dto.categoryId, group);
     const allCompanies = dto.allCompanies ?? false;
     const companyIds = this.resolveCompanies(allCompanies, dto.companyIds);
 
@@ -76,10 +82,10 @@ export class ItemService {
       const seq = await this.nextLeafSeq(dto.groupId);
       const created = await this.prisma.item.create({
         data: {
-          code: itemCode(group.code, seq),
+          code: withCategory(itemCode(group.code, seq), category.code),
           name: dto.name.trim(),
           description: dto.description?.trim() || null,
-          categoryId: group.categoryId,
+          categoryId: category.id,
           groupId: dto.groupId,
           unitId: dto.unitId,
           lastPurchasePrice: dto.lastPurchasePrice ?? 0,
@@ -105,19 +111,21 @@ export class ItemService {
   }
 
   /**
-   * The group an item attaches to must be a leaf (no sub-groups) that applies
-   * to items. Returns its category + code for building the item's code.
+   * The group an item attaches to must be a leaf (no sub-groups) serving at
+   * least one ITEM-kind category. Returns its categories + code, which the
+   * caller needs to validate the chosen category and build the item's code.
    */
   private async assertLeafGroup(groupId: number) {
     const group = await this.prisma.group.findUnique({
       where: { id: groupId },
       select: {
         id: true,
-        categoryId: true,
         code: true,
         subGroupApplicable: true,
-        forItem: true,
         isActive: true,
+        categories: {
+          select: { category: { select: { id: true, code: true, kind: true } } },
+        },
       },
     });
     if (!group) {
@@ -133,12 +141,36 @@ export class ItemService {
         'Items cannot be added under a group that has sub-groups. Choose a leaf group.',
       );
     }
-    if (!group.forItem) {
+    const itemCategories = group.categories
+      .map((c) => c.category)
+      .filter((c) => ITEM_KINDS.includes(c.kind));
+    if (itemCategories.length === 0) {
       throw new BadRequestException(
         'The selected group does not apply to items.',
       );
     }
-    return group;
+    return { ...group, itemCategories };
+  }
+
+  /**
+   * An item's category is CHOSEN, not inherited: it must be one the group
+   * serves and it must classify items (ingredient or packing material), since
+   * that is what tells the raw-material and packing screens apart.
+   */
+  private async assertCategoryOfGroup(
+    categoryId: number | null | undefined,
+    group: { itemCategories: { id: number; code: string; kind: CategoryKind }[] },
+  ) {
+    if (categoryId == null) {
+      throw new BadRequestException('Select a category for this item.');
+    }
+    const category = group.itemCategories.find((c) => c.id === categoryId);
+    if (!category) {
+      throw new BadRequestException(
+        'The selected category is not one this group belongs to.',
+      );
+    }
+    return category;
   }
 
   /** Lowest free 3-digit sequence under a leaf group (items + products share it). */

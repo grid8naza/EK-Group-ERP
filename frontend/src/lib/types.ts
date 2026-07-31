@@ -557,6 +557,29 @@ export interface Unit {
   isLocked?: boolean;
 }
 
+/**
+ * What a Category classifies — the top of the classification tree, and the only
+ * place the four kinds of stock are named. Every screen that owns one kind
+ * filters on this rather than on a category's name, so renaming a category is
+ * safe. Exactly one kind per category.
+ */
+export type CategoryKind =
+  | 'INGREDIENT'
+  | 'PACKING_MATERIAL'
+  | 'SEMI_FINISHED'
+  | 'FINISHED';
+
+export const CATEGORY_KIND_LABEL: Record<CategoryKind, string> = {
+  INGREDIENT: 'Ingredients',
+  PACKING_MATERIAL: 'Packing Materials',
+  SEMI_FINISHED: 'Semifinished Products',
+  FINISHED: 'Finished Products',
+};
+
+/** The kinds that classify items, and the kinds that classify products. */
+export const ITEM_KINDS: CategoryKind[] = ['INGREDIENT', 'PACKING_MATERIAL'];
+export const PRODUCT_KINDS: CategoryKind[] = ['SEMI_FINISHED', 'FINISHED'];
+
 // ---- Inventory: Category Master (one master for Items + Products) ----
 export interface Category {
   id: number;
@@ -567,19 +590,26 @@ export interface Category {
   allCompanies: boolean;
   /** Companies this category is available in (when not allCompanies). */
   companyIds: number[];
-  forItem: boolean;
-  forProduct: boolean;
-  /** Items in this category are packing materials (a kind of item). */
-  forPacking?: boolean;
+  /** What this category classifies — exactly one of the four kinds. */
+  kind: CategoryKind;
   isActive: boolean;
   isLocked?: boolean;
 }
 
-// ---- Inventory: Group Master (multilayer sub-level under a Category) ----
+/**
+ * ---- Inventory: Group Master ----
+ *
+ * ONE shared classification tree that categories draw from, rather than a
+ * subtree owned by a single category: "Bakery" is one group serving both the
+ * semi-finished and the finished category, instead of being re-entered under
+ * each. That is why `categoryIds` is a list, and why a group's code carries no
+ * category segment (the CC digits are stamped at Item/Product level).
+ */
 export interface Group {
   id: number;
-  categoryId: number;
-  category?: { id: number; code: string; name: string } | null;
+  /** Categories this group serves — at least one. */
+  categoryIds: number[];
+  categories?: { id: number; code: string; name: string; kind: CategoryKind }[];
   /** null = primary group (level 1); otherwise the parent group it sits under. */
   parentGroupId?: number | null;
   parent?: { id: number; code: string; name: string } | null;
@@ -592,20 +622,15 @@ export interface Group {
   description?: string | null;
   allCompanies: boolean;
   companyIds: number[];
+  /**
+   * Derived server-side from the kinds of the categories this group serves —
+   * not stored, and not sent when saving.
+   */
   forItem: boolean;
   forProduct: boolean;
-  /**
-   * Production stage held by this primary (level-1) product group — what binds
-   * a group to a product screen (Semifinished / Finished list its subtree).
-   * Required on such a group and chosen by the user; at most one group carries
-   * each stage; null on every other group.
-   */
-  productStage?: ProductStage | null;
   isActive: boolean;
   isLocked?: boolean;
 }
-
-export type ProductStage = 'SEMI_FINISHED' | 'FINISHED';
 
 // ---- Asset: Category Master (flat; no Item/Product applicability) ----
 export interface AssetCategory {
@@ -668,9 +693,10 @@ export interface Item {
   code: string;
   name: string;
   description?: string | null;
-  categoryId?: number | null;
+  /** Chosen from the group's item-kind categories; builds the code's CC digits. */
+  categoryId: number;
   category?: MasterRef | null;
-  groupId?: number | null;
+  groupId: number;
   group?: MasterRef | null;
   unitId: number;
   unit?: MasterRef | null;
@@ -736,9 +762,14 @@ export interface Product {
   description?: string | null;
   /** Product picture URL (sellable products), served under /uploads. */
   imageUrl?: string | null;
-  categoryId?: number | null;
+  /**
+   * Chosen (not inherited from the group) — it is what separates a
+   * semi-finished from a finished product sharing the same group, and what each
+   * product screen filters on. Also builds the code's CC digits.
+   */
+  categoryId: number;
   category?: MasterRef | null;
-  groupId?: number | null;
+  groupId: number;
   group?: MasterRef | null;
   unitId: number;
   unit?: MasterRef | null;

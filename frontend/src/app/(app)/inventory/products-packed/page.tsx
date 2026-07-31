@@ -19,7 +19,8 @@ import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import type {
   Product,
-  ProductStage,
+  Category,
+  CategoryKind,
   Group,
   Unit,
   HsnCode,
@@ -33,13 +34,13 @@ import type {
 
 const ROUTE = '/inventory/products-packed';
 
-// The single primary product group this screen owns: the listing, the parent
-// filter and the drawer are all scoped to its subtree, so there is no primary
-// picker. The binding is the group's `productStage` tag (set in Group Master),
-// not its name, so renaming the group doesn't strand the screen. While no group
-// carries the tag the scope is dropped rather than leaving the screen
-// permanently empty.
-const STAGE: ProductStage = 'FINISHED';
+// The category KIND this screen owns. The listing, the group filters and the
+// drawer are all scoped to categories of this kind, so a product's category —
+// not its group — is what decides which screen lists it. That is what lets
+// "Bakery" be one shared group serving both this screen and Products - Unpacked
+// instead of being entered twice. Binding to the kind rather than to a named
+// category means renaming a category never strands the screen.
+const SCREEN_KIND: CategoryKind = 'FINISHED';
 // Delivery trips are configurable (Inventory > Lookups), so the Delivery
 // Schedule offers whatever is defined rather than a hard-coded Trip 1-4.
 const DELIVERY_TRIP_LOOKUP_CODE = 'DELIVERY_TRIP';
@@ -148,6 +149,7 @@ export default function ProductsPage() {
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<Product[]>('/products');
   const { data: groups } = useFetch<Group[]>('/groups');
+  const { data: categories } = useFetch<Category[]>('/categories');
   const { data: units } = useFetch<Unit[]>('/units');
   const { data: hsnCodes } = useFetch<HsnCode[]>('/hsn-codes');
   const { data: companies } = useFetch<Company[]>('/companies');
@@ -229,8 +231,29 @@ export default function ProductsPage() {
 
   const companyList = companies ?? [];
   const unitList = units ?? [];
-  // Products use product groups only.
-  const productGroups = (groups ?? []).filter((g) => g.forProduct);
+
+  // The categories this screen owns. Usually exactly one, in which case the
+  // drawer shows it fixed rather than asking; more than one and it becomes a
+  // pick, limited to this kind either way.
+  const screenCategories = useMemo(
+    () => (categories ?? []).filter((c) => c.kind === SCREEN_KIND),
+    [categories],
+  );
+  const screenCategoryIds = useMemo(
+    () => new Set(screenCategories.map((c) => c.id)),
+    [screenCategories],
+  );
+  const soleCategory =
+    screenCategories.length === 1 ? screenCategories[0] : undefined;
+
+  // Groups usable here: those serving one of this screen's categories.
+  const productGroups = useMemo(
+    () =>
+      (groups ?? []).filter((g) =>
+        g.categoryIds.some((id) => screenCategoryIds.has(id)),
+      ),
+    [groups, screenCategoryIds],
+  );
 
   // Group lookups for the primary/parent list filters (each product attaches to
   // a leaf group via r.groupId; resolve it to apply the same subtree/child
@@ -247,26 +270,27 @@ export default function ProductsPage() {
     () => productGroups.filter((g) => g.subGroupApplicable && g.level < 5),
     [productGroups],
   );
-  // This screen's primary group and its CC+L1 code prefix (2+2 digits) — every
-  // group and product beneath it carries that prefix. Undefined until the group
-  // is created, which drops the scope instead of blanking the screen.
-  const screenPrimary = useMemo(
-    () => primaryGroups.find((g) => g.productStage === STAGE),
-    [primaryGroups],
-  );
-  const screenPrefix = screenPrimary?.code.slice(0, 4);
+  // The category the drawer is filing under: the sole one when there is only
+  // one, otherwise whatever the user picked. It narrows the group cascade, so
+  // only groups actually serving that category can be chosen.
+  const drawerCategoryId = soleCategory
+    ? soleCategory.id
+    : form.categoryId
+      ? Number(form.categoryId)
+      : undefined;
+  const inDrawerCategory = (g: Group) =>
+    drawerCategoryId == null || g.categoryIds.includes(drawerCategoryId);
 
-  // Drawer cascade: the primary group is fixed to this screen's, so its prefix
-  // scopes the parent + leaf options.
-  const drawerParentOptions = parentCandidates.filter(
-    (g) => !screenPrefix || g.code.startsWith(screenPrefix),
-  );
+  // Drawer cascade: parent → leaf, both within the drawer's category. Parent
+  // options include the primaries (Bakery, Pastry …), since those are now the
+  // top of the shared tree rather than a fixed per-screen group.
+  const drawerParentOptions = parentCandidates.filter(inDrawerCategory);
   // Products attach to LEAF groups only (no sub-groups), scoped by the chosen
-  // parent (or, failing that, this screen's primary subtree).
+  // parent (or, failing that, the drawer's category).
   const drawerLeafOptions = productGroups.filter((g) => {
     if (g.subGroupApplicable || !g.isActive) return false;
     if (drawerParent) return String(g.parentGroupId) === drawerParent;
-    return screenPrefix ? g.code.startsWith(screenPrefix) : true;
+    return inDrawerCategory(g);
   });
   // Resolve a leaf group's primary (level-1) + immediate parent names, for the
   // read-only classification shown when editing.
@@ -481,6 +505,10 @@ export default function ProductsPage() {
       toast.error('Select a group — every product belongs to a leaf group.');
       return;
     }
+    if (drawerCategoryId == null) {
+      toast.error('Select a category.');
+      return;
+    }
     if (!form.unitId) {
       toast.error('Select a unit.');
       return;
@@ -511,11 +539,12 @@ export default function ProductsPage() {
     // Note: recipe/packing are intentionally omitted — the BOM is edited under
     // Production, and omitting them leaves the saved BOM untouched.
     const payload = {
-      // code + category are derived server-side from the group.
+      // The code is derived server-side from the category (CC) + group (levels).
       name: form.name.trim(),
       description: form.description.trim() || undefined,
       // Picture is a sellable-product attribute; cleared when not sellable.
       imageUrl: form.canSell ? form.imageUrl || null : null,
+      categoryId: drawerCategoryId,
       groupId: Number(form.groupId),
       unitId: Number(form.unitId),
       unpacked: form.unpacked,
@@ -613,12 +642,9 @@ export default function ProductsPage() {
 
   const visibleRows = useMemo(() => {
     let rows = [...(data ?? [])];
-    // Scoped to this screen's primary group (no picker — see PRIMARY_GROUP).
-    if (screenPrefix) {
-      rows = rows.filter((r) =>
-        groupById.get(r.groupId ?? -1)?.code.startsWith(screenPrefix),
-      );
-    }
+    // Scoped by CATEGORY, not by group: a product's category is what assigns it
+    // to this screen, which is how one shared group can feed both.
+    rows = rows.filter((r) => screenCategoryIds.has(r.categoryId));
     if (parentFilter) {
       // The parent-group filter lists leaf groups (what products attach to), so
       // match the product's own leaf group.
@@ -631,7 +657,7 @@ export default function ProductsPage() {
     if (status === 'active') rows = rows.filter((r) => r.isActive);
     else if (status === 'inactive') rows = rows.filter((r) => !r.isActive);
     return rows.sort((a, b) => a.code.localeCompare(b.code));
-  }, [data, sellFilter, status, screenPrefix, parentFilter, groupById]);
+  }, [data, sellFilter, status, screenCategoryIds, parentFilter]);
 
   const columns: Column<Product>[] = [
     { key: 'code', header: 'Code', accessor: (r) => r.code },
@@ -731,12 +757,7 @@ export default function ProductsPage() {
               wrapClassName="w-36"
               placeholder="Any parent group"
               options={productGroups
-                .filter(
-                  (g) =>
-                    !g.subGroupApplicable &&
-                    g.isActive &&
-                    (!screenPrefix || g.code.startsWith(screenPrefix)),
-                )
+                .filter((g) => !g.subGroupApplicable && g.isActive)
                 .map((g) => ({ value: String(g.id), label: g.name }))}
             />
             <Select
@@ -836,6 +857,11 @@ export default function ProductsPage() {
             {editing ? (
               <>
                 <Input
+                  label="Category"
+                  value={editing.category?.name ?? '-'}
+                  disabled
+                />
+                <Input
                   label="Primary Group"
                   value={editAncestry?.primary ?? '-'}
                   disabled
@@ -853,21 +879,44 @@ export default function ProductsPage() {
                 />
               </>
             ) : (
-              // Category is always "Products" for this master, so it's hidden.
-              // Drill down parent → leaf group; the server derives the category
-              // from the chosen leaf group.
               <>
-                {/* Fixed to this screen's primary group, so it is shown rather
-                    than picked — a product filed elsewhere would vanish from
-                    the listing that created it. */}
-                <Input
-                  label="Primary Group"
-                  value={
-                    screenPrimary?.name ??
-                    'Not set — tag a primary group “Finished”'
-                  }
-                  disabled
-                />
+                {/* Category — shown but fixed: this screen owns one kind, so a
+                    product filed elsewhere would vanish from the very listing
+                    that created it. It becomes a pick only if a second category
+                    of this kind is ever added. */}
+                {soleCategory ? (
+                  <Input
+                    label="Category"
+                    value={soleCategory.name}
+                    disabled
+                    wrapClassName="sm:col-span-2"
+                  />
+                ) : (
+                  <Select
+                    label="Category"
+                    required
+                    value={form.categoryId}
+                    onChange={(e) => {
+                      // A different category invalidates the group cascade.
+                      setDrawerParent('');
+                      setForm({
+                        ...form,
+                        categoryId: e.target.value,
+                        groupId: '',
+                      });
+                    }}
+                    placeholder={
+                      screenCategories.length
+                        ? '— Select —'
+                        : 'No Finished Products category yet'
+                    }
+                    wrapClassName="sm:col-span-2"
+                    options={screenCategories.map((c) => ({
+                      value: c.id,
+                      label: c.name,
+                    }))}
+                  />
+                )}
                 <Select
                   label="Parent Group"
                   value={drawerParent}

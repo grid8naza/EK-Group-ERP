@@ -21,14 +21,12 @@ import {
   type ReportColumn,
   type ReportSpec,
 } from '@/lib/reportDoc';
+import { CATEGORY_KIND_LABEL, ITEM_KINDS, PRODUCT_KINDS } from '@/lib/types';
 import type { Category, Company } from '@/lib/types';
 
 const ROUTE = '/inventory/reports/categories';
 
-const appliesTo = (forItem: boolean, forProduct: boolean) =>
-  [forItem ? 'Item' : null, forProduct ? 'Product' : null]
-    .filter(Boolean)
-    .join(', ') || '-';
+const appliesTo = (c: Category) => CATEGORY_KIND_LABEL[c.kind] ?? '-';
 
 const ALL_COLUMNS: ReportColumn<Category>[] = [
   { key: 'code', header: 'Code', weight: 16, cell: (c) => c.code },
@@ -43,7 +41,7 @@ const ALL_COLUMNS: ReportColumn<Category>[] = [
     key: 'applies',
     header: 'Applies To',
     weight: 14,
-    cell: (c) => appliesTo(c.forItem, c.forProduct),
+    cell: (c) => appliesTo(c),
   },
   {
     key: 'status',
@@ -73,8 +71,9 @@ export default function CategoryReportPage() {
   // from the visible columns.
   const rows = useMemo(() => {
     let cats = data ?? [];
-    if (applies === 'item') cats = cats.filter((c) => c.forItem);
-    else if (applies === 'product') cats = cats.filter((c) => c.forProduct);
+    if (applies === 'item') cats = cats.filter((c) => ITEM_KINDS.includes(c.kind));
+    else if (applies === 'product')
+      cats = cats.filter((c) => PRODUCT_KINDS.includes(c.kind));
     return [...cats]
       .sort((a, b) => a.code.localeCompare(b.code))
       .map(selected.cells);

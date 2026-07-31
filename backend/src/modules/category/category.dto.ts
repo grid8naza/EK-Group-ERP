@@ -1,7 +1,9 @@
+import { CategoryKind } from '@prisma/client';
 import {
   ArrayUnique,
   IsArray,
   IsBoolean,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -38,17 +40,9 @@ export class CreateCategoryDto {
   @IsInt({ each: true })
   companyIds?: number[];
 
-  @IsOptional()
-  @IsBoolean()
-  forItem?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  forProduct?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  forPacking?: boolean;
+  /** What this category classifies — exactly one of the four kinds. */
+  @IsEnum(CategoryKind)
+  kind!: CategoryKind;
 
   @IsOptional()
   @IsBoolean()
@@ -84,16 +78,8 @@ export class UpdateCategoryDto {
   companyIds?: number[];
 
   @IsOptional()
-  @IsBoolean()
-  forItem?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  forProduct?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  forPacking?: boolean;
+  @IsEnum(CategoryKind)
+  kind?: CategoryKind;
 
   @IsOptional()
   @IsBoolean()

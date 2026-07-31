@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { CategoryKind, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
 import {
@@ -27,9 +27,14 @@ export class CategoryService {
   /**
    * Categories available in the active company: ones flagged for all companies
    * plus any explicitly linked to this company. With no active company, only
-   * the all-companies ones are returned.
+   * the all-companies ones are returned. `kind` narrows to one of the four
+   * kinds — that is how each master screen finds the categories it owns.
    */
-  async findAll(companyId: number | undefined, search?: string) {
+  async findAll(
+    companyId: number | undefined,
+    search?: string,
+    kind?: CategoryKind,
+  ) {
     const scopeFilter: Prisma.CategoryWhereInput = companyId
       ? {
           OR: [
@@ -42,6 +47,7 @@ export class CategoryService {
       where: {
         AND: [
           scopeFilter,
+          kind ? { kind } : {},
           search
             ? {
                 OR: [
@@ -72,10 +78,6 @@ export class CategoryService {
   async create(dto: CreateCategoryDto) {
     const allCompanies = dto.allCompanies ?? false;
     const companyIds = this.resolveCompanies(allCompanies, dto.companyIds);
-    const forItem = dto.forItem ?? true;
-    const forProduct = dto.forProduct ?? false;
-    const forPacking = dto.forPacking ?? false;
-    this.assertAppliesToSomething(forItem, forProduct, forPacking);
 
     // The code is system-generated (2-digit category segment); manual codes are
     // not accepted. Retry on the rare race where two categories grab the same
@@ -88,9 +90,7 @@ export class CategoryService {
           name: dto.name.trim(),
           description: dto.description?.trim() || null,
           allCompanies,
-          forItem,
-          forProduct,
-          forPacking,
+          kind: dto.kind,
           isActive: dto.isActive ?? true,
           companies: { create: companyIds.map((companyId) => ({ companyId })) },
         },
@@ -146,10 +146,8 @@ export class CategoryService {
         )
       : null;
 
-    const forItem = dto.forItem ?? existing.forItem;
-    const forProduct = dto.forProduct ?? existing.forProduct;
-    const forPacking = dto.forPacking ?? existing.forPacking;
-    this.assertAppliesToSomething(forItem, forProduct, forPacking);
+    const kind = dto.kind ?? existing.kind;
+    if (kind !== existing.kind) await this.assertKindChangeable(id);
 
     try {
       const updated = await this.prisma.category.update({
@@ -162,9 +160,7 @@ export class CategoryService {
               ? dto.description?.trim() || null
               : undefined,
           allCompanies,
-          forItem,
-          forProduct,
-          forPacking,
+          kind,
           isActive: dto.isActive,
           // Replace the link set when availability changed.
           ...(companyIds
@@ -197,7 +193,19 @@ export class CategoryService {
   async remove(companyId: number | undefined, id: number) {
     const existing = await this.findOne(companyId, id);
     assertUnlocked(existing, 'category', 'deleting');
-    await this.prisma.category.delete({ where: { id } });
+    try {
+      await this.prisma.category.delete({ where: { id } });
+    } catch (e) {
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2003'
+      ) {
+        throw new ConflictException(
+          'This category still has groups, items or products under it. Remove those first.',
+        );
+      }
+      throw e;
+    }
     return { success: true };
   }
 
@@ -234,19 +242,20 @@ export class CategoryService {
   }
 
   /**
-   * A category must apply to at least one thing. Packing material counts on its
-   * own: it is a kind of ITEM (the opening-stock and BOM screens split items by
-   * `category.forPacking`), so a packing-only category is a complete, valid
-   * choice — not an "applies to nothing" mistake.
+   * The kind decides which master a category holds, so re-pointing it once
+   * anything hangs off the category would strand those rows on the wrong screen
+   * — and, for items/products, invalidate the CC digits of their codes. It stays
+   * editable only while the category is still empty.
    */
-  private assertAppliesToSomething(
-    forItem: boolean,
-    forProduct: boolean,
-    forPacking: boolean,
-  ) {
-    if (!forItem && !forProduct && !forPacking) {
+  private async assertKindChangeable(id: number) {
+    const [groups, items, products] = await Promise.all([
+      this.prisma.groupCategory.count({ where: { categoryId: id } }),
+      this.prisma.item.count({ where: { categoryId: id } }),
+      this.prisma.product.count({ where: { categoryId: id } }),
+    ]);
+    if (groups || items || products) {
       throw new BadRequestException(
-        'A category must apply to Item, Product or Packing material.',
+        'This category already has groups, items or products under it, so what it applies to cannot be changed. Move or remove those first.',
       );
     }
   }

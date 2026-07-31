@@ -1,9 +1,8 @@
-import { ProductStage } from '@prisma/client';
 import {
+  ArrayNotEmpty,
   ArrayUnique,
   IsArray,
   IsBoolean,
-  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -12,10 +11,17 @@ import {
 } from 'class-validator';
 
 export class CreateGroupDto {
-  /** Parent category this group belongs to (ignored for a sub-group, which
-   * inherits its parent group's category). */
-  @IsInt()
-  categoryId!: number;
+  /**
+   * Categories this group serves — at least one. A group is shared, so "Bakery"
+   * can name both the semi-finished and the finished category instead of being
+   * entered under each. A sub-group's categories must be a subset of its
+   * parent's.
+   */
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayUnique()
+  @IsInt({ each: true })
+  categoryIds!: number[];
 
   /** When set, this is a sub-group under that (sub-group-applicable) group. */
   @IsOptional()
@@ -56,27 +62,21 @@ export class CreateGroupDto {
 
   @IsOptional()
   @IsBoolean()
-  forItem?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  forProduct?: boolean;
-
-  /** Production stage this primary product group holds (null = untagged). */
-  @IsOptional()
-  @IsEnum(ProductStage)
-  productStage?: ProductStage | null;
-
-  @IsOptional()
-  @IsBoolean()
   isActive?: boolean;
 }
 
 export class UpdateGroupDto {
-  // categoryId / parentGroupId are immutable (part of the code) and ignored.
+  /**
+   * Categories may be re-picked after creation (unlike the parent and level,
+   * which are baked into the code) — the service rejects a set that would
+   * strand a sub-group, item or product already under this one.
+   */
   @IsOptional()
-  @IsInt()
-  categoryId?: number;
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayUnique()
+  @IsInt({ each: true })
+  categoryIds?: number[];
 
   @IsOptional()
   @IsBoolean()
@@ -108,19 +108,6 @@ export class UpdateGroupDto {
   @ArrayUnique()
   @IsInt({ each: true })
   companyIds?: number[];
-
-  @IsOptional()
-  @IsBoolean()
-  forItem?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  forProduct?: boolean;
-
-  /** Production stage; send null to clear the tag. */
-  @IsOptional()
-  @IsEnum(ProductStage)
-  productStage?: ProductStage | null;
 
   @IsOptional()
   @IsBoolean()

@@ -22,6 +22,7 @@ import {
   type ReportColumn,
   type ReportSpec,
 } from '@/lib/reportDoc';
+import { ITEM_KINDS, PRODUCT_KINDS } from '@/lib/types';
 import type { Group, Category, Company } from '@/lib/types';
 
 const ROUTE = '/inventory/reports/groups';
@@ -77,8 +78,9 @@ export default function GroupReportPage() {
   // only item categories, Product-wise only product categories.
   const filterCategories = useMemo(() => {
     let cats = categories ?? [];
-    if (applies === 'item') cats = cats.filter((c) => c.forItem);
-    else if (applies === 'product') cats = cats.filter((c) => c.forProduct);
+    if (applies === 'item') cats = cats.filter((c) => ITEM_KINDS.includes(c.kind));
+    else if (applies === 'product')
+      cats = cats.filter((c) => PRODUCT_KINDS.includes(c.kind));
     return cats;
   }, [categories, applies]);
 
@@ -86,20 +88,26 @@ export default function GroupReportPage() {
   const filteredGroups = useMemo(() => {
     let rows = data ?? [];
     if (categoryFilter)
-      rows = rows.filter((g) => String(g.categoryId) === categoryFilter);
+      rows = rows.filter((g) => g.categoryIds.includes(Number(categoryFilter)));
     if (applies === 'item') rows = rows.filter((g) => g.forItem);
     else if (applies === 'product') rows = rows.filter((g) => g.forProduct);
     return rows;
   }, [data, categoryFilter, applies]);
 
-  // Groups grouped by category (sorted by name); groups sorted by code so
-  // sub-groups sit under their parent (the 15-digit positional code encodes it).
+  // Groups listed under each category they serve (sorted by name); groups
+  // sorted by code so sub-groups sit under their parent (the positional code
+  // encodes it). A shared group appears under every one of its categories —
+  // that is the point of the report, so the per-block counts overlap.
   const blocks = useMemo<ReportBlock[]>(() => {
     const byCat = new Map<string, Group[]>();
     for (const g of filteredGroups) {
-      const cat = g.category?.name ?? UNCATEGORISED;
-      if (!byCat.has(cat)) byCat.set(cat, []);
-      byCat.get(cat)!.push(g);
+      const names = g.categories?.length
+        ? g.categories.map((c) => c.name)
+        : [UNCATEGORISED];
+      for (const cat of names) {
+        if (!byCat.has(cat)) byCat.set(cat, []);
+        byCat.get(cat)!.push(g);
+      }
     }
     return [...byCat.entries()]
       .sort((a, b) => a[0].localeCompare(b[0]))

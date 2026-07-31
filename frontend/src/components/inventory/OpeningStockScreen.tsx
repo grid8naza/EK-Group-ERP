@@ -105,10 +105,12 @@ export function OpeningStockScreen({
   };
   const pickable = useMemo<Pickable[]>(() => {
     if (isItem) {
-      // Packing-material categories carry `forPacking`; everything else (incl.
-      // uncategorised items) is raw material.
+      // PACKING_MATERIAL categories hold packing items; the other item kind
+      // (Ingredients) is raw material.
       const packingCatIds = new Set(
-        (categories ?? []).filter((c) => c.forPacking).map((c) => c.id),
+        (categories ?? [])
+          .filter((c) => c.kind === 'PACKING_MATERIAL')
+          .map((c) => c.id),
       );
       const wantPacking = type === 'ITEM_PACKING';
       return (items ?? [])

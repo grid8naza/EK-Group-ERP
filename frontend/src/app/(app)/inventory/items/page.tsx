@@ -16,6 +16,7 @@ import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/u
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
+import { ITEM_KINDS } from '@/lib/types';
 import type { Item, Category, Group, Unit, HsnCode, Company } from '@/lib/types';
 
 const ROUTE = '/inventory/items';
@@ -81,14 +82,14 @@ export default function ItemsPage() {
   const companyList = companies ?? [];
   const unitList = units ?? [];
   const companyNameById = new Map(companyList.map((c) => [c.id, c.name]));
-  // Items attach to LEAF groups only (no sub-groups) that apply to items,
-  // within the chosen category.
+  // Items attach to LEAF groups only (no sub-groups) that serve the chosen
+  // category. A group can serve several, so this is a membership test.
   const groupOptions = (groups ?? []).filter(
     (g) =>
       !g.subGroupApplicable &&
       g.forItem &&
       g.isActive &&
-      (!form.categoryId || String(g.categoryId) === form.categoryId),
+      (!form.categoryId || g.categoryIds.includes(Number(form.categoryId))),
   );
 
   const closeDrawer = () => {
@@ -163,6 +164,10 @@ export default function ItemsPage() {
       toast.error('Name is required.');
       return;
     }
+    if (!form.categoryId) {
+      toast.error('Select a category.');
+      return;
+    }
     if (!form.groupId) {
       toast.error('Select a group — every item belongs to a leaf group.');
       return;
@@ -179,9 +184,10 @@ export default function ItemsPage() {
     const num = (s: string) => Number(s) || 0;
     const idOrNull = (s: string) => (s ? Number(s) : null);
     const payload = {
-      // code + category are derived server-side from the group.
+      // The code is derived server-side from the category (CC) + group (levels).
       name: form.name.trim(),
       description: form.description.trim() || undefined,
+      categoryId: Number(form.categoryId),
       groupId: Number(form.groupId),
       unitId: Number(form.unitId),
       lastPurchasePrice: num(form.lastPurchasePrice),
@@ -416,9 +422,9 @@ export default function ItemsPage() {
               wrapClassName="w-40"
               placeholder="All categories"
               options={(categories ?? [])
-                // Packing material is a kind of item, so a packing category
-                // holds items too even when "Item" itself isn't ticked.
-                .filter((c) => c.forItem || c.forPacking)
+                // Items live in the two item kinds: ingredients and packing
+                // materials.
+                .filter((c) => ITEM_KINDS.includes(c.kind))
                 .map((c) => ({
                   value: String(c.id),
                   label: c.name,
@@ -434,7 +440,9 @@ export default function ItemsPage() {
               placeholder="All primary groups"
               options={primaryGroups
                 .filter(
-                  (g) => !categoryFilter || String(g.categoryId) === categoryFilter,
+                  (g) =>
+                    !categoryFilter ||
+                    g.categoryIds.includes(Number(categoryFilter)),
                 )
                 .map((g) => ({ value: String(g.id), label: g.name }))}
             />
@@ -450,7 +458,7 @@ export default function ItemsPage() {
                     g.isActive &&
                     g.forItem &&
                     (!categoryFilter ||
-                      String(g.categoryId) === categoryFilter) &&
+                      g.categoryIds.includes(Number(categoryFilter))) &&
                     (!primaryGroupCode ||
                       g.code.startsWith(primaryGroupCode.slice(0, 4))),
                 )
@@ -541,15 +549,16 @@ export default function ItemsPage() {
               <>
                 <Select
                   label="Category"
+                  required
                   value={form.categoryId}
                   onChange={(e) =>
                     // changing category clears a now-invalid group
                     setForm({ ...form, categoryId: e.target.value, groupId: '' })
                   }
-                  placeholder="— None —"
+                  placeholder="— Select —"
                   options={(categories ?? [])
-                    // See the filter above: packing categories hold items.
-                    .filter((c) => c.isActive && (c.forItem || c.forPacking))
+                    // See the filter above: the two item kinds.
+                    .filter((c) => c.isActive && ITEM_KINDS.includes(c.kind))
                     .map((c) => ({ value: c.id, label: c.name }))}
                 />
                 <Select

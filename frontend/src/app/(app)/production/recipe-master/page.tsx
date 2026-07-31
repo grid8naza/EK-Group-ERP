@@ -15,6 +15,7 @@ import { Drawer } from '@/components/ui/Drawer';
 import { Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import { buildRecipeHtml, writeRecipeToWindow } from '@/lib/recipePrint';
+import { PRODUCT_KINDS } from '@/lib/types';
 import type {
   Product,
   Category,
@@ -74,15 +75,17 @@ export default function RecipeMasterPage() {
   const [groupFilter, setGroupFilter] = useState('');
   const [recipeFilter, setRecipeFilter] = useState(''); // '' | 'with' | 'without'
 
-  const filterCategories = (categories ?? []).filter((c) => c.forProduct);
+  const filterCategories = (categories ?? []).filter((c) =>
+    PRODUCT_KINDS.includes(c.kind),
+  );
   // The group hierarchy is two filters, not one: primary (level 1) and the leaf
-  // group a product actually attaches to. Leaf names repeat across primaries
-  // ("Bakery" under both Semi Finished and Finished), so the leaf list is scoped
-  // by the chosen primary's CC+L1 code prefix (2+2 digits, shared by its whole
-  // subtree) and, when none is chosen, each option names its primary.
+  // group a product actually attaches to. The leaf list is scoped by the chosen
+  // primary's L1 code prefix (shared by its whole subtree) and, when none is
+  // chosen, each option names its primary.
   const productGroups = (groups ?? []).filter(
     (g) =>
-      g.forProduct && (!categoryFilter || String(g.categoryId) === categoryFilter),
+      g.forProduct &&
+      (!categoryFilter || g.categoryIds.includes(Number(categoryFilter))),
   );
   const groupById = useMemo(
     () => new Map((groups ?? []).map((g) => [g.id, g])),
@@ -167,7 +170,8 @@ export default function RecipeMasterPage() {
   // Same two-level split as the toolbar: primary group, then the leaf group.
   const pickerGroupPool = (groups ?? []).filter(
     (g) =>
-      g.forProduct && (!pickCategory || String(g.categoryId) === pickCategory),
+      g.forProduct &&
+      (!pickCategory || g.categoryIds.includes(Number(pickCategory))),
   );
   const pickerPrimaries = pickerGroupPool.filter((g) => g.level === 1);
   const pickPrimaryPrefix = pickPrimary

@@ -197,10 +197,15 @@ export default function PackingMasterEditorPage() {
     () => (allProducts ?? []).filter((p) => String(p.id) !== id),
     [allProducts, id],
   );
-  // The material picker lists only items in packing-material categories (those
-  // flagged forPacking). Falls back to all items when no category is flagged yet.
+  // The material picker lists only items in PACKING_MATERIAL categories. Falls
+  // back to all items while no such category exists yet.
   const packingCatIds = useMemo(
-    () => new Set((categories ?? []).filter((c) => c.forPacking).map((c) => c.id)),
+    () =>
+      new Set(
+        (categories ?? [])
+          .filter((c) => c.kind === 'PACKING_MATERIAL')
+          .map((c) => c.id),
+      ),
     [categories],
   );
   const packingItems = useMemo(

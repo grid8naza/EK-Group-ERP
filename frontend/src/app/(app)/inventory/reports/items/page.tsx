@@ -96,7 +96,8 @@ export default function ItemsReportPage() {
   const filterGroups = useMemo(
     () =>
       (groups ?? []).filter(
-        (g) => !categoryFilter || String(g.categoryId) === categoryFilter,
+        (g) =>
+          !categoryFilter || g.categoryIds.includes(Number(categoryFilter)),
       ),
     [groups, categoryFilter],
   );

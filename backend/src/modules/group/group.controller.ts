@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { CategoryKind } from '@prisma/client';
 import { CompanyId } from '../../auth/company.decorator';
 import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
 import { LockDto } from '../../common/lock.dto';
@@ -18,9 +19,11 @@ import { GroupService } from './group.service';
 import { CreateGroupDto, UpdateGroupDto } from './group.dto';
 
 /**
- * Group Master (Inventory) — a sub-level under a Category. Like Category, it is
- * shared by Items and Products and available to all or a chosen set of
- * companies; the list is filtered to those available in the active company.
+ * Group Master (Inventory) — ONE shared classification tree that categories
+ * draw from, so the same sub-groups need not be re-entered under each category.
+ * Available to all or a chosen set of companies; the list is filtered to those
+ * available in the active company, and can be narrowed to a single category or
+ * to one category KIND (how the item/product screens scope themselves).
  */
 @ApiTags('groups')
 @ApiBearerAuth()
@@ -32,6 +35,8 @@ export class GroupController {
   findAll(
     @CompanyId() companyId: number | undefined,
     @Query('search') search?: string,
+    @Query('categoryId') categoryId?: string,
+    @Query('kind') kind?: CategoryKind,
     @Query('primaryGroupId') primaryGroupId?: string,
     @Query('parentGroupId') parentGroupId?: string,
   ) {
@@ -43,6 +48,8 @@ export class GroupController {
     };
     return this.service.findAll(companyId, {
       search,
+      categoryId: toId(categoryId),
+      kind,
       primaryGroupId: toId(primaryGroupId),
       parentGroupId: toId(parentGroupId),
     });

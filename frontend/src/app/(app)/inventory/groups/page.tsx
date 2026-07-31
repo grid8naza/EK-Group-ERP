@@ -16,31 +16,24 @@ import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/u
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import type { Group, Category, Company, ProductStage } from '@/lib/types';
+import { CATEGORY_KIND_LABEL, type Group, type Category, type Company } from '@/lib/types';
 
 const ROUTE = '/inventory/groups';
 const MAX_LEVEL = 5;
 
 const empty = {
   parentGroupId: '', // '' = primary group
-  categoryId: '',
+  // Categories this group serves. A list, because one group is shared: "Bakery"
+  // names both the semi-finished and the finished category rather than being
+  // typed out under each.
+  categoryIds: [] as number[],
   name: '',
   description: '',
   subGroupApplicable: false,
   allCompanies: true,
   companyIds: [] as number[],
-  forItem: true,
-  forProduct: false,
-  // '' = untagged; otherwise the production stage this primary product group
-  // holds, which is what binds it to a product screen.
-  productStage: '' as '' | ProductStage,
   isActive: true,
 };
-
-const STAGE_OPTIONS: { value: ProductStage; label: string }[] = [
-  { value: 'SEMI_FINISHED', label: 'Semi-finished' },
-  { value: 'FINISHED', label: 'Finished' },
-];
 
 export default function GroupsPage() {
   const { can } = useAuth();
@@ -93,24 +86,23 @@ export default function GroupsPage() {
   const selectedParent = form.parentGroupId
     ? groupList.find((g) => String(g.id) === form.parentGroupId)
     : undefined;
-  // Category is always picked first; a sub-group simply nests under a parent in
-  // that same category.
-  const effectiveCategoryId = form.categoryId
-    ? Number(form.categoryId)
-    : undefined;
   const effectiveLevel = selectedParent ? selectedParent.level + 1 : 1;
   const canBeContainer = effectiveLevel < MAX_LEVEL;
-  // A production stage lives on a PRIMARY product group; sub-groups inherit it.
-  const stageApplicable =
-    form.forProduct && (editing ? editing.level : effectiveLevel) === 1;
-  // The other group already holding each stage, to warn before the save fails.
-  const stageHolder = (stage: ProductStage) =>
-    primaryGroups.find((g) => g.productStage === stage && g.id !== editing?.id);
-  // Parent options for the form: active containers (level < 5) within the
-  // chosen category.
-  const formParentOptions = parentCandidates.filter(
-    (g) =>
-      g.isActive && (!form.categoryId || String(g.categoryId) === form.categoryId),
+
+  // Parent options: active containers (level < 5). A parent restricts what
+  // follows rather than the other way round, since a sub-group may only serve
+  // categories its parent serves.
+  const formParentOptions = parentCandidates.filter((g) => g.isActive);
+
+  // Categories offered in the form — narrowed to the parent's own set when this
+  // is a sub-group, so an out-of-subset pick is impossible to make.
+  const parentForCategories = editing
+    ? groupList.find((g) => g.id === editing.parentGroupId)
+    : selectedParent;
+  const formCategoryOptions = categoryList.filter(
+    (c) =>
+      (c.isActive || form.categoryIds.includes(c.id)) &&
+      (!parentForCategories || parentForCategories.categoryIds.includes(c.id)),
   );
 
   const closeDrawer = () => {
@@ -120,15 +112,12 @@ export default function GroupsPage() {
 
   const formFrom = (g: Group) => ({
     parentGroupId: g.parentGroupId ? String(g.parentGroupId) : '',
-    categoryId: String(g.categoryId),
+    categoryIds: g.categoryIds ?? [],
     name: g.name,
     description: g.description ?? '',
     subGroupApplicable: g.subGroupApplicable,
     allCompanies: g.allCompanies,
     companyIds: g.companyIds ?? [],
-    forItem: g.forItem,
-    forProduct: g.forProduct,
-    productStage: (g.productStage ?? '') as '' | ProductStage,
     isActive: g.isActive,
   });
 
@@ -174,17 +163,21 @@ export default function GroupsPage() {
         : [...f.companyIds, id],
     }));
 
+  const toggleCategory = (id: number) =>
+    setForm((f) => ({
+      ...f,
+      categoryIds: f.categoryIds.includes(id)
+        ? f.categoryIds.filter((x) => x !== id)
+        : [...f.categoryIds, id],
+    }));
+
   const save = async (mode: SaveMode = 'saveClose') => {
-    if (!form.categoryId) {
-      toast.error('Select a category.');
+    if (form.categoryIds.length === 0) {
+      toast.error('Select at least one category.');
       return;
     }
     if (!form.name.trim()) {
       toast.error('Name is required.');
-      return;
-    }
-    if (!form.forItem && !form.forProduct) {
-      toast.error('Select Item, Product, or both.');
       return;
     }
     if (form.subGroupApplicable && !canBeContainer) {
@@ -195,50 +188,33 @@ export default function GroupsPage() {
       toast.error('Select at least one company, or choose "All companies".');
       return;
     }
-    if (stageApplicable) {
-      // Mandatory: a primary product group must declare which screen lists it.
-      if (!form.productStage) {
-        toast.error('Select a production stage (Semi-finished or Finished).');
-        return;
-      }
-      const held = stageHolder(form.productStage);
-      if (held) {
-        toast.error(`“${held.name}” already holds that production stage.`);
-        return;
-      }
-    }
 
     setSaving(true);
     try {
       let saved: Group;
       if (editing) {
-        // Hierarchy (category/parent/code/level) is immutable — send only the
-        // editable fields.
+        // Placement (parent/code/level) is immutable — but the CATEGORIES are a
+        // link table rather than part of the code, so they stay editable; the
+        // server rejects a set that would strand a sub-group, item or product.
         saved = await api.patch<Group>(`/groups/${editing.id}`, {
+          categoryIds: form.categoryIds,
           name: form.name.trim(),
           description: form.description.trim() || undefined,
           subGroupApplicable: form.subGroupApplicable,
           allCompanies: form.allCompanies,
           companyIds: form.allCompanies ? [] : form.companyIds,
-          forItem: form.forItem,
-          forProduct: form.forProduct,
-          // null clears the tag; only a primary product group can hold one.
-          productStage: stageApplicable ? form.productStage || null : null,
           isActive: form.isActive,
         });
         toast.success('Group updated.');
       } else {
         saved = await api.post<Group>('/groups', {
-          categoryId: effectiveCategoryId,
+          categoryIds: form.categoryIds,
           parentGroupId: selectedParent ? selectedParent.id : undefined,
           subGroupApplicable: form.subGroupApplicable,
           name: form.name.trim(),
           description: form.description.trim() || undefined,
           allCompanies: form.allCompanies,
           companyIds: form.allCompanies ? [] : form.companyIds,
-          forItem: form.forItem,
-          forProduct: form.forProduct,
-          productStage: stageApplicable ? form.productStage || null : null,
           isActive: form.isActive,
         });
         toast.success('Group created.');
@@ -301,9 +277,9 @@ export default function GroupsPage() {
     if (status === 'active') rows = rows.filter((g) => g.isActive);
     else if (status === 'inactive') rows = rows.filter((g) => !g.isActive);
     if (categoryFilter)
-      rows = rows.filter((g) => String(g.categoryId) === categoryFilter);
-    // Primary group filter → the primary and its whole subtree (shared CC+L1
-    // code prefix). Parent group filter → direct children only.
+      rows = rows.filter((g) => g.categoryIds.includes(Number(categoryFilter)));
+    // Primary group filter → the primary and its whole subtree (shared L1 code
+    // prefix). Parent group filter → direct children only.
     if (primaryFilter) {
       const primary = groupList.find((g) => String(g.id) === primaryFilter);
       if (primary) {
@@ -319,6 +295,13 @@ export default function GroupsPage() {
 
   const availabilityText = (g: Group) =>
     g.companyIds.map((id) => companyNameById.get(id) ?? `#${id}`).join(', ');
+
+  // A group serves several categories, so this is a list, not a single name.
+  const categoryNames = (g: Group) =>
+    (g.categories ?? [])
+      .map((c) => c.name)
+      .sort((a, b) => a.localeCompare(b))
+      .join(', ');
 
   const appliesTo = (g: Group) => {
     if (g.forItem && g.forProduct) return 'Item + Product';
@@ -367,9 +350,12 @@ export default function GroupsPage() {
     },
     {
       key: 'category',
-      header: 'Category',
-      accessor: (r) => r.category?.name ?? '-',
+      header: 'Categories',
       sortable: true,
+      sortAccessor: (r) => categoryNames(r),
+      render: (r) => (
+        <span title={categoryNames(r)}>{categoryNames(r) || '-'}</span>
+      ),
     },
     {
       key: 'parent',
@@ -430,7 +416,7 @@ export default function GroupsPage() {
     <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="Group Master"
-        description="Multilayer groups under a category (up to 5 levels) — for Items and Products, with auto-generated codes"
+        description="One shared group tree (up to 5 levels) — each group serves one or more categories, so the same sub-groups are entered once"
         icon={<Layers className="h-5 w-5" />}
         actions={
           canAdd && (
@@ -488,7 +474,8 @@ export default function GroupsPage() {
               options={primaryGroups
                 .filter(
                   (g) =>
-                    !categoryFilter || String(g.categoryId) === categoryFilter,
+                    !categoryFilter ||
+                    g.categoryIds.includes(Number(categoryFilter)),
                 )
                 .map((g) => ({ value: String(g.id), label: g.name }))}
             />
@@ -501,9 +488,9 @@ export default function GroupsPage() {
                 .filter(
                   (g) =>
                     (!categoryFilter ||
-                      String(g.categoryId) === categoryFilter) &&
+                      g.categoryIds.includes(Number(categoryFilter))) &&
                     // When a primary group is chosen, only parents within its
-                    // subtree (sharing the primary's CC+L1 code prefix).
+                    // subtree (sharing the primary's L1 code prefix).
                     (!primaryGroupCode ||
                       g.code.startsWith(primaryGroupCode.slice(0, 4))),
                 )
@@ -584,61 +571,69 @@ export default function GroupsPage() {
                 once created, so it's read-only when editing. To reposition,
                 inactivate this group and create a new one. */}
             {editing ? (
-              <>
-                <Input
-                  label="Category"
-                  value={editing.category?.name ?? ''}
-                  disabled
-                  wrapClassName="sm:col-span-2"
-                />
-                <Input
-                  label="Parent group"
-                  value={editing.parent?.name ?? '— None (primary group) —'}
-                  disabled
-                  wrapClassName="sm:col-span-2"
-                />
-              </>
+              <Input
+                label="Parent group"
+                value={editing.parent?.name ?? '— None (primary group) —'}
+                disabled
+                wrapClassName="sm:col-span-2"
+              />
             ) : (
-              <>
-                {/* Category first, then a parent group within that category. */}
-                <Select
-                  label="Category"
-                  required
-                  value={form.categoryId}
-                  onChange={(e) =>
-                    // Changing the category invalidates a parent from another one.
-                    setForm({
-                      ...form,
-                      categoryId: e.target.value,
-                      parentGroupId: '',
-                    })
-                  }
-                  placeholder="Select a category"
-                  wrapClassName="sm:col-span-2"
-                  options={categoryList
-                    .filter((c) => c.isActive)
-                    .map((c) => ({ value: c.id, label: c.name }))}
-                />
-                <Select
-                  label="Parent group"
-                  value={form.parentGroupId}
-                  disabled={!form.categoryId}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, parentGroupId: e.target.value }))
-                  }
-                  placeholder={
-                    form.categoryId
-                      ? '— None (primary group) —'
-                      : 'Pick a category first'
-                  }
-                  wrapClassName="sm:col-span-2"
-                  options={formParentOptions.map((g) => ({
-                    value: String(g.id),
-                    label: `${'· '.repeat(g.level - 1)}${g.name}`,
-                  }))}
-                />
-              </>
+              /* Parent first: it narrows which categories may be picked, since a
+                 sub-group can only serve categories its parent serves. */
+              <Select
+                label="Parent group"
+                value={form.parentGroupId}
+                onChange={(e) =>
+                  // A new parent may not offer the categories already ticked.
+                  setForm((f) => ({
+                    ...f,
+                    parentGroupId: e.target.value,
+                    categoryIds: [],
+                  }))
+                }
+                placeholder="— None (primary group) —"
+                wrapClassName="sm:col-span-2"
+                options={formParentOptions.map((g) => ({
+                  value: String(g.id),
+                  label: `${'· '.repeat(g.level - 1)}${g.name}`,
+                }))}
+              />
             )}
+
+            {/* Categories — a group is SHARED, so it can serve more than one.
+                That is what stops the same sub-groups being re-entered under
+                every category: "Bakery" is one group in both the semi-finished
+                and the finished category. A sub-group is limited to its
+                parent's categories. */}
+            <div className="flex flex-col gap-2 sm:col-span-2">
+              <span className="label !mb-0">
+                Categories <span className="text-rose-500">*</span>
+              </span>
+              <div className="max-h-52 space-y-1.5 overflow-y-auto rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                {formCategoryOptions.length === 0 ? (
+                  <p className="text-sm text-slate-400">
+                    {parentForCategories
+                      ? 'The parent group belongs to no category.'
+                      : 'No categories found.'}
+                  </p>
+                ) : (
+                  formCategoryOptions.map((c) => (
+                    <Checkbox
+                      key={c.id}
+                      label={`${c.name} — ${CATEGORY_KIND_LABEL[c.kind]}`}
+                      checked={form.categoryIds.includes(c.id)}
+                      onChange={() => toggleCategory(c.id)}
+                    />
+                  ))
+                )}
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {form.categoryIds.length} selected
+                {parentForCategories
+                  ? ' — limited to the parent group’s categories.'
+                  : '. Pick every category this group should appear under.'}
+              </p>
+            </div>
 
             {editing && (
               <Input
@@ -695,61 +690,9 @@ export default function GroupsPage() {
               </p>
             </div>
 
-            {/* Applies to */}
-            <div className="flex flex-col gap-2 sm:col-span-2">
-              <span className="label !mb-0">Applies to</span>
-              <div className="flex items-center gap-5">
-                <Checkbox
-                  label="Item"
-                  checked={form.forItem}
-                  onChange={(e) =>
-                    setForm({ ...form, forItem: e.target.checked })
-                  }
-                />
-                <Checkbox
-                  label="Product"
-                  checked={form.forProduct}
-                  onChange={(e) =>
-                    setForm({ ...form, forProduct: e.target.checked })
-                  }
-                />
-              </div>
-            </div>
-
-            {/* Production stage — required on a primary group that applies to
-                Products, and shown only there. This is what binds a group to a
-                product screen: Inventory → Products - Semifinished lists the
-                SEMI_FINISHED subtree and Products - Finished the FINISHED one,
-                so renaming the group is safe. Each stage can be held by only
-                one group. */}
-            {stageApplicable && (
-              <div className="flex flex-col gap-1 sm:col-span-2">
-                <Select
-                  label="Production stage"
-                  required
-                  value={form.productStage}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      productStage: e.target.value as '' | ProductStage,
-                    })
-                  }
-                  placeholder="— Select —"
-                  options={STAGE_OPTIONS.map((o) => {
-                    const held = stageHolder(o.value);
-                    return {
-                      value: o.value,
-                      label: held ? `${o.label} — held by ${held.name}` : o.label,
-                    };
-                  })}
-                />
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Products under this group are listed by the matching screen
-                  (Products - Semifinished / Products - Finished). Sub-groups
-                  inherit it.
-                </p>
-              </div>
-            )}
+            {/* "Applies to" is no longer entered here: it follows from the
+                kinds of the categories ticked above (Ingredients / Packing
+                Materials ⇒ items, Semifinished / Finished ⇒ products). */}
 
             {/* Availability — all companies or a chosen set */}
             <div className="flex flex-col gap-2 sm:col-span-2">

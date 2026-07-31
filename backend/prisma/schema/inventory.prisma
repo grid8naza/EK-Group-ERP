@@ -17,13 +17,19 @@ enum BomKind {
   PACKING
 }
 
-/// The production stage a primary product group holds. Tagging a group is what
-/// binds it to a product screen — Products - Semifinished lists the
-/// SEMI_FINISHED subtree, Products - Finished the FINISHED one — so the screens
-/// survive a rename of the group. The user picks it: it is REQUIRED on a
-/// level-1 group that applies to Products, rejected on any other group, and at
-/// most one group may carry each stage. Nothing tags a group automatically.
-enum ProductStage {
+/// What a Category classifies. This is the TOP of the classification tree and
+/// the only place the four kinds of stock are named, so every screen that owns
+/// one kind (Items, Packing Material, Products - Unpacked, Products - Packed)
+/// filters on the kind rather than on a category's name — renaming a category
+/// never strands a screen.
+///
+/// Exactly one kind per category, because the four are disjoint by nature: a
+/// stocked thing is bought (ingredient or packing material) or made
+/// (semi-finished or finished), never both. That is what lets a Product name a
+/// single category and have its screen follow from it.
+enum CategoryKind {
+  INGREDIENT
+  PACKING_MATERIAL
   SEMI_FINISHED
   FINISHED
 }
@@ -93,30 +99,34 @@ model UnitChainLink {
   @@map("unit_chain_links")
 }
 
-/// Category master shared by Items and Products. Availability is multi-company:
-/// `allCompanies = true` makes it available to every company (including ones
-/// added later); otherwise it is available only to the companies linked via
-/// CategoryCompany. `forItem` / `forProduct` flag which masters it applies to
-/// (at least one).
+/// Category master — the top level of the classification tree, and the one
+/// place the four kinds of stock are declared (see CategoryKind). Availability
+/// is multi-company: `allCompanies = true` makes it available to every company
+/// (including ones added later); otherwise it is available only to the
+/// companies linked via CategoryCompany.
+///
+/// A category does NOT own a group subtree. Groups are shared across
+/// categories through GroupCategory, so "Bakery" is defined once and serves
+/// both the semi-finished and the finished categories instead of being typed
+/// out under each.
 model Category {
-  id           Int      @id @default(autoincrement())
-  code         String   @unique
+  id           Int          @id @default(autoincrement())
+  code         String       @unique
   name         String
   description  String?
-  allCompanies Boolean  @default(false) // true = available to every company
-  forItem      Boolean  @default(true)
-  forProduct   Boolean  @default(false)
-  forPacking   Boolean  @default(false) // items here are packing materials (a kind of item)
-  isActive     Boolean  @default(true)
-  isLocked     Boolean  @default(false) // when locked, must be unlocked before edit/delete
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  allCompanies Boolean      @default(false) // true = available to every company
+  kind         CategoryKind // what this category classifies — exactly one
+  isActive     Boolean      @default(true)
+  isLocked     Boolean      @default(false) // when locked, must be unlocked before edit/delete
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
 
   companies CategoryCompany[]
-  groups    Group[]
+  groups    GroupCategory[]
   items     Item[]
   products  Product[] @relation("CategoryProducts")
 
+  @@index([kind])
   @@map("categories")
 }
 
@@ -135,45 +145,64 @@ model CategoryCompany {
   @@map("category_companies")
 }
 
-/// Group master — a sub-level under a Category (Category → Group). Mirrors
-/// Category: applies to Items and/or Products, and is available to all
-/// companies or a chosen set (GroupCompany). Deleting a category is blocked
-/// while it still has groups (Restrict).
+/// Group master — one shared classification tree that CATEGORIES DRAW FROM,
+/// rather than a subtree owned by a single category. A group declares which
+/// categories it serves via GroupCategory, so "Bakery" is one row available to
+/// both the semi-finished and the finished category; without that the same
+/// sub-groups had to be re-entered under every category that needed them.
+///
+/// Because a group can serve several categories it has no category segment in
+/// its code (see hierarchy-code.ts): the CC digits stay 00 on a group and are
+/// filled in at the Item/Product level, where exactly one category IS chosen.
+/// Level-1 numbering is therefore global, not per category.
+///
+/// What a group applies to is no longer stored — it follows from the kinds of
+/// the categories it serves (INGREDIENT/PACKING_MATERIAL ⇒ items,
+/// SEMI_FINISHED/FINISHED ⇒ products), which is also what binds a subtree to a
+/// screen now that ProductStage is gone.
 model Group {
-  id           Int      @id @default(autoincrement())
-  categoryId   Int
+  id Int @id @default(autoincrement())
   // Self-referencing hierarchy: a "primary" group has no parent (level 1); a
-  // sub-group's parent is another group in the SAME category whose
-  // `subGroupApplicable` is true. `level` is parent.level + 1, capped at 5.
+  // sub-group's parent is another group whose `subGroupApplicable` is true, and
+  // its categories must be a SUBSET of that parent's (enforced in the service).
+  // `level` is parent.level + 1, capped at 5.
   parentGroupId      Int?
   level              Int     @default(1) // 1 = primary group … up to 5
   subGroupApplicable Boolean @default(false) // true = container: holds sub-groups, NOT items
-  code         String   @unique // system-generated 15-digit hierarchy code
+  code         String   @unique // system-generated 17-digit hierarchy code (CC = 00)
   name         String
   description  String?
   allCompanies Boolean  @default(false) // true = available to every company
-  forItem      Boolean  @default(true)
-  forProduct   Boolean  @default(false)
-  // Production stage owned by this group, set on PRIMARY (level-1) product
-  // groups only and inherited by everything beneath them via the code prefix.
-  // Unique, so each stage names exactly one group; NULLs are not compared by
-  // Postgres, so untagged groups are unconstrained.
-  productStage ProductStage? @unique
   isActive     Boolean  @default(true)
   isLocked     Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  category  Category       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  parent    Group?         @relation("GroupHierarchy", fields: [parentGroupId], references: [id], onDelete: Restrict)
-  children  Group[]        @relation("GroupHierarchy")
-  companies GroupCompany[]
-  items     Item[]
-  products  Product[] @relation("GroupProducts")
+  parent     Group?          @relation("GroupHierarchy", fields: [parentGroupId], references: [id], onDelete: Restrict)
+  children   Group[]         @relation("GroupHierarchy")
+  categories GroupCategory[]
+  companies  GroupCompany[]
+  items      Item[]
+  products   Product[]       @relation("GroupProducts")
 
-  @@index([categoryId])
   @@index([parentGroupId])
   @@map("groups")
+}
+
+/// Links a group to a category it is available under. This is what lets one
+/// group serve several categories. Deleting a category is blocked while groups
+/// still point at it (Restrict), matching the old categoryId behaviour.
+model GroupCategory {
+  id         Int @id @default(autoincrement())
+  groupId    Int
+  categoryId Int
+
+  group    Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@unique([groupId, categoryId])
+  @@index([categoryId])
+  @@map("group_categories")
 }
 
 /// Links a group to a company it is available in (when not `allCompanies`).
@@ -211,18 +240,23 @@ model HsnCode {
   @@map("hsn_codes")
 }
 
-/// Item master. Classified (optionally) under a Category/Group, stocked in a
-/// Unit, optionally packed in boxes (boxQty of boxUnit), taxed by an HSN code,
-/// with stock-control levels. Availability is multi-company (all companies or a
+/// Item master. Classified under a Category + leaf Group, stocked in a Unit,
+/// optionally packed in boxes (boxQty of boxUnit), taxed by an HSN code, with
+/// stock-control levels. Availability is multi-company (all companies or a
 /// chosen set, via ItemCompany). All masters referenced live in this domain, so
 /// they use real relations; only company links are plain cross-domain ids.
+///
+/// Both category and group are REQUIRED and together build the code: the
+/// category supplies its CC digits, the group the level digits. The chosen
+/// category must be one the group serves, and its kind must be INGREDIENT or
+/// PACKING_MATERIAL — a product kind belongs on Product.
 model Item {
   id           Int      @id @default(autoincrement())
   code         String   @unique
   name         String
   description  String?
-  categoryId   Int?
-  groupId      Int?
+  categoryId   Int
+  groupId      Int
   unitId       Int // stock unit
   lastPurchasePrice Float     @default(0) // updated on every purchase
   lastPurchaseDate  DateTime? // updated on every purchase (null = never purchased)
@@ -240,8 +274,8 @@ model Item {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  category  Category?     @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  group     Group?        @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  category  Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  group     Group         @relation(fields: [groupId], references: [id], onDelete: Restrict)
   unit      Unit          @relation("ItemUnit", fields: [unitId], references: [id], onDelete: Restrict)
   boxUnit   Unit?         @relation("ItemBoxUnit", fields: [boxUnitId], references: [id], onDelete: Restrict)
   hsnCode   HsnCode?      @relation(fields: [hsnCodeId], references: [id], onDelete: Restrict)
@@ -275,14 +309,20 @@ model ItemCompany {
 /// Category/Group/Unit/Hsn/Item links are real relations; companyId stays a
 /// plain cross-domain id (via ProductCompany). The BOM is edited under
 /// Production; the rest of the master under Inventory.
+///
+/// Both category and group are REQUIRED and together build the code. The
+/// category is CHOSEN, not inherited from the group — that choice is what
+/// separates a semi-finished from a finished product sharing the same group,
+/// and it is what each product screen filters on. It must be one of the
+/// group's categories and its kind must be SEMI_FINISHED or FINISHED.
 model Product {
   id           Int      @id @default(autoincrement())
   code         String   @unique
   name         String
   description  String?
   imageUrl     String? // product picture (sellable products), served at /uploads/products
-  categoryId   Int?
-  groupId      Int?
+  categoryId   Int
+  groupId      Int
   unitId       Int // selling / output unit
   // Form factor: a product may be sold unpacked, packed, or both.
   unpacked     Boolean @default(false)
@@ -339,8 +379,8 @@ model Product {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  category Category? @relation("CategoryProducts", fields: [categoryId], references: [id], onDelete: Restrict)
-  group    Group?    @relation("GroupProducts", fields: [groupId], references: [id], onDelete: Restrict)
+  category Category  @relation("CategoryProducts", fields: [categoryId], references: [id], onDelete: Restrict)
+  group    Group     @relation("GroupProducts", fields: [groupId], references: [id], onDelete: Restrict)
   unit      Unit      @relation("ProductUnit", fields: [unitId], references: [id], onDelete: Restrict)
   boxUnit   Unit?     @relation("ProductBoxUnit", fields: [boxUnitId], references: [id], onDelete: Restrict)
   yieldUnit Unit?     @relation("ProductYieldUnit", fields: [yieldUnitId], references: [id], onDelete: Restrict)

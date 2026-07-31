@@ -30,10 +30,12 @@ export class CreateItemDto {
   @MaxLength(300)
   description?: string;
 
-  // Category is derived from the group; ignored if sent.
-  @IsOptional()
+  /**
+   * Category this item is filed under (required). Must be one of the group's
+   * categories and must classify items (Ingredients or Packing Materials).
+   */
   @IsInt()
-  categoryId?: number | null;
+  categoryId!: number;
 
   /** Leaf group this item belongs to (required). */
   @IsInt()

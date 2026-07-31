@@ -152,10 +152,13 @@ export class CreateProductDto {
   @MaxLength(300)
   imageUrl?: string;
 
-  // Category is derived from the group; ignored if sent.
-  @IsOptional()
+  /**
+   * Category this product is filed under (required). Must be one of the group's
+   * categories and must be a product kind (Semi-finished or Finished) — this is
+   * what decides which product screen the row belongs to.
+   */
   @IsInt()
-  categoryId?: number | null;
+  categoryId!: number;
 
   /** Leaf group this product belongs to (required). */
   @IsInt()

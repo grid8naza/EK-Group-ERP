@@ -148,10 +148,15 @@ export default function RecipeMasterEditorPage() {
 
   const itemList = items ?? [];
   const unitList = units ?? [];
-  // Recipe ingredients are raw materials only — exclude items in packing-material
-  // categories (those flagged forPacking), which belong to the Packing master.
+  // Recipe ingredients are raw materials only — exclude items in
+  // PACKING_MATERIAL categories, which belong to the Packing master.
   const packingCatIds = useMemo(
-    () => new Set((categories ?? []).filter((c) => c.forPacking).map((c) => c.id)),
+    () =>
+      new Set(
+        (categories ?? [])
+          .filter((c) => c.kind === 'PACKING_MATERIAL')
+          .map((c) => c.id),
+      ),
     [categories],
   );
   const rawMaterialItems = useMemo(

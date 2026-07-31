@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { BomKind, Prisma } from '@prisma/client';
+import { BomKind, CategoryKind, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
 import {
@@ -12,6 +12,7 @@ import {
   itemSeqOf,
   lowestFree,
   MAX_ITEM_SEQ,
+  withCategory,
 } from '../../common/hierarchy-code';
 import { extname } from 'path';
 import { rename as renameFile } from 'fs/promises';
@@ -32,6 +33,9 @@ interface UploadedFile {
   originalname: string;
   mimetype: string;
 }
+
+/** The category kinds a PRODUCT may be filed under. */
+const PRODUCT_KINDS: CategoryKind[] = ['SEMI_FINISHED', 'FINISHED'];
 
 // Products are returned with their masters + company links flattened + the two
 // BOMs split out of the single bomLines table.
@@ -131,9 +135,11 @@ export class ProductService {
 
   async create(dto: CreateProductDto) {
     await this.assertRefs(dto);
-    // Every product lives under a leaf group; category comes from that group and
-    // the code is generated (manual codes are not accepted).
+    // Every product lives under a leaf group AND names one of that group's
+    // product categories. The code is generated from both (manual codes are not
+    // accepted): the group supplies the level digits, the category the CC ones.
     const group = await this.assertLeafGroup(dto.groupId);
+    const category = await this.assertCategoryOfGroup(dto.categoryId, group);
     const allCompanies = dto.allCompanies ?? false;
     const companyIds = this.resolveCompanies(allCompanies, dto.companyIds);
 
@@ -141,11 +147,11 @@ export class ProductService {
       const seq = await this.nextLeafSeq(dto.groupId);
       const created = await this.prisma.product.create({
         data: {
-          code: itemCode(group.code, seq),
+          code: withCategory(itemCode(group.code, seq), category.code),
           name: dto.name.trim(),
           description: dto.description?.trim() || null,
           imageUrl: dto.imageUrl?.trim() || null,
-          categoryId: group.categoryId,
+          categoryId: category.id,
           groupId: dto.groupId,
           unitId: dto.unitId,
           unpacked: dto.unpacked ?? false,
@@ -201,19 +207,21 @@ export class ProductService {
   }
 
   /**
-   * The group a product attaches to must be a leaf (no sub-groups) that applies
-   * to products. Returns its category + code for building the product's code.
+   * The group a product attaches to must be a leaf (no sub-groups) serving at
+   * least one PRODUCT-kind category. Returns its categories + code, which the
+   * caller needs to validate the chosen category and build the product's code.
    */
   private async assertLeafGroup(groupId: number) {
     const group = await this.prisma.group.findUnique({
       where: { id: groupId },
       select: {
         id: true,
-        categoryId: true,
         code: true,
         subGroupApplicable: true,
-        forProduct: true,
         isActive: true,
+        categories: {
+          select: { category: { select: { id: true, code: true, kind: true } } },
+        },
       },
     });
     if (!group) {
@@ -229,12 +237,39 @@ export class ProductService {
         'Products cannot be added under a group that has sub-groups. Choose a leaf group.',
       );
     }
-    if (!group.forProduct) {
+    const productCategories = group.categories
+      .map((c) => c.category)
+      .filter((c) => PRODUCT_KINDS.includes(c.kind));
+    if (productCategories.length === 0) {
       throw new BadRequestException(
         'The selected group does not apply to products.',
       );
     }
-    return group;
+    return { ...group, productCategories };
+  }
+
+  /**
+   * A product's category is CHOSEN, not inherited — it is what separates a
+   * semi-finished from a finished product sharing the same group, and what each
+   * product screen filters on. It must be one the group serves and must be a
+   * product kind.
+   */
+  private async assertCategoryOfGroup(
+    categoryId: number | null | undefined,
+    group: {
+      productCategories: { id: number; code: string; kind: CategoryKind }[];
+    },
+  ) {
+    if (categoryId == null) {
+      throw new BadRequestException('Select a category for this product.');
+    }
+    const category = group.productCategories.find((c) => c.id === categoryId);
+    if (!category) {
+      throw new BadRequestException(
+        'The selected category is not one this group belongs to.',
+      );
+    }
+    return category;
   }
 
   /** Lowest free 3-digit sequence under a leaf group (items + products share it). */

@@ -4,13 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, ProductStage } from '@prisma/client';
+import { CategoryKind, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
 import {
-  categoryCode,
   groupCode,
   groupNumberAt,
+  GROUP_ROOT_CODE,
   lowestFree,
   MAX_GROUP,
   MAX_LEVEL,
@@ -18,34 +18,48 @@ import {
 } from '../../common/hierarchy-code';
 import { CreateGroupDto, UpdateGroupDto } from './group.dto';
 
-// Group rows are returned with their parent category, parent group, and company
-// links flattened.
+// Group rows are returned with their categories, parent group and company links
+// flattened.
 const withRelations = {
   companies: { select: { companyId: true } },
-  category: { select: { id: true, code: true, name: true } },
+  categories: {
+    select: {
+      category: { select: { id: true, code: true, name: true, kind: true } },
+    },
+  },
   parent: { select: { id: true, code: true, name: true } },
 } satisfies Prisma.GroupInclude;
+
+/** The two kinds an ITEM may be classified under; the rest belong to products. */
+const ITEM_KINDS: CategoryKind[] = ['INGREDIENT', 'PACKING_MATERIAL'];
 
 @Injectable()
 export class GroupService {
   constructor(private prisma: PrismaService) {}
 
   /**
-   * Groups available in the active company, optionally narrowed to a primary
-   * group's whole subtree and/or to the direct children of a parent group.
-   * Ordered by code, which (being a positional hierarchy code) yields correct
-   * tree order: parent, then its children, then the next sibling.
+   * Groups available in the active company, optionally narrowed to one category
+   * (or one category KIND — how the product screens scope themselves), to a
+   * primary group's whole subtree and/or to the direct children of a parent
+   * group. Ordered by code, which (being a positional hierarchy code) yields
+   * correct tree order: parent, then its children, then the next sibling.
    */
   async findAll(
     companyId: number | undefined,
-    opts: { search?: string; primaryGroupId?: number; parentGroupId?: number } = {},
+    opts: {
+      search?: string;
+      categoryId?: number;
+      kind?: CategoryKind;
+      primaryGroupId?: number;
+      parentGroupId?: number;
+    } = {},
   ) {
     const scopeFilter: Prisma.GroupWhereInput = companyId
       ? { OR: [{ allCompanies: true }, { companies: { some: { companyId } } }] }
       : { allCompanies: true };
 
     // "Primary group" filter → every group whose code shares that primary's
-    // CC+L1 prefix (the primary itself and all its descendants).
+    // L1 prefix (the primary itself and all its descendants).
     let primaryFilter: Prisma.GroupWhereInput = {};
     if (opts.primaryGroupId) {
       const primary = await this.prisma.group.findUnique({
@@ -62,6 +76,12 @@ export class GroupService {
         AND: [
           scopeFilter,
           primaryFilter,
+          opts.categoryId
+            ? { categories: { some: { categoryId: opts.categoryId } } }
+            : {},
+          opts.kind
+            ? { categories: { some: { category: { kind: opts.kind } } } }
+            : {},
           opts.parentGroupId ? { parentGroupId: opts.parentGroupId } : {},
           opts.search
             ? {
@@ -91,21 +111,24 @@ export class GroupService {
   }
 
   async create(dto: CreateGroupDto) {
-    const forItem = dto.forItem ?? true;
-    const forProduct = dto.forProduct ?? false;
-    this.assertAppliesToSomething(forItem, forProduct);
     const subGroupApplicable = dto.subGroupApplicable ?? false;
 
-    // Resolve where this group sits in the tree.
-    let categoryId = dto.categoryId;
-    let parentCode: string;
+    // Resolve where this group sits in the tree. Levels 2+ hang off a parent
+    // group; level 1 starts from the all-zero root, since a group carries no
+    // category segment in its code.
+    let parentCode = GROUP_ROOT_CODE;
     let level = 1;
     const parentGroupId = dto.parentGroupId ?? null;
 
     if (parentGroupId != null) {
       const parent = await this.prisma.group.findUnique({
         where: { id: parentGroupId },
-        select: { categoryId: true, level: true, code: true, subGroupApplicable: true },
+        select: {
+          level: true,
+          code: true,
+          subGroupApplicable: true,
+          categories: { select: { categoryId: true } },
+        },
       });
       if (!parent) {
         throw new BadRequestException('Selected parent group does not exist.');
@@ -120,18 +143,12 @@ export class GroupService {
           `Groups can be nested at most ${MAX_LEVEL} levels deep.`,
         );
       }
-      categoryId = parent.categoryId; // a sub-group inherits its parent's category
+      this.assertSubsetOfParent(
+        dto.categoryIds,
+        parent.categories.map((c) => c.categoryId),
+      );
       level = parent.level + 1;
       parentCode = parent.code;
-    } else {
-      const category = await this.prisma.category.findUnique({
-        where: { id: categoryId },
-        select: { code: true },
-      });
-      if (!category) {
-        throw new BadRequestException('Selected category does not exist.');
-      }
-      parentCode = category.code;
     }
 
     // The deepest level cannot itself contain sub-groups.
@@ -141,19 +158,14 @@ export class GroupService {
       );
     }
 
+    const categoryIds = await this.resolveCategories(dto.categoryIds);
     const allCompanies = dto.allCompanies ?? false;
     const companyIds = this.resolveCompanies(allCompanies, dto.companyIds);
-    const productStage = await this.resolveStage(
-      dto.productStage ?? null,
-      { level, forProduct },
-      null,
-    );
 
     return this.withCodeRetry(async () => {
-      const n = await this.nextGroupNumber(categoryId, parentGroupId, level);
+      const n = await this.nextGroupNumber(parentGroupId, level);
       const created = await this.prisma.group.create({
         data: {
-          categoryId,
           parentGroupId,
           level,
           subGroupApplicable,
@@ -161,10 +173,8 @@ export class GroupService {
           name: dto.name.trim(),
           description: dto.description?.trim() || null,
           allCompanies,
-          forItem,
-          forProduct,
-          productStage,
           isActive: dto.isActive ?? true,
+          categories: { create: categoryIds.map((categoryId) => ({ categoryId })) },
           companies: { create: companyIds.map((companyId) => ({ companyId })) },
         },
         include: withRelations,
@@ -186,12 +196,14 @@ export class GroupService {
     }
     assertUnlocked(existing, 'group', 'editing');
 
-    // Category / parent / level / code are part of the immutable hierarchy code
-    // and cannot be changed after creation.
-
-    const forItem = dto.forItem ?? existing.forItem;
-    const forProduct = dto.forProduct ?? existing.forProduct;
-    this.assertAppliesToSomething(forItem, forProduct);
+    // Parent / level / code are part of the immutable hierarchy code and cannot
+    // be changed after creation. The CATEGORIES can — they are a link table, not
+    // part of the code — but only to a set that still covers everything below.
+    const categoryIds =
+      dto.categoryIds !== undefined
+        ? await this.resolveCategories(dto.categoryIds)
+        : null;
+    if (categoryIds) await this.assertCategoriesStillCover(existing, categoryIds);
 
     // Validate any change to whether this group holds sub-groups.
     let subGroupApplicable = existing.subGroupApplicable;
@@ -218,22 +230,6 @@ export class GroupService {
       }
     }
 
-    // The stage tag: taken from the payload when sent, otherwise carried over.
-    // Re-validated either way, since toggling Product changes whether a stage is
-    // required or forbidden — an edit that leaves a primary product group
-    // untagged is rejected. Dropping Product drops the tag with it, rather than
-    // stranding it on an item-only group.
-    const requestedStage = !forProduct
-      ? null
-      : dto.productStage !== undefined
-        ? dto.productStage
-        : existing.productStage;
-    const productStage = await this.resolveStage(
-      requestedStage,
-      { level: existing.level, forProduct },
-      id,
-    );
-
     const allCompanies = dto.allCompanies ?? existing.allCompanies;
     const wantsLinkChange =
       dto.allCompanies !== undefined || dto.companyIds !== undefined;
@@ -252,10 +248,15 @@ export class GroupService {
             : undefined,
         subGroupApplicable,
         allCompanies,
-        forItem,
-        forProduct,
-        productStage,
         isActive: dto.isActive,
+        ...(categoryIds
+          ? {
+              categories: {
+                deleteMany: {},
+                create: categoryIds.map((cid) => ({ categoryId: cid })),
+              },
+            }
+          : {}),
         ...(companyIds
           ? {
               companies: {
@@ -301,14 +302,17 @@ export class GroupService {
 
   // --- helpers ---
 
-  /** Lowest free 2-digit number for a group at `level` under a given parent. */
+  /**
+   * Lowest free 2-digit number for a group at `level` under a given parent.
+   * Level-1 numbering is a single global namespace (parentGroupId = null),
+   * because groups are no longer partitioned by category.
+   */
   private async nextGroupNumber(
-    categoryId: number,
     parentGroupId: number | null,
     level: number,
   ): Promise<number> {
     const sibs = await this.prisma.group.findMany({
-      where: { categoryId, parentGroupId },
+      where: { parentGroupId },
       select: { code: true },
     });
     const used = sibs.map((s) => groupNumberAt(s.code, level));
@@ -323,8 +327,8 @@ export class GroupService {
 
   /**
    * Re-run an allocate+insert if it loses the CODE-uniqueness race. Other unique
-   * columns (productStage) must not be retried — the second attempt would fail
-   * the same way and then surface as a raw P2002, so they are rethrown at once.
+   * columns must not be retried — the second attempt would fail the same way and
+   * then surface as a raw P2002, so they are rethrown at once.
    */
   private async withCodeRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
     for (let i = 0; ; i++) {
@@ -344,57 +348,110 @@ export class GroupService {
     }
   }
 
+  /** Every id must name a real category; duplicates are collapsed. */
+  private async resolveCategories(ids: number[]): Promise<number[]> {
+    const wanted = Array.from(new Set(ids)).filter((n) => n > 0);
+    if (wanted.length === 0) {
+      throw new BadRequestException('Select at least one category.');
+    }
+    const found = await this.prisma.category.findMany({
+      where: { id: { in: wanted } },
+      select: { id: true },
+    });
+    if (found.length !== wanted.length) {
+      throw new BadRequestException('One of the selected categories does not exist.');
+    }
+    return wanted;
+  }
+
   /**
-   * Validate a production-stage tag. It marks the one primary product group a
-   * product screen lists, so it is MANDATORY on a level-1 group that applies to
-   * products, forbidden anywhere else, and at most one group may hold each
-   * stage. Nothing sets it implicitly — the user chooses. The unique index is
-   * the real guard on the last rule; this check exists to fail with a message
-   * naming the group that already holds it. `selfId` is the row being updated.
+   * A sub-group may only serve categories its parent serves. Without this a
+   * product could sit in a category via a group whose parent is not in that
+   * category at all, leaving a hole in the tree.
    */
-  private async resolveStage(
-    stage: ProductStage | null,
-    group: { level: number; forProduct: boolean },
-    selfId: number | null,
-  ): Promise<ProductStage | null> {
-    const applicable = group.forProduct && group.level === 1;
-    if (stage == null) {
-      if (applicable) {
-        throw new BadRequestException(
-          'Select a production stage (Semi-finished or Finished) — a primary group that applies to Products must declare one.',
+  private assertSubsetOfParent(childIds: number[], parentIds: number[]) {
+    const parent = new Set(parentIds);
+    if (!childIds.every((id) => parent.has(id))) {
+      throw new BadRequestException(
+        'A sub-group can only be placed in categories its parent group belongs to.',
+      );
+    }
+  }
+
+  /**
+   * Guard a change to an existing group's categories: the new set must still be
+   * a subset of the parent's, still cover every child sub-group, and still
+   * include the category each item/product under this group was filed in.
+   */
+  private async assertCategoriesStillCover(
+    existing: { id: number; parentGroupId: number | null },
+    categoryIds: number[],
+  ) {
+    if (existing.parentGroupId != null) {
+      const parent = await this.prisma.group.findUnique({
+        where: { id: existing.parentGroupId },
+        select: { categories: { select: { categoryId: true } } },
+      });
+      if (parent) {
+        this.assertSubsetOfParent(
+          categoryIds,
+          parent.categories.map((c) => c.categoryId),
         );
       }
-      return null;
     }
-    if (!group.forProduct) {
-      throw new BadRequestException(
-        'Only a group that applies to Products can hold a production stage.',
-      );
-    }
-    if (group.level !== 1) {
-      throw new BadRequestException(
-        'Only a primary (level 1) group can hold a production stage — its sub-groups inherit it.',
-      );
-    }
-    const holder = await this.prisma.group.findUnique({
-      where: { productStage: stage },
-      select: { id: true, name: true },
+
+    const orphanedChild = await this.prisma.group.findFirst({
+      where: {
+        parentGroupId: existing.id,
+        categories: { some: { categoryId: { notIn: categoryIds } } },
+      },
+      select: { name: true },
     });
-    if (holder && holder.id !== selfId) {
-      throw new ConflictException(
-        `“${holder.name}” already holds that production stage. Clear it there first.`,
+    if (orphanedChild) {
+      throw new BadRequestException(
+        `Sub-group “${orphanedChild.name}” is in a category you are removing. Change it first.`,
       );
     }
-    return stage;
+
+    const [item, product] = await Promise.all([
+      this.prisma.item.findFirst({
+        where: { groupId: existing.id, categoryId: { notIn: categoryIds } },
+        select: { name: true },
+      }),
+      this.prisma.product.findFirst({
+        where: { groupId: existing.id, categoryId: { notIn: categoryIds } },
+        select: { name: true },
+      }),
+    ]);
+    const stranded = item ?? product;
+    if (stranded) {
+      throw new BadRequestException(
+        `“${stranded.name}” is filed in a category you are removing. Change it first.`,
+      );
+    }
   }
 
   private flatten<
     T extends {
       companies: { companyId: number }[];
+      categories: {
+        category: { id: number; code: string; name: string; kind: CategoryKind };
+      }[];
     },
   >(row: T) {
-    const { companies, ...rest } = row;
-    return { ...rest, companyIds: companies.map((c) => c.companyId) };
+    const { companies, categories, ...rest } = row;
+    const cats = categories.map((c) => c.category);
+    const kinds = new Set(cats.map((c) => c.kind));
+    return {
+      ...rest,
+      companyIds: companies.map((c) => c.companyId),
+      categories: cats,
+      categoryIds: cats.map((c) => c.id),
+      // What the group applies to is derived, not stored: it follows from the
+      // kinds of the categories it serves.
+      forItem: ITEM_KINDS.some((k) => kinds.has(k)),
+      forProduct: kinds.has('SEMI_FINISHED') || kinds.has('FINISHED'),
+    };
   }
 
   private isVisible(
@@ -419,13 +476,5 @@ export class GroupService {
       );
     }
     return ids;
-  }
-
-  private assertAppliesToSomething(forItem: boolean, forProduct: boolean) {
-    if (!forItem && !forProduct) {
-      throw new BadRequestException(
-        'A group must apply to Item, Product, or both.',
-      );
-    }
   }
 }

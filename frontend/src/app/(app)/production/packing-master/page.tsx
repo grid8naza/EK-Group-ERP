@@ -13,6 +13,7 @@ import { LockButton } from '@/components/ui/LockButton';
 import { Drawer } from '@/components/ui/Drawer';
 import { Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
+import { PRODUCT_KINDS } from '@/lib/types';
 import type { Product, Category, Group } from '@/lib/types';
 
 const ROUTE = '/production/packing-master';
@@ -30,15 +31,29 @@ export default function PackingMasterPage() {
   const [groupFilter, setGroupFilter] = useState('');
   const [packingFilter, setPackingFilter] = useState(''); // '' | 'with' | 'without'
 
-  const filterCategories = (categories ?? []).filter((c) => c.forProduct);
+  const filterCategories = (categories ?? []).filter((c) =>
+    PRODUCT_KINDS.includes(c.kind),
+  );
+  // A group serving a FINISHED category. Packing is a finished-goods step, so
+  // those primaries are always offered; anything else has to earn its place by
+  // actually holding a product this screen lists.
+  const finishedCategoryIds = useMemo(
+    () =>
+      new Set(
+        (categories ?? []).filter((c) => c.kind === 'FINISHED').map((c) => c.id),
+      ),
+    [categories],
+  );
+  const servesFinished = (g: Group) =>
+    g.categoryIds.some((id) => finishedCategoryIds.has(id));
+
   // The group hierarchy is two filters, not one: primary (level 1) and the leaf
-  // group a product attaches to. Leaf names repeat across primaries ("Bakery"
-  // under both Semi Finished and Finished), so the leaf list is scoped by the
-  // chosen primary's CC+L1 code prefix (2+2 digits, shared by its whole subtree)
-  // and, when none is chosen, each option names its primary.
+  // group a product attaches to. The leaf list is scoped by the chosen primary's
+  // L1 code prefix (shared by its whole subtree).
   const productGroups = (groups ?? []).filter(
     (g) =>
-      g.forProduct && (!categoryFilter || String(g.categoryId) === categoryFilter),
+      g.forProduct &&
+      (!categoryFilter || g.categoryIds.includes(Number(categoryFilter))),
   );
   const groupById = useMemo(
     () => new Map((groups ?? []).map((g) => [g.id, g])),
@@ -59,7 +74,7 @@ export default function PackingMasterPage() {
   const primaryGroups = productGroups.filter(
     (g) =>
       g.level === 1 &&
-      (g.productStage === 'FINISHED' ||
+      (servesFinished(g) ||
         packableCodes.some((c) => c.startsWith(g.code.slice(0, 4)))),
   );
   const primaryPrefix = primaryFilter
@@ -143,12 +158,13 @@ export default function PackingMasterPage() {
   // Same two-level split (and same primary-option rule) as the toolbar.
   const pickerGroupPool = (groups ?? []).filter(
     (g) =>
-      g.forProduct && (!pickCategory || String(g.categoryId) === pickCategory),
+      g.forProduct &&
+      (!pickCategory || g.categoryIds.includes(Number(pickCategory))),
   );
   const pickerPrimaries = pickerGroupPool.filter(
     (g) =>
       g.level === 1 &&
-      (g.productStage === 'FINISHED' ||
+      (servesFinished(g) ||
         packableCodes.some((c) => c.startsWith(g.code.slice(0, 4)))),
   );
   const pickPrimaryPrefix = pickPrimary

@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { CategoryKind } from '@prisma/client';
 import { CompanyId } from '../../auth/company.decorator';
 import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
 import { LockDto } from '../../common/lock.dto';
@@ -18,9 +19,11 @@ import { CategoryService } from './category.service';
 import { CreateCategoryDto, UpdateCategoryDto } from './category.dto';
 
 /**
- * Category Master (Inventory) — one master shared by Items and Products. A
- * category is available to all companies or to a chosen set of companies; the
- * list is filtered to those available in the active company (X-Company-Id).
+ * Category Master (Inventory) — the top of the classification tree, shared by
+ * Items and Products. A category is available to all companies or to a chosen
+ * set of companies; the list is filtered to those available in the active
+ * company (X-Company-Id), and optionally to one `kind`, which is how each
+ * master screen picks out the categories it owns.
  */
 @ApiTags('categories')
 @ApiBearerAuth()
@@ -32,8 +35,9 @@ export class CategoryController {
   findAll(
     @CompanyId() companyId: number | undefined,
     @Query('search') search?: string,
+    @Query('kind') kind?: CategoryKind,
   ) {
-    return this.service.findAll(companyId, search);
+    return this.service.findAll(companyId, search, kind);
   }
 
   @Get(':id')

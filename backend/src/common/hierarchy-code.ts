@@ -1,17 +1,31 @@
 /**
- * Auto-generated 17-digit hierarchy codes for Category → Group (up to 5 levels)
- * → Item / Product. Layout (each box a fixed-width numeric segment):
+ * Auto-generated 17-digit hierarchy codes for Category / Group (up to 5 levels)
+ * / Item / Product. Layout (each box a fixed-width numeric segment):
  *
  *   ┌──┬──┬──┬──┬──┬──┬─────┐
  *   │CC│L1│L2│L3│L4│L5│IIIII│   = 2 + 2·5 + 5 = 17 digits
  *   └──┴──┴──┴──┴──┴──┴─────┘
  *    cat  group levels    item/product sequence (shared per leaf group)
  *
- * A category's code fills CC and zeros the rest; a group fills CC + its level
- * segments and zeros the deeper levels + item slot; an item/product takes its
- * leaf group's code and fills the IIIII slot. Because the code is fixed-width
- * and positional, plain ascending sort of the code yields the correct tree
- * order (parent, then its children, then the next sibling).
+ * A category's code fills CC and zeros the rest.
+ *
+ * A GROUP leaves CC as 00 and fills only its level segments. It has to: one
+ * group serves several categories (Bakery is both semi-finished and finished),
+ * so there is no single CC to write. Group level-1 numbering is therefore a
+ * single global namespace rather than one per category.
+ *
+ * An ITEM / PRODUCT does name exactly one category, so its code is its leaf
+ * group's code with the IIIII slot filled AND the CC digits stamped from its
+ * own category — see `withCategory`. Two products sharing a group but sitting
+ * in different categories differ in CC, which is what makes the code sort and
+ * report by category:
+ *
+ *   Group   Bakery > Bread        00 01 01 00 00 00 00000
+ *   Product Bread Dough  (Semi)   03 01 01 00 00 00 00001
+ *   Product White Bread  (Fin)    04 01 01 00 00 00 00002
+ *
+ * Because the code is fixed-width and positional, plain ascending sort yields
+ * the correct tree order (parent, then its children, then the next sibling).
  */
 
 export const CATEGORY_DIGITS = 2;
@@ -54,10 +68,13 @@ export function categoryCode(n: number): string {
   return setSegment(ZEROS, 0, CATEGORY_DIGITS, n);
 }
 
+/** The all-zero code a level-1 group builds on (groups carry no category). */
+export const GROUP_ROOT_CODE = ZEROS;
+
 /**
- * Build a group's code from its parent's code (the category code for a level-1
- * "primary" group, or the parent group's code for a sub-group) by filling in
- * this group's own level segment.
+ * Build a group's code by filling in its own level segment. A level-1 group
+ * starts from GROUP_ROOT_CODE, a sub-group from its parent group's code; either
+ * way the CC digits stay 00, because a group is not owned by a category.
  */
 export function groupCode(parentCode: string, level: number, n: number): string {
   return setSegment(parentCode, levelOffset(level), LEVEL_DIGITS, n);
@@ -65,6 +82,15 @@ export function groupCode(parentCode: string, level: number, n: number): string 
 
 export function itemCode(leafGroupCode: string, seq: number): string {
   return setSegment(leafGroupCode, ITEM_OFFSET, ITEM_DIGITS, seq);
+}
+
+/**
+ * Stamp a category's CC digits onto an item/product code built from a (CC-less)
+ * group code. `categoryCode` is the category's own 17-digit code; only its CC
+ * segment is read.
+ */
+export function withCategory(code: string, categoryCode: string): string {
+  return setSegment(code, 0, CATEGORY_DIGITS, categoryNumberOf(categoryCode));
 }
 
 // ---- Readers --------------------------------------------------------------

@@ -16,9 +16,17 @@ import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/u
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import type { Category, Company } from '@/lib/types';
+import { CATEGORY_KIND_LABEL, type Category, type CategoryKind, type Company } from '@/lib/types';
 
 const ROUTE = '/inventory/categories';
+
+// The four kinds a category may classify, in tree order. Exactly one applies:
+// a stocked thing is bought (ingredient / packing material) or made
+// (semi-finished / finished), never both — and it is the kind, not the name,
+// that binds a category to its master screen.
+const KIND_OPTIONS: { value: CategoryKind; label: string }[] = (
+  ['INGREDIENT', 'PACKING_MATERIAL', 'SEMI_FINISHED', 'FINISHED'] as const
+).map((value) => ({ value, label: CATEGORY_KIND_LABEL[value] }));
 
 const empty = {
   code: '',
@@ -26,9 +34,7 @@ const empty = {
   description: '',
   allCompanies: true,
   companyIds: [] as number[],
-  forItem: true,
-  forProduct: false,
-  forPacking: false,
+  kind: '' as '' | CategoryKind,
   isActive: true,
 };
 
@@ -72,9 +78,7 @@ export default function CategoriesPage() {
     description: c.description ?? '',
     allCompanies: c.allCompanies,
     companyIds: c.companyIds ?? [],
-    forItem: c.forItem,
-    forProduct: c.forProduct,
-    forPacking: c.forPacking ?? false,
+    kind: c.kind as '' | CategoryKind,
     isActive: c.isActive,
   });
 
@@ -125,8 +129,8 @@ export default function CategoriesPage() {
       toast.error('Name is required.');
       return;
     }
-    if (!form.forItem && !form.forProduct && !form.forPacking) {
-      toast.error('Select Item, Product or Packing material.');
+    if (!form.kind) {
+      toast.error('Select what this category applies to.');
       return;
     }
     if (!form.allCompanies && form.companyIds.length === 0) {
@@ -140,9 +144,7 @@ export default function CategoriesPage() {
       description: form.description.trim() || undefined,
       allCompanies: form.allCompanies,
       companyIds: form.allCompanies ? [] : form.companyIds,
-      forItem: form.forItem,
-      forProduct: form.forProduct,
-      forPacking: form.forPacking,
+      kind: form.kind,
       isActive: form.isActive,
     };
 
@@ -214,16 +216,7 @@ export default function CategoriesPage() {
   const availabilityText = (c: Category) =>
     c.companyIds.map((id) => nameById.get(id) ?? `#${id}`).join(', ');
 
-  // All three flags are independent, and a category may carry any combination
-  // (packing material on its own is valid — it holds items of that kind).
-  const appliesTo = (c: Category) => {
-    const parts = [
-      c.forItem && 'Item',
-      c.forProduct && 'Product',
-      c.forPacking && 'Packing material',
-    ].filter(Boolean);
-    return parts.length ? parts.join(' + ') : '-';
-  };
+  const appliesTo = (c: Category) => CATEGORY_KIND_LABEL[c.kind] ?? '-';
 
   const columns: Column<Category>[] = [
     { key: 'code', header: 'Code', accessor: (r) => r.code },
@@ -258,7 +251,13 @@ export default function CategoriesPage() {
       header: 'Applies To',
       sortAccessor: (r) => appliesTo(r),
       render: (r) => (
-        <Badge color={r.forItem && r.forProduct ? 'green' : 'slate'}>
+        <Badge
+          color={
+            r.kind === 'SEMI_FINISHED' || r.kind === 'FINISHED'
+              ? 'green'
+              : 'slate'
+          }
+        >
           {appliesTo(r)}
         </Badge>
       ),
@@ -392,33 +391,20 @@ export default function CategoriesPage() {
               wrapClassName="sm:col-span-2"
             />
 
-            {/* Applies to */}
-            <div className="flex flex-col gap-2 sm:col-span-2">
-              <span className="label !mb-0">Applies to</span>
-              <div className="flex items-center gap-5">
-                <Checkbox
-                  label="Item"
-                  checked={form.forItem}
-                  onChange={(e) =>
-                    setForm({ ...form, forItem: e.target.checked })
-                  }
-                />
-                <Checkbox
-                  label="Product"
-                  checked={form.forProduct}
-                  onChange={(e) =>
-                    setForm({ ...form, forProduct: e.target.checked })
-                  }
-                />
-                <Checkbox
-                  label="Packing material"
-                  checked={form.forPacking}
-                  onChange={(e) =>
-                    setForm({ ...form, forPacking: e.target.checked })
-                  }
-                />
-              </div>
-            </div>
+            {/* Applies to — exactly one of the four kinds. This, not the name,
+                is what binds the category to a master screen, and it is fixed
+                once groups, items or products hang off the category. */}
+            <Select
+              label="Applies to"
+              required
+              value={form.kind}
+              onChange={(e) =>
+                setForm({ ...form, kind: e.target.value as '' | CategoryKind })
+              }
+              placeholder="— Select —"
+              options={KIND_OPTIONS}
+              wrapClassName="sm:col-span-2"
+            />
 
             {/* Availability — all companies or a chosen set */}
             <div className="flex flex-col gap-2 sm:col-span-2">
