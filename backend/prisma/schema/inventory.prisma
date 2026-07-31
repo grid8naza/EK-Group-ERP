@@ -811,6 +811,15 @@ model StockTransaction {
   // external-supplier receipt.
   dispatchId       Int?         @unique
   dispatchNo       String? // snapshot
+  // Costing the whole document is charged to. Raw-material ITEMS carry no
+  // costing of their own, so an issue raised outside a Material Request has
+  // nothing to inherit — this is where the user says what it is for. When set
+  // it OVERRIDES the per-line product costing, because an explicit choice on
+  // the document is a deliberate attribution (issuing finished goods to the
+  // staff mess belongs to the mess, not to the line that baked them).
+  // Plain cross-domain ids -> Cpanel CostCenter / CostObject.
+  costCenterId Int?
+  costObjectId Int?
   reference String?
   notes     String?
   status    String       @default("POSTED") // DRAFT | POSTED

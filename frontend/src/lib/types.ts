@@ -1759,6 +1759,13 @@ export interface StockTransaction {
   /** Goods Receipt Note only: the intercompany dispatch these goods arrived on. */
   dispatchId?: number | null;
   dispatchNo?: string | null;
+  /**
+   * Costing the document is charged to (Goods Issue Note). Raw-material items
+   * carry none of their own, so this is where an ad-hoc issue says what it is
+   * for; when set it overrides the per-line product costing.
+   */
+  costCenterId?: number | null;
+  costObjectId?: number | null;
   reference?: string | null;
   notes?: string | null;
   status: string;

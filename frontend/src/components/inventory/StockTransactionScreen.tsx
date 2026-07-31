@@ -27,6 +27,8 @@ import type {
   Product,
   Supplier,
   Company,
+  CostCenter,
+  CostObject,
   IncomingDispatch,
 } from '@/lib/types';
 
@@ -59,6 +61,7 @@ export function StockTransactionScreen({
   showClassification = false,
   showRate = true,
   showIncomingDispatch = false,
+  showCosting = false,
 }: {
   type: StockTxnKind;
   /** IN types (receipt/return) capture batches; OUT types (delivery/issue) decrement stock. */
@@ -78,6 +81,13 @@ export function StockTransactionScreen({
    * or damaged goods are received for what actually arrived.
    */
   showIncomingDispatch?: boolean;
+  /**
+   * Offer a cost centre / cost object on the header (Goods Issue Note). Raw
+   * material ITEMS carry no costing of their own, so an issue raised outside a
+   * Material Request has nothing to inherit — this is where the user says what
+   * it is for. When set it overrides the per-line product costing.
+   */
+  showCosting?: boolean;
 }) {
   const { can } = useAuth();
   const toast = useToast();
@@ -87,6 +97,12 @@ export function StockTransactionScreen({
     `/stock-transactions/documents?type=${type}`,
   );
   const { data: stores } = useFetch<Store[]>('/stores');
+  const { data: costCenters } = useFetch<CostCenter[]>(
+    showCosting ? '/cost-centers' : null,
+  );
+  const { data: costObjects } = useFetch<CostObject[]>(
+    showCosting ? '/cost-objects' : null,
+  );
   const { data: items } = useFetch<Item[]>('/items');
   const { data: products } = useFetch<Product[]>('/products');
   const { data: suppliers } = useFetch<Supplier[]>(
@@ -174,9 +190,32 @@ export function StockTransactionScreen({
   const [supplierId, setSupplierId] = useState('');
   const [dispatchId, setDispatchId] = useState('');
   const [poRef, setPoRef] = useState('');
+  const [costCenterId, setCostCenterId] = useState('');
+  const [costObjectId, setCostObjectId] = useState('');
   const [reference, setReference] = useState('');
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<DraftLine[]>([]);
+
+  // Costing pickers: the endpoints scope to the active company already, and the
+  // objects cascade from the chosen centre.
+  const costCenterOptions = useMemo(
+    () =>
+      (costCenters ?? [])
+        .filter((c) => c.isActive)
+        .map((c) => ({ value: String(c.id), label: c.name })),
+    [costCenters],
+  );
+  const costObjectOptions = useMemo(
+    () =>
+      (costObjects ?? [])
+        .filter(
+          (o) =>
+            o.isActive &&
+            (!costCenterId || o.costCenterId === Number(costCenterId)),
+        )
+        .map((o) => ({ value: String(o.id), label: o.name })),
+    [costObjects, costCenterId],
+  );
 
   const blankLine = (): DraftLine => ({
     key: '',
@@ -250,6 +289,8 @@ export function StockTransactionScreen({
     setSupplierId('');
     setDispatchId('');
     setPoRef('');
+    setCostCenterId('');
+    setCostObjectId('');
     setReference('');
     setNotes('');
     setLines([blankLine()]);
@@ -265,6 +306,8 @@ export function StockTransactionScreen({
     setSupplierId(full.supplierId ? String(full.supplierId) : '');
     setDispatchId(full.dispatchId ? String(full.dispatchId) : '');
     setPoRef(full.purchaseOrderRef ?? '');
+    setCostCenterId(full.costCenterId ? String(full.costCenterId) : '');
+    setCostObjectId(full.costObjectId ? String(full.costObjectId) : '');
     setReference(full.reference ?? '');
     setNotes(full.notes ?? '');
     setLines(
@@ -329,6 +372,8 @@ export function StockTransactionScreen({
     setSupplierId('');
     setDispatchId('');
     setPoRef('');
+    setCostCenterId('');
+    setCostObjectId('');
     setReference('');
     setNotes('');
     setLines([blankLine()]);
@@ -349,6 +394,12 @@ export function StockTransactionScreen({
           ? {
               supplierId: supplierId ? Number(supplierId) : null,
               purchaseOrderRef: poRef.trim() || null,
+            }
+          : {}),
+        ...(showCosting
+          ? {
+              costCenterId: costCenterId ? Number(costCenterId) : null,
+              costObjectId: costObjectId ? Number(costObjectId) : null,
             }
           : {}),
         // The dispatch link is set when the receipt is raised and never moves.
@@ -618,6 +669,41 @@ export function StockTransactionScreen({
                   value={poRef}
                   onChange={(e) => setPoRef(e.target.value)}
                   placeholder="PO reference"
+                />
+              </div>
+            )}
+            {/* Costing — what this issue is FOR. Raw-material items carry none
+                of their own, so without this an ad-hoc issue reports as
+                Unassigned; setting it also overrides the per-line product
+                costing, which is the point when issuing finished goods to,
+                say, the staff mess. */}
+            {showCosting && (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Select
+                  label="Cost centre"
+                  disabled={viewMode}
+                  value={costCenterId}
+                  onChange={(e) => {
+                    // A different centre invalidates the object under it.
+                    setCostCenterId(e.target.value);
+                    setCostObjectId('');
+                  }}
+                  placeholder={
+                    costCenterOptions.length
+                      ? '— None —'
+                      : 'No cost centres in this company'
+                  }
+                  options={costCenterOptions}
+                />
+                <Select
+                  label="Cost object"
+                  disabled={viewMode || !costCenterId}
+                  value={costObjectId}
+                  onChange={(e) => setCostObjectId(e.target.value)}
+                  placeholder={
+                    costCenterId ? '— None —' : 'Pick a cost centre first'
+                  }
+                  options={costObjectOptions}
                 />
               </div>
             )}

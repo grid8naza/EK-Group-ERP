@@ -69,6 +69,19 @@ export class CreateStockTransactionDto {
   @IsInt()
   dispatchId?: number | null;
 
+  /**
+   * Costing the document is charged to. Meant for the Goods Issue Note, where
+   * raw-material items have no costing to inherit; when set it overrides the
+   * per-line product costing for every line.
+   */
+  @IsOptional()
+  @IsInt()
+  costCenterId?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  costObjectId?: number | null;
+
   @IsOptional()
   @IsString()
   @MaxLength(200)
@@ -103,6 +116,14 @@ export class UpdateStockTransactionDto {
   @IsString()
   @MaxLength(120)
   purchaseOrderRef?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  costCenterId?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  costObjectId?: number | null;
 
   @IsOptional()
   @IsString()

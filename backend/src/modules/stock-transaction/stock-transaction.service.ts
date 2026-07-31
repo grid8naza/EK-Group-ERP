@@ -732,6 +732,7 @@ export class StockTransactionService {
         : null;
 
     const resolved = await this.resolveLines(dto.lines);
+    const headerCosting = await this.assertHeaderCosting(companyId, dto);
     const docDate = new Date(dto.docDate);
     const ymd = this.ymd(dto.docDate);
     // Only IN types create batches → only they need rule batch numbers.
@@ -762,6 +763,8 @@ export class StockTransactionService {
                   : null,
               dispatchId: incoming?.id ?? null,
               dispatchNo: incoming?.dispatchNo ?? null,
+              costCenterId: headerCosting.costCenterId,
+              costObjectId: headerCosting.costObjectId,
               reference: dto.reference?.trim() || null,
               notes: dto.notes?.trim() || null,
               status: 'POSTED',
@@ -782,6 +785,7 @@ export class StockTransactionService {
             ruleBatchNos,
             lines: dto.lines,
             resolved,
+            headerCosting,
           });
           return created;
         }),
@@ -835,6 +839,26 @@ export class StockTransactionService {
     const docDate = dto.docDate ? new Date(dto.docDate) : existing.docDate;
     const ymd = this.ymd(docDate.toISOString());
     const resolved = dto.lines ? await this.resolveLines(dto.lines) : null;
+    // Costing may be re-picked. Validate the pair the row will END UP with, not
+    // just what was sent — changing only the object must keep the saved centre,
+    // and an omitted field means "leave alone" rather than "clear".
+    const wantsCostingChange =
+      dto.costCenterId !== undefined || dto.costObjectId !== undefined;
+    const headerCosting = wantsCostingChange
+      ? await this.assertHeaderCosting(effCompany, {
+          costCenterId:
+            dto.costCenterId !== undefined
+              ? dto.costCenterId
+              : existing.costCenterId,
+          costObjectId:
+            dto.costObjectId !== undefined
+              ? dto.costObjectId
+              : existing.costObjectId,
+        })
+      : {
+          costCenterId: existing.costCenterId,
+          costObjectId: existing.costObjectId,
+        };
     const ruleBatchNos =
       dto.lines && isInbound(existing.type as TxnType)
         ? await this.ruleBatchNumbers(effCompany, txnBranchId, dto.lines.length, docDate)
@@ -854,6 +878,12 @@ export class StockTransactionService {
             isGrn && dto.purchaseOrderRef !== undefined
               ? dto.purchaseOrderRef?.trim() || null
               : undefined,
+          costCenterId: wantsCostingChange
+            ? headerCosting.costCenterId
+            : undefined,
+          costObjectId: wantsCostingChange
+            ? headerCosting.costObjectId
+            : undefined,
           reference:
             dto.reference !== undefined ? dto.reference?.trim() || null : undefined,
           notes: dto.notes !== undefined ? dto.notes?.trim() || null : undefined,
@@ -899,6 +929,7 @@ export class StockTransactionService {
           ruleBatchNos,
           lines: dto.lines,
           resolved,
+          headerCosting,
         });
       }
       return this.findOne(id);
@@ -1069,28 +1100,36 @@ export class StockTransactionService {
       ruleBatchNos: string[] | null;
       lines: StockTransactionLineInput[];
       resolved: LineClass[];
+      /** Costing chosen on the document; overrides the per-line product costing. */
+      headerCosting?: LineCosting;
     },
   ) {
     const inbound = isInbound(ctx.type);
-    // Costing for the PRODUCT lines — whatever this company traces the product
-    // against (packing object if it has one, else recipe, else its single one).
-    // Item lines carry none of their own: a raw material is costed by the
-    // requisition that issues it, not by the item master.
-    const costing = await this.costingFor(
-      ctx.companyId,
-      ctx.lines
-        .map((l) => l.productId)
-        .filter((n): n is number => n != null),
-      'SALE',
-    );
+    // The header's choice wins when there is one — it is a deliberate
+    // attribution of the whole document, and it is the only costing an issue of
+    // raw-material ITEMS can have (an item carries none of its own). Otherwise
+    // each PRODUCT line falls back to whatever this company traces that product
+    // against.
+    const headerCosting =
+      ctx.headerCosting?.costCenterId != null ? ctx.headerCosting : null;
+    const costing = headerCosting
+      ? new Map<number, LineCosting>()
+      : await this.costingFor(
+          ctx.companyId,
+          ctx.lines
+            .map((l) => l.productId)
+            .filter((n): n is number => n != null),
+          'SALE',
+        );
     let batchSeq = 0;
     for (let i = 0; i < ctx.lines.length; i++) {
       const line = ctx.lines[i];
       const cls = ctx.resolved[i];
       const cost =
-        line.productId != null
+        headerCosting ??
+        (line.productId != null
           ? (costing.get(line.productId) ?? NO_COSTING)
-          : NO_COSTING;
+          : NO_COSTING);
       const expiry = line.expiryDate ? new Date(line.expiryDate) : null;
 
       let batchId: number | null = null;
@@ -1250,6 +1289,56 @@ export class StockTransactionService {
   }
 
   /** Walk up the group chain to the level-1 (primary) group. */
+  /**
+   * Validate the costing chosen on a document header.
+   *
+   * Both must belong to the posting company, and the object must sit under the
+   * chosen centre — the ids come from the client, so a mismatched pair would
+   * otherwise charge another company's books. An object without a centre is
+   * rejected rather than silently kept: a cost object is only meaningful under
+   * its centre.
+   */
+  private async assertHeaderCosting(
+    companyId: number,
+    dto: { costCenterId?: number | null; costObjectId?: number | null },
+  ): Promise<LineCosting> {
+    const costCenterId = dto.costCenterId ?? null;
+    const costObjectId = dto.costObjectId ?? null;
+    if (costCenterId == null && costObjectId == null) return NO_COSTING;
+    if (costCenterId == null) {
+      throw new BadRequestException(
+        'Choose a cost centre before choosing a cost object.',
+      );
+    }
+
+    const centre = await this.prisma.costCenter.findUnique({
+      where: { id: costCenterId },
+      select: { companyId: true },
+    });
+    if (!centre || centre.companyId !== companyId) {
+      throw new BadRequestException(
+        'That cost centre belongs to another company.',
+      );
+    }
+    if (costObjectId != null) {
+      const obj = await this.prisma.costObject.findUnique({
+        where: { id: costObjectId },
+        select: { companyId: true, costCenterId: true },
+      });
+      if (!obj || obj.companyId !== companyId) {
+        throw new BadRequestException(
+          'That cost object belongs to another company.',
+        );
+      }
+      if (obj.costCenterId !== costCenterId) {
+        throw new BadRequestException(
+          'That cost object does not sit under the chosen cost centre.',
+        );
+      }
+    }
+    return { costCenterId, costObjectId };
+  }
+
   /**
    * The costing dimensions for a set of products, as seen by ONE company.
    *
