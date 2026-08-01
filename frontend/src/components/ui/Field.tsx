@@ -5,6 +5,31 @@ import { createPortal } from 'react-dom';
 import { Check, ChevronDown, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+/**
+ * Move focus to the field after `from`, in DOM order, within the nearest
+ * data-entry container (`[data-enter-advance]` — every form body wrapped in
+ * ReadOnlyFieldset). "Fields" are the visible, enabled inputs and textareas plus
+ * the searchable-select triggers; action buttons are not part of the run.
+ *
+ * A no-op outside a data-entry form (listing filters, the login page) and on the
+ * last field, so nothing traps focus or wraps around unexpectedly.
+ */
+export function focusNextField(from: HTMLElement) {
+  const root = from.closest('[data-enter-advance]');
+  if (!root) return;
+  const fields = Array.from(
+    root.querySelectorAll<HTMLElement>(
+      'input:not([type="hidden"]), textarea, button[data-field]',
+    ),
+  ).filter(
+    (el) =>
+      !(el as HTMLInputElement | HTMLButtonElement).disabled &&
+      el.offsetParent !== null,
+  );
+  const i = fields.indexOf(from);
+  if (i >= 0) fields[i + 1]?.focus();
+}
+
 interface FieldWrapProps {
   label?: string;
   /** Tooltip shown on hover over the label (e.g. an abbreviation's full form). */
@@ -60,7 +85,17 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
       error={error}
       className={wrapClassName}
     >
-      <input ref={ref} className={cn('input-base', className)} {...props} />
+      {/* Numbers are right-aligned everywhere, so digits (and decimal points)
+          line up down a column instead of drifting with their length. */}
+      <input
+        ref={ref}
+        className={cn(
+          'input-base',
+          props.type === 'number' && 'text-right',
+          className,
+        )}
+        {...props}
+      />
     </FieldWrap>
   );
 });
@@ -340,9 +375,17 @@ export function Select({
     return () => clearTimeout(t);
   }, [autoFocus]);
 
-  const choose = (val: string | number) => {
+  const choose = (val: string | number, viaKeyboard = false) => {
     onChange?.({ target: { value: String(val) } });
     setOpen(false);
+    if (!advanceToId && viaKeyboard) {
+      // Same rule as the plain inputs: picking a value with Enter moves on to
+      // the next field. Only for keyboard entry — a mouse pick leaves focus
+      // alone. Wait a tick so the dropdown has closed first.
+      const el = buttonRef.current;
+      if (el) setTimeout(() => focusNextField(el), 0);
+      return;
+    }
     if (advanceToId) {
       // Enter-to-advance: move to the next field once a value is picked. Wait a
       // tick so the dropdown has closed before we move focus.
@@ -376,7 +419,7 @@ export function Select({
     } else if (e.key === 'Enter') {
       e.preventDefault();
       const opt = filtered[highlight];
-      if (opt) choose(opt.value);
+      if (opt) choose(opt.value, true);
     }
   };
 
@@ -398,6 +441,9 @@ export function Select({
         <button
           ref={buttonRef}
           type="button"
+          // Marks the trigger as a field, so Enter-to-advance treats the picker
+          // as one stop in the run rather than skipping over it.
+          data-field=""
           id={id}
           name={name}
           title={title}

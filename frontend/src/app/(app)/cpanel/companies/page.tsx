@@ -1321,14 +1321,6 @@ export default function CompaniesPage() {
                     setCcForm({ ...ccForm, name: e.target.value })
                   }
                 />
-                <Textarea
-                  label="Description"
-                  wrapClassName="sm:col-span-2"
-                  value={ccForm.description}
-                  onChange={(e) =>
-                    setCcForm({ ...ccForm, description: e.target.value })
-                  }
-                />
                 <div className="sm:col-span-2">
                   <Checkbox
                     label="Active"
@@ -1338,6 +1330,15 @@ export default function CompaniesPage() {
                     }
                   />
                 </div>
+                {/* Description — kept at the very bottom of the form. */}
+                <Textarea
+                  label="Description"
+                  wrapClassName="sm:col-span-2"
+                  value={ccForm.description}
+                  onChange={(e) =>
+                    setCcForm({ ...ccForm, description: e.target.value })
+                  }
+                />
               </div>
               <div className="flex justify-end gap-2">
                 <button
@@ -1479,14 +1480,6 @@ export default function CompaniesPage() {
                         setCoForm({ ...coForm, name: e.target.value })
                       }
                     />
-                    <Textarea
-                      label="Description"
-                      wrapClassName="sm:col-span-2"
-                      value={coForm.description}
-                      onChange={(e) =>
-                        setCoForm({ ...coForm, description: e.target.value })
-                      }
-                    />
                     <div className="sm:col-span-2">
                       <Checkbox
                         label="Active"
@@ -1496,6 +1489,15 @@ export default function CompaniesPage() {
                         }
                       />
                     </div>
+                    {/* Description — kept at the very bottom of the form. */}
+                    <Textarea
+                      label="Description"
+                      wrapClassName="sm:col-span-2"
+                      value={coForm.description}
+                      onChange={(e) =>
+                        setCoForm({ ...coForm, description: e.target.value })
+                      }
+                    />
                   </div>
                   <div className="flex justify-end gap-2">
                     <button

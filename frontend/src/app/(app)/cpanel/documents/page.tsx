@@ -285,11 +285,6 @@ export default function DocumentsPage() {
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="e.g. Pre-Payment Voucher"
             />
-            <Textarea
-              label="Description"
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-            />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Select
                 label="Transaction Type"
@@ -312,6 +307,12 @@ export default function DocumentsPage() {
               label="Active"
               checked={form.isActive}
               onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+            />
+            {/* Description — kept at the very bottom of the form. */}
+            <Textarea
+              label="Description"
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
             />
           </div>
         </ReadOnlyFieldset>

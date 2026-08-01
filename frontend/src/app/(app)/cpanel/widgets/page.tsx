@@ -470,12 +470,6 @@ export default function WidgetsPage() {
             </p>
           )}
 
-          <Textarea
-            label="Description"
-            wrapClassName="sm:col-span-2"
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-          />
           <div className="flex items-end pb-2">
             <Checkbox
               label="Active"
@@ -621,6 +615,14 @@ export default function WidgetsPage() {
               </div>
             </div>
           </div>
+
+          {/* Description — kept at the very bottom of the form. */}
+          <Textarea
+            label="Description"
+            wrapClassName="sm:col-span-2"
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+          />
         </div>
         </ReadOnlyFieldset>
       </Drawer>

@@ -594,15 +594,6 @@ export default function HrGroupsPage() {
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="e.g. Machine Operators"
             />
-            <Textarea
-              label="Description"
-              value={form.description}
-              onChange={(e) =>
-                setForm({ ...form, description: e.target.value })
-              }
-              wrapClassName="sm:col-span-2"
-            />
-
             {/* Sub-group applicable */}
             <div className="flex flex-col gap-1 sm:col-span-2">
               <Checkbox
@@ -665,6 +656,16 @@ export default function HrGroupsPage() {
                 }
               />
             </div>
+
+            {/* Description — kept at the very bottom of the form. */}
+            <Textarea
+              label="Description"
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
+              wrapClassName="sm:col-span-2"
+            />
           </div>
         </ReadOnlyFieldset>
       </Drawer>

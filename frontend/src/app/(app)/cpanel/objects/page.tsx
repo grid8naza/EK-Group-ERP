@@ -734,18 +734,19 @@ export default function ObjectsPage() {
               />
             </div>
             <Textarea
+              label="Notes"
+              wrapClassName="sm:col-span-2"
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            />
+            {/* Description — kept at the very bottom of the form. */}
+            <Textarea
               label="Description"
               wrapClassName="sm:col-span-2"
               value={form.description}
               onChange={(e) =>
                 setForm({ ...form, description: e.target.value })
               }
-            />
-            <Textarea
-              label="Notes"
-              wrapClassName="sm:col-span-2"
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
             />
           </div>
         ) : (

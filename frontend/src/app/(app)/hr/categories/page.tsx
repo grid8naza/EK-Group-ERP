@@ -347,15 +347,6 @@ export default function HrCategoriesPage() {
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="e.g. Operators"
             />
-            <Textarea
-              label="Description"
-              value={form.description}
-              onChange={(e) =>
-                setForm({ ...form, description: e.target.value })
-              }
-              wrapClassName="sm:col-span-2"
-            />
-
             {/* Availability — all companies or a chosen set */}
             <div className="flex flex-col gap-2 sm:col-span-2">
               <span className="label !mb-0">Availability</span>
@@ -399,6 +390,16 @@ export default function HrCategoriesPage() {
                 }
               />
             </div>
+
+            {/* Description — kept at the very bottom of the form. */}
+            <Textarea
+              label="Description"
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
+              wrapClassName="sm:col-span-2"
+            />
           </div>
         </ReadOnlyFieldset>
       </Drawer>

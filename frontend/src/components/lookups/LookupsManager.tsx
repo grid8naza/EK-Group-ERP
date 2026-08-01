@@ -492,18 +492,19 @@ export function LookupsManager({ moduleCode, route, title, description }: Props)
               value={lkForm.name}
               onChange={(e) => setLkForm({ ...lkForm, name: e.target.value })}
             />
-            <Textarea
-              label="Description"
-              value={lkForm.description}
-              onChange={(e) =>
-                setLkForm({ ...lkForm, description: e.target.value })
-              }
-            />
             <Checkbox
               label="System lookup (protected from deletion)"
               checked={lkForm.isSystem}
               onChange={(e) =>
                 setLkForm({ ...lkForm, isSystem: e.target.checked })
+              }
+            />
+            {/* Description — kept at the very bottom of the form. */}
+            <Textarea
+              label="Description"
+              value={lkForm.description}
+              onChange={(e) =>
+                setLkForm({ ...lkForm, description: e.target.value })
               }
             />
           </div>

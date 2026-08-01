@@ -292,15 +292,6 @@ export default function HsnCodesPage() {
               placeholder="e.g. 1905"
             />
             <Input
-              label="Description"
-              required
-              value={form.description}
-              onChange={(e) =>
-                setForm({ ...form, description: e.target.value })
-              }
-              placeholder="e.g. Bread, pastry, cakes"
-            />
-            <Input
               label="CGST %"
               type="number"
               min={0}
@@ -345,6 +336,20 @@ export default function HsnCodesPage() {
                 }
               />
             </div>
+
+            {/* Description — kept at the very bottom of the form. Required, even
+                though it sits last: it's what names the code everywhere it's
+                picked ("1905 — Bread, pastry, cakes"). */}
+            <Input
+              label="Description"
+              required
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
+              placeholder="e.g. Bread, pastry, cakes"
+              wrapClassName="sm:col-span-2"
+            />
           </div>
         </ReadOnlyFieldset>
       </Drawer>

@@ -41,9 +41,6 @@ import type {
   Company,
   CostCenter,
   CostObject,
-  Branch,
-  Store,
-  Rack,
 } from '@/lib/types';
 
 const ROUTE = '/inventory/products-unpacked';
@@ -56,24 +53,9 @@ const ROUTE = '/inventory/products-unpacked';
 // category means renaming a category never strands the screen.
 const SCREEN_KIND: CategoryKind = 'SEMI_FINISHED';
 
-// Per-branch stocking parameters, kept as strings while editing (like every
-// other numeric field on this form). Keyed by branchId in the form state.
-type BranchStockForm = {
-  minStock: string;
-  maxStock: string;
-  reorderLevel: string;
-  leadTimeDays: string;
-  defaultStoreId: string;
-  defaultRackId: string;
-};
-const EMPTY_BS: BranchStockForm = {
-  minStock: '',
-  maxStock: '',
-  reorderLevel: '',
-  leadTimeDays: '',
-  defaultStoreId: '',
-  defaultRackId: '',
-};
+// Note: per-branch stock levels (min/max, reorder level, lead time, default
+// store/rack) are not edited here — they're a finished-goods concern, so they
+// live on Products - Packed only.
 
 const empty = {
   code: '',
@@ -86,18 +68,21 @@ const empty = {
   // Unpacked screen: every product here is unpacked and never packed.
   unpacked: true,
   packed: false,
-  canSell: true,
-  costPrice: '0',
-  wholesalePrice: '0',
+  // Off by default: a semi-finished product is usually consumed in-house, and
+  // the whole selling block (picture, price matrix, discounts, branch levels)
+  // stays hidden until it is ticked.
+  canSell: false,
+  costPrice: '',
+  wholesalePrice: '',
   wholesaleProfitPct: '',
-  intercompanyPrice: '0',
+  intercompanyPrice: '',
   intercompanyProfitPct: '',
-  retailPrice: '0',
+  retailPrice: '',
   retailProfitPct: '',
-  boxQty: '0',
+  boxQty: '',
   boxUnitId: '',
   hsnCodeId: '',
-  shelfLife: '0',
+  shelfLife: '',
   // Max discount % per authority level, keyed by DISCOUNT_LEVEL LookupValue id.
   discounts: {} as DiscountForm,
   // In-house by default on this screen; switch to Purchased for resale stock.
@@ -110,9 +95,6 @@ const empty = {
   // Which companies make and/or sell this, and the costing each traces it
   // against. Keyed by companyId; a missing key means the company isn't involved.
   companies: {} as CompaniesForm,
-  // Per-branch stock levels, keyed by branchId (built from the product's saved
-  // rows; branches with no saved row start blank).
-  branchStocks: {} as Record<number, BranchStockForm>,
   isActive: true,
 };
 
@@ -154,12 +136,6 @@ export default function ProductsPage() {
   const { data: units } = useFetch<Unit[]>('/units');
   const { data: hsnCodes } = useFetch<HsnCode[]>('/hsn-codes');
   const { data: companies } = useFetch<Company[]>('/companies');
-  const { data: branches } = useFetch<Branch[]>('/branches');
-  // All stores/racks across companies — the per-branch default location pickers
-  // span every company the product is available in, so they can't be scoped to
-  // the active branch.
-  const { data: stores } = useFetch<Store[]>('/stores?all=true');
-  const { data: racks } = useFetch<Rack[]>('/racks?all=true');
   const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<Product>({
     endpoint: '/products',
     route: ROUTE,
@@ -290,6 +266,24 @@ export default function ProductsPage() {
   };
 
   const editAncestry = editing ? groupAncestry(editing.groupId) : null;
+  // The same read-out for a new product, following the cascade as it is filled
+  // in (leaf group once chosen, otherwise the parent).
+  const drawerAncestry = groupAncestry(
+    form.groupId
+      ? Number(form.groupId)
+      : drawerParent
+        ? Number(drawerParent)
+        : null,
+  );
+
+  // Data-entry keyboard rules, same as the transaction screens: Enter moves to
+  // the next field (it never submits), and pickers open ready to search as soon
+  // as focus lands on them.
+  const enterTo = (nextId: string) => (e: React.KeyboardEvent) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    document.getElementById(nextId)?.focus();
+  };
 
   const closeDrawer = () => {
     setOpen(false);
@@ -332,19 +326,6 @@ export default function ProductsPage() {
     hasPacking: p.hasPacking ?? false,
     isIngredient: p.isIngredient ?? false,
     companies: companiesFormFrom(p.companies),
-    branchStocks: Object.fromEntries(
-      (p.branchStocks ?? []).map((bs) => [
-        bs.branchId,
-        {
-          minStock: bs.minStock ? String(bs.minStock) : '',
-          maxStock: bs.maxStock ? String(bs.maxStock) : '',
-          reorderLevel: bs.reorderLevel ? String(bs.reorderLevel) : '',
-          leadTimeDays: bs.leadTimeDays ? String(bs.leadTimeDays) : '',
-          defaultStoreId: bs.defaultStoreId ? String(bs.defaultStoreId) : '',
-          defaultRackId: bs.defaultRackId ? String(bs.defaultRackId) : '',
-        },
-      ]),
-    ) as Record<number, BranchStockForm>,
     isActive: p.isActive,
   });
 
@@ -380,68 +361,14 @@ export default function ProductsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canAdd, open]);
 
-  // Branches the product can be stocked at: every active branch of each company
-  // the product is in, grouped by company. New branches appear automatically
-  // because this reads the live branch list rather than the product's saved rows.
-  const branchGroups = companyList
-    .filter((c) => form.companies[c.id] != null)
-    .map((c) => ({
-      company: c,
-      branches: (branches ?? []).filter(
-        (b) => b.companyId === c.id && b.isActive,
-      ),
-    }))
-    .filter((g) => g.branches.length > 0);
-
-  const setBranchStock = (
-    branchId: number,
-    field: keyof BranchStockForm,
-    value: string,
-  ) =>
-    setForm((f) => ({
-      ...f,
-      branchStocks: {
-        ...f.branchStocks,
-        [branchId]: { ...(f.branchStocks[branchId] ?? EMPTY_BS), [field]: value },
-      },
-    }));
-
-  // Setting a branch's default store clears any rack chosen from the old store.
-  const setBranchStore = (branchId: number, storeId: string) =>
-    setForm((f) => ({
-      ...f,
-      branchStocks: {
-        ...f.branchStocks,
-        [branchId]: {
-          ...(f.branchStocks[branchId] ?? EMPTY_BS),
-          defaultStoreId: storeId,
-          defaultRackId: '',
-        },
-      },
-    }));
-
-  // Stores for a company+branch (branchless stores show for every branch); racks
-  // within the chosen store. A currently-selected id is always kept as an option
-  // so an inactive/hidden store or rack still displays instead of vanishing.
-  const storeOptions = (companyId: number, branchId: number, current: string) =>
-    (stores ?? [])
-      .filter(
-        (s) =>
-          s.companyId === companyId &&
-          (s.branchId === branchId || s.branchId == null) &&
-          (s.isActive || String(s.id) === current),
-      )
-      .map((s) => ({ value: String(s.id), label: s.name }));
-  const rackOptions = (storeId: string, current: string) =>
-    !storeId
-      ? []
-      : (racks ?? [])
-          .filter(
-            (r) =>
-              String(r.storeId) === storeId &&
-              (r.isActive || String(r.id) === current),
-          )
-          .map((r) => ({ value: String(r.id), label: r.name }));
+  // A new product opens with the cursor in Name — the first thing anyone types
+  // (Source, category and the capabilities all come pre-filled). The delay lets
+  // the drawer finish sliding in, otherwise the focus doesn't stick.
+  useEffect(() => {
+    if (!open || editing || view) return;
+    const t = setTimeout(() => codeRef.current?.focus(), 320);
+    return () => clearTimeout(t);
+  }, [open, editing, view]);
 
   const save = async (mode: SaveMode = 'saveClose') => {
     if (!form.name.trim()) {
@@ -467,22 +394,6 @@ export default function ProductsPage() {
 
     const num = (s: string) => Number(s) || 0;
     const idOrNull = (s: string) => (s ? Number(s) : null);
-    // One row per displayed branch (available companies only). Branches removed
-    // from availability are dropped; the backend also drops all-zero rows.
-    const branchStocks = branchGroups
-      .flatMap((g) => g.branches)
-      .map((b) => {
-        const v = form.branchStocks[b.id] ?? EMPTY_BS;
-        return {
-          branchId: b.id,
-          minStock: num(v.minStock),
-          maxStock: num(v.maxStock),
-          reorderLevel: num(v.reorderLevel),
-          leadTimeDays: num(v.leadTimeDays),
-          defaultStoreId: idOrNull(v.defaultStoreId),
-          defaultRackId: idOrNull(v.defaultRackId),
-        };
-      });
     // Note: recipe/packing are intentionally omitted — the BOM is edited under
     // Production, and omitting them leaves the saved BOM untouched.
     const payload = {
@@ -515,11 +426,9 @@ export default function ProductsPage() {
       hasPacking: form.hasPacking,
       isIngredient: form.isIngredient,
       companies: companiesPayload(form.companies),
-      // Branch stock levels are a sellable-product attribute; cleared when not
-      // sellable. Only sent when the branch list has loaded, so a failed/empty
-      // fetch can't silently wipe saved rows (backend leaves them intact when
-      // omitted).
-      ...(branches ? { branchStocks: form.canSell ? branchStocks : [] } : {}),
+      // Branch stock levels are deliberately omitted: min/max, reorder level and
+      // lead time are a finished-goods concern, so they're edited on Products -
+      // Packed only. Omitting the key leaves any saved rows untouched.
       isActive: form.isActive,
     };
 
@@ -779,11 +688,45 @@ export default function ProductsPage() {
       >
         <ReadOnlyFieldset readOnly={view}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Input
-              label="Code (auto)"
-              value={editing ? editing.code : 'Generated from the group'}
-              disabled
-            />
+            {/* Header — identity on the left, picture on the right. Source
+                leads because it decides the rest of the form: a Purchased
+                product carries no BOM at all.
+                Description sits at the very bottom of the drawer — it's free
+                text nobody fills in first, so it shouldn't push the fields that
+                matter (classification, unit, cost) below the fold. */}
+            {/* Source — in-house production vs resale/traded goods.
+                Declared, not inferred from a missing recipe, and it governs
+                the two BOM capabilities below: resale stock is bought
+                ready-made, so choosing Purchased clears and locks them. */}
+            <div className="flex flex-col gap-1 sm:col-start-1">
+              <Select
+                id="pf-source"
+                advanceToId="pf-name"
+                label="Source"
+                required
+                value={form.source}
+                onChange={(e) => {
+                  const source = e.target.value as ProductSource;
+                  // Resale stock carries no BOM — clear both rather than let
+                  // the server reject the save.
+                  setForm((f) =>
+                    source === 'PURCHASED'
+                      ? { ...f, source, hasRecipe: false, hasPacking: false }
+                      : { ...f, source },
+                  );
+                }}
+                options={PRODUCT_SOURCE_OPTIONS}
+              />
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {form.source === 'PURCHASED'
+                  ? 'Resale / traded goods — bought ready-made, so it carries no recipe or packing BOM and stays off the production screens.'
+                  : 'Made in-house — it can carry a recipe and packing BOM and appears on the production screens.'}
+              </p>
+            </div>
+            {/* The code is system-generated from the category + group and
+                is already on the listing, so the drawer doesn't repeat it.
+                Name gets the whole row, in bold — it's what the record is
+                known by. */}
             <Input
               ref={codeRef}
               label="Name"
@@ -791,15 +734,65 @@ export default function ProductsPage() {
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="e.g. Butter Bun"
+              id="pf-name"
+              onKeyDown={enterTo(editing ? 'pf-unit' : 'pf-parent')}
+              className="font-semibold"
+              wrapClassName="sm:col-start-1"
             />
-            <Textarea
-              label="Description"
-              value={form.description}
-              onChange={(e) =>
-                setForm({ ...form, description: e.target.value })
-              }
-              wrapClassName="sm:col-span-2"
-            />
+
+            {/* Product picture — only for sellable products. */}
+            {form.canSell && (
+              <div className="flex flex-col gap-1.5 sm:col-start-2 sm:row-start-1 sm:row-span-2">
+                <span className="label !mb-0">Product Picture</span>
+                <div className="flex h-36 w-36 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50">
+                  {form.imageUrl ? (
+                    <img
+                      src={mediaUrl(form.imageUrl)}
+                      alt="Product"
+                      className="h-full w-full object-contain"
+                    />
+                  ) : (
+                    <ImageIcon className="h-8 w-8 text-slate-300" />
+                  )}
+                </div>
+                {!view && (
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="btn-secondary inline-flex items-center gap-2"
+                      onClick={() => imageInput.current?.click()}
+                      disabled={imageUploading}
+                    >
+                      <Upload className="h-4 w-4" />
+                      {imageUploading ? 'Uploading…' : 'Upload'}
+                    </button>
+                    {form.imageUrl && (
+                      <button
+                        type="button"
+                        className="btn-secondary inline-flex items-center gap-2 text-rose-600"
+                        onClick={() => setForm({ ...form, imageUrl: '' })}
+                      >
+                        <Trash2 className="h-4 w-4" /> Remove
+                      </button>
+                    )}
+                    <input
+                      ref={imageInput}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) void uploadImage(f);
+                        e.target.value = '';
+                      }}
+                    />
+                  </div>
+                )}
+                <p className="text-xs text-slate-400">
+                  PNG, JPG, WEBP or GIF — up to 5 MB.
+                </p>
+              </div>
+            )}
 
             {/* Classification — immutable after creation (the code encodes it),
                 so it's read-only when editing. To move a product, inactivate it
@@ -825,7 +818,6 @@ export default function ProductsPage() {
                   label="Group"
                   value={editing.group?.name ?? editAncestry?.leaf ?? '-'}
                   disabled
-                  wrapClassName="sm:col-span-2"
                 />
               </>
             ) : (
@@ -839,7 +831,6 @@ export default function ProductsPage() {
                     label="Category"
                     value={soleCategory.name}
                     disabled
-                    wrapClassName="sm:col-span-2"
                   />
                 ) : (
                   <Select
@@ -860,14 +851,24 @@ export default function ProductsPage() {
                         ? '— Select —'
                         : 'No Semifinished Products category yet'
                     }
-                    wrapClassName="sm:col-span-2"
                     options={screenCategories.map((c) => ({
                       value: c.id,
                       label: c.name,
                     }))}
                   />
                 )}
+                {/* Primary Group — derived from the chosen group rather
+                    than picked, so a new product reads exactly like the view /
+                    edit form instead of a differently shaped one. */}
+                <Input
+                  label="Primary Group"
+                  value={drawerAncestry.primary}
+                  disabled
+                />
                 <Select
+                  id="pf-parent"
+                  advanceToId="pf-group"
+                  openOnFocus
                   label="Parent Group"
                   value={drawerParent}
                   onChange={(e) => {
@@ -881,6 +882,9 @@ export default function ProductsPage() {
                   }))}
                 />
                 <Select
+                  id="pf-group"
+                  advanceToId="pf-unit"
+                  openOnFocus
                   label="Group"
                   required
                   value={form.groupId}
@@ -894,92 +898,17 @@ export default function ProductsPage() {
               </>
             )}
 
-            <Select
-              label="Unit"
-              required
-              value={form.unitId}
-              onChange={(e) => setForm({ ...form, unitId: e.target.value })}
-              placeholder="Select a unit"
-              options={unitList.map((u) => ({
-                value: u.id,
-                label: u.name,
-              }))}
-            />
-            {/* Cost — the base for every profit %. Always editable, even for
-                non-sellable products (e.g. ingredients). */}
-            <Input
-              label="Cost Price"
-              type="number"
-              min={0}
-              step="any"
-              value={form.costPrice}
-              onChange={(e) =>
-                setForm((f) => {
-                  const cost = toN(e.target.value);
-                  // Keep the entered prices; refresh each margin against the
-                  // new cost (blank when the price is 0 or below cost).
-                  return {
-                    ...f,
-                    costPrice: e.target.value,
-                    intercompanyProfitPct: pctDisplay(
-                      f.intercompanyPrice,
-                      cost,
-                      f.intercompanyProfitPct,
-                    ),
-                    wholesaleProfitPct: pctDisplay(
-                      f.wholesalePrice,
-                      cost,
-                      f.wholesaleProfitPct,
-                    ),
-                    retailProfitPct: pctDisplay(
-                      f.retailPrice,
-                      cost,
-                      f.retailProfitPct,
-                    ),
-                  };
-                })
-              }
-            />
-
             {/* Form factor is fixed on the Unpacked screen (always unpacked,
                 never packed), so the toggles are hidden and forced — see
                 `empty` / `formFrom`. */}
-
-            {/* Source — in-house production vs resale/traded goods. Declared,
-                not inferred from a missing recipe, and it governs the two BOM
-                capabilities below: resale stock is bought ready-made, so
-                choosing Purchased clears and locks them. */}
-            <div className="flex flex-col gap-1 sm:col-span-2">
-              <Select
-                label="Source"
-                required
-                value={form.source}
-                onChange={(e) => {
-                  const source = e.target.value as ProductSource;
-                  // Resale stock carries no BOM — clear both rather than let
-                  // the server reject the save.
-                  setForm((f) =>
-                    source === 'PURCHASED'
-                      ? { ...f, source, hasRecipe: false, hasPacking: false }
-                      : { ...f, source },
-                  );
-                }}
-                options={PRODUCT_SOURCE_OPTIONS}
-              />
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {form.source === 'PURCHASED'
-                  ? 'Resale / traded goods — bought ready-made, so it carries no recipe or packing BOM and stays off the production screens.'
-                  : 'Made in-house — it can carry a recipe and packing BOM and appears on the production screens.'}
-              </p>
-            </div>
 
             {/* Capabilities — what may be built for this product and how it may
                 be used. Has Recipe puts it on Production → Recipe Master and Has
                 Packing on Packing Master; both are defaulted per screen (recipe
                 on here) but editable, and both are unavailable to a Purchased
-                product. Can Sell gates the selling prices, profit %, picture and
-                branch stock levels, so the group sits above them. Kept together
-                in one block ahead of the fields they govern. */}
+                product. Can Sell decides whether the price matrix, discount
+                matrix, picture and branch stock levels are shown at all, so the
+                group sits ahead of them. */}
             <div className="flex flex-col gap-2 sm:col-span-2">
               <span className="label !mb-0">Capabilities</span>
               <div className="flex flex-wrap gap-x-8 gap-y-2">
@@ -1011,7 +940,7 @@ export default function ProductsPage() {
                   checked={form.canSell}
                   onChange={(e) => {
                     const canSell = e.target.checked;
-                    // Unchecking clears the now-disabled selling fields.
+                    // Unchecking clears the fields that vanish with it.
                     setForm((f) =>
                       canSell
                         ? { ...f, canSell }
@@ -1025,8 +954,6 @@ export default function ProductsPage() {
                             wholesaleProfitPct: '',
                             retailPrice: '',
                             retailProfitPct: '',
-                            boxQty: '',
-                            boxUnitId: '',
                           },
                     );
                   }}
@@ -1034,202 +961,38 @@ export default function ProductsPage() {
               </div>
             </div>
 
-            {/* Product picture — only for sellable products. */}
-            {form.canSell && (
-              <div className="sm:col-span-2">
-                <span className="label !mb-1 block">Product Picture</span>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-20 w-20 flex-none items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50">
-                    {form.imageUrl ? (
-                      <img
-                        src={mediaUrl(form.imageUrl)}
-                        alt="Product"
-                        className="h-full w-full object-contain"
-                      />
-                    ) : (
-                      <ImageIcon className="h-6 w-6 text-slate-300" />
-                    )}
-                  </div>
-                  {!view && (
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        className="btn-secondary inline-flex items-center gap-2"
-                        onClick={() => imageInput.current?.click()}
-                        disabled={imageUploading}
-                      >
-                        <Upload className="h-4 w-4" />
-                        {imageUploading ? 'Uploading…' : 'Upload'}
-                      </button>
-                      {form.imageUrl && (
-                        <button
-                          type="button"
-                          className="btn-secondary inline-flex items-center gap-2 text-rose-600"
-                          onClick={() => setForm({ ...form, imageUrl: '' })}
-                        >
-                          <Trash2 className="h-4 w-4" /> Remove
-                        </button>
-                      )}
-                      <input
-                        ref={imageInput}
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp,image/gif"
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) void uploadImage(f);
-                          e.target.value = '';
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-                <p className="mt-1 text-xs text-slate-400">
-                  PNG, JPG, WEBP or GIF — up to 5 MB.
-                </p>
-              </div>
-            )}
-
-            <Input
-              label="Intercompany Price"
-              type="number"
-              min={0}
-              step="any"
-              disabled={!form.canSell}
-              value={form.intercompanyPrice}
-              onChange={(e) =>
-                setForm((f) => {
-                  const cost = toN(f.costPrice);
-                  return {
-                    ...f,
-                    intercompanyPrice: e.target.value,
-                    intercompanyProfitPct: pctDisplay(
-                      e.target.value,
-                      cost,
-                      f.intercompanyProfitPct,
-                    ),
-                  };
-                })
-              }
+            <Select
+              id="pf-unit"
+              advanceToId="pf-boxqty"
+              openOnFocus
+              label="Unit"
+              required
+              value={form.unitId}
+              onChange={(e) => setForm({ ...form, unitId: e.target.value })}
+              placeholder="Select a unit"
+              options={unitList.map((u) => ({
+                value: u.id,
+                label: u.name,
+              }))}
             />
-            <Input
-              label="Intercompany Profit %"
-              type="number"
-              step="any"
-              disabled={!form.canSell}
-              value={form.intercompanyProfitPct}
-              onChange={(e) =>
-                setForm((f) => {
-                  const cost = toN(f.costPrice);
-                  return {
-                    ...f,
-                    intercompanyProfitPct: e.target.value,
-                    intercompanyPrice:
-                      e.target.value !== '' && cost > 0
-                        ? String(priceFromPct(toN(e.target.value), cost))
-                        : f.intercompanyPrice,
-                  };
-                })
-              }
-            />
-            <Input
-              label="Wholesale Price"
-              type="number"
-              min={0}
-              step="any"
-              disabled={!form.canSell}
-              value={form.wholesalePrice}
-              onChange={(e) =>
-                setForm((f) => {
-                  const cost = toN(f.costPrice);
-                  return {
-                    ...f,
-                    wholesalePrice: e.target.value,
-                    wholesaleProfitPct: pctDisplay(
-                      e.target.value,
-                      cost,
-                      f.wholesaleProfitPct,
-                    ),
-                  };
-                })
-              }
-            />
-            <Input
-              label="Wholesale Profit %"
-              type="number"
-              step="any"
-              disabled={!form.canSell}
-              value={form.wholesaleProfitPct}
-              onChange={(e) =>
-                setForm((f) => {
-                  const cost = toN(f.costPrice);
-                  return {
-                    ...f,
-                    wholesaleProfitPct: e.target.value,
-                    wholesalePrice:
-                      e.target.value !== '' && cost > 0
-                        ? String(priceFromPct(toN(e.target.value), cost))
-                        : f.wholesalePrice,
-                  };
-                })
-              }
-            />
-            <Input
-              label="Retail Price"
-              type="number"
-              min={0}
-              step="any"
-              disabled={!form.canSell}
-              value={form.retailPrice}
-              onChange={(e) =>
-                setForm((f) => {
-                  const cost = toN(f.costPrice);
-                  return {
-                    ...f,
-                    retailPrice: e.target.value,
-                    retailProfitPct: pctDisplay(
-                      e.target.value,
-                      cost,
-                      f.retailProfitPct,
-                    ),
-                  };
-                })
-              }
-            />
-            <Input
-              label="Retail Profit %"
-              type="number"
-              step="any"
-              disabled={!form.canSell}
-              value={form.retailProfitPct}
-              onChange={(e) =>
-                setForm((f) => {
-                  const cost = toN(f.costPrice);
-                  return {
-                    ...f,
-                    retailProfitPct: e.target.value,
-                    retailPrice:
-                      e.target.value !== '' && cost > 0
-                        ? String(priceFromPct(toN(e.target.value), cost))
-                        : f.retailPrice,
-                  };
-                })
-              }
-            />
-
-            {/* Pack content */}
+            {/* Pack content — how the stock is boxed, so it follows the unit.
+                Not gated by Can Sell: it's how the product is handled, whether
+                or not it is sold. */}
             <Input
               label="Box Quantity"
               type="number"
               min={0}
               step="any"
-              disabled={!form.canSell}
+              id="pf-boxqty"
+              onKeyDown={enterTo('pf-boxunit')}
               value={form.boxQty}
               onChange={(e) => setForm({ ...form, boxQty: e.target.value })}
             />
             <Select
+              id="pf-boxunit"
+              advanceToId="pf-shelf"
+              openOnFocus
               label="Box Unit"
-              disabled={!form.canSell}
               value={form.boxUnitId}
               onChange={(e) => setForm({ ...form, boxUnitId: e.target.value })}
               placeholder="— None —"
@@ -1238,8 +1001,19 @@ export default function ProductsPage() {
                 label: u.name,
               }))}
             />
-
+            <Input
+              label="Shelf Life (days)"
+              type="number"
+              min={0}
+              id="pf-shelf"
+              onKeyDown={enterTo('pf-hsn')}
+              value={form.shelfLife}
+              onChange={(e) => setForm({ ...form, shelfLife: e.target.value })}
+            />
             <Select
+              id="pf-hsn"
+              advanceToId="pf-cost"
+              openOnFocus
               label="HSN Code"
               value={form.hsnCodeId}
               onChange={(e) => setForm({ ...form, hsnCodeId: e.target.value })}
@@ -1249,17 +1023,205 @@ export default function ProductsPage() {
                 label: `${h.code} — ${h.description} (IGST ${h.igst}%)`,
               }))}
             />
+            {/* Cost — the base for every profit %. Always shown, even for
+                non-sellable products (e.g. ingredients), so it sits outside the
+                price matrix below. */}
             <Input
-              label="Shelf Life (days)"
+              label="Cost Price"
               type="number"
               min={0}
-              value={form.shelfLife}
-              onChange={(e) => setForm({ ...form, shelfLife: e.target.value })}
+              step="any"
+              id="pf-cost"
+              onKeyDown={enterTo('pf-interco')}
+              value={form.costPrice}
+              onChange={(e) =>
+                setForm((f) => {
+                  const cost = toN(e.target.value);
+                  // Keep the entered prices; refresh each margin against the
+                  // new cost (blank when the price is 0 or below cost).
+                  return {
+                    ...f,
+                    costPrice: e.target.value,
+                    intercompanyProfitPct: pctDisplay(
+                      f.intercompanyPrice,
+                      cost,
+                      f.intercompanyProfitPct,
+                    ),
+                    wholesaleProfitPct: pctDisplay(
+                      f.wholesalePrice,
+                      cost,
+                      f.wholesaleProfitPct,
+                    ),
+                    retailProfitPct: pctDisplay(
+                      f.retailPrice,
+                      cost,
+                      f.retailProfitPct,
+                    ),
+                  };
+                })
+              }
             />
 
-            {/* Capabilities (Has Recipe / Has Packing / Can be Ingredient / Can
-                Sell) live in one block higher up, above the selling fields that
-                Can Sell gates. */}
+            {/* Price matrix — selling prices and the margin each carries over
+                the cost above. Hidden outright for a product that isn't sold,
+                rather than shown greyed out. */}
+            {form.canSell && (
+              <div className="flex flex-col gap-2 sm:col-span-2">
+                <span className="label !mb-0">Price Matrix</span>
+                <p className="text-xs text-slate-400">
+                  Price or profit % — entering either fills the other from the
+                  cost price.
+                </p>
+                <div className="grid grid-cols-1 gap-4 rounded-lg border border-slate-200 p-3 dark:border-slate-700 sm:grid-cols-2">
+                  <Input
+                    label="Intercompany Price"
+                    type="number"
+                    id="pf-interco"
+                    onKeyDown={enterTo('pf-interco-pct')}
+                    min={0}
+                    step="any"
+                    value={form.intercompanyPrice}
+                    onChange={(e) =>
+                      setForm((f) => {
+                        const cost = toN(f.costPrice);
+                        return {
+                          ...f,
+                          intercompanyPrice: e.target.value,
+                          intercompanyProfitPct: pctDisplay(
+                            e.target.value,
+                            cost,
+                            f.intercompanyProfitPct,
+                          ),
+                        };
+                      })
+                    }
+                  />
+                  <Input
+                    label="Intercompany Profit %"
+                    type="number"
+                    id="pf-interco-pct"
+                    onKeyDown={enterTo('pf-wholesale')}
+                    step="any"
+                    value={form.intercompanyProfitPct}
+                    onChange={(e) =>
+                      setForm((f) => {
+                        const cost = toN(f.costPrice);
+                        return {
+                          ...f,
+                          intercompanyProfitPct: e.target.value,
+                          intercompanyPrice:
+                            e.target.value !== '' && cost > 0
+                              ? String(priceFromPct(toN(e.target.value), cost))
+                              : f.intercompanyPrice,
+                        };
+                      })
+                    }
+                  />
+                  <Input
+                    label="Wholesale Price"
+                    type="number"
+                    id="pf-wholesale"
+                    onKeyDown={enterTo('pf-wholesale-pct')}
+                    min={0}
+                    step="any"
+                    value={form.wholesalePrice}
+                    onChange={(e) =>
+                      setForm((f) => {
+                        const cost = toN(f.costPrice);
+                        return {
+                          ...f,
+                          wholesalePrice: e.target.value,
+                          wholesaleProfitPct: pctDisplay(
+                            e.target.value,
+                            cost,
+                            f.wholesaleProfitPct,
+                          ),
+                        };
+                      })
+                    }
+                  />
+                  <Input
+                    label="Wholesale Profit %"
+                    type="number"
+                    id="pf-wholesale-pct"
+                    onKeyDown={enterTo('pf-retail')}
+                    step="any"
+                    value={form.wholesaleProfitPct}
+                    onChange={(e) =>
+                      setForm((f) => {
+                        const cost = toN(f.costPrice);
+                        return {
+                          ...f,
+                          wholesaleProfitPct: e.target.value,
+                          wholesalePrice:
+                            e.target.value !== '' && cost > 0
+                              ? String(priceFromPct(toN(e.target.value), cost))
+                              : f.wholesalePrice,
+                        };
+                      })
+                    }
+                  />
+                  <Input
+                    label="Retail Price"
+                    type="number"
+                    id="pf-retail"
+                    onKeyDown={enterTo('pf-retail-pct')}
+                    min={0}
+                    step="any"
+                    value={form.retailPrice}
+                    onChange={(e) =>
+                      setForm((f) => {
+                        const cost = toN(f.costPrice);
+                        return {
+                          ...f,
+                          retailPrice: e.target.value,
+                          retailProfitPct: pctDisplay(
+                            e.target.value,
+                            cost,
+                            f.retailProfitPct,
+                          ),
+                        };
+                      })
+                    }
+                  />
+                  <Input
+                    label="Retail Profit %"
+                    type="number"
+                    id="pf-retail-pct"
+                    step="any"
+                    value={form.retailProfitPct}
+                    onChange={(e) =>
+                      setForm((f) => {
+                        const cost = toN(f.costPrice);
+                        return {
+                          ...f,
+                          retailProfitPct: e.target.value,
+                          retailPrice:
+                            e.target.value !== '' && cost > 0
+                              ? String(priceFromPct(toN(e.target.value), cost))
+                              : f.retailPrice,
+                        };
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Discount matrix — sellable products only, straight after the
+                prices it discounts. */}
+            {form.canSell && (
+              <DiscountMatrix
+                levels={discountLevels}
+                value={form.discounts}
+                onChange={(levelId, percentage) =>
+                  setForm((f) => ({
+                    ...f,
+                    discounts: { ...f.discounts, [levelId]: percentage },
+                  }))
+                }
+              />
+            )}
 
             {/* Companies — replaces the old flat "Availability" list: which
                 companies make and/or sell this, each with the cost centre its
@@ -1274,177 +1236,6 @@ export default function ProductsPage() {
               hasPacking={form.hasPacking}
             />
 
-            {/* Discount matrix — sellable products only, for the same reason as
-                the branch levels below: a product that isn't sold has nothing
-                to discount. */}
-            {form.canSell && (
-              <DiscountMatrix
-                levels={discountLevels}
-                value={form.discounts}
-                onChange={(levelId, percentage) =>
-                  setForm((f) => ({
-                    ...f,
-                    discounts: { ...f.discounts, [levelId]: percentage },
-                  }))
-                }
-              />
-            )}
-
-            {/* Per-branch stock levels — sellable products only. One row per
-                active branch of every company this product is available in.
-                New branches appear here automatically (rendered from the live
-                branch list). */}
-            {form.canSell && (
-              <div className="flex flex-col gap-2 sm:col-span-2">
-                <span className="label !mb-0">Branch Stock Levels</span>
-                <p className="text-xs text-slate-400">
-                  Minimum / maximum stock, reorder level and lead time (days) per
-                  branch. New branches are added here automatically.
-                </p>
-                {branchGroups.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-slate-200 p-3 text-sm text-slate-400 dark:border-slate-700">
-                    No branches to configure. Add branches under the companies
-                    this product is available in.
-                  </p>
-                ) : (
-                  <div className="space-y-4 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                    {branchGroups.map((g) => (
-                      <div key={g.company.id}>
-                        <div className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-200">
-                          {g.company.name}
-                        </div>
-                        <div className="overflow-x-auto">
-                          <table className="w-full border-collapse text-sm">
-                            <thead>
-                              <tr className="text-left text-xs text-slate-400">
-                                <th className="pb-1 pr-2 font-medium">Branch</th>
-                                <th className="pb-1 pr-2 font-medium">Min</th>
-                                <th className="pb-1 pr-2 font-medium">Max</th>
-                                <th className="pb-1 pr-2 font-medium">Reorder</th>
-                                <th className="pb-1 pr-2 font-medium">Lead (days)</th>
-                                <th className="pb-1 pr-2 font-medium">Default store</th>
-                                <th className="pb-1 font-medium">Default rack</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {g.branches.map((b) => {
-                                const v = form.branchStocks[b.id] ?? EMPTY_BS;
-                                return (
-                                  <tr key={b.id}>
-                                    <td className="py-1 pr-2 align-middle text-slate-700 dark:text-slate-200">
-                                      {b.name}
-                                    </td>
-                                    <td className="py-1 pr-2">
-                                      <input
-                                        type="number"
-                                        min={0}
-                                        step="any"
-                                        className="input-base w-24 text-right"
-                                        value={v.minStock}
-                                        onChange={(e) =>
-                                          setBranchStock(
-                                            b.id,
-                                            'minStock',
-                                            e.target.value,
-                                          )
-                                        }
-                                      />
-                                    </td>
-                                    <td className="py-1 pr-2">
-                                      <input
-                                        type="number"
-                                        min={0}
-                                        step="any"
-                                        className="input-base w-24 text-right"
-                                        value={v.maxStock}
-                                        onChange={(e) =>
-                                          setBranchStock(
-                                            b.id,
-                                            'maxStock',
-                                            e.target.value,
-                                          )
-                                        }
-                                      />
-                                    </td>
-                                    <td className="py-1 pr-2">
-                                      <input
-                                        type="number"
-                                        min={0}
-                                        step="any"
-                                        className="input-base w-24 text-right"
-                                        value={v.reorderLevel}
-                                        onChange={(e) =>
-                                          setBranchStock(
-                                            b.id,
-                                            'reorderLevel',
-                                            e.target.value,
-                                          )
-                                        }
-                                      />
-                                    </td>
-                                    <td className="py-1 pr-2">
-                                      <input
-                                        type="number"
-                                        min={0}
-                                        step={1}
-                                        className="input-base w-24 text-right"
-                                        value={v.leadTimeDays}
-                                        onChange={(e) =>
-                                          setBranchStock(
-                                            b.id,
-                                            'leadTimeDays',
-                                            e.target.value,
-                                          )
-                                        }
-                                      />
-                                    </td>
-                                    <td className="py-1 pr-2">
-                                      <Select
-                                        value={v.defaultStoreId}
-                                        onChange={(e) =>
-                                          setBranchStore(b.id, e.target.value)
-                                        }
-                                        placeholder="—"
-                                        wrapClassName="w-40"
-                                        options={storeOptions(
-                                          g.company.id,
-                                          b.id,
-                                          v.defaultStoreId,
-                                        )}
-                                      />
-                                    </td>
-                                    <td className="py-1">
-                                      <Select
-                                        value={v.defaultRackId}
-                                        onChange={(e) =>
-                                          setBranchStock(
-                                            b.id,
-                                            'defaultRackId',
-                                            e.target.value,
-                                          )
-                                        }
-                                        placeholder="—"
-                                        wrapClassName="w-36"
-                                        disabled={!v.defaultStoreId}
-                                        options={rackOptions(
-                                          v.defaultStoreId,
-                                          v.defaultRackId,
-                                        )}
-                                      />
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
             <div className="sm:col-span-2">
               <Checkbox
                 label="Active"
@@ -1454,6 +1245,15 @@ export default function ProductsPage() {
                 }
               />
             </div>
+
+            <Textarea
+              label="Description"
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
+              wrapClassName="sm:col-span-2"
+            />
           </div>
         </ReadOnlyFieldset>
       </Drawer>

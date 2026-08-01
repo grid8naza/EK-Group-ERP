@@ -382,15 +382,6 @@ export default function CategoriesPage() {
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="e.g. Raw Materials"
             />
-            <Textarea
-              label="Description"
-              value={form.description}
-              onChange={(e) =>
-                setForm({ ...form, description: e.target.value })
-              }
-              wrapClassName="sm:col-span-2"
-            />
-
             {/* Applies to — exactly one of the four kinds. This, not the name,
                 is what binds the category to a master screen, and it is fixed
                 once groups, items or products hang off the category. */}
@@ -449,6 +440,16 @@ export default function CategoriesPage() {
                 }
               />
             </div>
+
+            {/* Description — kept at the very bottom of the form. */}
+            <Textarea
+              label="Description"
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
+              wrapClassName="sm:col-span-2"
+            />
           </div>
         </ReadOnlyFieldset>
       </Drawer>
