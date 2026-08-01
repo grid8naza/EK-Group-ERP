@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Layers } from 'lucide-react';
+import { Plus, Layers, ChevronDown, ChevronRight } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
@@ -60,6 +60,7 @@ export default function GroupsPage() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [primaryFilter, setPrimaryFilter] = useState('');
   const [parentFilter, setParentFilter] = useState('');
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const nameRef = useRef<HTMLInputElement>(null);
 
   const canAdd = can(ROUTE, 'add');
@@ -307,6 +308,46 @@ export default function GroupsPage() {
     return rows;
   }, [groupList, applies, status, categoryFilter, primaryFilter, parentFilter]);
 
+  // Collapsed parents (by id). The listing is one long tree, so a group can be
+  // folded away to get its sub-groups out of the way; nothing is collapsed until
+  // asked, so the default view is unchanged.
+  const groupById = useMemo(
+    () => new Map(groupList.map((g) => [g.id, g])),
+    [groupList],
+  );
+  // Which rows have children *within the current filters* — a chevron on a row
+  // whose children are filtered out would fold nothing.
+  const parentIds = useMemo(
+    () =>
+      new Set(
+        filteredRows
+          .map((g) => g.parentGroupId)
+          .filter((id): id is number => id != null),
+      ),
+    [filteredRows],
+  );
+  const visibleRows = useMemo(() => {
+    if (collapsed.size === 0) return filteredRows;
+    return filteredRows.filter((g) => {
+      // Hidden when any ancestor is folded, however deep the row sits.
+      let node = g.parentGroupId ? groupById.get(g.parentGroupId) : undefined;
+      while (node) {
+        if (collapsed.has(node.id)) return false;
+        node = node.parentGroupId ? groupById.get(node.parentGroupId) : undefined;
+      }
+      return true;
+    });
+  }, [filteredRows, collapsed, groupById]);
+
+  const toggleCollapsed = (id: number) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const allCollapsed = parentIds.size > 0 && collapsed.size >= parentIds.size;
+
   const availabilityText = (g: Group) =>
     g.companyIds.map((id) => companyNameById.get(id) ?? `#${id}`).join(', ');
 
@@ -331,15 +372,40 @@ export default function GroupsPage() {
       header: 'Name',
       sortable: true,
       sortAccessor: (r) => r.name,
-      render: (r) => (
-        <span
-          className="font-medium text-slate-800 dark:text-slate-100"
-          style={{ paddingLeft: (r.level - 1) * 18 }}
-        >
-          {r.level > 1 && <span className="mr-1 text-slate-400">↳</span>}
-          {r.name}
-        </span>
-      ),
+      render: (r) => {
+        const hasChildren = parentIds.has(r.id);
+        const isCollapsed = collapsed.has(r.id);
+        return (
+          <span
+            className="flex items-center font-medium text-slate-800 dark:text-slate-100"
+            style={{ paddingLeft: (r.level - 1) * 18 }}
+          >
+            {hasChildren ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleCollapsed(r.id);
+                }}
+                aria-expanded={!isCollapsed}
+                title={isCollapsed ? 'Expand' : 'Collapse'}
+                className="mr-1 flex-none rounded p-0.5 text-slate-400 transition hover:bg-slate-200/70 hover:text-slate-600 dark:hover:bg-slate-700"
+              >
+                {isCollapsed ? (
+                  <ChevronRight className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </button>
+            ) : (
+              // Keeps the names on one line whether or not a row folds.
+              <span className="mr-1 inline-block h-5 w-5 flex-none" />
+            )}
+            {r.level > 1 && <span className="mr-1 text-slate-400">↳</span>}
+            {r.name}
+          </span>
+        );
+      },
     },
     {
       key: 'level',
@@ -446,7 +512,7 @@ export default function GroupsPage() {
 
       <DataTable
         columns={columns}
-        rows={filteredRows}
+        rows={visibleRows}
         defaultSort={{ key: 'code', dir: 'asc' }}
         key={`${applies}|${status}|${categoryFilter}|${primaryFilter}|${parentFilter}`}
         rowKey={(r) => r.id}
@@ -533,6 +599,25 @@ export default function GroupsPage() {
                 { value: 'inactive', label: 'Inactive' },
               ]}
             />
+            {parentIds.size > 0 && (
+              <button
+                type="button"
+                className="btn-secondary whitespace-nowrap"
+                onClick={() =>
+                  setCollapsed(allCollapsed ? new Set() : new Set(parentIds))
+                }
+              >
+                {allCollapsed ? (
+                  <>
+                    <ChevronDown className="h-4 w-4" /> Expand all
+                  </>
+                ) : (
+                  <>
+                    <ChevronRight className="h-4 w-4" /> Collapse all
+                  </>
+                )}
+              </button>
+            )}
           </div>
         }
         onView={openView}
