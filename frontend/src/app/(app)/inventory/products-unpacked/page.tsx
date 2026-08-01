@@ -170,6 +170,7 @@ export default function ProductsPage() {
       setImageUploading(false);
     }
   };
+  const [primaryFilter, setPrimaryFilter] = useState('');
   const [parentFilter, setParentFilter] = useState('');
   const [sourceFilter, setSourceFilter] = useState(''); // '' | ProductSource
   const [sellFilter, setSellFilter] = useState(''); // '' | 'yes' | 'no'
@@ -217,6 +218,18 @@ export default function ProductsPage() {
   const primaryGroups = useMemo(
     () => productGroups.filter((g) => g.level === 1),
     [productGroups],
+  );
+  // Top of a group's tree. Products hang off leaf groups, so both the Primary
+  // group filter and the group list it cascades into resolve through this.
+  const primaryIdOf = useMemo(
+    () => (groupId: number | null | undefined) => {
+      let node = groupId != null ? groupById.get(groupId) : undefined;
+      while (node && node.level > 1 && node.parentGroupId) {
+        node = groupById.get(node.parentGroupId);
+      }
+      return node && node.level === 1 ? node.id : null;
+    },
+    [groupById],
   );
   const parentCandidates = useMemo(
     () => productGroups.filter((g) => g.subGroupApplicable && g.level < 5),
@@ -496,6 +509,12 @@ export default function ProductsPage() {
     // Scoped by CATEGORY, not by group: a product's category is what assigns it
     // to this screen, which is how one shared group can feed both.
     rows = rows.filter((r) => screenCategoryIds.has(r.categoryId));
+    // A primary picks up everything beneath it, however deep the tree runs.
+    if (primaryFilter) {
+      rows = rows.filter(
+        (r) => String(primaryIdOf(r.groupId) ?? '') === primaryFilter,
+      );
+    }
     if (parentFilter) {
       // The parent-group filter lists leaf groups (what products attach to), so
       // match the product's own leaf group.
@@ -509,7 +528,16 @@ export default function ProductsPage() {
     if (status === 'active') rows = rows.filter((r) => r.isActive);
     else if (status === 'inactive') rows = rows.filter((r) => !r.isActive);
     return rows.sort((a, b) => a.code.localeCompare(b.code));
-  }, [data, sellFilter, sourceFilter, status, screenCategoryIds, parentFilter]);
+  }, [
+    data,
+    sellFilter,
+    sourceFilter,
+    status,
+    screenCategoryIds,
+    primaryFilter,
+    parentFilter,
+    primaryIdOf,
+  ]);
 
   const columns: Column<Product>[] = [
     { key: 'code', header: 'Code', accessor: (r) => r.code },
@@ -591,7 +619,7 @@ export default function ProductsPage() {
         columns={columns}
         rows={visibleRows}
         defaultSort={{ key: 'code', dir: 'asc' }}
-        key={`${parentFilter}|${sellFilter}|${status}`}
+        key={`${primaryFilter}|${parentFilter}|${sellFilter}|${status}`}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
@@ -601,12 +629,32 @@ export default function ProductsPage() {
           <div className="flex flex-nowrap items-center gap-2">
             {/* No category filter: the screen is fixed to SCREEN_KIND. */}
             <Select
+              value={primaryFilter}
+              onChange={(e) => {
+                // The group list below cascades from this, so a leftover group
+                // from another tree would filter everything away.
+                setPrimaryFilter(e.target.value);
+                setParentFilter('');
+              }}
+              wrapClassName="w-36"
+              placeholder="Any primary group"
+              options={primaryGroups
+                .filter((g) => g.isActive)
+                .map((g) => ({ value: String(g.id), label: g.name }))}
+            />
+            <Select
               value={parentFilter}
               onChange={(e) => setParentFilter(e.target.value)}
               wrapClassName="w-36"
               placeholder="Any parent group"
               options={productGroups
-                .filter((g) => !g.subGroupApplicable && g.isActive)
+                .filter(
+                  (g) =>
+                    !g.subGroupApplicable &&
+                    g.isActive &&
+                    (!primaryFilter ||
+                      String(primaryIdOf(g.id) ?? '') === primaryFilter),
+                )
                 .map((g) => ({ value: String(g.id), label: g.name }))}
             />
             <Select
