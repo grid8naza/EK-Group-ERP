@@ -267,6 +267,8 @@ export default function HrDesignationsPage() {
       header: 'Rate/hr',
       accessor: (r) => r.ratePerHour ?? 0,
       sortAccessor: (r) => r.ratePerHour ?? 0,
+      className: 'text-right tabular-nums',
+      headerClassName: 'text-right',
     },
     {
       key: 'availability',

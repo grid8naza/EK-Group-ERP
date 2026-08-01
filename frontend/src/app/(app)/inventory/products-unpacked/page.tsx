@@ -573,7 +573,7 @@ export default function ProductsPage() {
       header: 'Cost',
       accessor: (r) => (r.costPrice ?? 0).toLocaleString(),
       sortAccessor: (r) => r.costPrice ?? 0,
-      className: 'text-right',
+      className: 'text-right tabular-nums',
       headerClassName: 'text-right',
     },
     { key: 'hsn', header: 'HSN', accessor: (r) => r.hsnCode?.code ?? '-' },

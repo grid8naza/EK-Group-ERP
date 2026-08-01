@@ -750,22 +750,37 @@ export default function ProductsPage() {
       ),
     },
     {
+      // Cost leads the prices — it's the base every margin is read against.
+      key: 'costPrice',
+      header: 'Cost',
+      accessor: (r) => (r.costPrice ?? 0).toLocaleString(),
+      sortAccessor: (r) => r.costPrice ?? 0,
+      className: 'text-right tabular-nums',
+      headerClassName: 'text-right',
+    },
+    {
       key: 'intercompanyPrice',
       header: 'Inter-Co',
       accessor: (r) => (r.intercompanyPrice ?? 0).toLocaleString(),
       sortAccessor: (r) => r.intercompanyPrice ?? 0,
+      className: 'text-right tabular-nums',
+      headerClassName: 'text-right',
     },
     {
       key: 'wholesalePrice',
       header: 'Wholesale',
       accessor: (r) => (r.wholesalePrice ?? 0).toLocaleString(),
       sortAccessor: (r) => r.wholesalePrice ?? 0,
+      className: 'text-right tabular-nums',
+      headerClassName: 'text-right',
     },
     {
       key: 'retailPrice',
       header: 'Retail',
       accessor: (r) => (r.retailPrice ?? 0).toLocaleString(),
       sortAccessor: (r) => r.retailPrice ?? 0,
+      className: 'text-right tabular-nums',
+      headerClassName: 'text-right',
     },
     { key: 'hsn', header: 'HSN', accessor: (r) => r.hsnCode?.code ?? '-' },
     {

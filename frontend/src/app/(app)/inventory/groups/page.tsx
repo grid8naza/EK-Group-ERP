@@ -89,16 +89,19 @@ export default function GroupsPage() {
   const effectiveLevel = selectedParent ? selectedParent.level + 1 : 1;
   const canBeContainer = effectiveLevel < MAX_LEVEL;
 
-  // Parent options: active containers (level < 5). A parent restricts what
-  // follows rather than the other way round, since a sub-group may only serve
-  // categories its parent serves.
-  const formParentOptions = parentCandidates.filter((g) => g.isActive);
+  // Categories lead: pick what the group serves, and the parent list narrows to
+  // the groups that can hold it. A sub-group may only serve categories its
+  // parent serves, so a candidate parent must serve every category ticked.
+  const formParentOptions = parentCandidates.filter(
+    (g) =>
+      g.isActive && form.categoryIds.every((id) => g.categoryIds.includes(id)),
+  );
 
-  // Categories offered in the form — narrowed to the parent's own set when this
-  // is a sub-group, so an out-of-subset pick is impossible to make.
+  // On an existing group the parent is immutable, so there the dependency still
+  // runs the other way: the categories on offer are the parent's own.
   const parentForCategories = editing
     ? groupList.find((g) => g.id === editing.parentGroupId)
-    : selectedParent;
+    : undefined;
   const formCategoryOptions = categoryList.filter(
     (c) =>
       (c.isActive || form.categoryIds.includes(c.id)) &&
@@ -164,12 +167,23 @@ export default function GroupsPage() {
     }));
 
   const toggleCategory = (id: number) =>
-    setForm((f) => ({
-      ...f,
-      categoryIds: f.categoryIds.includes(id)
+    setForm((f) => {
+      const categoryIds = f.categoryIds.includes(id)
         ? f.categoryIds.filter((x) => x !== id)
-        : [...f.categoryIds, id],
-    }));
+        : [...f.categoryIds, id];
+      // The parent list is driven by these, so a parent that no longer serves
+      // every ticked category drops out rather than being silently kept.
+      const parent = f.parentGroupId
+        ? groupList.find((g) => String(g.id) === f.parentGroupId)
+        : undefined;
+      const parentStillFits =
+        !parent || categoryIds.every((c) => parent.categoryIds.includes(c));
+      return {
+        ...f,
+        categoryIds,
+        parentGroupId: parentStillFits ? f.parentGroupId : '',
+      };
+    });
 
   const save = async (mode: SaveMode = 'saveClose') => {
     if (form.categoryIds.length === 0) {
@@ -567,44 +581,11 @@ export default function GroupsPage() {
       >
         <ReadOnlyFieldset readOnly={view}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {/* Placement: primary (category) vs sub-group (parent). Immutable
-                once created, so it's read-only when editing. To reposition,
-                inactivate this group and create a new one. */}
-            {editing ? (
-              <Input
-                label="Parent group"
-                value={editing.parent?.name ?? '— None (primary group) —'}
-                disabled
-                wrapClassName="sm:col-span-2"
-              />
-            ) : (
-              /* Parent first: it narrows which categories may be picked, since a
-                 sub-group can only serve categories its parent serves. */
-              <Select
-                label="Parent group"
-                value={form.parentGroupId}
-                onChange={(e) =>
-                  // A new parent may not offer the categories already ticked.
-                  setForm((f) => ({
-                    ...f,
-                    parentGroupId: e.target.value,
-                    categoryIds: [],
-                  }))
-                }
-                placeholder="— None (primary group) —"
-                wrapClassName="sm:col-span-2"
-                options={formParentOptions.map((g) => ({
-                  value: String(g.id),
-                  label: `${'· '.repeat(g.level - 1)}${g.name}`,
-                }))}
-              />
-            )}
-
-            {/* Categories — a group is SHARED, so it can serve more than one.
-                That is what stops the same sub-groups being re-entered under
-                every category: "Bakery" is one group in both the semi-finished
-                and the finished category. A sub-group is limited to its
-                parent's categories. */}
+            {/* Categories first — they decide the rest. A group is SHARED, so
+                it can serve more than one: that is what stops the same
+                sub-groups being re-entered under every category ("Bakery" is
+                one group in both the semi-finished and the finished category),
+                and it is what the parent list below is drawn from. */}
             <div className="flex flex-col gap-2 sm:col-span-2">
               <span className="label !mb-0">
                 Categories <span className="text-rose-500">*</span>
@@ -634,6 +615,42 @@ export default function GroupsPage() {
                   : '. Pick every category this group should appear under.'}
               </p>
             </div>
+
+            {/* Placement: primary (top of a tree) vs sub-group (under a parent).
+                Immutable once created, so it's read-only when editing. To
+                reposition, inactivate this group and create a new one. */}
+            {editing ? (
+              <Input
+                label="Parent group"
+                value={editing.parent?.name ?? '— None (primary group) —'}
+                disabled
+                wrapClassName="sm:col-span-2"
+              />
+            ) : (
+              <div className="flex flex-col gap-1 sm:col-span-2">
+                <Select
+                  label="Parent group"
+                  value={form.parentGroupId}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, parentGroupId: e.target.value }))
+                  }
+                  placeholder="— None (primary group) —"
+                  options={formParentOptions.map((g) => ({
+                    value: String(g.id),
+                    label: `${'· '.repeat(g.level - 1)}${g.name}`,
+                  }))}
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {form.categoryIds.length === 0
+                    ? 'Leave empty for a primary group. Pick the categories above to narrow this list.'
+                    : `Only groups serving ${
+                        form.categoryIds.length === 1
+                          ? 'that category'
+                          : 'all those categories'
+                      } can hold this one — leave empty for a primary group.`}
+                </p>
+              </div>
+            )}
 
             {editing && (
               <Input
