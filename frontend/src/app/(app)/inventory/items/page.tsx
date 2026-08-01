@@ -30,7 +30,10 @@ const empty = {
   unitId: '',
   lastPurchasePrice: '0',
   lastPurchaseDate: '',
-  boxQty: '0',
+  // Box packing is optional per item, so the two fields below only appear
+  // once it is ticked. Form-only: what's stored is the box qty/unit themselves.
+  boxApplicable: false,
+  boxQty: '',
   boxUnitId: '',
   hsnCodeId: '',
   minimumStock: '0',
@@ -92,6 +95,9 @@ export default function ItemsPage() {
       (!form.categoryId || g.categoryIds.includes(Number(form.categoryId))),
   );
 
+  // Unit name for the pack helper line under the box fields.
+  const unitName = (id: string) =>
+    unitList.find((u) => String(u.id) === String(id))?.name ?? 'unit';
   const closeDrawer = () => {
     setOpen(false);
     setView(false);
@@ -106,6 +112,8 @@ export default function ItemsPage() {
     unitId: String(i.unitId),
     lastPurchasePrice: String(i.lastPurchasePrice ?? 0),
     lastPurchaseDate: i.lastPurchaseDate ? i.lastPurchaseDate.slice(0, 10) : '',
+    // Ticked for anything already boxed, so the saved values stay visible.
+    boxApplicable: !!(i.boxUnitId || i.boxQty),
     boxQty: String(i.boxQty ?? 0),
     boxUnitId: i.boxUnitId != null ? String(i.boxUnitId) : '',
     hsnCodeId: i.hsnCodeId != null ? String(i.hsnCodeId) : '',
@@ -192,8 +200,9 @@ export default function ItemsPage() {
       unitId: Number(form.unitId),
       lastPurchasePrice: num(form.lastPurchasePrice),
       lastPurchaseDate: form.lastPurchaseDate || null,
-      boxQty: num(form.boxQty),
-      boxUnitId: idOrNull(form.boxUnitId),
+      // Cleared outright when box packing does not apply.
+      boxQty: form.boxApplicable ? num(form.boxQty) : 0,
+      boxUnitId: form.boxApplicable ? idOrNull(form.boxUnitId) : null,
       hsnCodeId: idOrNull(form.hsnCodeId),
       minimumStock: num(form.minimumStock),
       maximumStock: num(form.maximumStock),
@@ -611,25 +620,54 @@ export default function ItemsPage() {
               }))}
             />
 
-            {/* Packing */}
-            <Input
-              label="Box Qty"
-              type="number"
-              min={0}
-              step="any"
-              value={form.boxQty}
-              onChange={(e) => setForm({ ...form, boxQty: e.target.value })}
-            />
-            <Select
-              label="Box Unit"
-              value={form.boxUnitId}
-              onChange={(e) => setForm({ ...form, boxUnitId: e.target.value })}
-              placeholder="— None —"
-              options={unitList.map((u) => ({
-                value: u.id,
-                label: u.name,
-              }))}
-            />
+            {/* Packing — off by default and hidden with it: plenty of items
+                are never handled by the box. */}
+            <div className="sm:col-span-2">
+              <Checkbox
+                label="Box packing applicable"
+                checked={form.boxApplicable}
+                onChange={(e) =>
+                  setForm((f) =>
+                    e.target.checked
+                      ? { ...f, boxApplicable: true }
+                      : { ...f, boxApplicable: false, boxQty: '', boxUnitId: '' },
+                  )
+                }
+              />
+            </div>
+            {form.boxApplicable && (
+              <>
+                <Input
+                  label="Box Qty"
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={form.boxQty}
+                  onChange={(e) => setForm({ ...form, boxQty: e.target.value })}
+                />
+                <Select
+                  label="Box Unit"
+                  value={form.boxUnitId}
+                  onChange={(e) =>
+                    setForm({ ...form, boxUnitId: e.target.value })
+                  }
+                  placeholder="— None —"
+                  options={unitList.map((u) => ({
+                    value: u.id,
+                    label: u.name,
+                  }))}
+                />
+                <p className="-mt-1 text-xs text-slate-500 dark:text-slate-400 sm:col-span-2">
+                {form.boxQty && form.boxUnitId && form.unitId
+                  ? `1 ${unitName(form.boxUnitId)} = ${form.boxQty} ${unitName(
+                      form.unitId,
+                    )} — goods are received in this pack, while stock, issues and balances stay in ${unitName(
+                      form.unitId,
+                    )}.`
+                  : 'How much stock one pack holds — pack unit Bottle with a box qty of 200 against a stock unit of Gram means one bottle is 200 g.'}
+                </p>
+              </>
+            )}
 
             {/* Stock control */}
             <Input

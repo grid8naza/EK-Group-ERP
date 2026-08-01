@@ -79,6 +79,9 @@ const empty = {
   intercompanyProfitPct: '',
   retailPrice: '',
   retailProfitPct: '',
+  // Box packing is optional per product, so the two fields below only show
+  // once it is ticked. Form-only: what's stored is the box qty/unit themselves.
+  boxApplicable: false,
   boxQty: '',
   boxUnitId: '',
   hsnCodeId: '',
@@ -298,6 +301,9 @@ export default function ProductsPage() {
     document.getElementById(nextId)?.focus();
   };
 
+  // Unit name for the pack helper line under the box fields.
+  const unitName = (id: string) =>
+    unitList.find((u) => String(u.id) === String(id))?.name ?? 'unit';
   const closeDrawer = () => {
     setOpen(false);
     setView(false);
@@ -328,6 +334,8 @@ export default function ProductsPage() {
     ),
     retailPrice: String(p.retailPrice ?? 0),
     retailProfitPct: pctDisplay(String(p.retailPrice ?? 0), p.costPrice ?? 0),
+    // Ticked for anything already boxed, so the saved values stay visible.
+    boxApplicable: !!(p.boxUnitId || p.boxQty),
     boxQty: String(p.boxQty ?? 0),
     boxUnitId: p.boxUnitId != null ? String(p.boxUnitId) : '',
     hsnCodeId: p.hsnCodeId != null ? String(p.hsnCodeId) : '',
@@ -428,8 +436,9 @@ export default function ProductsPage() {
       intercompanyProfitPct: num(form.intercompanyProfitPct),
       retailPrice: num(form.retailPrice),
       retailProfitPct: num(form.retailProfitPct),
-      boxQty: num(form.boxQty),
-      boxUnitId: idOrNull(form.boxUnitId),
+      // Cleared outright when box packing does not apply.
+      boxQty: form.boxApplicable ? num(form.boxQty) : 0,
+      boxUnitId: form.boxApplicable ? idOrNull(form.boxUnitId) : null,
       hsnCodeId: idOrNull(form.hsnCodeId),
       shelfLife: num(form.shelfLife),
       // Sent whole; the server drops the zeros and clears it when not sellable.
@@ -1018,31 +1027,60 @@ export default function ProductsPage() {
               }))}
             />
             {/* Pack content — how the stock is boxed, so it follows the unit.
-                Not gated by Can Sell: it's how the product is handled, whether
-                or not it is sold. */}
-            <Input
-              label="Box Quantity"
-              type="number"
-              min={0}
-              step="any"
-              id="pf-boxqty"
-              onKeyDown={enterTo('pf-boxunit')}
-              value={form.boxQty}
-              onChange={(e) => setForm({ ...form, boxQty: e.target.value })}
-            />
-            <Select
-              id="pf-boxunit"
-              advanceToId="pf-shelf"
-              openOnFocus
-              label="Box Unit"
-              value={form.boxUnitId}
-              onChange={(e) => setForm({ ...form, boxUnitId: e.target.value })}
-              placeholder="— None —"
-              options={unitList.map((u) => ({
-                value: u.id,
-                label: u.name,
-              }))}
-            />
+                Off by default and hidden with it: plenty of products are never
+                handled by the box. Not gated by Can Sell either way — it is how
+                the product is handled, whether or not it is sold. */}
+            <div className="sm:col-span-2">
+              <Checkbox
+                label="Box packing applicable"
+                checked={form.boxApplicable}
+                onChange={(e) =>
+                  setForm((f) =>
+                    e.target.checked
+                      ? { ...f, boxApplicable: true }
+                      : { ...f, boxApplicable: false, boxQty: '', boxUnitId: '' },
+                  )
+                }
+              />
+            </div>
+            {form.boxApplicable && (
+              <>
+                <Input
+                  label="Box Quantity"
+                  type="number"
+                  min={0}
+                  step="any"
+                  id="pf-boxqty"
+                  onKeyDown={enterTo('pf-boxunit')}
+                  value={form.boxQty}
+                  onChange={(e) => setForm({ ...form, boxQty: e.target.value })}
+                />
+                <Select
+                  id="pf-boxunit"
+                  advanceToId="pf-shelf"
+                  openOnFocus
+                  label="Box Unit"
+                  value={form.boxUnitId}
+                  onChange={(e) =>
+                    setForm({ ...form, boxUnitId: e.target.value })
+                  }
+                  placeholder="— None —"
+                  options={unitList.map((u) => ({
+                    value: u.id,
+                    label: u.name,
+                  }))}
+                />
+                <p className="-mt-1 text-xs text-slate-500 dark:text-slate-400 sm:col-span-2">
+                {form.boxQty && form.boxUnitId && form.unitId
+                  ? `1 ${unitName(form.boxUnitId)} = ${form.boxQty} ${unitName(
+                      form.unitId,
+                    )} — goods are received in this pack, while stock, issues and balances stay in ${unitName(
+                      form.unitId,
+                    )}.`
+                  : 'How much stock one pack holds — pack unit Bottle with a box qty of 200 against a stock unit of Gram means one bottle is 200 g.'}
+                </p>
+              </>
+            )}
             <Input
               label="Shelf Life (days)"
               type="number"

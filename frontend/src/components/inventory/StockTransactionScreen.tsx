@@ -40,6 +40,12 @@ type DraftLine = {
   expiry: string;
   /** Set when the line came off a dispatch: what the seller shipped. */
   dispatchedQty?: number;
+  /**
+   * Which unit the typed quantity is in. Stock is always what gets posted —
+   * 'box' just means the entry is multiplied by the stockable's box quantity on
+   * the way out, so pickers can count boxes instead of doing the sum.
+   */
+  unitMode?: 'stock' | 'box';
 };
 
 const todayInput = () => {
@@ -124,12 +130,23 @@ export function StockTransactionScreen({
 
   // ---- pickable stockables: items AND products, keyed by kind ----
   const pickable = useMemo(() => {
+    // Box packing rides along: a stockable that is boxed can be counted in
+    // boxes on the line, and boxQty is what converts that to stock units.
+    const boxOf = (x: Item | Product) =>
+      x.boxUnitId && x.boxQty > 0
+        ? {
+            boxQty: x.boxQty,
+            boxUnitId: x.boxUnitId,
+            boxUnit: x.boxUnit?.symbol ?? x.boxUnit?.code ?? 'box',
+          }
+        : {};
     const its = (items ?? []).map((i) => ({
       key: `item:${i.id}`,
       name: i.name,
       unit: i.unit?.symbol ?? i.unit?.code ?? '',
       category: i.category?.name ?? '—',
       group: i.group?.name ?? '—',
+      ...boxOf(i),
     }));
     const prs = (products ?? []).map((p) => ({
       key: `product:${p.id}`,
@@ -137,6 +154,7 @@ export function StockTransactionScreen({
       unit: p.unit?.symbol ?? p.unit?.code ?? '',
       category: p.category?.name ?? '—',
       group: p.group?.name ?? '—',
+      ...boxOf(p),
     }));
     return [...its, ...prs];
   }, [items, products]);
@@ -311,13 +329,25 @@ export function StockTransactionScreen({
     setReference(full.reference ?? '');
     setNotes(full.notes ?? '');
     setLines(
-      (full.lines ?? []).map((l) => ({
-        key: l.itemId ? `item:${l.itemId}` : `product:${l.productId}`,
-        quantity: String(inbound ? l.qtyIn : l.qtyOut),
-        unitPrice: String(l.unitPrice ?? 0),
-        batchNo2: l.batchNo2 ?? '',
-        expiry: dateInput(l.expiryDate),
-      })),
+      (full.lines ?? []).map((l) => {
+        // A line entered in the pack comes back in the pack: the document
+        // should read as it was written, not as the stock it became.
+        const stockQty = inbound ? l.qtyIn : l.qtyOut;
+        const inPack = l.enteredQty != null && l.enteredUnitId != null;
+        // Pack rate as invoiced. Rows saved before it was stored fall back
+        // to deriving it from the stock rate and the pack size.
+        const packQty = inPack && l.enteredQty ? stockQty / l.enteredQty : 1;
+        const packRate =
+          l.enteredUnitPrice ?? round6((l.unitPrice ?? 0) * packQty);
+        return {
+          key: l.itemId ? `item:${l.itemId}` : `product:${l.productId}`,
+          quantity: String(inPack ? l.enteredQty : stockQty),
+          unitPrice: String(inPack ? packRate : (l.unitPrice ?? 0)),
+          unitMode: (inPack ? 'box' : 'stock') as 'box' | 'stock',
+          batchNo2: l.batchNo2 ?? '',
+          expiry: dateInput(l.expiryDate),
+        };
+      }),
     );
   };
   const openView = async (r: StockDocumentRow) => {
@@ -348,6 +378,22 @@ export function StockTransactionScreen({
     setEditingDoc(null);
   };
 
+  // Derived rates divide by the pack size, so they need a sane precision:
+  // 6 dp keeps a 0.000001 rate honest without trailing float noise.
+  const round6 = (v: number) => Math.round(v * 1e6) / 1e6;
+
+  // The pack unit's id for a line, stamped on the saved document.
+  const boxUnitIdOf = (l: DraftLine) => {
+    const pick = l.key ? pickById.get(l.key) : undefined;
+    return pick && 'boxUnitId' in pick ? (pick.boxUnitId as number) ?? null : null;
+  };
+
+  // How many stock units one pack holds for a line (1 when it isn't packed).
+  const boxQtyOf = (l: DraftLine) => {
+    const pick = l.key ? pickById.get(l.key) : undefined;
+    return pick && 'boxQty' in pick && pick.boxQty ? pick.boxQty : 1;
+  };
+
   const buildLines = () =>
     lines
       .filter((l) => l.key && Number(l.quantity) > 0)
@@ -357,8 +403,30 @@ export function StockTransactionScreen({
         return {
           itemId: kind === 'item' ? id : undefined,
           productId: kind === 'product' ? id : undefined,
-          quantity: Number(l.quantity),
-          unitPrice: l.unitPrice ? Number(l.unitPrice) : 0,
+          // Packs are an entry convenience; stock is always posted in stock
+          // units, and the rate follows it — 1 bottle at 50 is 200 g at 0.25,
+          // so the line total is the same either way.
+          quantity: Number(l.quantity) * (l.unitMode === 'box' ? boxQtyOf(l) : 1),
+          unitPrice: l.unitPrice
+            ? l.unitMode === 'box'
+              ? round6(Number(l.unitPrice) / boxQtyOf(l))
+              : Number(l.unitPrice)
+            : 0,
+          // The document's own words, so reopening shows the delivery note
+          // (1 Bottle at 50) rather than the stock it became (200 g at
+          // 0.25). Both rates are stored — reports read them together and
+          // dividing one back out would only reintroduce rounding.
+          ...(l.unitMode === 'box'
+            ? {
+                enteredQty: Number(l.quantity),
+                enteredUnitId: boxUnitIdOf(l),
+                enteredUnitPrice: l.unitPrice ? Number(l.unitPrice) : 0,
+              }
+            : {
+                enteredQty: null,
+                enteredUnitId: null,
+                enteredUnitPrice: null,
+              }),
           batchNo2: inbound ? l.batchNo2.trim() || undefined : undefined,
           expiryDate:
             inbound && l.expiry ? new Date(l.expiry).toISOString() : undefined,
@@ -770,6 +838,18 @@ export function StockTransactionScreen({
                   ) : (
                     lines.map((l, i) => {
                       const p = l.key ? pickById.get(l.key) : undefined;
+                      // Stock is always held in the stock unit (grams), but
+                      // goods are handled in the pack: a bottle of coffee is
+                      // bought as one bottle and consumed by the gram. The
+                      // line can be typed either way and converts on save.
+                      const boxed =
+                        p && 'boxQty' in p && p.boxQty
+                          ? {
+                              boxQty: p.boxQty as number,
+                              boxUnit: p.boxUnit as string,
+                            }
+                          : undefined;
+                      const inBoxes = !!boxed && l.unitMode === 'box';
                       const docLine = editingDoc?.lines?.[i];
                       return (
                         <tr key={i} className="border-b border-slate-100 dark:border-slate-800/60">
@@ -789,7 +869,19 @@ export function StockTransactionScreen({
                                   inbound ? `stl-${i}-batch` : `stl-${i}-qty`
                                 }
                                 value={l.key}
-                                onChange={(e) => setLine(i, { key: e.target.value })}
+                                onChange={(e) => {
+                                  // Receipts come in packs (a case of
+                                  // bottles), issues go out in stock units
+                                  // (20 g a cup), so each starts where it
+                                  // is normally counted.
+                                  const pick = pickById.get(e.target.value);
+                                  const isBoxed =
+                                    !!pick && 'boxQty' in pick && !!pick.boxQty;
+                                  setLine(i, {
+                                    key: e.target.value,
+                                    unitMode: inbound && isBoxed ? 'box' : 'stock',
+                                  });
+                                }}
                                 placeholder="Select item / product"
                                 options={pickOptions}
                               />
@@ -863,8 +955,35 @@ export function StockTransactionScreen({
                                 className="text-right tabular-nums"
                               />
                             )}
+                            {inBoxes && Number(l.quantity) > 0 && (
+                              <span className="mt-0.5 block text-right text-[11px] tabular-nums text-slate-400">
+                                = {(Number(l.quantity) * boxed.boxQty).toLocaleString()}{' '}
+                                {p?.unit}
+                              </span>
+                            )}
                           </td>
-                          <td className="px-1 text-slate-500">{p?.unit ?? ''}</td>
+                          <td className="px-1 text-slate-500">
+                            {boxed && !viewMode ? (
+                              <Select
+                                value={l.unitMode ?? 'stock'}
+                                onChange={(e) =>
+                                  setLine(i, {
+                                    unitMode: e.target.value as 'stock' | 'box',
+                                  })
+                                }
+                                sortOptions={false}
+                                searchThreshold={9}
+                                plainSelected
+                                wrapClassName="w-24"
+                                options={[
+                                  { value: 'stock', label: p?.unit || 'Unit' },
+                                  { value: 'box', label: boxed.boxUnit },
+                                ]}
+                              />
+                            ) : (
+                              <span>{inBoxes ? boxed?.boxUnit : (p?.unit ?? '')}</span>
+                            )}
+                          </td>
                           {showRateCol && (
                             <td className="px-1">
                               {viewMode || l.dispatchedQty !== undefined ? (
@@ -882,6 +1001,12 @@ export function StockTransactionScreen({
                                   onKeyDown={enterNextLine(i)}
                                   className="text-right tabular-nums"
                                 />
+                              )}
+                              {inBoxes && Number(l.unitPrice) > 0 && (
+                                <span className="mt-0.5 block text-right text-[11px] tabular-nums text-slate-400">
+                                  = {round6(Number(l.unitPrice) / boxed.boxQty).toLocaleString()}{' '}
+                                  / {p?.unit}
+                                </span>
                               )}
                             </td>
                           )}

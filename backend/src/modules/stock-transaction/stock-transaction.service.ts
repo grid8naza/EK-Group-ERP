@@ -1195,6 +1195,12 @@ export class StockTransactionService {
           qtyOut: inbound ? 0 : line.quantity,
           unitId: cls.unitId,
           unitPrice: line.unitPrice ?? 0,
+          // The document's own words, kept beside the converted quantity: pack
+          // qty, pack unit and the rate per pack, against the stock-unit
+          // quantity and rate above.
+          enteredQty: line.enteredQty ?? null,
+          enteredUnitId: line.enteredUnitId ?? null,
+          enteredUnitPrice: line.enteredUnitPrice ?? null,
         },
       });
     }

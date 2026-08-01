@@ -742,6 +742,19 @@ model StockLedger {
   qtyOut             Float        @default(0)
   unitId             Int
   unitPrice          Float        @default(0)
+  // What was actually written on the supplier's delivery note / invoice, when
+  // the line was entered in the pack rather than the stock unit: 1 Bottle, not
+  // the 200 g it becomes. qtyIn/qtyOut/unitId/unitPrice above stay in the STOCK
+  // unit and remain the only thing balances, FEFO and costing read — these two
+  // exist so reopening or reprinting the document shows what was received.
+  // Null on a line typed in the stock unit, which is already its own record.
+  enteredQty         Float?
+  enteredUnitId      Int? // -> Unit (plain id, like every other id on this row)
+  // The rate as invoiced, per PACK (50 a bottle) beside unitPrice's per-gram
+  // 0.25. Stored rather than divided back out of unitPrice on demand: the two
+  // rates are read together on every purchase report, and re-deriving one from
+  // the other reintroduces the rounding that storing both avoids.
+  enteredUnitPrice   Float?
   // Tax captured on the movement line.
   cgst               Float        @default(0)
   sgst               Float        @default(0)

@@ -22,14 +22,36 @@ export class StockTransactionLineInput {
   @IsInt()
   productId?: number | null;
 
+  /** Always in the stockable's STOCK unit — what actually moves. */
   @IsNumber()
   @Min(0)
   quantity!: number;
 
+  /** Always per STOCK unit, to match `quantity`. */
   @IsOptional()
   @IsNumber()
   @Min(0)
   unitPrice?: number;
+
+  /**
+   * What was written on the delivery note / invoice when the line was entered in
+   * the pack: 1 (Bottle) behind a quantity of 200 (Gram). Kept for the document
+   * only — stock is posted from `quantity`. Omit for a line typed in stock units.
+   */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  enteredQty?: number | null;
+
+  @IsOptional()
+  @IsInt()
+  enteredUnitId?: number | null;
+
+  /** The rate as invoiced, per pack (50 a bottle beside unitPrice's 0.25 a gram). */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  enteredUnitPrice?: number | null;
 
   /** Supplier/external batch number on the goods (IN types only). */
   @IsOptional()

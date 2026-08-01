@@ -1674,6 +1674,16 @@ export interface OpeningStockLine {
   qtyOut: number;
   unitId: number;
   unitPrice: number;
+  /**
+   * What the document itself said, when the line was entered in the pack rather
+   * than the stock unit: 1 Bottle behind the 200 Gram that entered stock. Null
+   * for a line typed in stock units. Never used for stock maths — qtyIn/qtyOut
+   * above are the only quantities that move.
+   */
+  enteredQty?: number | null;
+  enteredUnitId?: number | null;
+  /** The rate as invoiced, per pack (50 a bottle beside unitPrice's 0.25 a gram). */
+  enteredUnitPrice?: number | null;
   intercompanyPrice?: number;
   wholesalePrice?: number;
   retailPrice?: number;
