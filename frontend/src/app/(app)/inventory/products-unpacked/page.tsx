@@ -564,23 +564,17 @@ export default function ProductsPage() {
         </Badge>
       ),
     },
+    // Cost, not the selling prices: a semi-finished product is usually consumed
+    // in-house, so what it costs to make is the number that matters. The selling
+    // prices stay on the form for the few that are sold, and on Products -
+    // Finished.
     {
-      key: 'intercompanyPrice',
-      header: 'Inter-Co',
-      accessor: (r) => (r.intercompanyPrice ?? 0).toLocaleString(),
-      sortAccessor: (r) => r.intercompanyPrice ?? 0,
-    },
-    {
-      key: 'wholesalePrice',
-      header: 'Wholesale',
-      accessor: (r) => (r.wholesalePrice ?? 0).toLocaleString(),
-      sortAccessor: (r) => r.wholesalePrice ?? 0,
-    },
-    {
-      key: 'retailPrice',
-      header: 'Retail',
-      accessor: (r) => (r.retailPrice ?? 0).toLocaleString(),
-      sortAccessor: (r) => r.retailPrice ?? 0,
+      key: 'costPrice',
+      header: 'Cost',
+      accessor: (r) => (r.costPrice ?? 0).toLocaleString(),
+      sortAccessor: (r) => r.costPrice ?? 0,
+      className: 'text-right',
+      headerClassName: 'text-right',
     },
     { key: 'hsn', header: 'HSN', accessor: (r) => r.hsnCode?.code ?? '-' },
     {
