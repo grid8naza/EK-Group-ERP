@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { ClipboardList, Plus, Trash2 } from 'lucide-react';
+import { ClipboardList, Plus, Printer, Trash2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
@@ -18,6 +18,10 @@ import {
   type SaveMode,
 } from '@/components/ui/Drawer';
 import { Input, Select, Textarea, DateInput } from '@/components/ui/Field';
+import {
+  StockDocumentPrint,
+  type PrintLine,
+} from '@/components/inventory/StockDocumentPrint';
 import type {
   StockTransaction,
   StockDocumentRow,
@@ -213,6 +217,9 @@ export function StockTransactionScreen({
   const [reference, setReference] = useState('');
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<DraftLine[]>([]);
+  // The listing row the open document came from: the header stores ids, and
+  // the printout wants the company / branch / store names it already resolved.
+  const [docRow, setDocRow] = useState<StockDocumentRow | null>(null);
 
   // Costing pickers: the endpoints scope to the active company already, and the
   // objects cascade from the chosen centre.
@@ -301,6 +308,7 @@ export function StockTransactionScreen({
 
   const openNew = () => {
     setEditingDoc(null);
+    setDocRow(null);
     setViewMode(false);
     setStoreId(defaultStoreId ? String(defaultStoreId) : '');
     setDocDate(todayInput());
@@ -353,6 +361,7 @@ export function StockTransactionScreen({
   const openView = async (r: StockDocumentRow) => {
     try {
       await loadDoc(r.id);
+      setDocRow(r);
       setViewMode(true);
       setOpen(true);
     } catch {
@@ -366,6 +375,7 @@ export function StockTransactionScreen({
     }
     try {
       await loadDoc(r.id);
+      setDocRow(r);
       setViewMode(false);
       setOpen(true);
     } catch {
@@ -393,6 +403,14 @@ export function StockTransactionScreen({
     const pick = l.key ? pickById.get(l.key) : undefined;
     return pick && 'boxQty' in pick && pick.boxQty ? pick.boxQty : 1;
   };
+
+  // True once any line is counted in packs: the stock column only earns its
+  // width on a document that actually has one.
+  const anyInPacks = lines.some((l) => {
+    if (l.unitMode !== 'box' || !l.key) return false;
+    const pick = pickById.get(l.key);
+    return !!pick && 'boxQty' in pick && !!pick.boxQty;
+  });
 
   const buildLines = () =>
     lines
@@ -576,6 +594,31 @@ export function StockTransactionScreen({
   // what the goods cost this company, so it is shown (read-only: the seller set it).
   const showRateCol = showRate || showDispatched;
 
+  // The open document's lines, resolved for the printout: what the document
+  // says (1 Bottle at 50) beside what entered stock (200 Gram).
+  const printLines: PrintLine[] = lines
+    .filter((l) => l.key && Number(l.quantity) > 0)
+    .map((l) => {
+      const pick = pickById.get(l.key);
+      const packQty = pick && 'boxQty' in pick ? (pick.boxQty as number) : 0;
+      const inPacks = l.unitMode === 'box' && !!packQty;
+      const qty = Number(l.quantity);
+      return {
+        name: pick?.name ?? '',
+        qty,
+        unit: inPacks ? (pick?.boxUnit as string) : (pick?.unit ?? ''),
+        stockQty: inPacks ? qty * packQty : qty,
+        stockUnit: pick?.unit ?? '',
+        inPacks,
+        rate: Number(l.unitPrice || 0),
+        batchNo2: l.batchNo2,
+        expiry: l.expiry,
+      };
+    });
+  const supplierName = supplierId
+    ? supplierOptions.find((o) => o.value === supplierId)?.label
+    : undefined;
+
   const columns: Column<StockDocumentRow>[] = [
     {
       key: 'docDate',
@@ -672,7 +715,15 @@ export function StockTransactionScreen({
         width="full"
         footer={
           viewMode ? (
-            <CloseFooter onClose={closeOverlay} />
+            <div className="flex items-center justify-end gap-2">
+              {/* No separate print privilege gate: canPrint is only grantable on
+                  REPORT screens, and these are FORMs. Opening the document is
+                  the permission — this prints what is already on the screen. */}
+              <button className="btn-secondary" onClick={() => window.print()}>
+                <Printer className="h-4 w-4" /> Print
+              </button>
+              <CloseFooter onClose={closeOverlay} />
+            </div>
           ) : (
             <DrawerFooter
               onCancel={closeOverlay}
@@ -822,6 +873,9 @@ export function StockTransactionScreen({
                       {showDispatched ? 'Accepted' : 'Qty'}
                     </th>
                     <th className="w-12 py-2 px-1">Unit</th>
+                    {anyInPacks && (
+                      <th className="w-28 py-2 px-1 text-right">Stock Qty</th>
+                    )}
                     {showRateCol && (
                       <th className="w-28 py-2 px-1 text-right">Rate</th>
                     )}
@@ -955,12 +1009,6 @@ export function StockTransactionScreen({
                                 className="text-right tabular-nums"
                               />
                             )}
-                            {inBoxes && Number(l.quantity) > 0 && (
-                              <span className="mt-0.5 block text-right text-[11px] tabular-nums text-slate-400">
-                                = {(Number(l.quantity) * boxed.boxQty).toLocaleString()}{' '}
-                                {p?.unit}
-                              </span>
-                            )}
                           </td>
                           <td className="px-1 text-slate-500">
                             {boxed && !viewMode ? (
@@ -984,6 +1032,16 @@ export function StockTransactionScreen({
                               <span>{inBoxes ? boxed?.boxUnit : (p?.unit ?? '')}</span>
                             )}
                           </td>
+                          {anyInPacks && (
+                            <td className="px-1 text-right tabular-nums text-slate-600 dark:text-slate-300">
+                              {Number(l.quantity) > 0
+                                ? `${(
+                                    Number(l.quantity) *
+                                    (inBoxes ? boxed.boxQty : 1)
+                                  ).toLocaleString()} ${p?.unit ?? ''}`
+                                : '—'}
+                            </td>
+                          )}
                           {showRateCol && (
                             <td className="px-1">
                               {viewMode || l.dispatchedQty !== undefined ? (
@@ -1050,6 +1108,23 @@ export function StockTransactionScreen({
           />
         </div>
       </Drawer>
+
+      {/* The printable face of the open document. It sits in the page flow
+          rather than inside the drawer: the panel is a fixed overlay, and a
+          fixed box prints as a single clipped page. `print-root` in
+          globals.css hides everything else on the paper. */}
+      {open && editingDoc && (
+        <StockDocumentPrint
+          title={title}
+          doc={editingDoc}
+          row={docRow}
+          lines={printLines}
+          supplierName={supplierName}
+          showRate={showRateCol}
+          inbound={inbound}
+          notes={notes}
+        />
+      )}
     </div>
   );
 }

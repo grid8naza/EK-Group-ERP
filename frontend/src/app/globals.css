@@ -95,3 +95,34 @@ body {
     @apply mb-1.5 block text-sm font-medium text-slate-600 dark:text-slate-300;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Printing a document.
+
+   A screen with an open drawer is: the page behind it, a fixed overlay, the
+   drawer chrome, and the data-entry grid — none of which belong on paper. The
+   printable face of a document carries `print-root`, and everything else is
+   made invisible rather than hidden, so the layout it sits in is undisturbed.
+   `print-root` lives in the normal page flow (never inside the fixed drawer),
+   which is what lets a long document paginate.
+--------------------------------------------------------------------------- */
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+  .print-root,
+  .print-root * {
+    visibility: visible !important;
+  }
+  .print-root {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: #fff;
+  }
+}
