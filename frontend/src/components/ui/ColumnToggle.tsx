@@ -39,16 +39,22 @@ export function ColumnToggle({
 
   return (
     <div className="relative" ref={ref}>
+      {/* Icon only — a "N hidden" label wrapped on a narrow toolbar and pushed
+          the buttons beside it out of shape. The count lives in the tooltip,
+          and the icon takes the brand colour while anything is hidden. */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        title="Show/hide columns"
-        className="btn-secondary px-2.5"
+        title={
+          hiddenCount > 0
+            ? `Show/hide columns — ${hiddenCount} hidden`
+            : 'Show/hide columns'
+        }
+        className="btn-secondary flex-none px-2.5"
       >
-        <Columns3 className="h-4 w-4" />
-        {hiddenCount > 0 && (
-          <span className="text-xs text-slate-400">{hiddenCount} hidden</span>
-        )}
+        <Columns3
+          className={cn('h-4 w-4', hiddenCount > 0 && 'text-brand-600')}
+        />
       </button>
 
       {open && (

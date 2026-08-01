@@ -44,7 +44,7 @@ export function BulkLockMenu({
         type="button"
         onClick={() => setOpen((v) => !v)}
         title="Lock or unlock all"
-        className="btn-secondary px-2.5"
+        className="btn-secondary flex-none px-2.5"
       >
         <Lock className="h-4 w-4" />
         <ChevronDown className="h-3.5 w-3.5 text-slate-400" />

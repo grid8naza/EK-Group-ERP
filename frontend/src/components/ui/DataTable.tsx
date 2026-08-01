@@ -360,7 +360,9 @@ export function DataTable<T>({
       {/* Toolbar */}
       <div className="flex flex-col gap-3 border-b border-slate-200 p-3 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-1 flex-wrap items-center gap-2">{toolbar}</div>
-        <div className="flex items-center gap-2">
+        {/* Search plus the icon buttons. flex-none throughout: the filters on
+            the left may be many, but these must never be squashed. */}
+        <div className="flex flex-none items-center gap-2">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -391,7 +393,7 @@ export function DataTable<T>({
           {onRefresh && (
             <button
               onClick={onRefresh}
-              className="btn-secondary px-2.5"
+              className="btn-secondary flex-none px-2.5"
               title="Refresh"
             >
               <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />

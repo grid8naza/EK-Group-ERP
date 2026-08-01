@@ -526,7 +526,8 @@ export default function GroupsPage() {
             : undefined
         }
         toolbar={
-          <div className="flex flex-wrap items-center gap-2">
+          // Kept on one line — the filters read as a single row of controls.
+          <div className="flex flex-nowrap items-center gap-2">
             <Select
               value={categoryFilter}
               onChange={(e) => {
@@ -535,7 +536,7 @@ export default function GroupsPage() {
                 setPrimaryFilter('');
                 setParentFilter('');
               }}
-              wrapClassName="w-40"
+              wrapClassName="w-36"
               placeholder="All categories"
               options={categoryList.map((c) => ({
                 value: String(c.id),
@@ -549,7 +550,7 @@ export default function GroupsPage() {
                 setPrimaryFilter(e.target.value);
                 setParentFilter('');
               }}
-              wrapClassName="w-40"
+              wrapClassName="w-36"
               placeholder="All primary groups"
               options={primaryGroups
                 .filter(
@@ -562,7 +563,7 @@ export default function GroupsPage() {
             <Select
               value={parentFilter}
               onChange={(e) => setParentFilter(e.target.value)}
-              wrapClassName="w-40"
+              wrapClassName="w-36"
               placeholder="Any parent group"
               options={parentCandidates
                 .filter(
@@ -582,7 +583,7 @@ export default function GroupsPage() {
             <Select
               value={applies}
               onChange={(e) => setApplies(e.target.value)}
-              wrapClassName="w-36"
+              wrapClassName="w-32"
               placeholder="Applies to: All"
               options={[
                 { value: 'item', label: 'Item-wise' },
@@ -609,11 +610,11 @@ export default function GroupsPage() {
               >
                 {allCollapsed ? (
                   <>
-                    <ChevronDown className="h-4 w-4" /> Expand all
+                    <ChevronDown className="h-4 w-4" /> Expand
                   </>
                 ) : (
                   <>
-                    <ChevronRight className="h-4 w-4" /> Collapse all
+                    <ChevronRight className="h-4 w-4" /> Collapse
                   </>
                 )}
               </button>
