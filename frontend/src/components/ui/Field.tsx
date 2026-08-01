@@ -215,7 +215,9 @@ type SelectProps = {
   title?: string;
   /** Sort options A→Z by label. On by default (project-wide convention). */
   sortOptions?: boolean;
-  /** Show the type-to-search box once the list has more than this many items. */
+  /** Show the type-to-search box once the list has more than this many items.
+   *  Defaults to 0 — every picker searches, so the behaviour never depends on
+   *  how many rows a master happens to hold today. */
   searchThreshold?: number;
   /** Open the dropdown (and focus its search) on mount — for fast keyboard
    *  entry when the field is the first in a freshly opened form. */
@@ -237,8 +239,9 @@ type SelectProps = {
  * Searchable combobox used for every dropdown in the app. Keeps the old native
  * `<select>` API (`value` + `onChange(e => e.target.value)` + `options`/
  * `placeholder`) so it's a drop-in replacement, while adding type-to-search and
- * A→Z sorting. The search box only appears once a list is long enough to make
- * scrolling tedious (see `searchThreshold`).
+ * A→Z sorting. Every picker searches: a list that is short today grows, and a
+ * box that comes and goes with the row count can't be relied on. Raise
+ * `searchThreshold` on the rare picker that shouldn't have one.
  */
 export function Select({
   label,
@@ -255,7 +258,7 @@ export function Select({
   id,
   title,
   sortOptions = true,
-  searchThreshold = 8,
+  searchThreshold = 0,
   autoFocus = false,
   openOnFocus = false,
   advanceToId,
