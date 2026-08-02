@@ -559,10 +559,18 @@ export default function PackingMasterEditorPage() {
       setPacking(rows);
       setIngForm({ index: null, draft: { ...BLANK_LINE } });
       setIngSeq((s) => s + 1); // remount → item combo re-opens for the next entry
-      void autoSave({ packSources, packing: rows, processes }, itemName(d.itemId));
+      void autoSave(
+        { packSources, packing: rows, processes },
+        `${itemName(d.itemId)} added`,
+      );
     } else {
-      setPacking((rows) => rows.map((r, i) => (i === ingForm.index ? d : r)));
+      const rows = packing.map((r, i) => (i === ingForm.index ? d : r));
+      setPacking(rows);
       setIngForm(null);
+      void autoSave(
+        { packSources, packing: rows, processes },
+        `${itemName(d.itemId)} updated`,
+      );
     }
   };
 
@@ -577,18 +585,18 @@ export default function PackingMasterEditorPage() {
       toast.error('Pick a product and a positive quantity.');
       return;
     }
+    const srcName = productById.get(Number(d.productId))?.name ?? 'Source product';
     if (srcForm.index == null) {
       const rows = [...packSources, d];
       setPackSources(rows);
       setSrcForm({ index: null, draft: { ...BLANK_SRC } });
       setSrcSeq((s) => s + 1);
-      void autoSave(
-        { packSources: rows, packing, processes },
-        productById.get(Number(d.productId))?.name ?? 'Source product',
-      );
+      void autoSave({ packSources: rows, packing, processes }, `${srcName} added`);
     } else {
-      setPackSources((rows) => rows.map((r, i) => (i === srcForm.index ? d : r)));
+      const rows = packSources.map((r, i) => (i === srcForm.index ? d : r));
+      setPackSources(rows);
       setSrcForm(null);
+      void autoSave({ packSources: rows, packing, processes }, `${srcName} updated`);
     }
   };
 
@@ -620,10 +628,15 @@ export default function PackingMasterEditorPage() {
       setProcesses(rows);
       setProcForm({ index: null, draft: { ...BLANK_PROC } });
       setProcSeq((s) => s + 1); // remount → name field re-focuses for the next entry
-      void autoSave({ packSources, packing, processes: rows }, clean.name);
+      void autoSave({ packSources, packing, processes: rows }, `${clean.name} added`);
     } else {
-      setProcesses((rows) => rows.map((r, i) => (i === procForm.index ? clean : r)));
+      const rows = processes.map((r, i) => (i === procForm.index ? clean : r));
+      setProcesses(rows);
       setProcForm(null);
+      void autoSave(
+        { packSources, packing, processes: rows },
+        `${clean.name} updated`,
+      );
     }
   };
 
@@ -784,14 +797,15 @@ export default function PackingMasterEditorPage() {
     }
   };
 
-  // Every added source product / material / process is persisted straight away,
-  // so a row is never lost by leaving the page without pressing Save.
+  // Every source product / material / process added or edited is persisted
+  // straight away, so a row is never lost by leaving the page without pressing
+  // Save.
   const autoSave = async (
     rows: { packSources: Src[]; packing: Line[]; processes: Proc[] },
-    added: string,
+    what: string,
   ) => {
     const ok = await save(false, { rows, silent: true });
-    if (ok) toast.success(`${added} added · packing saved.`);
+    if (ok) toast.success(`${what} · packing saved.`);
   };
 
   // Keep the latest save closure for the keyboard shortcut (avoids stale state).

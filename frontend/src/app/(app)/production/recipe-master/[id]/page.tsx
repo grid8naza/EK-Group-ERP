@@ -465,10 +465,12 @@ export default function RecipeMasterEditorPage() {
       setRecipe(rows);
       setIngForm({ index: null, draft: { ...BLANK_LINE } });
       setIngSeq((s) => s + 1); // remount → item combo re-opens for the next entry
-      void autoSave({ recipe: rows, processes }, itemName(d.itemId));
+      void autoSave({ recipe: rows, processes }, `${itemName(d.itemId)} added`);
     } else {
-      setRecipe((rows) => rows.map((r, i) => (i === ingForm.index ? d : r)));
+      const rows = recipe.map((r, i) => (i === ingForm.index ? d : r));
+      setRecipe(rows);
       setIngForm(null);
+      void autoSave({ recipe: rows, processes }, `${itemName(d.itemId)} updated`);
     }
   };
 
@@ -500,10 +502,12 @@ export default function RecipeMasterEditorPage() {
       setProcesses(rows);
       setProcForm({ index: null, draft: { ...BLANK_PROC } });
       setProcSeq((s) => s + 1); // remount → name field re-focuses for the next entry
-      void autoSave({ recipe, processes: rows }, clean.name);
+      void autoSave({ recipe, processes: rows }, `${clean.name} added`);
     } else {
-      setProcesses((rows) => rows.map((r, i) => (i === procForm.index ? clean : r)));
+      const rows = processes.map((r, i) => (i === procForm.index ? clean : r));
+      setProcesses(rows);
       setProcForm(null);
+      void autoSave({ recipe, processes: rows }, `${clean.name} updated`);
     }
   };
 
@@ -638,14 +642,14 @@ export default function RecipeMasterEditorPage() {
     }
   };
 
-  // Every added ingredient / process is persisted straight away, so a row is
-  // never lost by leaving the page without pressing Save.
+  // Every ingredient / process added or edited is persisted straight away, so a
+  // row is never lost by leaving the page without pressing Save.
   const autoSave = async (
     rows: { recipe: Line[]; processes: Proc[] },
-    added: string,
+    what: string,
   ) => {
     const ok = await save(false, { rows, silent: true });
-    if (ok) toast.success(`${added} added · recipe saved.`);
+    if (ok) toast.success(`${what} · recipe saved.`);
   };
 
   // Print the recipe from the CURRENT on-screen state (so unsaved edits show).
