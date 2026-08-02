@@ -14,6 +14,7 @@ import {
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useFetch, useUnsavedChangesGuard } from '@/lib/hooks';
+import { useConfirm } from '@/providers/ConfirmProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -108,6 +109,7 @@ export default function PackingMasterEditorPage() {
   const router = useRouter();
   const { can } = useAuth();
   const toast = useToast();
+  const confirm = useConfirm();
 
   const id = String(params.id);
   const view = searchParams.get('view') === '1' || !can(ROUTE, 'edit');
@@ -528,6 +530,18 @@ export default function PackingMasterEditorPage() {
   });
   const yieldUnitCode = unitCode(product?.unitId);
 
+  // Removing a row writes through immediately (see autoSave), so unlike an
+  // aborted edit there is nothing to walk away from — ask before it goes.
+  const confirmRemove = (message: string) =>
+    confirm({
+      title: 'Remove row',
+      message: `${message} It is saved as soon as you confirm.`,
+      confirmText: 'Remove',
+      cancelText: 'Cancel',
+      danger: true,
+      defaultCancel: true,
+    });
+
   // --- ingredient overlay ---
   const openAddIng = () => setIngForm({ index: null, draft: { ...BLANK_LINE } });
   const openEditIng = (i: number) =>
@@ -573,8 +587,9 @@ export default function PackingMasterEditorPage() {
       );
     }
   };
-  const removeIng = (i: number) => {
+  const removeIng = async (i: number) => {
     const gone = itemName(packing[i].itemId);
+    if (!(await confirmRemove(`Remove ${gone} from this packing?`))) return;
     const rows = packing.filter((_, idx) => idx !== i);
     setPacking(rows);
     void autoSave({ packSources, packing: rows, processes }, `${gone} removed`);
@@ -605,9 +620,10 @@ export default function PackingMasterEditorPage() {
       void autoSave({ packSources: rows, packing, processes }, `${srcName} updated`);
     }
   };
-  const removeSrc = (i: number) => {
+  const removeSrc = async (i: number) => {
     const gone =
       productById.get(Number(packSources[i].productId))?.name ?? 'Source product';
+    if (!(await confirmRemove(`Remove ${gone} as a source product?`))) return;
     const rows = packSources.filter((_, idx) => idx !== i);
     setPackSources(rows);
     void autoSave({ packSources: rows, packing, processes }, `${gone} removed`);
@@ -652,8 +668,10 @@ export default function PackingMasterEditorPage() {
       );
     }
   };
-  const removeProc = (i: number) => {
+  const removeProc = async (i: number) => {
     const gone = processes[i].name;
+    if (!(await confirmRemove(`Remove the ${gone} step from this process flow?`)))
+      return;
     const rows = processes.filter((_, idx) => idx !== i);
     setProcesses(rows);
     void autoSave({ packSources, packing, processes: rows }, `${gone} removed`);
@@ -999,7 +1017,7 @@ export default function PackingMasterEditorPage() {
                         <td className="pl-1">
                           <RowActions
                             onEdit={() => openEditSrc(i)}
-                            onDelete={() => removeSrc(i)}
+                            onDelete={() => void removeSrc(i)}
                           />
                         </td>
                       )}
@@ -1080,7 +1098,7 @@ export default function PackingMasterEditorPage() {
                         <td className="pl-1">
                           <RowActions
                             onEdit={() => openEditIng(i)}
-                            onDelete={() => removeIng(i)}
+                            onDelete={() => void removeIng(i)}
                           />
                         </td>
                       )}
@@ -1156,7 +1174,7 @@ export default function PackingMasterEditorPage() {
                         <td className="pl-1">
                           <RowActions
                             onEdit={() => openEditProc(i)}
-                            onDelete={() => removeProc(i)}
+                            onDelete={() => void removeProc(i)}
                           />
                         </td>
                       )}

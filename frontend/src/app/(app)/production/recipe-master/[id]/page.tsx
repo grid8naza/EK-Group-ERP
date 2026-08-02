@@ -16,6 +16,7 @@ import { printRecipe } from '@/lib/recipePrint';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useFetch, useUnsavedChangesGuard } from '@/lib/hooks';
+import { useConfirm } from '@/providers/ConfirmProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -107,6 +108,7 @@ export default function RecipeMasterEditorPage() {
   const router = useRouter();
   const { can } = useAuth();
   const toast = useToast();
+  const confirm = useConfirm();
 
   const id = String(params.id);
   const view = searchParams.get('view') === '1' || !can(ROUTE, 'edit');
@@ -434,6 +436,18 @@ export default function RecipeMasterEditorPage() {
   });
   const yieldUnitCode = unitCode(product?.boxUnitId ?? product?.unitId);
 
+  // Removing a row writes through immediately (see autoSave), so unlike an
+  // aborted edit there is nothing to walk away from — ask before it goes.
+  const confirmRemove = (message: string) =>
+    confirm({
+      title: 'Remove row',
+      message: `${message} It is saved as soon as you confirm.`,
+      confirmText: 'Remove',
+      cancelText: 'Cancel',
+      danger: true,
+      defaultCancel: true,
+    });
+
   // --- ingredient overlay ---
   const openAddIng = () => setIngForm({ index: null, draft: { ...BLANK_LINE } });
   const openEditIng = (i: number) =>
@@ -473,8 +487,9 @@ export default function RecipeMasterEditorPage() {
       void autoSave({ recipe: rows, processes }, `${itemName(d.itemId)} updated`);
     }
   };
-  const removeIng = (i: number) => {
+  const removeIng = async (i: number) => {
     const gone = itemName(recipe[i].itemId);
+    if (!(await confirmRemove(`Remove ${gone} from this recipe?`))) return;
     const rows = recipe.filter((_, idx) => idx !== i);
     setRecipe(rows);
     void autoSave({ recipe: rows, processes }, `${gone} removed`);
@@ -516,8 +531,10 @@ export default function RecipeMasterEditorPage() {
       void autoSave({ recipe, processes: rows }, `${clean.name} updated`);
     }
   };
-  const removeProc = (i: number) => {
+  const removeProc = async (i: number) => {
     const gone = processes[i].name;
+    if (!(await confirmRemove(`Remove the ${gone} step from this process flow?`)))
+      return;
     const rows = processes.filter((_, idx) => idx !== i);
     setProcesses(rows);
     void autoSave({ recipe, processes: rows }, `${gone} removed`);
@@ -885,7 +902,7 @@ export default function RecipeMasterEditorPage() {
                         <td className="pl-1">
                           <RowActions
                             onEdit={() => openEditIng(i)}
-                            onDelete={() => removeIng(i)}
+                            onDelete={() => void removeIng(i)}
                           />
                         </td>
                       )}
@@ -961,7 +978,7 @@ export default function RecipeMasterEditorPage() {
                         <td className="pl-1">
                           <RowActions
                             onEdit={() => openEditProc(i)}
-                            onDelete={() => removeProc(i)}
+                            onDelete={() => void removeProc(i)}
                           />
                         </td>
                       )}
