@@ -833,6 +833,12 @@ export interface Product {
   intercompanyProfitPct: number;
   retailPrice: number;
   retailProfitPct: number;
+  /**
+   * Maximum Retail Price — the single figure printed on the pack label, set in
+   * Packing Master against RETAIL only. Distinct from the retail "Total Price"
+   * (retail price + GST/cess), which is computed rather than stored.
+   */
+  mrp: number;
   boxQty: number;
   boxUnitId?: number | null;
   boxUnit?: MasterRef | null;

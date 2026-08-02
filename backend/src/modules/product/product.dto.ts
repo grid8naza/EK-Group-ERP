@@ -269,6 +269,12 @@ export class CreateProductDto {
   @IsNumber()
   retailProfitPct?: number;
 
+  /** Maximum Retail Price — the single figure printed on the pack label. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  mrp?: number;
+
   @IsOptional()
   @IsNumber()
   @Min(0)
@@ -512,6 +518,12 @@ export class UpdateProductDto {
   @IsOptional()
   @IsNumber()
   retailProfitPct?: number;
+
+  /** Maximum Retail Price — the single figure printed on the pack label. */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  mrp?: number;
 
   @IsOptional()
   @IsNumber()

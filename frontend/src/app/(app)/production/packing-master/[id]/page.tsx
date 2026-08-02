@@ -242,6 +242,10 @@ export default function PackingMasterEditorPage() {
   const [wholesalePct, setWholesalePct] = useState('0');
   const [retailPrice, setRetailPrice] = useState('0');
   const [retailPct, setRetailPct] = useState('0');
+  // Maximum Retail Price — entered against RETAIL only, because it is the one
+  // figure printed on the pack label alongside the dates, not a per-customer
+  // price. Free of the computed Total Price above it, which is retail + taxes.
+  const [mrp, setMrp] = useState('0');
   // Source (unpacked) products this pack is made from, each with a quantity.
   const [packSources, setPackSources] = useState<Src[]>([]);
   const [saving, setSaving] = useState(false);
@@ -297,6 +301,7 @@ export default function PackingMasterEditorPage() {
     setWholesalePct(toPrice(String(product.wholesaleProfitPct ?? 0)));
     setRetailPrice(toPrice(String(product.retailPrice ?? 0)));
     setRetailPct(toPrice(String(product.retailProfitPct ?? 0)));
+    setMrp(toPrice(String(product.mrp ?? 0)));
     setPackSources(
       (product.packSources ?? []).map((s) => ({
         productId: String(s.sourceProductId),
@@ -311,6 +316,7 @@ export default function PackingMasterEditorPage() {
       intercompanyPrice: Number(product.intercompanyPrice ?? 0) || 0,
       wholesalePrice: Number(product.wholesalePrice ?? 0) || 0,
       retailPrice: Number(product.retailPrice ?? 0) || 0,
+      mrp: Number(product.mrp ?? 0) || 0,
       packSources: (product.packSources ?? []).map((s) => ({
         p: s.sourceProductId,
         q: s.quantity,
@@ -427,14 +433,15 @@ export default function PackingMasterEditorPage() {
     actualCostPerUnit ? (profitOf(price) / actualCostPerUnit) * 100 : 0;
   const priceFromPct = (pct: string) => actualCostPerUnit * (1 + num(pct) / 100);
   // GST / Cess rates come from this product's HSN code (set in Product Master).
-  // Each tax amount is the rate applied to the entered sales price; MRP adds them
-  // on top of the sales price.
+  // Each tax amount is the rate applied to the entered sales price; the total
+  // price adds them on top of it. (Not the MRP — that is the figure printed on
+  // the label, entered by hand below, and it need not equal retail + tax.)
   const hsn = (hsnCodes ?? []).find((h) => h.id === product?.hsnCodeId);
   const cgstPct = hsn?.cgst ?? 0;
   const sgstPct = hsn?.sgst ?? 0;
   const cessPct = hsn?.cess ?? 0;
   const taxOf = (price: string, ratePct: number) => (num(price) * ratePct) / 100;
-  const mrpOf = (price: string) =>
+  const totalPriceOf = (price: string) =>
     num(price) + taxOf(price, cgstPct) + taxOf(price, sgstPct) + taxOf(price, cessPct);
   // The three selling-price columns of the "Price per box" table. Editing a price
   // recomputes its %, and editing a % recomputes its price (both over unit cost).
@@ -744,6 +751,7 @@ export default function PackingMasterEditorPage() {
       intercompanyPrice: num(intercompanyPrice),
       wholesalePrice: num(wholesalePrice),
       retailPrice: num(retailPrice),
+      mrp: num(mrp),
       packSources: src.map((s) => ({
         p: Number(s.productId) || 0,
         q: Number(s.quantity) || 0,
@@ -836,6 +844,8 @@ export default function PackingMasterEditorPage() {
       wholesaleProfitPct: round1(profitPctOf(wholesalePrice)),
       retailPrice: round1(num(retailPrice)),
       retailProfitPct: round1(profitPctOf(retailPrice)),
+      // The label price. Entered, never derived — it is a decision, not a sum.
+      mrp: round1(num(mrp)),
     };
     setSaving(true);
     try {
@@ -1444,14 +1454,14 @@ export default function PackingMasterEditorPage() {
                     </tr>
                     <tr className="bg-slate-100 dark:bg-slate-800/60">
                       <td className="border border-slate-200 px-3 py-2 font-semibold text-slate-800 dark:border-slate-700 dark:text-slate-100">
-                        MRP
+                        Total Price
                       </td>
                       {priceCols.map((c) => (
                         <td
                           key={c.key}
                           className="border border-slate-200 px-3 py-2 text-right font-bold tabular-nums text-slate-900 dark:border-slate-700 dark:text-white"
                         >
-                          {money1(mrpOf(c.price))}
+                          {money1(totalPriceOf(c.price))}
                         </td>
                       ))}
                     </tr>
@@ -1467,6 +1477,33 @@ export default function PackingMasterEditorPage() {
                           {money1(profitOf(c.price))}
                         </td>
                       ))}
+                    </tr>
+                    {/* MRP sits under Retail alone: one figure goes on the pack
+                        label, so there is nothing to enter for the other two. */}
+                    <tr>
+                      <td className="border border-slate-200 px-3 py-2 font-semibold text-slate-800 dark:border-slate-700 dark:text-slate-100">
+                        MRP
+                        <span className="ml-1 font-normal text-xs text-slate-400">
+                          (printed on the label)
+                        </span>
+                      </td>
+                      <td className="border border-slate-200 px-3 py-2 text-right text-slate-300 dark:border-slate-700 dark:text-slate-600">
+                        —
+                      </td>
+                      <td className="border border-slate-200 px-3 py-2 text-right text-slate-300 dark:border-slate-700 dark:text-slate-600">
+                        —
+                      </td>
+                      <td className="border border-slate-200 p-0 dark:border-slate-700">
+                        <input
+                          className="cell-input no-spinner text-right font-bold tabular-nums"
+                          type="number"
+                          min={0}
+                          step="any"
+                          value={mrp}
+                          onChange={(e) => setMrp(e.target.value)}
+                          onBlur={() => setMrp((v) => toPrice(v))}
+                        />
+                      </td>
                     </tr>
                   </tbody>
                 </table>
