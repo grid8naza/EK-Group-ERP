@@ -13,9 +13,8 @@ import {
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { useFetch } from '@/lib/hooks';
+import { useFetch, useUnsavedChangesGuard } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
-import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
@@ -109,7 +108,6 @@ export default function PackingMasterEditorPage() {
   const router = useRouter();
   const { can } = useAuth();
   const toast = useToast();
-  const confirm = useConfirm();
 
   const id = String(params.id);
   const view = searchParams.get('view') === '1' || !can(ROUTE, 'edit');
@@ -556,11 +554,12 @@ export default function PackingMasterEditorPage() {
     }
     if (ingForm.index == null) {
       // Adding: keep the drawer open with a fresh row so more can be added;
-      // the user closes with Cancel when done.
-      setPacking((rows) => [...rows, d]);
-      toast.success(`${itemName(d.itemId)} added.`);
+      // the user closes with Cancel when done. The packing is saved right away.
+      const rows = [...packing, d];
+      setPacking(rows);
       setIngForm({ index: null, draft: { ...BLANK_LINE } });
       setIngSeq((s) => s + 1); // remount → item combo re-opens for the next entry
+      void autoSave({ packSources, packing: rows, processes }, itemName(d.itemId));
     } else {
       setPacking((rows) => rows.map((r, i) => (i === ingForm.index ? d : r)));
       setIngForm(null);
@@ -579,9 +578,14 @@ export default function PackingMasterEditorPage() {
       return;
     }
     if (srcForm.index == null) {
-      setPackSources((rows) => [...rows, d]);
+      const rows = [...packSources, d];
+      setPackSources(rows);
       setSrcForm({ index: null, draft: { ...BLANK_SRC } });
       setSrcSeq((s) => s + 1);
+      void autoSave(
+        { packSources: rows, packing, processes },
+        productById.get(Number(d.productId))?.name ?? 'Source product',
+      );
     } else {
       setPackSources((rows) => rows.map((r, i) => (i === srcForm.index ? d : r)));
       setSrcForm(null);
@@ -611,10 +615,12 @@ export default function PackingMasterEditorPage() {
     const clean = { ...d, name: d.name.trim() };
     if (procForm.index == null) {
       // Adding: keep the drawer open for the next process; Cancel closes it.
-      setProcesses((rows) => [...rows, clean]);
-      toast.success(`${clean.name} added.`);
+      // The packing is saved right away.
+      const rows = [...processes, clean];
+      setProcesses(rows);
       setProcForm({ index: null, draft: { ...BLANK_PROC } });
       setProcSeq((s) => s + 1); // remount → name field re-focuses for the next entry
+      void autoSave({ packSources, packing, processes: rows }, clean.name);
     } else {
       setProcesses((rows) => rows.map((r, i) => (i === procForm.index ? clean : r)));
       setProcForm(null);
@@ -662,8 +668,13 @@ export default function PackingMasterEditorPage() {
   };
 
   // Format-independent snapshot of the editable state; compared to the baseline
-  // to detect unsaved changes.
-  const snapshot = () =>
+  // to detect unsaved changes. The rows can be overridden so a just-added line
+  // can be snapshotted before React has re-rendered with it (auto-save).
+  const snapshot = (
+    src: Src[] = packSources,
+    pack: Line[] = packing,
+    procs: Proc[] = processes,
+  ) =>
     JSON.stringify({
       yieldQty: num(yieldQty),
       fuelCost: num(fuelCost),
@@ -672,16 +683,16 @@ export default function PackingMasterEditorPage() {
       intercompanyPrice: num(intercompanyPrice),
       wholesalePrice: num(wholesalePrice),
       retailPrice: num(retailPrice),
-      packSources: packSources.map((s) => ({
+      packSources: src.map((s) => ({
         p: Number(s.productId) || 0,
         q: Number(s.quantity) || 0,
       })),
-      packing: packing.map((l) => ({
+      packing: pack.map((l) => ({
         i: Number(l.itemId) || 0,
         q: Number(l.quantity) || 0,
         u: Number(l.unitId) || 0,
       })),
-      processes: processes.map((p) => ({
+      processes: procs.map((p) => ({
         n: p.name.trim(),
         t: num(p.timeValue),
         tu: p.timeUnit,
@@ -693,42 +704,44 @@ export default function PackingMasterEditorPage() {
       })),
     });
 
-  // Warn before leaving with unsaved edits (the Back button).
-  const onBack = async () => {
-    if (snapshot() !== baselineRef.current) {
-      const ok = await confirm({
-        title: 'Unsaved changes',
-        message:
-          'There are unsaved changes. If you leave this page, they will be lost. Continue?',
-        danger: true,
-        confirmText: 'Yes',
-        cancelText: 'No',
-        defaultCancel: true,
-      });
-      if (!ok) return;
-    }
-    router.push(ROUTE);
-  };
+  // Warn before leaving with unsaved edits — the Back button below, and equally
+  // the sidebar menu, any other in-app link and a browser refresh.
+  const { leave } = useUnsavedChangesGuard(
+    () => snapshot() !== baselineRef.current,
+  );
+  const onBack = () => leave(ROUTE);
 
-  const save = async (close: boolean) => {
-    if (!product) return;
+  // `rows` overrides the state arrays (auto-save passes the just-added row, which
+  // React has not re-rendered yet); `silent` suppresses the success toast so the
+  // auto-save can report through the "… added" toast instead. Returns true on save.
+  const save = async (
+    close: boolean,
+    opts?: {
+      rows?: { packSources: Src[]; packing: Line[]; processes: Proc[] };
+      silent?: boolean;
+    },
+  ) => {
+    if (!product) return false;
+    const src = opts?.rows?.packSources ?? packSources;
+    const pack = opts?.rows?.packing ?? packing;
+    const procs = opts?.rows?.processes ?? processes;
     const payload = {
       yieldQty: num(yieldQty) || 1,
       yieldUnitId: product.unitId,
-      packSources: packSources
+      packSources: src
         .filter((s) => s.productId && Number(s.quantity) > 0)
         .map((s) => ({
           sourceProductId: Number(s.productId),
           quantity: Number(s.quantity),
         })),
-      packing: packing
+      packing: pack
         .filter((l) => l.itemId && Number(l.quantity) > 0 && l.unitId)
         .map((l) => ({
           itemId: Number(l.itemId),
           quantity: Number(l.quantity),
           unitId: Number(l.unitId),
         })),
-      processes: processes
+      processes: procs
         .filter((p) => p.name.trim())
         .map((p) => ({
           name: p.name.trim(),
@@ -759,14 +772,26 @@ export default function PackingMasterEditorPage() {
     setSaving(true);
     try {
       await api.patch(`/products/${product.id}`, payload);
-      baselineRef.current = snapshot();
-      toast.success('Packing saved.');
+      baselineRef.current = snapshot(src, pack, procs);
+      if (!opts?.silent) toast.success('Packing saved.');
       if (close) router.push(ROUTE);
+      return true;
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save packing.');
+      return false;
     } finally {
       setSaving(false);
     }
+  };
+
+  // Every added source product / material / process is persisted straight away,
+  // so a row is never lost by leaving the page without pressing Save.
+  const autoSave = async (
+    rows: { packSources: Src[]; packing: Line[]; processes: Proc[] },
+    added: string,
+  ) => {
+    const ok = await save(false, { rows, silent: true });
+    if (ok) toast.success(`${added} added · packing saved.`);
   };
 
   // Keep the latest save closure for the keyboard shortcut (avoids stale state).

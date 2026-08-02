@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ClipboardList,
   Trash2,
@@ -13,7 +13,7 @@ import {
   Truck,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
-import { useFetch } from '@/lib/hooks';
+import { useFetch, useUnsavedChangesGuard } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
@@ -148,6 +148,16 @@ export function SalesOrderScreen() {
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [notes, setNotes] = useState('');
 
+  // Snapshot of the draft as loaded (and as last saved), so leaving the screen —
+  // the sidebar menu, any other in-app link, a browser refresh — can tell
+  // whether the committed quantities on it have actually been touched.
+  const baselineRef = useRef('');
+  const snapshotOf = (at: string, note: string, ls: DraftLine[]) =>
+    JSON.stringify({ at, note, ls });
+  useUnsavedChangesGuard(
+    () => mode === 'edit' && snapshotOf(deliveryAt, notes, lines) !== baselineRef.current,
+  );
+
   const setLineQty = (lineId: number, quantity: string) =>
     setLines((ls) => ls.map((l) => (l.lineId === lineId ? { ...l, quantity } : l)));
   // Only a balance line (no batch) accepts a price — the backend enforces it too.
@@ -163,19 +173,27 @@ export function SalesOrderScreen() {
     [lines, current],
   );
 
+  // Push a freshly loaded / freshly saved order into the draft form, and take
+  // that as the clean baseline.
+  const hydrate = (full: SalesOrder) => {
+    const at = toLocalInput(full.deliveryAt);
+    const note = full.notes ?? '';
+    const ls = full.lines.map((l) => ({
+      lineId: l.id,
+      quantity: String(l.quantity),
+      rate: String(l.rate),
+    }));
+    setDeliveryAt(at);
+    setNotes(note);
+    setLines(ls);
+    baselineRef.current = snapshotOf(at, note, ls);
+  };
+
   const loadOrder = async (id: number) => {
     const full = await api.get<SalesOrder>(`/sales-orders/${id}`);
     setCurrent(full);
     setComment('');
-    setDeliveryAt(toLocalInput(full.deliveryAt));
-    setLines(
-      full.lines.map((l) => ({
-        lineId: l.id,
-        quantity: String(l.quantity),
-        rate: String(l.rate),
-      })),
-    );
-    setNotes(full.notes ?? '');
+    hydrate(full);
     return full;
   };
 
@@ -248,13 +266,7 @@ export function SalesOrderScreen() {
       if (close) backToList();
       else {
         setCurrent(saved);
-        setLines(
-          saved.lines.map((l) => ({
-            lineId: l.id,
-            quantity: String(l.quantity),
-            rate: String(l.rate),
-          })),
-        );
+        hydrate(saved);
       }
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save.');

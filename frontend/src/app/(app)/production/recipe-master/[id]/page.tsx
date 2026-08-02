@@ -15,9 +15,8 @@ import {
 import { printRecipe } from '@/lib/recipePrint';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { useFetch } from '@/lib/hooks';
+import { useFetch, useUnsavedChangesGuard } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
-import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
@@ -108,7 +107,6 @@ export default function RecipeMasterEditorPage() {
   const router = useRouter();
   const { can } = useAuth();
   const toast = useToast();
-  const confirm = useConfirm();
 
   const id = String(params.id);
   const view = searchParams.get('view') === '1' || !can(ROUTE, 'edit');
@@ -462,11 +460,12 @@ export default function RecipeMasterEditorPage() {
     }
     if (ingForm.index == null) {
       // Adding: keep the drawer open with a fresh row so more can be added;
-      // the user closes with Cancel when done.
-      setRecipe((rows) => [...rows, d]);
-      toast.success(`${itemName(d.itemId)} added.`);
+      // the user closes with Cancel when done. The recipe is saved right away.
+      const rows = [...recipe, d];
+      setRecipe(rows);
       setIngForm({ index: null, draft: { ...BLANK_LINE } });
       setIngSeq((s) => s + 1); // remount → item combo re-opens for the next entry
+      void autoSave({ recipe: rows, processes }, itemName(d.itemId));
     } else {
       setRecipe((rows) => rows.map((r, i) => (i === ingForm.index ? d : r)));
       setIngForm(null);
@@ -496,10 +495,12 @@ export default function RecipeMasterEditorPage() {
     const clean = { ...d, name: d.name.trim() };
     if (procForm.index == null) {
       // Adding: keep the drawer open for the next process; Cancel closes it.
-      setProcesses((rows) => [...rows, clean]);
-      toast.success(`${clean.name} added.`);
+      // The recipe is saved right away.
+      const rows = [...processes, clean];
+      setProcesses(rows);
       setProcForm({ index: null, draft: { ...BLANK_PROC } });
       setProcSeq((s) => s + 1); // remount → name field re-focuses for the next entry
+      void autoSave({ recipe, processes: rows }, clean.name);
     } else {
       setProcesses((rows) => rows.map((r, i) => (i === procForm.index ? clean : r)));
       setProcForm(null);
@@ -547,20 +548,21 @@ export default function RecipeMasterEditorPage() {
   };
 
   // Format-independent snapshot of the editable state; compared to the baseline
-  // to detect unsaved changes.
-  const snapshot = () =>
+  // to detect unsaved changes. The rows can be overridden so a just-added line
+  // can be snapshotted before React has re-rendered with it (auto-save).
+  const snapshot = (rec: Line[] = recipe, procs: Proc[] = processes) =>
     JSON.stringify({
       yieldQty: num(yieldQty),
       fuelCost: num(fuelCost),
       overheadCost: num(overheadCost),
       bomMarginPct: num(bomMarginPct),
       actualSalesPrice: num(actualSalesPrice),
-      recipe: recipe.map((l) => ({
+      recipe: rec.map((l) => ({
         i: Number(l.itemId) || 0,
         q: Number(l.quantity) || 0,
         u: Number(l.unitId) || 0,
       })),
-      processes: processes.map((p) => ({
+      processes: procs.map((p) => ({
         n: p.name.trim(),
         t: num(p.timeValue),
         tu: p.timeUnit,
@@ -572,36 +574,34 @@ export default function RecipeMasterEditorPage() {
       })),
     });
 
-  // Warn before leaving with unsaved edits (the Back button).
-  const onBack = async () => {
-    if (snapshot() !== baselineRef.current) {
-      const ok = await confirm({
-        title: 'Unsaved changes',
-        message:
-          'There are unsaved changes. If you leave this page, they will be lost. Continue?',
-        danger: true,
-        confirmText: 'Yes',
-        cancelText: 'No',
-        defaultCancel: true,
-      });
-      if (!ok) return;
-    }
-    router.push(ROUTE);
-  };
+  // Warn before leaving with unsaved edits — the Back button below, and equally
+  // the sidebar menu, any other in-app link and a browser refresh.
+  const { leave } = useUnsavedChangesGuard(
+    () => snapshot() !== baselineRef.current,
+  );
+  const onBack = () => leave(ROUTE);
 
-  const save = async (close: boolean) => {
-    if (!product) return;
+  // `rows` overrides the state arrays (auto-save passes the just-added row, which
+  // React has not re-rendered yet); `silent` suppresses the success toast so the
+  // auto-save can report through the "… added" toast instead. Returns true on save.
+  const save = async (
+    close: boolean,
+    opts?: { rows?: { recipe: Line[]; processes: Proc[] }; silent?: boolean },
+  ) => {
+    if (!product) return false;
+    const rec = opts?.rows?.recipe ?? recipe;
+    const procs = opts?.rows?.processes ?? processes;
     const payload = {
       yieldQty: num(yieldQty) || 1,
       yieldUnitId: product.boxUnitId ?? product.unitId,
-      recipe: recipe
+      recipe: rec
         .filter((l) => l.itemId && Number(l.quantity) > 0 && l.unitId)
         .map((l) => ({
           itemId: Number(l.itemId),
           quantity: Number(l.quantity),
           unitId: Number(l.unitId),
         })),
-      processes: processes
+      processes: procs
         .filter((p) => p.name.trim())
         .map((p) => ({
           name: p.name.trim(),
@@ -626,14 +626,26 @@ export default function RecipeMasterEditorPage() {
     setSaving(true);
     try {
       await api.patch(`/products/${product.id}`, payload);
-      baselineRef.current = snapshot();
-      toast.success('Recipe saved.');
+      baselineRef.current = snapshot(rec, procs);
+      if (!opts?.silent) toast.success('Recipe saved.');
       if (close) router.push(ROUTE);
+      return true;
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save recipe.');
+      return false;
     } finally {
       setSaving(false);
     }
+  };
+
+  // Every added ingredient / process is persisted straight away, so a row is
+  // never lost by leaving the page without pressing Save.
+  const autoSave = async (
+    rows: { recipe: Line[]; processes: Proc[] },
+    added: string,
+  ) => {
+    const ok = await save(false, { rows, silent: true });
+    if (ok) toast.success(`${added} added · recipe saved.`);
   };
 
   // Print the recipe from the CURRENT on-screen state (so unsaved edits show).

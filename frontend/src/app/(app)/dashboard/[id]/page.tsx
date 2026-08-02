@@ -19,6 +19,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, RotateCcw, Save, LayoutDashboard } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
+import { useUnsavedChangesGuard } from '@/lib/hooks';
 import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { resolveIcon } from '@/lib/icons';
@@ -49,6 +50,11 @@ export default function DashboardViewPage() {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
+
+  // A re-arranged layout lives only in state until "Save layout" is pressed, so
+  // leaving the page — the sidebar menu, any other in-app link, a browser
+  // refresh — has to ask first.
+  useUnsavedChangesGuard(() => dirty);
 
   const loadDashboard = useCallback(async () => {
     if (!id) return;

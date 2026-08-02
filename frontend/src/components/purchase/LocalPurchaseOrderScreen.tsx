@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Truck,
   Plus,
@@ -12,7 +12,7 @@ import {
   Ban,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
-import { useFetch } from '@/lib/hooks';
+import { useFetch, useUnsavedChangesGuard } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
@@ -197,6 +197,37 @@ export function LocalPurchaseOrderScreen() {
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [notes, setNotes] = useState('');
 
+  // Snapshot of the draft as opened (and as last saved), so leaving the screen —
+  // the sidebar menu, any other in-app link, a browser refresh — can tell
+  // whether the order on it has actually been touched.
+  const baselineRef = useRef('');
+  type Draft = {
+    supplier: string;
+    store: string;
+    at: string;
+    note: string;
+    ls: DraftLine[];
+  };
+  const snapshot = () =>
+    JSON.stringify({
+      supplier: supplierId,
+      store: storeId,
+      at: deliveryAt,
+      note: notes,
+      ls: lines,
+    } satisfies Draft);
+  useUnsavedChangesGuard(() => mode === 'edit' && snapshot() !== baselineRef.current);
+
+  // Push a draft into the form and take it as the clean baseline.
+  const hydrate = (d: Draft) => {
+    setSupplierId(d.supplier);
+    setStoreId(d.store);
+    setDeliveryAt(d.at);
+    setNotes(d.note);
+    setLines(d.ls);
+    baselineRef.current = JSON.stringify(d);
+  };
+
   const addLine = () =>
     setLines((ls) => [...ls, { target: '', quantity: '', rate: '' }]);
   const setLine = (i: number, patch: Partial<DraftLine>) =>
@@ -228,30 +259,34 @@ export function LocalPurchaseOrderScreen() {
   // ---- navigation ----
   const openNew = () => {
     setCurrent(null);
-    setSupplierId('');
-    // Default store: the one the masters flag as default for this branch.
-    setStoreId(String((stores ?? []).find((s) => s.isDefault)?.id ?? ''));
-    setDeliveryAt('');
-    setLines([]);
-    setNotes('');
+    hydrate({
+      supplier: '',
+      // Default store: the one the masters flag as default for this branch.
+      store: String((stores ?? []).find((s) => s.isDefault)?.id ?? ''),
+      at: '',
+      note: '',
+      ls: [],
+    });
     setMode('edit');
   };
+
+  const draftOf = (full: LocalPurchaseOrder): Draft => ({
+    supplier: String(full.supplierId),
+    store: full.storeId ? String(full.storeId) : '',
+    at: toLocalInput(full.deliveryAt),
+    note: full.notes ?? '',
+    ls: full.lines.map((l) => ({
+      target: targetOf(l),
+      quantity: String(l.quantity),
+      rate: String(l.rate),
+    })),
+  });
 
   const loadOrder = async (id: number) => {
     const full = await api.get<LocalPurchaseOrder>(`/local-purchase-orders/${id}`);
     setCurrent(full);
     setComment('');
-    setSupplierId(String(full.supplierId));
-    setStoreId(full.storeId ? String(full.storeId) : '');
-    setDeliveryAt(toLocalInput(full.deliveryAt));
-    setLines(
-      full.lines.map((l) => ({
-        target: targetOf(l),
-        quantity: String(l.quantity),
-        rate: String(l.rate),
-      })),
-    );
-    setNotes(full.notes ?? '');
+    hydrate(draftOf(full));
     return full;
   };
 
@@ -339,7 +374,10 @@ export function LocalPurchaseOrderScreen() {
       const saved = await persist();
       toast.success(current ? 'Draft saved.' : 'Draft created.');
       if (close) backToList();
-      else setCurrent(saved);
+      else {
+        setCurrent(saved);
+        hydrate(draftOf(saved));
+      }
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
     } finally {

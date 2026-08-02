@@ -10,6 +10,7 @@ import { useSoftwareInfo } from '@/providers/SoftwareInfoProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Input, Textarea } from '@/components/ui/Field';
 import { mediaUrl } from '@/lib/login-screen';
+import { useUnsavedChangesGuard } from '@/lib/hooks';
 import {
   LOGO_SIZE_DEFAULT,
   LOGO_SIZE_MAX,
@@ -45,10 +46,23 @@ export default function SoftwareInfoPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const symbolFileRef = useRef<HTMLInputElement>(null);
 
+  // Nothing here is saved until Save is pressed, so leaving the page — the
+  // sidebar menu, any other in-app link, a browser refresh — has to ask first.
+  // (Logo uploads are their own immediate action and are not part of this.)
+  const baselineRef = useRef('');
+  const snapshot = (
+    f: SoftwareInfo = form,
+    size = logoSize,
+    symbolSize = symbolLogoSize,
+  ) => JSON.stringify({ f, size, symbolSize });
+  useUnsavedChangesGuard(
+    () => !readOnly && !loading && snapshot() !== baselineRef.current,
+  );
+
   const load = async () => {
     try {
       const data = await api.get<SoftwareInfo>('/software-info');
-      setForm({
+      const loaded: SoftwareInfo = {
         companyName: data.companyName ?? '',
         address: data.address ?? '',
         email: data.email ?? '',
@@ -57,13 +71,17 @@ export default function SoftwareInfoPage() {
         softwareVersion: data.softwareVersion ?? '',
         licenceKey: data.licenceKey ?? '',
         subscriptionExpiry: toDateInput(data.subscriptionExpiry),
-      });
+      };
+      const size = data.logoSize ?? LOGO_SIZE_DEFAULT;
+      const symbolSize = data.symbolLogoSize ?? LOGO_SIZE_DEFAULT;
+      setForm(loaded);
       setLogoUrl(data.logoUrl ?? null);
-      setLogoSize(data.logoSize ?? LOGO_SIZE_DEFAULT);
+      setLogoSize(size);
       setLogoBroken(false);
       setSymbolLogoUrl(data.symbolLogoUrl ?? null);
-      setSymbolLogoSize(data.symbolLogoSize ?? LOGO_SIZE_DEFAULT);
+      setSymbolLogoSize(symbolSize);
       setSymbolBroken(false);
+      baselineRef.current = snapshot(loaded, size, symbolSize);
     } catch {
       toast.error('Failed to load software information.');
     } finally {
@@ -93,6 +111,7 @@ export default function SoftwareInfoPage() {
         logoSize,
         symbolLogoSize,
       });
+      baselineRef.current = snapshot();
       toast.success('Software information saved.');
       await refresh();
     } catch (e) {

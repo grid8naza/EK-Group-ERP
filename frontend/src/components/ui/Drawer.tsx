@@ -1,8 +1,19 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useUnsavedChangesGuard } from '@/lib/hooks';
+import { useConfirm } from '@/providers/ConfirmProvider';
+
+// What counts as an editable field inside an open panel — the same three kinds
+// the Enter-to-advance rule walks (see Field.tsx), minus anything the form has
+// switched off. A view drawer wraps its body in a disabled <fieldset>, so its
+// controls all match :disabled and none of them are found here.
+const EDITABLE_FIELD =
+  'input:not([type="hidden"]):not(:disabled):not([readonly]),' +
+  'textarea:not(:disabled):not([readonly]),' +
+  'button[data-field]:not(:disabled)';
 
 interface DrawerProps {
   open: boolean;
@@ -57,6 +68,39 @@ export function Drawer({
   aside,
   closeOnEsc = true,
 }: DrawerProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const confirm = useConfirm();
+
+  // An open data-entry drawer holds work that no Save has persisted yet. Rather
+  // than have every screen track its own draft, the drawer itself is the signal:
+  // open with at least one editable field in it. Read-only (view) drawers
+  // disable their fields, so they never count.
+  const unsaved = () => open && !!panelRef.current?.querySelector(EDITABLE_FIELD);
+
+  // Leaving the page behind the drawer (a browser refresh; an in-app link, on
+  // the layouts where one is reachable) would drop that work.
+  useUnsavedChangesGuard(unsaved);
+
+  // Clicking the blurred backdrop is the easy accident — this panel sits above
+  // the sidebar, so a click aimed at the left menu lands here and, until now,
+  // threw the form away without a word. The X, Esc and Cancel are deliberate
+  // and still close straight away.
+  const dismiss = async () => {
+    if (unsaved()) {
+      const ok = await confirm({
+        title: 'Discard this form?',
+        message:
+          'What has been entered here has not been saved. Close the form and lose it?',
+        danger: true,
+        confirmText: 'Yes',
+        cancelText: 'No',
+        defaultCancel: true,
+      });
+      if (!ok) return;
+    }
+    onClose();
+  };
+
   // Close on Escape; lock body scroll while open.
   useEffect(() => {
     if (!open) return;
@@ -86,7 +130,7 @@ export function Drawer({
           'absolute inset-0 bg-slate-900/50 backdrop-blur-sm transition-opacity duration-300',
           open ? 'opacity-100' : 'opacity-0',
         )}
-        onClick={onClose}
+        onClick={() => void dismiss()}
       />
 
       {/* Summary card floated in the blurred area, left of the panel. Only on
@@ -98,7 +142,7 @@ export function Drawer({
             open ? 'opacity-100' : 'opacity-0',
           )}
           style={{ right: PANEL_OFFSET[width] }}
-          onClick={onClose}
+          onClick={() => void dismiss()}
         >
           <div
             className="pointer-events-auto max-h-full w-full max-w-md overflow-y-auto"
@@ -111,6 +155,7 @@ export function Drawer({
 
       {/* Panel (slides in from the right) */}
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         className={cn(

@@ -15,6 +15,7 @@ import {
   AlignRight,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
+import { useUnsavedChangesGuard } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -66,6 +67,18 @@ export default function LoginScreenSetupPage() {
   const logoInput = useRef<HTMLInputElement>(null);
   const mediaInput = useRef<HTMLInputElement>(null);
 
+  // The whole config is a draft until Save is pressed ("Changes aren't saved
+  // until you click Save" in the footer), so leaving the page — the sidebar
+  // menu, any other in-app link, a browser refresh — has to ask first. Media and
+  // logo uploads are their own immediate action and keep the baseline in step.
+  const baselineRef = useRef(JSON.stringify(withDefaults(null)));
+  const markClean = (c: LoginScreenConfig) => {
+    baselineRef.current = JSON.stringify(c);
+  };
+  useUnsavedChangesGuard(
+    () => !readOnly && !loading && JSON.stringify(config) !== baselineRef.current,
+  );
+
   useEffect(() => {
     let active = true;
     (async () => {
@@ -74,7 +87,9 @@ export default function LoginScreenSetupPage() {
           '/login-screen',
         );
         if (!active) return;
-        setConfig(withDefaults(res.config));
+        const loaded = withDefaults(res.config);
+        setConfig(loaded);
+        markClean(loaded);
         setMedia(res.media ?? []);
       } catch (e) {
         if (!(e instanceof ApiError && e.status === 401))
@@ -138,7 +153,9 @@ export default function LoginScreenSetupPage() {
         '/login-screen',
         { config },
       );
-      setConfig(withDefaults(res.config));
+      const saved = withDefaults(res.config);
+      setConfig(saved);
+      markClean(saved);
       setMedia(res.media ?? []);
       toast.success('Login screen saved.');
     } catch (e) {
@@ -153,7 +170,11 @@ export default function LoginScreenSetupPage() {
     fd.append('file', file);
     try {
       const res = await api.post<{ config: LoginScreenConfig | null }>('/login-screen/logo', fd);
-      patch({ logoUrl: res.config?.logoUrl ?? null });
+      const logoUrl = res.config?.logoUrl ?? null;
+      patch({ logoUrl });
+      // The upload persisted the logo on its own, so move the clean baseline
+      // with it — a bare upload must not read as an unsaved edit.
+      markClean({ ...(JSON.parse(baselineRef.current) as LoginScreenConfig), logoUrl });
       toast.success('Logo uploaded.');
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Upload failed.');

@@ -16,7 +16,7 @@ import {
   Package,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
-import { useFetch } from '@/lib/hooks';
+import { useFetch, useUnsavedChangesGuard } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
@@ -220,17 +220,10 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
   // the form or closing the tab can warn before the work is lost.
   const [dirty, setDirty] = useState(false);
   const markDirty = () => setDirty(true);
-  // Native prompt for a browser refresh / tab close while edits are pending —
-  // the in-app Back button gets our own Yes/No dialog (see requestBackToList).
-  useEffect(() => {
-    if (!dirty) return;
-    const warn = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [dirty]);
+  // Leaving the screen entirely — the sidebar menu, any other in-app link, or a
+  // browser refresh — is caught here; the in-app Back button, which only drops
+  // back to the list, gets its own Yes/No dialog (see requestBackToList).
+  useUnsavedChangesGuard(() => dirty);
 
   // ---- editable draft form ----
   const [supplierId, setSupplierId] = useState('');
