@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Cpu } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
+import { money2, dec2 } from '@/lib/utils';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -65,13 +66,13 @@ const empty = {
   lifeSpanYears: '0',
   purchasedFrom: '',
   purchaseDate: '',
-  purchasePrice: '0',
+  purchasePrice: '0.00',
   warrantyPeriod: '',
   allCompanies: true,
   companyIds: [] as number[],
   status: 'ACTIVE' as AssetStatus,
   isProductionLine: false,
-  costPerHour: '0',
+  costPerHour: '0.00',
 };
 
 export default function AssetsPage() {
@@ -185,13 +186,13 @@ export default function AssetsPage() {
     lifeSpanYears: String(a.lifeSpanYears ?? 0),
     purchasedFrom: a.purchasedFrom ?? '',
     purchaseDate: a.purchaseDate ? a.purchaseDate.slice(0, 10) : '',
-    purchasePrice: String(a.purchasePrice ?? 0),
+    purchasePrice: dec2(String(a.purchasePrice ?? 0)),
     warrantyPeriod: a.warrantyPeriod ?? '',
     allCompanies: a.allCompanies,
     companyIds: a.companyIds ?? [],
     status: a.status,
     isProductionLine: a.isProductionLine,
-    costPerHour: String(a.costPerHour ?? 0),
+    costPerHour: dec2(String(a.costPerHour ?? 0)),
   });
 
   const openAdd = () => {
@@ -710,6 +711,9 @@ export default function AssetsPage() {
               onChange={(e) =>
                 setForm({ ...form, purchasePrice: e.target.value })
               }
+              onBlur={() =>
+                setForm((f) => ({ ...f, purchasePrice: dec2(f.purchasePrice) }))
+              }
             />
             <Input
               label="Warranty Period"
@@ -774,6 +778,9 @@ export default function AssetsPage() {
                 value={form.costPerHour}
                 onChange={(e) =>
                   setForm({ ...form, costPerHour: e.target.value })
+                }
+                onBlur={() =>
+                  setForm((f) => ({ ...f, costPerHour: dec2(f.costPerHour) }))
                 }
                 placeholder="Running cost per hour"
               />

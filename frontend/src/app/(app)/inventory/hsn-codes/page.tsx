@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Plus, Percent } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
+import { money2, dec2 } from '@/lib/utils';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -22,14 +23,14 @@ const ROUTE = '/inventory/hsn-codes';
 const empty = {
   code: '',
   description: '',
-  cgst: '0',
-  sgst: '0',
-  igst: '0',
-  cess: '0',
+  cgst: '0.00',
+  sgst: '0.00',
+  igst: '0.00',
+  cess: '0.00',
   isActive: true,
 };
 
-const pct = (n: number) => `${(n ?? 0).toLocaleString()}%`;
+const pct = (n: number) => `${money2(n)}%`;
 
 export default function HsnCodesPage() {
   const { can } = useAuth();
@@ -63,10 +64,10 @@ export default function HsnCodesPage() {
   const formFrom = (h: HsnCode) => ({
     code: h.code,
     description: h.description,
-    cgst: String(h.cgst ?? 0),
-    sgst: String(h.sgst ?? 0),
-    igst: String(h.igst ?? 0),
-    cess: String(h.cess ?? 0),
+    cgst: dec2(String(h.cgst ?? 0)),
+    sgst: dec2(String(h.sgst ?? 0)),
+    igst: dec2(String(h.igst ?? 0)),
+    cess: dec2(String(h.cess ?? 0)),
     isActive: h.isActive,
   });
 
@@ -111,9 +112,13 @@ export default function HsnCodesPage() {
       const next = { ...f, [key]: value };
       const c = Number(key === 'cgst' ? value : f.cgst) || 0;
       const s = Number(key === 'sgst' ? value : f.sgst) || 0;
-      return { ...next, igst: String(c + s) };
+      return { ...next, igst: (c + s).toFixed(2) };
     });
   };
+
+  // Tax rates settle to two decimals when the field is left; typing stays free.
+  const blur2 = (key: 'cgst' | 'sgst' | 'igst' | 'cess') => () =>
+    setForm((f) => ({ ...f, [key]: dec2(f[key]) }));
 
   const save = async (mode: SaveMode = 'saveClose') => {
     if (!form.code.trim() || !form.description.trim()) {
@@ -299,6 +304,7 @@ export default function HsnCodesPage() {
               step="any"
               value={form.cgst}
               onChange={(e) => setHalf('cgst', e.target.value)}
+              onBlur={blur2('cgst')}
             />
             <Input
               label="SGST %"
@@ -308,6 +314,7 @@ export default function HsnCodesPage() {
               step="any"
               value={form.sgst}
               onChange={(e) => setHalf('sgst', e.target.value)}
+              onBlur={blur2('sgst')}
             />
             <Input
               label="IGST %"
@@ -317,6 +324,7 @@ export default function HsnCodesPage() {
               step="any"
               value={form.igst}
               onChange={(e) => setForm({ ...form, igst: e.target.value })}
+              onBlur={blur2('igst')}
             />
             <Input
               label="Cess %"
@@ -326,6 +334,7 @@ export default function HsnCodesPage() {
               step="any"
               value={form.cess}
               onChange={(e) => setForm({ ...form, cess: e.target.value })}
+              onBlur={blur2('cess')}
             />
             <div className="sm:col-span-2">
               <Checkbox

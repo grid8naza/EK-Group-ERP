@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, PackageOpen, Upload, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
+import { money2, dec2 } from '@/lib/utils';
 import { mediaUrl } from '@/lib/login-screen';
 import { useFetch, useLookupValues } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
@@ -165,7 +166,7 @@ const pctDisplay = (priceStr: string, cost: number, current = '') => {
   if (priceStr === '' || price === 0) return '';
   if (cost <= 0) return current;
   const pct = pctFromPrice(price, cost);
-  return pct < 0 ? '' : String(pct);
+  return pct < 0 ? '' : pct.toFixed(2);
 };
 
 export default function ProductsPage() {
@@ -364,6 +365,22 @@ export default function ProductsPage() {
     setView(false);
   };
 
+  // Prices and margins are read down a column and compared against each other,
+  // so each settles to two decimals when its field is left. Typing stays free.
+  const blur2 =
+    (
+      key:
+        | 'costPrice'
+        | 'wholesalePrice'
+        | 'wholesaleProfitPct'
+        | 'intercompanyPrice'
+        | 'intercompanyProfitPct'
+        | 'retailPrice'
+        | 'retailProfitPct',
+    ) =>
+    () =>
+      setForm((f) => ({ ...f, [key]: dec2(f[key]) }));
+
   const formFrom = (p: Product) => ({
     code: p.code,
     name: p.name,
@@ -377,18 +394,18 @@ export default function ProductsPage() {
     unpacked: false,
     packed: true,
     canSell: true,
-    costPrice: String(p.costPrice ?? 0),
-    wholesalePrice: String(p.wholesalePrice ?? 0),
+    costPrice: dec2(String(p.costPrice ?? 0)),
+    wholesalePrice: dec2(String(p.wholesalePrice ?? 0)),
     wholesaleProfitPct: pctDisplay(
       String(p.wholesalePrice ?? 0),
       p.costPrice ?? 0,
     ),
-    intercompanyPrice: String(p.intercompanyPrice ?? 0),
+    intercompanyPrice: dec2(String(p.intercompanyPrice ?? 0)),
     intercompanyProfitPct: pctDisplay(
       String(p.intercompanyPrice ?? 0),
       p.costPrice ?? 0,
     ),
-    retailPrice: String(p.retailPrice ?? 0),
+    retailPrice: dec2(String(p.retailPrice ?? 0)),
     retailProfitPct: pctDisplay(String(p.retailPrice ?? 0), p.costPrice ?? 0),
     // Ticked for anything already boxed, so the saved values stay visible.
     boxApplicable: !!(p.boxUnitId || p.boxQty),
@@ -762,7 +779,7 @@ export default function ProductsPage() {
       // Cost leads the prices — it's the base every margin is read against.
       key: 'costPrice',
       header: 'Cost',
-      accessor: (r) => (r.costPrice ?? 0).toLocaleString(),
+      accessor: (r) => money2(r.costPrice),
       sortAccessor: (r) => r.costPrice ?? 0,
       className: 'text-right tabular-nums',
       headerClassName: 'text-right',
@@ -770,7 +787,7 @@ export default function ProductsPage() {
     {
       key: 'intercompanyPrice',
       header: 'Inter-Co',
-      accessor: (r) => (r.intercompanyPrice ?? 0).toLocaleString(),
+      accessor: (r) => money2(r.intercompanyPrice),
       sortAccessor: (r) => r.intercompanyPrice ?? 0,
       className: 'text-right tabular-nums',
       headerClassName: 'text-right',
@@ -778,7 +795,7 @@ export default function ProductsPage() {
     {
       key: 'wholesalePrice',
       header: 'Wholesale',
-      accessor: (r) => (r.wholesalePrice ?? 0).toLocaleString(),
+      accessor: (r) => money2(r.wholesalePrice),
       sortAccessor: (r) => r.wholesalePrice ?? 0,
       className: 'text-right tabular-nums',
       headerClassName: 'text-right',
@@ -786,7 +803,7 @@ export default function ProductsPage() {
     {
       key: 'retailPrice',
       header: 'Retail',
-      accessor: (r) => (r.retailPrice ?? 0).toLocaleString(),
+      accessor: (r) => money2(r.retailPrice),
       sortAccessor: (r) => r.retailPrice ?? 0,
       className: 'text-right tabular-nums',
       headerClassName: 'text-right',
@@ -1302,6 +1319,7 @@ export default function ProductsPage() {
               min={0}
               step="any"
               id="pf-cost"
+              onBlur={blur2('costPrice')}
               onKeyDown={enterTo('pf-interco')}
               value={form.costPrice}
               onChange={(e) =>
@@ -1347,6 +1365,7 @@ export default function ProductsPage() {
                     label="Intercompany Price"
                     type="number"
                     id="pf-interco"
+                    onBlur={blur2('intercompanyPrice')}
                     onKeyDown={enterTo('pf-interco-pct')}
                     min={0}
                     step="any"
@@ -1370,6 +1389,7 @@ export default function ProductsPage() {
                     label="Intercompany Profit %"
                     type="number"
                     id="pf-interco-pct"
+                    onBlur={blur2('intercompanyProfitPct')}
                     onKeyDown={enterTo('pf-wholesale')}
                     step="any"
                     value={form.intercompanyProfitPct}
@@ -1381,7 +1401,7 @@ export default function ProductsPage() {
                           intercompanyProfitPct: e.target.value,
                           intercompanyPrice:
                             e.target.value !== '' && cost > 0
-                              ? String(priceFromPct(toN(e.target.value), cost))
+                              ? priceFromPct(toN(e.target.value), cost).toFixed(2)
                               : f.intercompanyPrice,
                         };
                       })
@@ -1391,6 +1411,7 @@ export default function ProductsPage() {
                     label="Wholesale Price"
                     type="number"
                     id="pf-wholesale"
+                    onBlur={blur2('wholesalePrice')}
                     onKeyDown={enterTo('pf-wholesale-pct')}
                     min={0}
                     step="any"
@@ -1414,6 +1435,7 @@ export default function ProductsPage() {
                     label="Wholesale Profit %"
                     type="number"
                     id="pf-wholesale-pct"
+                    onBlur={blur2('wholesaleProfitPct')}
                     onKeyDown={enterTo('pf-retail')}
                     step="any"
                     value={form.wholesaleProfitPct}
@@ -1425,7 +1447,7 @@ export default function ProductsPage() {
                           wholesaleProfitPct: e.target.value,
                           wholesalePrice:
                             e.target.value !== '' && cost > 0
-                              ? String(priceFromPct(toN(e.target.value), cost))
+                              ? priceFromPct(toN(e.target.value), cost).toFixed(2)
                               : f.wholesalePrice,
                         };
                       })
@@ -1435,6 +1457,7 @@ export default function ProductsPage() {
                     label="Retail Price"
                     type="number"
                     id="pf-retail"
+                    onBlur={blur2('retailPrice')}
                     onKeyDown={enterTo('pf-retail-pct')}
                     min={0}
                     step="any"
@@ -1458,6 +1481,7 @@ export default function ProductsPage() {
                     label="Retail Profit %"
                     type="number"
                     id="pf-retail-pct"
+                    onBlur={blur2('retailProfitPct')}
                     step="any"
                     value={form.retailProfitPct}
                     onChange={(e) =>
@@ -1468,7 +1492,7 @@ export default function ProductsPage() {
                           retailProfitPct: e.target.value,
                           retailPrice:
                             e.target.value !== '' && cost > 0
-                              ? String(priceFromPct(toN(e.target.value), cost))
+                              ? priceFromPct(toN(e.target.value), cost).toFixed(2)
                               : f.retailPrice,
                         };
                       })

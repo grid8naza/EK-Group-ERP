@@ -13,6 +13,7 @@ import {
   Truck,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
+import { dec2 } from '@/lib/utils';
 import { useFetch, useUnsavedChangesGuard } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -181,7 +182,7 @@ export function SalesOrderScreen() {
     const ls = full.lines.map((l) => ({
       lineId: l.id,
       quantity: String(l.quantity),
-      rate: String(l.rate),
+      rate: dec2(String(l.rate)),
     }));
     setDeliveryAt(at);
     setNotes(note);
@@ -804,6 +805,7 @@ function DraftEditor(props: {
                       step="any"
                       value={l?.rate ?? ''}
                       onChange={(e) => setLineRate(src.id, e.target.value)}
+                      onBlur={() => setLineRate(src.id, dec2(l?.rate ?? ''))}
                       className="text-right tabular-nums"
                       title="Estimated — no batch exists yet to set the price"
                     />

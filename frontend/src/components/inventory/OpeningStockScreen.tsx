@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ClipboardList, Plus, Trash2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
+import { money2, dec2 } from '@/lib/utils';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -197,7 +198,7 @@ export function OpeningStockScreen({
   // Picking a product defaults its cost price + the three selling prices from
   // the product master — same values as the Products - Packed screen. Editable
   // afterwards. Items have no such prices, so only the key is set.
-  const s0 = (n?: number) => (n ? String(n) : '');
+  const s0 = (n?: number) => (n ? dec2(String(n)) : '');
   const selectStockable = (i: number, id: string) => {
     const pk = id ? pickById.get(id) : undefined;
     setLine(i, {
@@ -254,10 +255,10 @@ export function OpeningStockScreen({
     const loadedLines: DraftLine[] = (full.lines ?? []).map((l) => ({
       key: String(l.itemId ?? l.productId ?? ''),
       quantity: String(l.qtyIn),
-      unitPrice: String(l.unitPrice ?? 0),
-      intercompanyPrice: l.intercompanyPrice ? String(l.intercompanyPrice) : '',
-      wholesalePrice: l.wholesalePrice ? String(l.wholesalePrice) : '',
-      retailPrice: l.retailPrice ? String(l.retailPrice) : '',
+      unitPrice: dec2(String(l.unitPrice ?? 0)),
+      intercompanyPrice: s0(l.intercompanyPrice),
+      wholesalePrice: s0(l.wholesalePrice),
+      retailPrice: s0(l.retailPrice),
       batchNo2: l.batchNo2 ?? '',
       expiry: dateInput(l.expiryDate),
     }));
@@ -700,7 +701,7 @@ export function OpeningStockScreen({
                           <td className="px-1">
                             {viewMode ? (
                               <span className="block text-right tabular-nums">
-                                {Number(l.unitPrice || 0).toLocaleString()}
+                                {money2(l.unitPrice)}
                               </span>
                             ) : (
                               <Input
@@ -710,6 +711,7 @@ export function OpeningStockScreen({
                                 step="any"
                                 value={l.unitPrice}
                                 onChange={(e) => setLine(i, { unitPrice: e.target.value })}
+                                onBlur={() => setLine(i, { unitPrice: dec2(l.unitPrice) })}
                                 onKeyDown={
                                   isItem ? enterNextLine(i) : enterTo(`os-${i}-interco`)
                                 }
@@ -729,7 +731,7 @@ export function OpeningStockScreen({
                               <td className="px-1">
                                 {viewMode ? (
                                   <span className="block text-right tabular-nums">
-                                    {Number(l.intercompanyPrice || 0).toLocaleString()}
+                                    {money2(l.intercompanyPrice)}
                                   </span>
                                 ) : (
                                   <Input
@@ -741,6 +743,9 @@ export function OpeningStockScreen({
                                     onChange={(e) =>
                                       setLine(i, { intercompanyPrice: e.target.value })
                                     }
+                                    onBlur={() =>
+                                      setLine(i, { intercompanyPrice: dec2(l.intercompanyPrice) })
+                                    }
                                     onKeyDown={enterTo(`os-${i}-wholesale`)}
                                     className="text-right tabular-nums"
                                   />
@@ -749,7 +754,7 @@ export function OpeningStockScreen({
                               <td className="px-1">
                                 {viewMode ? (
                                   <span className="block text-right tabular-nums">
-                                    {Number(l.wholesalePrice || 0).toLocaleString()}
+                                    {money2(l.wholesalePrice)}
                                   </span>
                                 ) : (
                                   <Input
@@ -761,6 +766,9 @@ export function OpeningStockScreen({
                                     onChange={(e) =>
                                       setLine(i, { wholesalePrice: e.target.value })
                                     }
+                                    onBlur={() =>
+                                      setLine(i, { wholesalePrice: dec2(l.wholesalePrice) })
+                                    }
                                     onKeyDown={enterTo(`os-${i}-retail`)}
                                     className="text-right tabular-nums"
                                   />
@@ -769,7 +777,7 @@ export function OpeningStockScreen({
                               <td className="px-1">
                                 {viewMode ? (
                                   <span className="block text-right tabular-nums">
-                                    {Number(l.retailPrice || 0).toLocaleString()}
+                                    {money2(l.retailPrice)}
                                   </span>
                                 ) : (
                                   <Input
@@ -780,6 +788,9 @@ export function OpeningStockScreen({
                                     value={l.retailPrice}
                                     onChange={(e) =>
                                       setLine(i, { retailPrice: e.target.value })
+                                    }
+                                    onBlur={() =>
+                                      setLine(i, { retailPrice: dec2(l.retailPrice) })
                                     }
                                     onKeyDown={enterNextLine(i)}
                                     className="text-right tabular-nums"

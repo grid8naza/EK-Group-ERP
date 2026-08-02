@@ -12,6 +12,7 @@ import {
   Ban,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
+import { dec2 } from '@/lib/utils';
 import { useFetch, useUnsavedChangesGuard } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -278,7 +279,7 @@ export function LocalPurchaseOrderScreen() {
     ls: full.lines.map((l) => ({
       target: targetOf(l),
       quantity: String(l.quantity),
-      rate: String(l.rate),
+      rate: dec2(String(l.rate)),
     })),
   });
 
@@ -840,6 +841,7 @@ function DraftEditor(props: {
                       step="any"
                       value={l.rate}
                       onChange={(e) => setLine(i, { rate: e.target.value })}
+                      onBlur={() => setLine(i, { rate: dec2(l.rate) })}
                       className="text-right tabular-nums"
                     />
                   </td>

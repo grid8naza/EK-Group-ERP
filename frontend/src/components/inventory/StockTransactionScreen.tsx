@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ClipboardList, Plus, Printer, Trash2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
+import { money2, dec2 } from '@/lib/utils';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -283,7 +284,7 @@ export function StockTransactionScreen({
       d.lines.map((l) => ({
         key: `product:${l.productId}`,
         quantity: String(l.quantity),
-        unitPrice: String(l.rate),
+        unitPrice: dec2(String(l.rate)),
         batchNo2: l.batchNo ?? '',
         expiry: dateInput(l.expiryDate),
         dispatchedQty: l.quantity,
@@ -350,7 +351,7 @@ export function StockTransactionScreen({
         return {
           key: l.itemId ? `item:${l.itemId}` : `product:${l.productId}`,
           quantity: String(inPack ? l.enteredQty : stockQty),
-          unitPrice: String(inPack ? packRate : (l.unitPrice ?? 0)),
+          unitPrice: dec2(String(inPack ? packRate : (l.unitPrice ?? 0))),
           unitMode: (inPack ? 'box' : 'stock') as 'box' | 'stock',
           batchNo2: l.batchNo2 ?? '',
           expiry: dateInput(l.expiryDate),
@@ -1046,7 +1047,7 @@ export function StockTransactionScreen({
                             <td className="px-1">
                               {viewMode || l.dispatchedQty !== undefined ? (
                                 <span className="block text-right tabular-nums">
-                                  {Number(l.unitPrice || 0).toLocaleString()}
+                                  {money2(l.unitPrice)}
                                 </span>
                               ) : (
                                 <Input
@@ -1056,6 +1057,11 @@ export function StockTransactionScreen({
                                   step="any"
                                   value={l.unitPrice}
                                   onChange={(e) => setLine(i, { unitPrice: e.target.value })}
+                                  // The rate AS INVOICED is money, so it settles
+                                  // to two decimals. The derived per-stock-unit
+                                  // rate shown beneath keeps its 6 dp — that one
+                                  // is a division, not a price anyone quoted.
+                                  onBlur={() => setLine(i, { unitPrice: dec2(l.unitPrice) })}
                                   onKeyDown={enterNextLine(i)}
                                   className="text-right tabular-nums"
                                 />

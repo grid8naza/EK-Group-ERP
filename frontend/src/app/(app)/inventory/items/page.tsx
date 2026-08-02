@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Box } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
+import { money2, dec2 } from '@/lib/utils';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -28,7 +29,7 @@ const empty = {
   categoryId: '',
   groupId: '',
   unitId: '',
-  lastPurchasePrice: '0',
+  lastPurchasePrice: '0.00',
   lastPurchaseDate: '',
   // Box packing is optional per item, so the two fields below only appear
   // once it is ticked. Form-only: what's stored is the box qty/unit themselves.
@@ -110,7 +111,7 @@ export default function ItemsPage() {
     categoryId: i.categoryId != null ? String(i.categoryId) : '',
     groupId: i.groupId != null ? String(i.groupId) : '',
     unitId: String(i.unitId),
-    lastPurchasePrice: String(i.lastPurchasePrice ?? 0),
+    lastPurchasePrice: dec2(String(i.lastPurchasePrice ?? 0)),
     lastPurchaseDate: i.lastPurchaseDate ? i.lastPurchaseDate.slice(0, 10) : '',
     // Ticked for anything already boxed, so the saved values stay visible.
     boxApplicable: !!(i.boxUnitId || i.boxQty),
@@ -338,7 +339,7 @@ export default function ItemsPage() {
     {
       key: 'lastPurchasePrice',
       header: 'Last Purchase Price',
-      accessor: (r) => (r.lastPurchasePrice ?? 0).toLocaleString(),
+      accessor: (r) => money2(r.lastPurchasePrice),
       sortAccessor: (r) => r.lastPurchasePrice ?? 0,
       className: 'text-right tabular-nums',
       headerClassName: 'text-right',
@@ -726,6 +727,7 @@ export default function ItemsPage() {
               onChange={(e) =>
                 setForm({ ...form, lastPurchasePrice: e.target.value })
               }
+              onBlur={() => setForm((f) => ({ ...f, lastPurchasePrice: dec2(f.lastPurchasePrice) }))}
             />
 
             {/* Shelf Life on its own row below the purchase pair */}

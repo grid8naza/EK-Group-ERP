@@ -1,5 +1,6 @@
 'use client';
 
+import { dec2 } from '@/lib/utils';
 import type { LookupValue } from '@/lib/types';
 
 /**
@@ -14,7 +15,7 @@ export function discountFormFrom(
   rows: { lookupValueId: number; percentage: number }[] | undefined,
 ): DiscountForm {
   const out: DiscountForm = {};
-  for (const r of rows ?? []) out[r.lookupValueId] = String(r.percentage);
+  for (const r of rows ?? []) out[r.lookupValueId] = dec2(String(r.percentage));
   return out;
 }
 
@@ -92,6 +93,10 @@ export function DiscountMatrix({
                       placeholder="0"
                       value={value[l.id] ?? ''}
                       onChange={(e) => onChange(l.id, e.target.value)}
+                      // Percentages settle to two decimals once the cell is
+                      // left; a blank stays blank, which is what "no discount"
+                      // means here.
+                      onBlur={() => onChange(l.id, dec2(value[l.id] ?? ''))}
                     />
                   </td>
                 </tr>

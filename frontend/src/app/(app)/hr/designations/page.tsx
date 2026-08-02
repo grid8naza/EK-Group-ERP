@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Cpu } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
+import { money2, dec2 } from '@/lib/utils';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -30,7 +31,7 @@ const empty = {
   name: '',
   categoryId: '',
   groupId: '',
-  ratePerHour: '0',
+  ratePerHour: '0.00',
   allCompanies: true,
   companyIds: [] as number[],
   isActive: true,
@@ -90,7 +91,7 @@ export default function HrDesignationsPage() {
     name: d.name,
     categoryId: d.categoryId != null ? String(d.categoryId) : '',
     groupId: d.groupId != null ? String(d.groupId) : '',
-    ratePerHour: String(d.ratePerHour ?? 0),
+    ratePerHour: dec2(String(d.ratePerHour ?? 0)),
     allCompanies: d.allCompanies,
     companyIds: d.companyIds ?? [],
     isActive: d.isActive,
@@ -265,7 +266,7 @@ export default function HrDesignationsPage() {
     {
       key: 'ratePerHour',
       header: 'Rate/hr',
-      accessor: (r) => r.ratePerHour ?? 0,
+      accessor: (r) => money2(r.ratePerHour),
       sortAccessor: (r) => r.ratePerHour ?? 0,
       className: 'text-right tabular-nums',
       headerClassName: 'text-right',
@@ -480,6 +481,9 @@ export default function HrDesignationsPage() {
               value={form.ratePerHour}
               onChange={(e) =>
                 setForm({ ...form, ratePerHour: e.target.value })
+              }
+              onBlur={() =>
+                setForm((f) => ({ ...f, ratePerHour: dec2(f.ratePerHour) }))
               }
               placeholder="Manpower cost per hour"
             />
