@@ -1064,6 +1064,21 @@ function DraftEditor(props: {
     orderNo,
   } = props;
 
+  // What this SUPPLIER sells. Two criteria: the product is sold at all
+  // (product-level Can Sell — an intermediate never is), and the supplier's own
+  // company row is ticked Sells. The second is what keeps a company that merely
+  // buys the product in from being offered as a source of it.
+  const sellableOptions = useMemo(() => {
+    const supplier = Number(supplierId);
+    return products
+      .filter(
+        (pr) =>
+          pr.canSell &&
+          pr.companies?.some((c) => c.companyId === supplier && c.canSell),
+      )
+      .map((pr) => ({ value: pr.id, label: pr.name }));
+  }, [products, supplierId]);
+
   return (
     <div className="card border-slate-200 bg-slate-50 p-6 dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-4 flex items-center justify-between">
@@ -1139,11 +1154,7 @@ function DraftEditor(props: {
                             setLine(i, { productId: e.target.value })
                           }
                           placeholder="Select product"
-                          // Can Sell is the only criterion — any product
-                          // carrying it can be ordered, whatever its group.
-                          options={products
-                            .filter((pr) => pr.canSell)
-                            .map((pr) => ({ value: pr.id, label: pr.name }))}
+                          options={sellableOptions}
                         />
                       </td>
                       <td className="px-1">
