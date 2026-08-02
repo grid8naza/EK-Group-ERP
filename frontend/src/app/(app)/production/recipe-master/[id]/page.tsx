@@ -473,6 +473,12 @@ export default function RecipeMasterEditorPage() {
       void autoSave({ recipe: rows, processes }, `${itemName(d.itemId)} updated`);
     }
   };
+  const removeIng = (i: number) => {
+    const gone = itemName(recipe[i].itemId);
+    const rows = recipe.filter((_, idx) => idx !== i);
+    setRecipe(rows);
+    void autoSave({ recipe: rows, processes }, `${gone} removed`);
+  };
 
   // --- process overlay ---
   const resetMpEntry = () => {
@@ -509,6 +515,12 @@ export default function RecipeMasterEditorPage() {
       setProcForm(null);
       void autoSave({ recipe, processes: rows }, `${clean.name} updated`);
     }
+  };
+  const removeProc = (i: number) => {
+    const gone = processes[i].name;
+    const rows = processes.filter((_, idx) => idx !== i);
+    setProcesses(rows);
+    void autoSave({ recipe, processes: rows }, `${gone} removed`);
   };
 
   // --- manpower rows within the process draft ---
@@ -873,9 +885,7 @@ export default function RecipeMasterEditorPage() {
                         <td className="pl-1">
                           <RowActions
                             onEdit={() => openEditIng(i)}
-                            onDelete={() =>
-                              setRecipe(recipe.filter((_, idx) => idx !== i))
-                            }
+                            onDelete={() => removeIng(i)}
                           />
                         </td>
                       )}
@@ -951,9 +961,7 @@ export default function RecipeMasterEditorPage() {
                         <td className="pl-1">
                           <RowActions
                             onEdit={() => openEditProc(i)}
-                            onDelete={() =>
-                              setProcesses(processes.filter((_, idx) => idx !== i))
-                            }
+                            onDelete={() => removeProc(i)}
                           />
                         </td>
                       )}

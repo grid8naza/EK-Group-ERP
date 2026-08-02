@@ -573,6 +573,12 @@ export default function PackingMasterEditorPage() {
       );
     }
   };
+  const removeIng = (i: number) => {
+    const gone = itemName(packing[i].itemId);
+    const rows = packing.filter((_, idx) => idx !== i);
+    setPacking(rows);
+    void autoSave({ packSources, packing: rows, processes }, `${gone} removed`);
+  };
 
   // --- source-product overlay ---
   const openAddSrc = () => setSrcForm({ index: null, draft: { ...BLANK_SRC } });
@@ -598,6 +604,13 @@ export default function PackingMasterEditorPage() {
       setSrcForm(null);
       void autoSave({ packSources: rows, packing, processes }, `${srcName} updated`);
     }
+  };
+  const removeSrc = (i: number) => {
+    const gone =
+      productById.get(Number(packSources[i].productId))?.name ?? 'Source product';
+    const rows = packSources.filter((_, idx) => idx !== i);
+    setPackSources(rows);
+    void autoSave({ packSources: rows, packing, processes }, `${gone} removed`);
   };
 
   // --- process overlay ---
@@ -638,6 +651,12 @@ export default function PackingMasterEditorPage() {
         `${clean.name} updated`,
       );
     }
+  };
+  const removeProc = (i: number) => {
+    const gone = processes[i].name;
+    const rows = processes.filter((_, idx) => idx !== i);
+    setProcesses(rows);
+    void autoSave({ packSources, packing, processes: rows }, `${gone} removed`);
   };
 
   // --- manpower rows within the process draft ---
@@ -980,11 +999,7 @@ export default function PackingMasterEditorPage() {
                         <td className="pl-1">
                           <RowActions
                             onEdit={() => openEditSrc(i)}
-                            onDelete={() =>
-                              setPackSources(
-                                packSources.filter((_, idx) => idx !== i),
-                              )
-                            }
+                            onDelete={() => removeSrc(i)}
                           />
                         </td>
                       )}
@@ -1065,9 +1080,7 @@ export default function PackingMasterEditorPage() {
                         <td className="pl-1">
                           <RowActions
                             onEdit={() => openEditIng(i)}
-                            onDelete={() =>
-                              setPacking(packing.filter((_, idx) => idx !== i))
-                            }
+                            onDelete={() => removeIng(i)}
                           />
                         </td>
                       )}
@@ -1143,9 +1156,7 @@ export default function PackingMasterEditorPage() {
                         <td className="pl-1">
                           <RowActions
                             onEdit={() => openEditProc(i)}
-                            onDelete={() =>
-                              setProcesses(processes.filter((_, idx) => idx !== i))
-                            }
+                            onDelete={() => removeProc(i)}
                           />
                         </td>
                       )}
