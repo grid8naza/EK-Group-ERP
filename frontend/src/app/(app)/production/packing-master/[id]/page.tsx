@@ -822,6 +822,13 @@ export default function PackingMasterEditorPage() {
       // Per-unit cost (1 decimal) and the three entered selling prices, each with
       // its profit % over cost. These write straight onto the product, so the
       // Product Master reflects them.
+      //
+      // costPrice is the product's canonical per-unit cost: it is what the
+      // Product Master labels Cost Price, what every profit % there is worked
+      // out against, and what this screen itself reads off a source product for
+      // "Product Cost (from source)". Packing is what establishes that figure,
+      // so it writes it rather than leaving it to be typed in by hand.
+      costPrice: actualCostPerUnit,
       actualCostPrice: actualCostPerUnit,
       intercompanyPrice: round1(num(intercompanyPrice)),
       intercompanyProfitPct: round1(profitPctOf(intercompanyPrice)),

@@ -664,6 +664,14 @@ export default function RecipeMasterEditorPage() {
       bomMarginPct: num(bomMarginPct),
       // Per-unit actual prices (1 decimal). Cost is the estimated cost/unit;
       // sales is the user-entered value.
+      //
+      // costPrice is the product's canonical per-unit cost: it is what the
+      // Product Master labels Cost Price, what every profit % there is worked
+      // out against, and what Packing Master reads off this product when it is
+      // used as a source ("Product Cost (from source)"). The recipe is what
+      // establishes that figure, so it writes it rather than leaving it to be
+      // typed in by hand.
+      costPrice: actualCostPerUnit,
       actualCostPrice: actualCostPerUnit,
       actualSalesPrice: round1(num(actualSalesPrice)),
     };
