@@ -10,6 +10,7 @@ import {
   ArrowLeft,
   Cog,
   Info,
+  X,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
@@ -41,6 +42,13 @@ const ROUTE = '/production/packing-master';
 const PRODUCTION_PROCESS_LOOKUP_CODE = 'PRODUCTION_PROCESS';
 
 type Line = { itemId: string; quantity: string; unitId: string };
+/** The per-process working behind a computed cost, shown in its own popup. */
+type CostDetail = {
+  title: string;
+  rows: { label: string; detail: string; amount: number }[];
+  total: number;
+  empty: string;
+};
 type ManpowerRow = { designationId: string; count: string };
 type Proc = {
   name: string;
@@ -260,6 +268,8 @@ export default function PackingMasterEditorPage() {
     draft: Src;
   } | null>(null);
   const [srcSeq, setSrcSeq] = useState(0);
+  // The costing breakdown popup, opened from the ⓘ beside a computed cost.
+  const [costInfo, setCostInfo] = useState<CostDetail | null>(null);
 
   // Hydrate once the product loads.
   useEffect(() => {
@@ -499,8 +509,9 @@ export default function PackingMasterEditorPage() {
     return r ? `${h}h ${r}m` : `${h}h`;
   };
 
-  // Per-process breakdown rows powering the hover tooltips on the two computed
-  // cost fields, so the detail is visible without opening a process for edit.
+  // Per-process breakdown rows powering the popup behind the ⓘ on the two
+  // computed cost fields, so the detail is visible without opening a process
+  // for edit.
   const fmtHours = (h: number) => `${Math.round(h * 100) / 100}h`;
   const equipmentBreakdown = processes
     .filter((p) => p.machineId)
@@ -1250,26 +1261,26 @@ export default function PackingMasterEditorPage() {
                     </CostLabelRow>
                     <CostLabelRow
                       label="Equipment Cost (from process)"
-                      tip={
-                        <CostBreakdown
-                          title="Equipment cost by process"
-                          rows={equipmentBreakdown}
-                          total={equipmentCost}
-                          empty="No machine assigned to any process."
-                        />
+                      onInfo={() =>
+                        setCostInfo({
+                          title: 'Equipment cost by process',
+                          rows: equipmentBreakdown,
+                          total: equipmentCost,
+                          empty: 'No machine assigned to any process.',
+                        })
                       }
                     >
                       {money(equipmentCost)}
                     </CostLabelRow>
                     <CostLabelRow
                       label="Manpower Cost (from process)"
-                      tip={
-                        <CostBreakdown
-                          title="Manpower cost by process"
-                          rows={manpowerBreakdown}
-                          total={manpowerCost}
-                          empty="No manpower added to any process."
-                        />
+                      onInfo={() =>
+                        setCostInfo({
+                          title: 'Manpower cost by process',
+                          rows: manpowerBreakdown,
+                          total: manpowerCost,
+                          empty: 'No manpower added to any process.',
+                        })
                       }
                     >
                       {money(manpowerCost)}
@@ -2072,6 +2083,11 @@ export default function PackingMasterEditorPage() {
           </div>
         )}
       </Drawer>
+
+      {/* Costing breakdown popup (the ⓘ beside a computed cost) */}
+      {costInfo && (
+        <CostDetailDialog detail={costInfo} onClose={() => setCostInfo(null)} />
+      )}
     </div>
   );
 }
@@ -2146,35 +2162,27 @@ function ReadField({
   value,
   numeric,
   bold,
-  tooltip,
   valueClassName,
 }: {
   label: string;
   value: string;
   numeric?: boolean;
   bold?: boolean;
-  /** Optional hover popover (e.g. a cost breakdown) shown below the field. */
-  tooltip?: React.ReactNode;
   /** Extra classes for the value box (e.g. a custom text colour). */
   valueClassName?: string;
 }) {
   return (
-    <div className="group relative">
+    <div>
       <span className="label !mb-0.5 block">{label}</span>
       <div
         className={`rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800/50 dark:text-slate-200 ${
           numeric ? 'text-right tabular-nums' : ''
         } ${bold ? 'font-semibold text-slate-900 dark:text-white' : ''} ${
-          tooltip ? 'cursor-help' : ''
-        } ${valueClassName ?? ''}`}
+          valueClassName ?? ''
+        }`}
       >
         {value}
       </div>
-      {tooltip && (
-        <div className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-max max-w-md rounded-lg border border-slate-200 bg-white p-3 text-xs group-hover:block dark:border-slate-700 dark:bg-slate-800">
-          {tooltip}
-        </div>
-      )}
     </div>
   );
 }
@@ -2183,13 +2191,14 @@ function ReadField({
  * `strong` styles it as a subtotal/total (top rule + bold). */
 function CostLabelRow({
   label,
-  tip,
+  onInfo,
   strong,
   stronger,
   children,
 }: {
   label: string;
-  tip?: React.ReactNode;
+  /** Given for a computed cost: shows an ⓘ that opens the breakdown popup. */
+  onInfo?: () => void;
   strong?: boolean;
   /** A deeper fill than `strong`, to make a headline total (e.g. Gross Profit)
    * stand out from the subtotal rows. Implies `strong`. */
@@ -2214,14 +2223,29 @@ function CostLabelRow({
             : 'text-slate-600 dark:text-slate-300'
         }`}
       >
-        {tip ? (
-          <div className="group relative inline-flex cursor-help items-center gap-1">
+        {onInfo ? (
+          <span className="inline-flex items-center gap-1.5">
             <span>{label}</span>
-            <Info className="h-3.5 w-3.5 text-slate-400" />
-            <div className="pointer-events-none absolute left-0 top-full z-50 mt-1 hidden w-max max-w-md rounded-lg border border-slate-200 bg-white p-3 text-left font-normal group-hover:block dark:border-slate-700 dark:bg-slate-800">
-              {tip}
-            </div>
-          </div>
+            {/* A span rather than a button: this table sits inside the
+                ReadOnlyFieldset, which disables every control in it in view
+                mode — and the breakdown is worth reading there too. */}
+            <span
+              role="button"
+              tabIndex={0}
+              title="Show the breakdown"
+              aria-label={`${label} — show the breakdown`}
+              onClick={onInfo}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onInfo();
+                }
+              }}
+              className="cursor-pointer rounded-full p-0.5 text-slate-400 transition hover:bg-slate-200 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-200"
+            >
+              <Info className="h-3.5 w-3.5" />
+            </span>
+          </span>
         ) : (
           label
         )}
@@ -2259,51 +2283,103 @@ function CostInputRow({
   );
 }
 
-/** A small "process → amount" table used inside a ReadField hover tooltip. */
-function CostBreakdown({
-  title,
-  rows,
-  total,
-  empty,
-}: {
-  title: string;
-  rows: { label: string; detail: string; amount: number }[];
-  total: number;
-  empty: string;
-}) {
+/** The "process → amount" table shown in the cost breakdown popup. */
+function CostBreakdown({ rows, total, empty }: Omit<CostDetail, 'title'>) {
   if (rows.length === 0) {
-    return <span className="text-slate-400">{empty}</span>;
+    return <p className="py-2 text-center text-slate-400">{empty}</p>;
   }
   return (
-    <div className="min-w-[15rem]">
-      <div className="mb-1.5 font-semibold text-slate-700 dark:text-slate-200">
-        {title}
-      </div>
+    <div className="min-w-[15rem] text-sm">
       <table className="w-full">
         <tbody>
           {rows.map((r, i) => (
-            <tr key={i} className="align-top">
-              <td className="py-0.5 pr-4">
+            <tr
+              key={i}
+              className="align-top border-b border-slate-100 dark:border-slate-800/60"
+            >
+              <td className="py-1.5 pr-4">
                 <div className="text-slate-700 dark:text-slate-200">{r.label}</div>
-                <div className="text-slate-400">{r.detail}</div>
+                <div className="text-xs text-slate-400">{r.detail}</div>
               </td>
-              <td className="whitespace-nowrap py-0.5 text-right font-medium tabular-nums text-slate-700 dark:text-slate-200">
+              <td className="whitespace-nowrap py-1.5 text-right font-medium tabular-nums text-slate-700 dark:text-slate-200">
                 {money(r.amount)}
               </td>
             </tr>
           ))}
         </tbody>
         <tfoot>
-          <tr className="border-t border-slate-200 dark:border-slate-700">
-            <td className="pt-1 font-semibold text-slate-700 dark:text-slate-200">
+          <tr className="border-t-2 border-slate-200 dark:border-slate-700">
+            <td className="pt-2 font-semibold text-slate-700 dark:text-slate-200">
               Total
             </td>
-            <td className="pt-1 text-right font-bold tabular-nums text-slate-900 dark:text-white">
+            <td className="pt-2 text-right font-bold tabular-nums text-slate-900 dark:text-white">
               {money(total)}
             </td>
           </tr>
         </tfoot>
       </table>
+    </div>
+  );
+}
+
+/**
+ * The cost breakdown as its own popup, opened from the ⓘ beside a computed
+ * cost. It replaced a hover tooltip, which on a long process flow ran off the
+ * bottom of the page and could not be read.
+ */
+function CostDetailDialog({
+  detail,
+  onClose,
+}: {
+  detail: CostDetail;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <div
+        className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="relative flex max-h-[80vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900"
+      >
+        <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-3 dark:border-slate-800">
+          <Info className="h-5 w-5 flex-none text-brand-600" />
+          <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-slate-900 dark:text-white">
+            {detail.title}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+          <CostBreakdown
+            rows={detail.rows}
+            total={detail.total}
+            empty={detail.empty}
+          />
+        </div>
+        <div className="flex justify-end border-t border-slate-200 px-5 py-3 dark:border-slate-800">
+          <button type="button" className="btn-secondary" onClick={onClose}>
+            Close <Kbd>Esc</Kbd>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
