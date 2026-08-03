@@ -139,7 +139,8 @@ export interface ProductCostVariance {
   /**
    * How far a margin may sit from its target before alerting, in percentage
    * points, applied in both directions. One tolerance covers all three channels.
-   * Null means no tolerance is set and this product never alerts.
+   * Null means ZERO tolerance — the target is expected to be hit — not "never
+   * alert". A channel with no TARGET is what goes unalerted.
    */
   maxVariancePct: number | null;
   breakdown: CostBreakdown;
@@ -772,10 +773,13 @@ export class CostingService {
           variancePct,
           // No target or no tolerance set means no alerting for this channel —
           // silence is the right default for something nobody has configured.
+          // A blank tolerance means ZERO tolerance, not "never alert": having
+          // bothered to set a target, you want to know when you are off it. The
+          // tolerance widens that band; leaving it empty asks for the target to
+          // be hit. The epsilon is float noise, not a grace margin.
           alert:
             variancePct != null &&
-            p.maxVariancePct != null &&
-            Math.abs(variancePct) > p.maxVariancePct,
+            Math.abs(variancePct) - (p.maxVariancePct ?? 0) > 0.05,
           priceAtTarget:
             c.target == null ? null : round1(computedCost * (1 + c.target / 100)),
         };

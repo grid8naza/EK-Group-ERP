@@ -355,7 +355,9 @@ export default function PriceReviewPage() {
           </div>
           <div className="text-xs text-slate-400">
             {r.code} · {r.basis === 'PACKING' ? 'Packing' : 'Recipe'}
-            {r.maxVariancePct != null ? ` · ±${money(r.maxVariancePct)}%` : ' · no tolerance set'}
+            {r.maxVariancePct != null
+              ? ` · ±${money(r.maxVariancePct)}%`
+              : ' · exact target'}
           </div>
         </div>
       ),
@@ -571,9 +573,9 @@ export default function PriceReviewPage() {
         <span className="text-slate-300">|</span>
         {/* The colours carry the finding, so they are named rather than left to
             be inferred. Each swatch uses the class it describes. */}
-        <span className={TONE_TEXT.ok}>● at or above target</span>
+        <span className={TONE_TEXT.ok}>● on target</span>
         <span className={TONE_TEXT.short}>▼ below target</span>
-        <span className={TONE_TEXT.over}>▲ over tolerance</span>
+        <span className={TONE_TEXT.over}>▲ above target</span>
         <span className={TONE_TEXT.none}>● no target</span>
       </div>
 

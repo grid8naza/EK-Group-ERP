@@ -1592,7 +1592,7 @@ export default function ProductsPage() {
                       type="number"
                       min={0}
                       step="any"
-                      placeholder="no alerts"
+                      placeholder="exact"
                       value={form.maxVariancePct}
                       onBlur={blur2('maxVariancePct')}
                       onChange={(e) =>

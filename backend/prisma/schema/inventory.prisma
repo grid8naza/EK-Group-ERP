@@ -364,8 +364,11 @@ model Product {
   /// How far a channel's actual margin may sit from its target before Price
   /// Review raises an alert, in percentage points. Applied in BOTH directions:
   /// an overshoot can mean the price is uncompetitive or the target is stale,
-  /// which is worth knowing too. One tolerance covers all three channels. NULL
-  /// means no alerting for this product.
+  /// which is worth knowing too. One tolerance covers all three channels.
+  ///
+  /// NULL means ZERO tolerance — having set a target you want to know when you
+  /// are off it, and this only widens the band. What goes unalerted is a channel
+  /// with no TARGET, since there is then nothing to be off.
   maxVariancePct        Float?
   /// Maximum Retail Price — the single price printed on the pack label, set in
   /// Packing Master. It is entered against RETAIL only: the label carries one

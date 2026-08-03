@@ -69,24 +69,29 @@ export const costedAgo = (iso: string | null | undefined): string => {
  *
  *  none  — no target set, so there is nothing to be above or below
  *  ok    — within the product's tolerance; the margin is where it was meant to be
- *  short — BELOW target: the margin has eroded. The one that costs money
- *  over   — ABOVE target beyond tolerance: not a loss, but worth knowing — the
+ *  short — BELOW target beyond tolerance: the margin has eroded. Costs money
+ *  over  — ABOVE target beyond tolerance: not a loss, but worth knowing — the
  *          price may be uncompetitive, or the target has gone stale
  *
- * Where no tolerance is set nothing "alerts", but the direction is still worth
- * seeing, so anything below target reads as short and anything at or above it
- * reads as ok. That is the difference between a screen that shows a variation
- * and one that shows a uniform wall of grey.
+ * A blank tolerance means ZERO tolerance, not "never flag": having set a target
+ * you want to know when you are off it, and the tolerance only widens the band.
+ * What goes unflagged is a channel with no TARGET, since there is then nothing
+ * to be off. Mirrors CostingService.priceVariances exactly — the server decides
+ * `alert`, and this must agree or a row would be coloured one way and grouped
+ * another.
  */
 export type VarianceTone = 'none' | 'ok' | 'short' | 'over';
+
+/** Float noise, not a grace margin — the percentages are held to 1 decimal. */
+const VARIANCE_EPSILON = 0.05;
 
 export const varianceTone = (
   variancePct: number | null,
   maxVariancePct: number | null,
 ): VarianceTone => {
   if (variancePct == null) return 'none';
-  if (maxVariancePct == null) return variancePct < 0 ? 'short' : 'ok';
-  if (Math.abs(variancePct) <= maxVariancePct) return 'ok';
+  if (Math.abs(variancePct) - (maxVariancePct ?? 0) <= VARIANCE_EPSILON)
+    return 'ok';
   return variancePct < 0 ? 'short' : 'over';
 };
 

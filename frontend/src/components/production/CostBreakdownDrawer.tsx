@@ -163,7 +163,7 @@ export function CostBreakdownDrawer({
               </table>
               <p className="mt-2 text-xs text-slate-500">
                 {row.maxVariancePct == null
-                  ? 'No variance tolerance is set for this product, so nothing alerts — the colour still shows which channels sit below target.'
+                  ? 'No tolerance is set, so each target is expected to be hit exactly. Widen the band with Max Variance % in Product Master.'
                   : `Alerts past ±${money(row.maxVariancePct)}% from target, in either direction.`}
               </p>
             </div>
