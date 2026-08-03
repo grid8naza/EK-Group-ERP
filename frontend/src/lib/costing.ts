@@ -65,6 +65,48 @@ export const costedAgo = (iso: string | null | undefined): string => {
 };
 
 /**
+ * How a margin sits against the target it was meant to earn.
+ *
+ *  none  — no target set, so there is nothing to be above or below
+ *  ok    — within the product's tolerance; the margin is where it was meant to be
+ *  short — BELOW target: the margin has eroded. The one that costs money
+ *  over   — ABOVE target beyond tolerance: not a loss, but worth knowing — the
+ *          price may be uncompetitive, or the target has gone stale
+ *
+ * Where no tolerance is set nothing "alerts", but the direction is still worth
+ * seeing, so anything below target reads as short and anything at or above it
+ * reads as ok. That is the difference between a screen that shows a variation
+ * and one that shows a uniform wall of grey.
+ */
+export type VarianceTone = 'none' | 'ok' | 'short' | 'over';
+
+export const varianceTone = (
+  variancePct: number | null,
+  maxVariancePct: number | null,
+): VarianceTone => {
+  if (variancePct == null) return 'none';
+  if (maxVariancePct == null) return variancePct < 0 ? 'short' : 'ok';
+  if (Math.abs(variancePct) <= maxVariancePct) return 'ok';
+  return variancePct < 0 ? 'short' : 'over';
+};
+
+/** Text colour per tone. Short is the alarming one, so it gets the alarm colour. */
+export const TONE_TEXT: Record<VarianceTone, string> = {
+  none: 'text-slate-400',
+  ok: 'text-emerald-600 dark:text-emerald-400',
+  short: 'text-rose-600 dark:text-rose-400',
+  over: 'text-amber-600 dark:text-amber-400',
+};
+
+/** A ▲ / ▼ beside the figure, so the direction survives a colour-blind reader. */
+export const TONE_MARK: Record<VarianceTone, string> = {
+  none: '',
+  ok: '',
+  short: '▼',
+  over: '▲',
+};
+
+/**
  * A cost nobody has re-established in a long while is worth a second look even
  * when the recompute agrees with it — the BOM itself may simply be out of date.
  */

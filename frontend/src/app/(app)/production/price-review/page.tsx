@@ -19,6 +19,8 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { CostBreakdownDrawer } from '@/components/production/CostBreakdownDrawer';
 import {
+  TONE_MARK,
+  TONE_TEXT,
   costBasisOf,
   costedAgo,
   isCostStale,
@@ -28,6 +30,7 @@ import {
   round1,
   signed,
   toPrice,
+  varianceTone,
 } from '@/lib/costing';
 import type {
   ApplyCostingResult,
@@ -265,12 +268,10 @@ export default function PriceReviewPage() {
     const masterPct = profitPctAt(livePrice, r.storedCost);
     const costingPct = profitPctAt(livePrice, costBasisOf(r));
     const variance = liveTarget == null ? null : round1(costingPct - liveTarget);
-    // Alerting mirrors the server exactly: outside tolerance in either
-    // direction. No tolerance set means this product never alerts.
-    const off =
-      variance != null &&
-      r.maxVariancePct != null &&
-      Math.abs(variance) > r.maxVariancePct;
+    // Colour by how the margin sits against target. Without a tolerance nothing
+    // "alerts", but the direction still shows — a channel short of target must
+    // never read the same as one comfortably over it.
+    const tone = varianceTone(variance, r.maxVariancePct);
 
     return (
       <div className="flex flex-col items-end gap-1">
@@ -323,11 +324,14 @@ export default function PriceReviewPage() {
           </span>
           <span className="text-slate-300">·</span>
           <span
-            className={cn(
-              off ? 'font-semibold text-rose-600 dark:text-rose-400' : 'text-slate-600 dark:text-slate-300',
-            )}
-            title="Margin at the recomputed cost"
+            className={cn('font-semibold', TONE_TEXT[tone])}
+            title={
+              variance == null
+                ? 'Margin at the recomputed cost (no target set)'
+                : `Margin at the recomputed cost — ${signed(variance)} against target`
+            }
           >
+            {TONE_MARK[tone]}
             {money(costingPct)}
           </span>
         </div>
@@ -564,6 +568,13 @@ export default function PriceReviewPage() {
         <span>actual at Product Master cost</span>
         <span className="text-slate-300">·</span>
         <span>actual at recomputed cost</span>
+        <span className="text-slate-300">|</span>
+        {/* The colours carry the finding, so they are named rather than left to
+            be inferred. Each swatch uses the class it describes. */}
+        <span className={TONE_TEXT.ok}>● at or above target</span>
+        <span className={TONE_TEXT.short}>▼ below target</span>
+        <span className={TONE_TEXT.over}>▲ over tolerance</span>
+        <span className={TONE_TEXT.none}>● no target</span>
       </div>
 
       <div className="min-h-0 flex-1">

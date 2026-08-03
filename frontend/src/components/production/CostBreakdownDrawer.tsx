@@ -3,7 +3,14 @@
 import { Scale } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Drawer } from '@/components/ui/Drawer';
-import { costedAgo, money, signed } from '@/lib/costing';
+import {
+  TONE_MARK,
+  TONE_TEXT,
+  costedAgo,
+  money,
+  signed,
+  varianceTone,
+} from '@/lib/costing';
 import type { ProductCostVariance } from '@/lib/types';
 
 /**
@@ -67,9 +74,20 @@ export function CostBreakdownDrawer({
               <span className="text-slate-500">Recomputed</span>
               <span className="tabular-nums">{money(row.computedCost)}</span>
             </div>
+            {/* A cost that has RISEN is the one that eats margin, so it reads
+                red; a fall reads green. Same convention as the listing. */}
             <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 font-semibold dark:border-slate-700">
               <span>Difference</span>
-              <span className="tabular-nums">{signed(row.costDelta)}</span>
+              <span
+                className={cn(
+                  'tabular-nums',
+                  row.costDelta > 0 && 'text-rose-600 dark:text-rose-400',
+                  row.costDelta < 0 && 'text-emerald-600 dark:text-emerald-400',
+                  row.costDelta === 0 && 'text-slate-400',
+                )}
+              >
+                {signed(row.costDelta)}
+              </span>
             </div>
             <div className="mt-2 flex justify-between text-xs text-slate-400">
               <span>Last costed</span>
@@ -98,37 +116,56 @@ export function CostBreakdownDrawer({
                     <th className="py-1 text-right font-medium">Price</th>
                     <th className="py-1 text-right font-medium">Target</th>
                     <th className="py-1 text-right font-medium">Actual</th>
+                    <th className="py-1 text-right font-medium">Variance</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {row.prices.map((p) => (
-                    <tr
-                      key={p.key}
-                      className="border-t border-slate-100 dark:border-slate-800"
-                    >
-                      <td className="py-1.5 text-slate-600 dark:text-slate-300">
-                        {p.label}
-                      </td>
-                      <td className="py-1.5 text-right tabular-nums">
-                        {money(p.price)}
-                      </td>
-                      <td className="py-1.5 text-right tabular-nums text-slate-400">
-                        {p.targetProfitPct == null
-                          ? '—'
-                          : `${money(p.targetProfitPct)}%`}
-                      </td>
-                      <td
-                        className={cn(
-                          'py-1.5 text-right font-semibold tabular-nums',
-                          p.alert && 'text-rose-600 dark:text-rose-400',
-                        )}
+                  {row.prices.map((p) => {
+                    const tone = varianceTone(p.variancePct, row.maxVariancePct);
+                    return (
+                      <tr
+                        key={p.key}
+                        className="border-t border-slate-100 dark:border-slate-800"
                       >
-                        {money(p.actualProfitPct)}%
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="py-1.5 text-slate-600 dark:text-slate-300">
+                          {p.label}
+                        </td>
+                        <td className="py-1.5 text-right tabular-nums">
+                          {money(p.price)}
+                        </td>
+                        <td className="py-1.5 text-right tabular-nums text-slate-400">
+                          {p.targetProfitPct == null
+                            ? '—'
+                            : `${money(p.targetProfitPct)}%`}
+                        </td>
+                        <td
+                          className={cn(
+                            'py-1.5 text-right font-semibold tabular-nums',
+                            TONE_TEXT[tone],
+                          )}
+                        >
+                          {money(p.actualProfitPct)}%
+                        </td>
+                        <td
+                          className={cn(
+                            'py-1.5 text-right font-semibold tabular-nums',
+                            TONE_TEXT[tone],
+                          )}
+                        >
+                          {p.variancePct == null
+                            ? '—'
+                            : `${TONE_MARK[tone]}${signed(p.variancePct)}`}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
+              <p className="mt-2 text-xs text-slate-500">
+                {row.maxVariancePct == null
+                  ? 'No variance tolerance is set for this product, so nothing alerts — the colour still shows which channels sit below target.'
+                  : `Alerts past ±${money(row.maxVariancePct)}% from target, in either direction.`}
+              </p>
             </div>
           )}
         </div>
