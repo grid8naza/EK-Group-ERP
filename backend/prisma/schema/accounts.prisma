@@ -185,8 +185,19 @@ model AccountCompany {
   @@map("account_companies")
 }
 
-/// The kinds of cost centre — branch, department, kitchen, cafe, counter, mess,
-/// vehicle, project. Global, like the account master.
+/// The kinds of cost centre the annexure analyses by — branch, department,
+/// kitchen, cafe, counter, mess, vehicle, project (D.7). Global, like the
+/// account master.
+///
+/// The cost centres THEMSELVES are not modelled here: `CostCenter` in the Cpanel
+/// domain already owns them, per company, with `CostObject` beneath — and
+/// product costing, the stock ledger and production plans all reference it
+/// already. A second table would have split the same idea in two.
+///
+/// So this holds only the classification, which Cpanel's cost centres can carry
+/// via a plain `categoryCode` (no relation — the cross-domain rule). It is what
+/// makes the annexure's cost-per-meal, per-counter and per-vehicle analysis
+/// possible without one account per outlet.
 model CostCentreCategory {
   code        String  @id // BRANCH, DEPT, KITCHEN, …
   name        String
@@ -196,34 +207,5 @@ model CostCentreCategory {
   sortOrder   Int     @default(0)
   isActive    Boolean @default(true)
 
-  costCentres CostCentre[]
-
   @@map("cost_centre_categories")
-}
-
-/// The cost centres themselves, hierarchical within a branch. Analysis is by
-/// cost centre rather than by proliferating accounts: one account carries the
-/// cost and the cost centre says where it landed, so cost per meal, per counter
-/// and per vehicle comes out of the ledger rather than a side report.
-model CostCentre {
-  id           Int      @id @default(autoincrement())
-  companyId    Int // -> Cpanel Company (plain id)
-  branchId     Int? // -> Cpanel Branch (plain id)
-  categoryCode String
-  parentId     Int?
-  code         String
-  name         String
-  isActive     Boolean  @default(true)
-  isLocked     Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  category CostCentreCategory @relation(fields: [categoryCode], references: [code], onDelete: Restrict)
-  parent   CostCentre?        @relation("CostCentreTree", fields: [parentId], references: [id], onDelete: Restrict)
-  children CostCentre[]       @relation("CostCentreTree")
-
-  @@unique([companyId, code])
-  @@index([companyId, branchId])
-  @@index([categoryCode])
-  @@map("cost_centres")
 }
