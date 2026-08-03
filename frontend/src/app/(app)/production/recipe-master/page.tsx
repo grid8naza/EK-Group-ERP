@@ -24,6 +24,7 @@ import type {
   Unit,
   Asset,
   HrDesignation,
+  HsnCode,
 } from '@/lib/types';
 
 const ROUTE = '/production/recipe-master';
@@ -40,6 +41,7 @@ export default function RecipeMasterPage() {
   const { data: units } = useFetch<Unit[]>('/units');
   const { data: assets } = useFetch<Asset[]>('/assets');
   const { data: designations } = useFetch<HrDesignation[]>('/hr-designations');
+  const { data: hsnCodes } = useFetch<HsnCode[]>('/hsn-codes');
 
   // Print a recipe: open the print window synchronously (inside the click, so
   // the popup isn't blocked), then fetch the full product (recipe / processes /
@@ -55,9 +57,23 @@ export default function RecipeMasterPage() {
     );
     try {
       const full = await api.get<Product>(`/products/${p.id}`);
+      // Selling prices print only when the recipe is what prices the product —
+      // sold, with no packing step. Same rule as the editor's `isPricedHere`.
+      const hsn = (hsnCodes ?? []).find((h) => h.id === full.hsnCodeId);
+      const selling =
+        full.canSell && !full.hasPacking
+          ? {
+              intercompanyPrice: full.intercompanyPrice ?? 0,
+              wholesalePrice: full.wholesalePrice ?? 0,
+              retailPrice: full.retailPrice ?? 0,
+              cgstPct: hsn?.cgst ?? 0,
+              sgstPct: hsn?.sgst ?? 0,
+              cessPct: hsn?.cess ?? 0,
+            }
+          : null;
       writeRecipeToWindow(
         w,
-        buildRecipeHtml(full, {
+        buildRecipeHtml({ ...full, selling }, {
           items: items ?? [],
           units: units ?? [],
           assets: assets ?? [],

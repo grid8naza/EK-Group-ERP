@@ -26,8 +26,8 @@ export interface RecipePrintInput {
   category?: { name: string } | null;
   group?: { name: string } | null;
   yieldQty: number;
+  /** Stock unit — the recipe yields in this, never in a box unit. */
   unitId: number;
-  boxUnitId?: number | null;
   recipe: { itemId: number; quantity: number; unitId: number }[];
   processes: {
     name: string;
@@ -38,8 +38,21 @@ export interface RecipePrintInput {
   }[];
   fuelCost: number;
   overheadCost: number;
-  bomMarginPct: number;
-  actualSalesPrice: number;
+  /**
+   * Selling prices, present only when the recipe is what prices the product —
+   * it is sold and has no packing step (a sellable semi-finished product, or an
+   * "unpacked finished" one such as Egg Puff). A packed product is priced in
+   * Packing Master and one that is not sold has no price, so both pass null and
+   * the printout shows costing alone. No MRP: that is a pack-label figure.
+   */
+  selling?: {
+    intercompanyPrice: number;
+    wholesalePrice: number;
+    retailPrice: number;
+    cgstPct: number;
+    sgstPct: number;
+    cessPct: number;
+  } | null;
 }
 
 const money = (v: number) =>
@@ -118,18 +131,11 @@ export function buildRecipeHtml(
   );
   const costPrice =
     materialCost + equipmentCost + manpowerCost + p.fuelCost + p.overheadCost;
-  const salesPrice = costPrice * (1 + p.bomMarginPct / 100);
-  const grossProfit = salesPrice - costPrice;
   const yQty = p.yieldQty || 1;
   const estCostPerUnit = costPrice / yQty;
-  const estSalesPerUnit = salesPrice / yQty;
-  const estProfitPerUnit = estSalesPerUnit - estCostPerUnit;
   const actualCostPerUnit = round1(estCostPerUnit);
-  const actualProfitPerUnit = p.actualSalesPrice - actualCostPerUnit;
-  const estProfitPct = estCostPerUnit ? (estProfitPerUnit / estCostPerUnit) * 100 : 0;
-  const actualProfitPct = actualCostPerUnit
-    ? (actualProfitPerUnit / actualCostPerUnit) * 100
-    : 0;
+  const profitOf = (price: number) => price - actualCostPerUnit;
+  const taxOf = (price: number, ratePct: number) => (price * ratePct) / 100;
 
   const totalProcMinutes = p.processes.reduce(
     (s, proc) => s + (proc.timeUnit === 'HR' ? proc.timeValue * 60 : proc.timeValue),
@@ -143,7 +149,7 @@ export function buildRecipeHtml(
     return r ? `${h}h ${r}m` : `${h}h`;
   };
 
-  const yieldUnitCode = unitCode(p.boxUnitId ?? p.unitId) || 'unit';
+  const yieldUnitCode = unitCode(p.unitId) || 'unit';
   const batchQty = round1(yQty);
 
   // --- rows ---
@@ -192,6 +198,37 @@ export function buildRecipeHtml(
 
   const costingRow = (label: string, value: string, cls = '') =>
     `<tr class="${cls}"><td>${label}</td><td class="r">${value}</td></tr>`;
+
+  // Intercompany / Wholesale / Retail per yield unit — printed only when this
+  // recipe is what prices the product (see RecipePrintInput.selling).
+  const sellingTable = (() => {
+    const s = p.selling;
+    if (!s) return '';
+    const cols = [s.intercompanyPrice, s.wholesalePrice, s.retailPrice];
+    const row = (label: string, cell: (price: number) => string, cls = '') =>
+      `<tr class="${cls}"><td>${label}</td>${cols
+        .map((price) => `<td class="r">${cell(price)}</td>`)
+        .join('')}</tr>`;
+    const totalOf = (v: number) =>
+      v + taxOf(v, s.cgstPct) + taxOf(v, s.sgstPct) + taxOf(v, s.cessPct);
+    const pctOf = (v: number) =>
+      actualCostPerUnit ? (profitOf(v) / actualCostPerUnit) * 100 : 0;
+    return `<table>
+      <thead>
+        <tr><th colspan="4" style="text-align:center;background:#334155;color:#fff;">Price per 1 ${esc(yieldUnitCode)}</th></tr>
+        <tr><th>Description</th><th class="r">Intercompany</th><th class="r">Wholesale</th><th class="r">Retail</th></tr>
+      </thead>
+      <tbody>
+        ${row('Profit Percentage', (v) => `${money1(pctOf(v))}%`)}
+        ${row('Sales Price', (v) => money1(v))}
+        ${row(`CGST (${s.cgstPct}%)`, (v) => money1(taxOf(v, s.cgstPct)))}
+        ${row(`SGST (${s.sgstPct}%)`, (v) => money1(taxOf(v, s.sgstPct)))}
+        ${row(`Cess (${s.cessPct}%)`, (v) => money1(taxOf(v, s.cessPct)))}
+        ${row('Total Price', (v) => money1(totalOf(v)), 'total')}
+        ${row('Profit Amount', (v) => money1(profitOf(v)), 'total')}
+      </tbody>
+    </table>`;
+  })();
 
   const html = `<!doctype html>
 <html>
@@ -258,23 +295,10 @@ export function buildRecipeHtml(
         ${costingRow('Fuel Cost', money(p.fuelCost))}
         ${costingRow('Overheads', money(p.overheadCost))}
         ${costingRow('Cost Price', money(costPrice), 'total')}
-        ${costingRow('Profit Margin %', money(p.bomMarginPct))}
-        ${costingRow('Sales Price', money(salesPrice), 'total')}
-        ${costingRow('Gross Profit', money(grossProfit), 'total')}
+        ${costingRow(`Cost Price / ${esc(yieldUnitCode) || 'unit'}`, money(estCostPerUnit), 'total')}
       </tbody>
     </table>
-    <table>
-      <thead>
-        <tr><th colspan="3" style="text-align:center;background:#334155;color:#fff;">Price per 1 ${esc(yieldUnitCode)}</th></tr>
-        <tr><th>Description</th><th class="r">Estimated</th><th class="r">Actual</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>Sales Price</td><td class="r">${money1(estSalesPerUnit)}</td><td class="r">${money1(p.actualSalesPrice)}</td></tr>
-        <tr><td>Cost Price</td><td class="r">${money1(estCostPerUnit)}</td><td class="r">${money1(actualCostPerUnit)}</td></tr>
-        <tr class="total"><td>Profit</td><td class="r">${money1(estProfitPerUnit)}</td><td class="r">${money1(actualProfitPerUnit)}</td></tr>
-        <tr><td>Profit Percentage</td><td class="r">${money1(estProfitPct)}%</td><td class="r">${money1(actualProfitPct)}%</td></tr>
-      </tbody>
-    </table>
+    ${sellingTable}
   </div>
 
   <script>

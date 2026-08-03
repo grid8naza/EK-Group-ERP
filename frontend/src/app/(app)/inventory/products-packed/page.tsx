@@ -99,7 +99,8 @@ const empty = {
   categoryId: '',
   groupId: '',
   unitId: '',
-  // Packed screen: every product here is packed and never unpacked.
+  // Form factor is derived from hasPacking on save (see the save payload), so
+  // these only mirror the `hasPacking: true` default below.
   unpacked: false,
   packed: true,
   canSell: true,
@@ -389,10 +390,10 @@ export default function ProductsPage() {
     categoryId: p.categoryId != null ? String(p.categoryId) : '',
     groupId: p.groupId != null ? String(p.groupId) : '',
     unitId: String(p.unitId),
-    // Forced invariants for the Packed screen (see `empty`) — packed products
-    // are always sellable.
-    unpacked: false,
-    packed: true,
+    // Form factor is re-derived from hasPacking on save; finished products are
+    // always sellable.
+    unpacked: !(p.hasPacking ?? true),
+    packed: p.hasPacking ?? true,
     canSell: true,
     costPrice: dec2(String(p.costPrice ?? 0)),
     wholesalePrice: dec2(String(p.wholesalePrice ?? 0)),
@@ -609,8 +610,13 @@ export default function ProductsPage() {
       categoryId: drawerCategoryId,
       groupId: Number(form.groupId),
       unitId: Number(form.unitId),
-      unpacked: form.unpacked,
-      packed: form.packed,
+      // Form factor follows the packing capability rather than the screen: a
+      // finished product that has a packing step is packed, one made straight
+      // from a recipe (e.g. Egg Puff) is not. Deriving it here keeps the flag
+      // from drifting away from `hasPacking`, which is what Recipe Master and
+      // Packing Master actually key their costing off.
+      unpacked: !form.hasPacking,
+      packed: form.hasPacking,
       canSell: form.canSell,
       costPrice: num(form.costPrice),
       wholesalePrice: num(form.wholesalePrice),
@@ -721,8 +727,10 @@ export default function ProductsPage() {
       // match the product's own leaf group.
       rows = rows.filter((r) => String(r.groupId ?? '') === parentFilter);
     }
-    // This screen lists packed products only.
-    rows = rows.filter((r) => r.packed);
+    // No packed/unpacked narrowing: the screen's boundary is the category kind
+    // (filtered above), and a FINISHED product may be either — packed (made from
+    // a semi-finished source) or unpacked (made straight from a recipe, e.g. Egg
+    // Puff). Filtering on `packed` here would hide the unpacked ones.
     if (sourceFilter) rows = rows.filter((r) => r.source === sourceFilter);
     if (status === 'active') rows = rows.filter((r) => r.isActive);
     else if (status === 'inactive') rows = rows.filter((r) => !r.isActive);
@@ -1162,9 +1170,8 @@ export default function ProductsPage() {
               </>
             )}
 
-            {/* Form factor is fixed on the Packed screen (always packed, never
-                unpacked), so the toggles are hidden and forced — see `empty` /
-                `formFrom`. */}
+            {/* Form factor has no toggles: it is derived from "Has packing"
+                below — see the save payload. */}
 
             {/* Capabilities — what may be built for this product and how it may
                 be used. Has Packing puts it on Production → Packing Master and
