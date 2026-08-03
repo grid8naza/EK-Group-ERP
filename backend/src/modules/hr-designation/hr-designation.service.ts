@@ -1,11 +1,14 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RECOST, RecostPort } from '../../contracts/recost.port';
 import { assertUnlocked } from '../../common/assert-unlocked';
 import {
   itemCode,
@@ -28,7 +31,41 @@ const withRelations = {
 
 @Injectable()
 export class HrDesignationService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(HrDesignationService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    // A designation's rate/hour is the manpower cost in every recipe process
+    // that uses it, so a change here has to reach product costing. The product
+    // module owns that; this one only announces the change through the port.
+    @Inject(RECOST) private readonly recost: RecostPort,
+  ) {}
+
+  /**
+   * Tell product costing that this designation's rate has moved, so every
+   * recipe employing it — and everything packed from those products — is
+   * recosted.
+   *
+   * Runs after the save has committed and never throws: the designation edit is
+   * the user's action and must stand on its own. Only the COST follows; selling
+   * prices and their targets are left for Price Review to raise with a human.
+   */
+  private async recostAfterRateChange(designationId: number): Promise<void> {
+    try {
+      const changed = await this.recost.recostForRateChange({
+        designationIds: [designationId],
+      });
+      for (const c of changed) {
+        this.logger.log(`Recosted ${c.name}: ${c.from} → ${c.to}`);
+      }
+    } catch (e) {
+      this.logger.error(
+        `Designation saved, but dependent product costs could not be refreshed: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+    }
+  }
 
   async findAll(companyId: number | undefined, search?: string) {
     const scopeFilter: Prisma.HrDesignationWhereInput = companyId
@@ -196,6 +233,14 @@ export class HrDesignationService {
         },
         include: withRelations,
       });
+      // Only when the rate actually moved — renaming a designation or changing
+      // its company links must not touch a single product cost.
+      if (
+        dto.ratePerHour !== undefined &&
+        dto.ratePerHour !== existing.ratePerHour
+      ) {
+        await this.recostAfterRateChange(id);
+      }
       return this.flatten(updated);
     } catch (e) {
       throw this.asDuplicate(e, dto.code);

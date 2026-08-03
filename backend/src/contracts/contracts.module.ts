@@ -32,6 +32,9 @@ import { LABOUR_RATE } from './labour-rate.port';
 import { LabourRateAdapter } from '../modules/hr-designation/labour-rate.adapter';
 import { PURCHASE_PRICE } from './purchase-price.port';
 import { PurchasePriceAdapter } from '../modules/item/purchase-price.adapter';
+import { RECOST } from './recost.port';
+import { RecostAdapter } from '../modules/product/recost.adapter';
+import { CostingService } from '../modules/product/costing.service';
 
 /**
  * Composition root for cross-module contracts (ports & adapters).
@@ -102,6 +105,11 @@ import { PurchasePriceAdapter } from '../modules/item/purchase-price.adapter';
     // recipe costing follows a real purchase. Implemented by the item module,
     // which owns lastPurchasePrice.
     { provide: PURCHASE_PRICE, useClass: PurchasePriceAdapter },
+    // The other direction: Asset and HR own costing RATES, and announce a rate
+    // change so the product module can recost what is built on it. Its own
+    // CostingService instance here (stateless), so no module import is needed.
+    CostingService,
+    { provide: RECOST, useClass: RecostAdapter },
     CpanelMetricsAdapter,
     ProductionMetricsAdapter,
     InventoryMetricsAdapter,
@@ -133,6 +141,7 @@ import { PurchasePriceAdapter } from '../modules/item/purchase-price.adapter';
     ASSET_RATE,
     LABOUR_RATE,
     PURCHASE_PRICE,
+    RECOST,
   ],
 })
 export class ContractsModule {}

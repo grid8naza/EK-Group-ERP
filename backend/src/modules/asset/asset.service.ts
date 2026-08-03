@@ -1,11 +1,14 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { RECOST, RecostPort } from '../../contracts/recost.port';
 import { assertUnlocked } from '../../common/assert-unlocked';
 import {
   itemCode,
@@ -26,7 +29,40 @@ const withRelations = {
 
 @Injectable()
 export class AssetService {
-  constructor(private prisma: PrismaService) {}
+  private readonly logger = new Logger(AssetService.name);
+
+  constructor(
+    private prisma: PrismaService,
+    // A machine's cost/hour feeds every recipe that runs on it, so a change here
+    // has to reach product costing. The product module owns that; this one only
+    // announces the change through the port.
+    @Inject(RECOST) private readonly recost: RecostPort,
+  ) {}
+
+  /**
+   * Tell product costing that this machine's running rate has moved, so every
+   * recipe using it — and everything packed from those products — is recosted.
+   *
+   * Runs after the save has committed and never throws: the asset edit is the
+   * user's action and must stand on its own. Only the COST follows; selling
+   * prices and their targets are left for Price Review to raise with a human.
+   */
+  private async recostAfterRateChange(assetId: number): Promise<void> {
+    try {
+      const changed = await this.recost.recostForRateChange({
+        assetIds: [assetId],
+      });
+      for (const c of changed) {
+        this.logger.log(`Recosted ${c.name}: ${c.from} → ${c.to}`);
+      }
+    } catch (e) {
+      this.logger.error(
+        `Asset saved, but dependent product costs could not be refreshed: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+    }
+  }
 
   async findAll(companyId: number | undefined, search?: string) {
     const scopeFilter: Prisma.AssetWhereInput = companyId
@@ -228,6 +264,14 @@ export class AssetService {
         },
         include: withRelations,
       });
+      // Only when the running rate actually moved — renaming a machine or
+      // editing its warranty must not touch a single product cost.
+      if (
+        dto.costPerHour !== undefined &&
+        dto.costPerHour !== existing.costPerHour
+      ) {
+        await this.recostAfterRateChange(id);
+      }
       return this.flatten(updated);
     } catch (e) {
       throw this.asDuplicate(e, dto.code);

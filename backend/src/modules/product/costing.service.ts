@@ -30,6 +30,14 @@ const COST_EPSILON = 0.05;
 /** Which master establishes a product's cost. */
 export type CostBasis = 'RECIPE' | 'PACKING';
 
+/**
+ * Which products a costing pass covers: one company's catalogue (what a user
+ * browsing Price Review sees), or `'all'` — used by the rate-change recost,
+ * where a master rate has moved under every company at once and the affected
+ * products cannot be known from an active company.
+ */
+export type CostingScope = number | undefined | 'all';
+
 export interface CostBreakdown {
   /** Packing only: Σ (source product's per-unit cost × quantity per pack). */
   productCost: number;
@@ -165,8 +173,8 @@ export class CostingService {
    * Product Master; the costing itself is company-independent (the rates are
    * global masters).
    */
-  async variance(companyId: number | undefined): Promise<ProductCostVariance[]> {
-    const products = await this.loadProducts(companyId);
+  async variance(scope: CostingScope): Promise<ProductCostVariance[]> {
+    const products = await this.loadProducts(scope);
     if (!products.length) return [];
 
     const refs = await this.loadRefs(products);
@@ -389,6 +397,94 @@ export class CostingService {
     return { updated: updated.length, updatedNames: updated, skippedLocked };
   }
 
+  /**
+   * Recost after a MASTER RATE moved — a machine's cost/hour or a designation's
+   * rate/hour. Writes the refreshed cost onto the products that rate actually
+   * reaches, and nothing else.
+   *
+   * Cost is a calculation, so it may follow a rate without asking. Selling
+   * prices are not touched, and neither are the profit targets they are judged
+   * against: the point of moving a cost automatically is that the margin change
+   * then SHOWS UP in Price Review for someone to decide about.
+   *
+   * Deliberately targeted rather than "apply everything that has drifted". A
+   * product may be drifted for an unrelated reason — an ingredient repriced last
+   * week that nobody has reviewed yet — and saving a machine rate is no reason
+   * to silently accept that too. The affected set is: every product whose
+   * process flow references the changed asset/designation, plus everything
+   * packed from those, transitively (a packed product's cost contains its
+   * source's, so it moves when the source does).
+   */
+  async recostForRateChange(input: {
+    assetIds?: number[];
+    designationIds?: number[];
+  }): Promise<{ productId: number; name: string; from: number; to: number }[]> {
+    const assetIds = input.assetIds?.filter(Number.isFinite) ?? [];
+    const designationIds = input.designationIds?.filter(Number.isFinite) ?? [];
+    if (!assetIds.length && !designationIds.length) return [];
+
+    // Products whose own process flow uses the changed rate.
+    const touched = await this.prisma.productProcess.findMany({
+      where: {
+        OR: [
+          ...(assetIds.length ? [{ machineId: { in: assetIds } }] : []),
+          ...(designationIds.length
+            ? [{ manpower: { some: { designationId: { in: designationIds } } } }]
+            : []),
+        ],
+      },
+      select: { productId: true },
+    });
+    const affected = new Set(touched.map((t) => t.productId));
+    if (!affected.size) return [];
+
+    // Walk forward through packing: whatever is packed from an affected product
+    // is affected too, however long the chain.
+    const links = await this.prisma.productPackSource.findMany({
+      select: { productId: true, sourceProductId: true },
+    });
+    const packedFrom = new Map<number, number[]>();
+    for (const l of links) {
+      const list = packedFrom.get(l.sourceProductId) ?? [];
+      list.push(l.productId);
+      packedFrom.set(l.sourceProductId, list);
+    }
+    const queue = [...affected];
+    while (queue.length) {
+      const id = queue.pop()!;
+      for (const next of packedFrom.get(id) ?? []) {
+        // The `add`-then-check guard also terminates a mis-configured cycle.
+        if (affected.has(next)) continue;
+        affected.add(next);
+        queue.push(next);
+      }
+    }
+
+    const rows = (await this.variance('all')).filter(
+      (r) =>
+        affected.has(r.productId) && r.hasDrift && !r.emptyBom && !r.isLocked,
+    );
+
+    const changed: { productId: number; name: string; from: number; to: number }[] =
+      [];
+    for (const row of rows) {
+      await this.prisma.product.update({
+        where: { id: row.productId },
+        data: {
+          costPrice: row.computedCost,
+          actualCostPrice: row.computedCost,
+        },
+      });
+      changed.push({
+        productId: row.productId,
+        name: row.name,
+        from: row.storedCost,
+        to: row.computedCost,
+      });
+    }
+    return changed;
+  }
+
   // ---- internals ----
 
   /** Which master owns this product's cost, or null when neither does. */
@@ -402,13 +498,19 @@ export class CostingService {
     return null;
   }
 
-  private async loadProducts(companyId: number | undefined) {
+  private async loadProducts(scope: CostingScope) {
     return this.prisma.product.findMany({
       where: {
         AND: [
           // A product is available exactly where it has a company row; with no
           // active company nothing is in scope. Same rule as ProductService.findAll.
-          companyId ? { companies: { some: { companyId } } } : { id: -1 },
+          // 'all' is for the rate-change recost, which is not a user browsing a
+          // company but a master rate moving under every company at once.
+          scope === 'all'
+            ? {}
+            : scope
+              ? { companies: { some: { companyId: scope } } }
+              : { id: -1 },
           { source: 'MANUFACTURED' },
           { OR: [{ hasRecipe: true }, { hasPacking: true }] },
         ],
