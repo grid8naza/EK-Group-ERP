@@ -10,6 +10,7 @@ import {
   OPENING_STOCK_MENU,
   INVENTORY_TXN_MENU,
   PRODUCTION_SUBS,
+  PRODUCTION_COSTING_MENU,
   PRODUCTION_REPORT_MENUS,
   seedInventoryDefaults,
   seedProductionDefaults,
@@ -160,7 +161,7 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     autoEnable: true, // on for every company so the Recipe Master screen appears
     menu: { name: 'Production', icon: 'factory' },
     subs: PRODUCTION_SUBS,
-    extraMenus: [...PRODUCTION_REPORT_MENUS],
+    extraMenus: [PRODUCTION_COSTING_MENU, ...PRODUCTION_REPORT_MENUS],
     seedData: seedProductionDefaults,
   },
   {

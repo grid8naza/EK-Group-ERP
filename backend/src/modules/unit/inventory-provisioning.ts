@@ -79,13 +79,8 @@ export const PRODUCTION_SUBS = [
   { name: 'Material Request', route: '/production/material-requests', icon: 'clipboard-check', order: 6 },
   // Production Receipt — finished goods banked into stock from a work order.
   { name: 'Production Receipt', route: '/production/receipts', icon: 'package-plus', order: 7 },
-  // The two review screens, split by whether the product is sold. Both recost
-  // every BOM at today's master rates; they differ in what there is to review.
-  // Price Review asks whether a sellable product still earns its target margin;
-  // Cost Review covers what is never sold (semi-finished intermediates), where
-  // cost is the whole story. Reports that can also act, not read-only reports.
-  { name: 'Price Review', route: '/production/price-review', icon: 'tags', order: 10 },
-  { name: 'Cost Review', route: '/production/cost-review', icon: 'scale', order: 11 },
+  // The two review screens live in their own main menu — see
+  // PRODUCTION_COSTING_MENU below.
   // Per-module reference data. Super-admin-only; isolated from other modules.
   {
     name: 'Lookups',
@@ -95,6 +90,29 @@ export const PRODUCTION_SUBS = [
     superAdminOnly: true,
   },
 ];
+
+/**
+ * A main menu of its own for the two costing reviews, kept out of the
+ * operational "Production" menu.
+ *
+ * They are a different kind of work: the screens above are things you DO on a
+ * given day — raise a work order, pack, receive. These are a periodic check that
+ * what the Product Master believes still matches what the BOMs actually cost,
+ * and a decision about prices when it does not. Reports that can act, so they
+ * are FORM screens rather than living under Production Report.
+ *
+ * Split by whether the product is sold: Price Review asks whether a sellable
+ * product still earns its target margin, Cost Review covers what is never sold
+ * (semi-finished intermediates), where cost is the whole story.
+ */
+export const PRODUCTION_COSTING_MENU = {
+  name: 'Costing Review',
+  icon: 'scale',
+  subs: [
+    { name: 'Price Review', route: '/production/price-review', icon: 'tags', order: 1 },
+    { name: 'Cost Review', route: '/production/cost-review', icon: 'scale', order: 2 },
+  ],
+};
 
 // A second main menu under the Production module for its reports (kept separate
 // from the operational "Production" menu).

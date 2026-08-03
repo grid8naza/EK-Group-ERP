@@ -1,7 +1,11 @@
 import { ObjectType, Prisma } from '@prisma/client';
 import { MODULE_SCAFFOLDS, type ModuleScaffold } from './module-scaffold';
 import { CPANEL_COMPANY_SUBS } from '../modules/company/company-provisioning';
-import { OPENING_STOCK_MENU } from '../modules/unit/inventory-provisioning';
+import {
+  OPENING_STOCK_MENU,
+  PRODUCTION_COSTING_MENU,
+  PRODUCTION_REPORT_MENUS,
+} from '../modules/unit/inventory-provisioning';
 
 /**
  * Screen routes that were renamed or removed. The additive sync below never
@@ -185,6 +189,113 @@ async function migrateOpeningStockMenu(
       where: { mainMenuId: primary.id, route: { in: osRoutes } },
       data: { mainMenuId: osId },
     });
+  }
+}
+
+/**
+ * One-time migration: Price Review and Cost Review were first shipped under the
+ * operational "Production" main menu. They now live in their own "Costing
+ * Review" menu — different work: the Production screens are what you DO on a
+ * given day, these are a periodic check that costs and margins still hold.
+ *
+ * Per company: create the menu, mirror the Production menu's group visibility so
+ * no group loses reach, and move the screens across. The sub-menu ids are
+ * unchanged, so the privileges already granted on them follow. Idempotent — a
+ * no-op once moved, and on a fresh DB where the sync creates them in place.
+ */
+async function migrateProductionCostingMenu(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  const prod = await prisma.module.findUnique({
+    where: { code: 'PRODUCTION' },
+    select: { id: true },
+  });
+  if (!prod) return; // fresh DB: nothing to migrate yet
+  const routes = PRODUCTION_COSTING_MENU.subs.map((s) => s.route);
+
+  const menus = await prisma.mainMenu.findMany({
+    where: { moduleId: prod.id },
+    select: { id: true, companyId: true, menuName: true, sortOrder: true },
+    orderBy: { id: 'asc' },
+  });
+  const companyIds = [...new Set(menus.map((m) => m.companyId))];
+
+  for (const companyId of companyIds) {
+    const mine = menus.filter((m) => m.companyId === companyId);
+    // The primary Production menu is the oldest that is not a known extra menu
+    // (a renamed primary still qualifies).
+    const primary = mine.find(
+      (m) =>
+        m.menuName !== PRODUCTION_COSTING_MENU.name &&
+        !PRODUCTION_REPORT_MENUS.some((r) => r.name === m.menuName),
+    );
+    if (!primary) continue;
+
+    // Push Production Report down so the sidebar reads Production → Costing
+    // Review → Production Report, rather than tying at 2.
+    const report = mine.find((m) =>
+      PRODUCTION_REPORT_MENUS.some((r) => r.name === m.menuName),
+    );
+    if (report && report.sortOrder < 3) {
+      await prisma.mainMenu.update({
+        where: { id: report.id },
+        data: { sortOrder: 3 },
+      });
+    }
+
+    let costingId = mine.find(
+      (m) => m.menuName === PRODUCTION_COSTING_MENU.name,
+    )?.id;
+    if (!costingId) {
+      const created = await prisma.mainMenu.create({
+        data: {
+          companyId,
+          moduleId: prod.id,
+          menuName: PRODUCTION_COSTING_MENU.name,
+          // After Production, before Production Report.
+          sortOrder: 2,
+          objectType: ObjectType.FORM,
+          isUserMenu: true,
+          icon: PRODUCTION_COSTING_MENU.icon,
+        },
+        select: { id: true },
+      });
+      costingId = created.id;
+    }
+
+    // Mirror the Production menu's group visibility, so a group that could
+    // reach these screens still can. Groups without sub-privileges just see it
+    // empty, and the nav hides empty menus for non-super-admins.
+    const access = await prisma.groupMainMenuAccess.findMany({
+      where: { mainMenuId: primary.id },
+      select: { userGroupId: true, visible: true },
+    });
+    if (access.length) {
+      await prisma.groupMainMenuAccess.createMany({
+        data: access.map((a) => ({
+          userGroupId: a.userGroupId,
+          mainMenuId: costingId!,
+          visible: a.visible,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    await prisma.subMenu.updateMany({
+      where: { mainMenuId: primary.id, route: { in: routes } },
+      data: { mainMenuId: costingId },
+    });
+
+    // The additive sync never renumbers an existing screen, so a moved one
+    // would keep the order it had in the Production menu (10, 11) instead of
+    // this menu's own 1, 2. Harmless to relative order, but it leaves the DB
+    // disagreeing with the scaffold — so set it here rather than by hand.
+    for (const sub of PRODUCTION_COSTING_MENU.subs) {
+      await prisma.subMenu.updateMany({
+        where: { mainMenuId: costingId, route: sub.route },
+        data: { sortOrder: sub.order },
+      });
+    }
   }
 }
 
@@ -585,6 +696,11 @@ export async function syncScaffold(
 
   // 0e2) Rename the product screens → Products - Semifinished / - Finished.
   await migrateProductScreenNames(prisma);
+
+  // 0e3) Move Price Review + Cost Review off the operational Production menu
+  //      into their own "Costing Review" menu. Before the additive sync so the
+  //      moved screens are matched under the new menu rather than duplicated.
+  await migrateProductionCostingMenu(prisma);
 
   // 0f) Split Purchase Order - IC in two: Sent moves to the Purchase module,
   //     Received stays in CRM. Must run before the sync so the moved screen is
