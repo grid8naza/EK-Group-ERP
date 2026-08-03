@@ -771,12 +771,11 @@ export class CostingService {
           masterProfitPct: pctAt(c.price, storedCost),
           actualProfitPct,
           variancePct,
-          // No target or no tolerance set means no alerting for this channel —
-          // silence is the right default for something nobody has configured.
-          // A blank tolerance means ZERO tolerance, not "never alert": having
-          // bothered to set a target, you want to know when you are off it. The
-          // tolerance widens that band; leaving it empty asks for the target to
-          // be hit. The epsilon is float noise, not a grace margin.
+          // No TARGET means no alerting for this channel — there is nothing to
+          // be off. A blank TOLERANCE is different: it means ZERO tolerance,
+          // not "never alert". Having bothered to set a target you want to know
+          // when you are off it; the tolerance only widens that band. The
+          // epsilon is float noise, not a grace margin.
           alert:
             variancePct != null &&
             Math.abs(variancePct) - (p.maxVariancePct ?? 0) > 0.05,

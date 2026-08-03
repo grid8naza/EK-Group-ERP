@@ -161,26 +161,72 @@ export default function PriceReviewPage() {
     await refetch();
   };
 
-  /** Reprice: fill in what hits each off-target channel's target margin. */
-  const repriceToTarget = (r: ProductCostVariance) =>
+  /**
+   * Reprice: fill in what hits each off-target channel's target margin.
+   *
+   * Confirmed because it overwrites whatever is already in those price boxes,
+   * including edits typed a moment ago. It only fills the form — Save is still
+   * what writes — so the prompt says so rather than implying a commit.
+   */
+  const repriceToTarget = async (r: ProductCostVariance) => {
+    const moves = r.prices.filter((p) => p.alert && p.priceAtTarget != null);
+    if (!moves.length) return;
+    const ok = await confirm({
+      title: 'Reprice to target',
+      message:
+        `${r.name} — set ${moves
+          .map((p) => `${p.label} ${money(p.price)} → ${money(p.priceAtTarget!)}`)
+          .join(', ')}. This overwrites anything typed into those price boxes. ` +
+        `Nothing is written until you press Save.`,
+      confirmText: 'Reprice',
+      cancelText: 'Cancel',
+    });
+    if (!ok) return;
     setEdits((prev) => {
       const next = { ...prev };
-      for (const p of r.prices) {
-        if (p.alert && p.priceAtTarget != null)
-          next[priceKeyOf(r.productId, p.key)] = p.priceAtTarget.toFixed(2);
+      for (const p of moves) {
+        next[priceKeyOf(r.productId, p.key)] = p.priceAtTarget!.toFixed(2);
       }
       return next;
     });
+  };
 
-  /** Reset targets: accept each off-target channel's actual margin as intended. */
-  const resetTargets = (r: ProductCostVariance) =>
+  /**
+   * Reset targets: accept each off-target channel's actual margin as intended.
+   *
+   * The more consequential of the two, so it is the one marked dangerous and
+   * defaulted to Cancel: it moves the goalposts. Once the target matches what
+   * the product currently earns, the channel stops being flagged — and a real
+   * erosion afterwards has a lower bar to clear before anyone notices.
+   */
+  const resetTargets = async (r: ProductCostVariance) => {
+    const moves = r.prices.filter((p) => p.alert);
+    if (!moves.length) return;
+    const ok = await confirm({
+      title: 'Reset targets to the current margin',
+      message:
+        `${r.name} — move ${moves
+          .map(
+            (p) =>
+              `${p.label} ${money(p.targetProfitPct ?? 0)}% → ${money(p.actualProfitPct)}%`,
+          )
+          .join(', ')}. This accepts the margin as it stands rather than ` +
+        `correcting it, so the channel stops being flagged. Only do this if the ` +
+        `new margin is what you now intend. Nothing is written until you press Save.`,
+      confirmText: 'Reset targets',
+      cancelText: 'Cancel',
+      danger: true,
+      defaultCancel: true,
+    });
+    if (!ok) return;
     setEdits((prev) => {
       const next = { ...prev };
-      for (const p of r.prices) {
-        if (p.alert) next[targetKeyOf(r.productId, p.key)] = p.actualProfitPct.toFixed(2);
+      for (const p of moves) {
+        next[targetKeyOf(r.productId, p.key)] = p.actualProfitPct.toFixed(2);
       }
       return next;
     });
+  };
 
   const save = async () => {
     if (!pending.length) return;
@@ -454,7 +500,7 @@ export default function PriceReviewPage() {
                 className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800"
                 onClick={(e) => {
                   e.stopPropagation();
-                  repriceToTarget(r);
+                  void repriceToTarget(r);
                 }}
               >
                 <RotateCcw className="h-4 w-4" />
@@ -464,7 +510,7 @@ export default function PriceReviewPage() {
                 className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800"
                 onClick={(e) => {
                   e.stopPropagation();
-                  resetTargets(r);
+                  void resetTargets(r);
                 }}
               >
                 <Crosshair className="h-4 w-4" />
