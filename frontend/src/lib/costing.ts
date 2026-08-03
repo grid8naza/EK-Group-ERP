@@ -44,3 +44,34 @@ export const costBasisOf = (r: ProductCostVariance) =>
 
 export const profitPctAt = (price: number, cost: number) =>
   cost ? round1(((price - cost) / cost) * 100) : 0;
+
+/**
+ * How long ago the stored cost was established, in the coarsest useful unit.
+ * A cached figure is judged by its AGE rather than its timestamp — "3 months
+ * ago" says what needs saying, where a date would have to be worked out.
+ */
+export const costedAgo = (iso: string | null | undefined): string => {
+  if (!iso) return 'never';
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return 'never';
+  const days = Math.floor((Date.now() - then) / 86_400_000);
+  if (days < 1) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 30) return `${days} days ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} month${months === 1 ? '' : 's'} ago`;
+  const years = Math.floor(days / 365);
+  return `${years} year${years === 1 ? '' : 's'} ago`;
+};
+
+/**
+ * A cost nobody has re-established in a long while is worth a second look even
+ * when the recompute agrees with it — the BOM itself may simply be out of date.
+ */
+export const COST_STALE_DAYS = 90;
+export const isCostStale = (iso: string | null | undefined): boolean => {
+  if (!iso) return true;
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return true;
+  return Date.now() - then > COST_STALE_DAYS * 86_400_000;
+};

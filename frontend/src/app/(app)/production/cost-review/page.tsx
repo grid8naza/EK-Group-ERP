@@ -11,7 +11,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Drawer } from '@/components/ui/Drawer';
-import { money, signed } from '@/lib/costing';
+import { costedAgo, isCostStale, money, signed } from '@/lib/costing';
 import type { ApplyCostingResult, ProductCostVariance } from '@/lib/types';
 
 const ROUTE = '/production/cost-review';
@@ -116,6 +116,32 @@ export default function CostReviewPage() {
       headerClassName: 'text-right',
       sortAccessor: (r) => r.storedCost,
       render: (r) => money(r.storedCost),
+    },
+    {
+      key: 'lastCostedAt',
+      header: 'Last costed',
+      className: 'whitespace-nowrap',
+      // Sort by the timestamp; a never-costed product sorts oldest, which is
+      // where it belongs in a review.
+      sortAccessor: (r: ProductCostVariance) =>
+        r.lastCostedAt ? new Date(r.lastCostedAt).getTime() : 0,
+      render: (r: ProductCostVariance) => (
+        <span
+          className={cn(
+            'text-xs',
+            isCostStale(r.lastCostedAt)
+              ? 'font-medium text-amber-600 dark:text-amber-400'
+              : 'text-slate-400',
+          )}
+          title={
+            r.lastCostedAt
+              ? new Date(r.lastCostedAt).toLocaleString()
+              : 'This cost has never been established from a BOM.'
+          }
+        >
+          {costedAgo(r.lastCostedAt)}
+        </span>
+      ),
     },
     {
       key: 'computedCost',

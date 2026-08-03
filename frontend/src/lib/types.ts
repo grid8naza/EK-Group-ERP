@@ -833,6 +833,8 @@ export interface Product {
   intercompanyProfitPct: number;
   retailPrice: number;
   retailProfitPct: number;
+  /** When costPrice last changed (ISO). Null = never costed. */
+  lastCostedAt?: string | null;
   /** Profit % each channel is MEANT to earn; null = no target set. */
   intercompanyTargetPct?: number | null;
   wholesaleTargetPct?: number | null;
@@ -1966,6 +1968,8 @@ export interface ProductCostVariance {
   /** Sold or not — splits the review: Price Review (true) vs Cost Review (false). */
   canSell: boolean;
   storedCost: number;
+  /** When the stored cost was last established (ISO). Null = never costed. */
+  lastCostedAt: string | null;
   computedCost: number;
   costDelta: number;
   hasDrift: boolean;

@@ -121,6 +121,8 @@ export interface ProductCostVariance {
    */
   canSell: boolean;
   storedCost: number;
+  /** When the stored cost was last established. Null = never costed. */
+  lastCostedAt: string | null;
   computedCost: number;
   costDelta: number;
   hasDrift: boolean;
@@ -237,6 +239,7 @@ export class CostingService {
         isLocked: !!p.isLocked,
         canSell: !!p.canSell,
         storedCost,
+        lastCostedAt: p.lastCostedAt ? p.lastCostedAt.toISOString() : null,
         computedCost: breakdown.perUnit,
         costDelta,
         hasDrift: Math.abs(breakdown.perUnit - storedCost) >= COST_EPSILON,
@@ -297,6 +300,8 @@ export class CostingService {
         data: {
           costPrice: row.computedCost,
           actualCostPrice: row.computedCost,
+          // The cost is established as of now (only drifted rows reach here).
+          lastCostedAt: new Date(),
         },
       });
       updated.push(row.productId);
@@ -353,7 +358,7 @@ export class CostingService {
       // the recomputed one, not a stale cache the reviewer cannot see. Where
       // there is no BOM to compute from, the stored cost is all there is.
       const cost = row.emptyBom ? row.storedCost : row.computedCost;
-      const data: Record<string, number | null> = {};
+      const data: Record<string, number | null | Date> = {};
 
       for (const key of PRICE_KEYS) {
         const price = wanted.prices?.[key];
@@ -384,6 +389,7 @@ export class CostingService {
       if (!row.emptyBom && row.hasDrift && Object.keys(data).length) {
         data.costPrice = row.computedCost;
         data.actualCostPrice = row.computedCost;
+        data.lastCostedAt = new Date();
       }
 
       if (!Object.keys(data).length) continue;
@@ -473,6 +479,8 @@ export class CostingService {
         data: {
           costPrice: row.computedCost,
           actualCostPrice: row.computedCost,
+          // The cost is established as of now (only drifted rows reach here).
+          lastCostedAt: new Date(),
         },
       });
       changed.push({
@@ -527,6 +535,7 @@ export class CostingService {
         unitId: true,
         yieldQty: true,
         costPrice: true,
+        lastCostedAt: true,
         fuelCost: true,
         overheadCost: true,
         intercompanyPrice: true,

@@ -389,6 +389,13 @@ model Product {
   // sales price is entered by the user (used later for the sales invoice).
   actualCostPrice  Float @default(0)
   actualSalesPrice Float @default(0)
+  /// When `costPrice` last actually CHANGED — not when the product was last
+  /// saved. So it answers "as of when is this cost figure true", which is the
+  /// only question worth asking of a cached figure; re-saving a form without
+  /// touching the cost leaves it alone. Written by every path that moves the
+  /// cost: the Recipe/Packing editors, the Product Master, the review screens
+  /// and the automatic recost. NULL means the cost has never been established.
+  lastCostedAt DateTime?
   /// Made in-house or bought in for resale. A PURCHASED product may not carry
   /// either BOM (the service rejects hasRecipe/hasPacking on it, and refuses to
   /// flip a product to PURCHASED while a BOM, process or pack source exists);

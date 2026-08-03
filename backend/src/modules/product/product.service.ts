@@ -188,6 +188,9 @@ export class ProductService {
           packed: dto.packed ?? false,
           canSell: dto.canSell ?? true,
           costPrice: dto.costPrice ?? 0,
+          // A cost given at creation is established now; one left at zero has
+          // never been costed at all, so it stays null.
+          lastCostedAt: dto.costPrice ? new Date() : null,
           wholesalePrice: dto.wholesalePrice ?? 0,
           wholesaleProfitPct: dto.wholesaleProfitPct ?? 0,
           intercompanyPrice: dto.intercompanyPrice ?? 0,
@@ -445,6 +448,13 @@ export class ProductService {
           packed: dto.packed,
           canSell: dto.canSell,
           costPrice: dto.costPrice,
+          // Stamped only when the cost actually MOVES. Re-saving a form that
+          // merely echoes the current cost back must not make a stale figure
+          // look freshly established.
+          lastCostedAt:
+            dto.costPrice !== undefined && dto.costPrice !== existing.costPrice
+              ? new Date()
+              : undefined,
           wholesalePrice: dto.wholesalePrice,
           wholesaleProfitPct: dto.wholesaleProfitPct,
           intercompanyPrice: dto.intercompanyPrice,
