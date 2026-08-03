@@ -1387,6 +1387,73 @@ export default function ProductsPage() {
               }
             />
 
+            {/* Profit targets — the margin each channel is MEANT to earn.
+                Deliberately ABOVE the price matrix: the target is the intent,
+                the price is the decision measured against it. Distinct from the
+                profit percentages in the matrix, which only record what the
+                current price happens to earn. */}
+            {form.canSell && (
+              <div className="flex flex-col gap-2 sm:col-span-2">
+                <span className="label !mb-0">Profit Targets</span>
+                <p className="text-xs text-slate-400">
+                  What each channel should earn, and how far the real margin may
+                  stray before Production &rsaquo; Price Review flags it. A blank
+                  target is never flagged; a blank variance expects the target to
+                  be hit exactly.
+                </p>
+                <div className="grid grid-cols-1 gap-4 rounded-lg border border-slate-200 p-3 dark:border-slate-700 sm:grid-cols-2 lg:grid-cols-4">
+                  <Input
+                    label="Target Intercompany %"
+                    type="number"
+                    step="any"
+                    placeholder="none"
+                    value={form.intercompanyTargetPct}
+                    onBlur={blur2('intercompanyTargetPct')}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        intercompanyTargetPct: e.target.value,
+                      }))
+                    }
+                  />
+                  <Input
+                    label="Target Wholesale %"
+                    type="number"
+                    step="any"
+                    placeholder="none"
+                    value={form.wholesaleTargetPct}
+                    onBlur={blur2('wholesaleTargetPct')}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, wholesaleTargetPct: e.target.value }))
+                    }
+                  />
+                  <Input
+                    label="Target Retail %"
+                    type="number"
+                    step="any"
+                    placeholder="none"
+                    value={form.retailTargetPct}
+                    onBlur={blur2('retailTargetPct')}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, retailTargetPct: e.target.value }))
+                    }
+                  />
+                  <Input
+                    label="Max Variance %"
+                    type="number"
+                    min={0}
+                    step="any"
+                    placeholder="exact"
+                    value={form.maxVariancePct}
+                    onBlur={blur2('maxVariancePct')}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, maxVariancePct: e.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Price matrix — selling prices and the margin each carries over
                 the cost above. Hidden outright for a product that isn't sold,
                 rather than shown greyed out. */}
@@ -1535,71 +1602,6 @@ export default function ProductsPage() {
                       })
                     }
                   />
-                </div>
-
-                {/* Profit targets — what each channel is MEANT to earn, and how
-                    far the real margin may stray before Price Review raises an
-                    alert. Deliberate commercial intent, distinct from the profit
-                    percentages above, which merely record what the current price
-                    happens to earn. Blank = no target, so that channel is
-                    reported but never alerted on. */}
-                <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-700">
-                  <h4 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
-                    Profit targets
-                    <span className="ml-2 text-xs font-normal text-slate-400">
-                      reviewed in Production → Price Review
-                    </span>
-                  </h4>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <Input
-                      label="Target Intercompany %"
-                      type="number"
-                      step="any"
-                      placeholder="none"
-                      value={form.intercompanyTargetPct}
-                      onBlur={blur2('intercompanyTargetPct')}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          intercompanyTargetPct: e.target.value,
-                        }))
-                      }
-                    />
-                    <Input
-                      label="Target Wholesale %"
-                      type="number"
-                      step="any"
-                      placeholder="none"
-                      value={form.wholesaleTargetPct}
-                      onBlur={blur2('wholesaleTargetPct')}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, wholesaleTargetPct: e.target.value }))
-                      }
-                    />
-                    <Input
-                      label="Target Retail %"
-                      type="number"
-                      step="any"
-                      placeholder="none"
-                      value={form.retailTargetPct}
-                      onBlur={blur2('retailTargetPct')}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, retailTargetPct: e.target.value }))
-                      }
-                    />
-                    <Input
-                      label="Max Variance %"
-                      type="number"
-                      min={0}
-                      step="any"
-                      placeholder="exact"
-                      value={form.maxVariancePct}
-                      onBlur={blur2('maxVariancePct')}
-                      onChange={(e) =>
-                        setForm((f) => ({ ...f, maxVariancePct: e.target.value }))
-                      }
-                    />
-                  </div>
                 </div>
               </div>
             )}
