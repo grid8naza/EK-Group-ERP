@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, StockTxnType } from '@prisma/client';
@@ -16,6 +17,10 @@ import { assertBatchesFree } from '../../common/assert-batches-free';
 import { maxBatchSeq } from '../../common/max-batch-seq';
 import { withNumberRetry } from '../../common/with-number-retry';
 import { STOCK, StockPort } from '../../contracts/stock.port';
+import {
+  PURCHASE_PRICE,
+  PurchasePricePort,
+} from '../../contracts/purchase-price.port';
 import {
   DispatchPosting,
   MaterialIssuePosting,
@@ -90,6 +95,8 @@ type CostActivity =
 
 @Injectable()
 export class StockTransactionService {
+  private readonly logger = new Logger(StockTransactionService.name);
+
   constructor(
     private prisma: PrismaService,
     @Inject(NUMBERING) private readonly numbering: NumberingPort,
@@ -100,7 +107,55 @@ export class StockTransactionService {
     // A Goods Receipt Note can receive an intercompany dispatch; CRM owns that
     // row, so it is read and closed through the port.
     @Inject(DISPATCH) private readonly dispatch: DispatchPort,
+    // What a receipt paid feeds back into the Item master, which the item
+    // module owns — so it is written through the port.
+    @Inject(PURCHASE_PRICE) private readonly purchasePrice: PurchasePricePort,
   ) {}
+
+  /**
+   * Feed what a Goods Receipt paid back into the Item master, raising each
+   * item's last purchase price where the rate received is higher.
+   *
+   * This is what makes recipe and packing costs follow real purchases: those
+   * BOMs hold no rates of their own, so every one of them recosts off
+   * `Item.lastPurchasePrice` the moment it moves. Nothing downstream is rewritten
+   * here — a cost change is surfaced for review in Production → Price Review,
+   * where a human decides whether a selling price should follow. Prices are
+   * never repriced automatically.
+   *
+   * `line.unitPrice` is already per the item's own stock unit (the document's
+   * pack rate is kept separately as `enteredUnitPrice`), so it needs no
+   * conversion. PURCHASE only — a return is not a purchase, and issues and
+   * transfers pay nothing.
+   *
+   * Deliberately runs AFTER the receipt has committed, and never throws: the
+   * goods are in stock either way, and a price write-back failing is no reason
+   * to lose the receipt.
+   */
+  private async feedPurchasePrices(
+    type: TxnType,
+    lines: { itemId?: number | null; unitPrice?: number | null }[],
+  ): Promise<void> {
+    if (type !== 'PURCHASE') return;
+    const paid = lines
+      .filter((l) => l.itemId != null && (l.unitPrice ?? 0) > 0)
+      .map((l) => ({ itemId: l.itemId as number, unitPrice: l.unitPrice as number }));
+    if (!paid.length) return;
+    try {
+      const raised = await this.purchasePrice.raiseLastPurchasePrice(paid);
+      for (const r of raised) {
+        this.logger.log(
+          `Last purchase price raised: ${r.itemName} ${r.from} → ${r.to}`,
+        );
+      }
+    } catch (e) {
+      this.logger.error(
+        `Goods receipt posted, but the item purchase prices could not be updated: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+    }
+  }
 
   /** Batch numbers from the configured rule, or null to fall back to the
    *  built-in `CompanyCode-YYMMDD-####` scheme. One per line, in order. */
@@ -801,6 +856,10 @@ export class StockTransactionService {
         throw e;
       }
     }
+
+    // Last — after the receipt is committed and the shipment closed, so a
+    // rolled-back or refused receipt never moves a purchase price.
+    await this.feedPurchasePrices(type, dto.lines);
     return header;
   }
 
@@ -864,7 +923,7 @@ export class StockTransactionService {
         ? await this.ruleBatchNumbers(effCompany, txnBranchId, dto.lines.length, docDate)
         : null;
 
-    return this.prisma.$transaction(async (tx) => {
+    const saved = await this.prisma.$transaction(async (tx) => {
       const isGrn = existing.type === 'PURCHASE';
       await tx.stockTransaction.update({
         where: { id },
@@ -934,6 +993,15 @@ export class StockTransactionService {
       }
       return this.findOne(id);
     });
+
+    // An edit can correct the rate that was received, so the write-back runs
+    // again over the saved lines. It only ever raises, so re-running is safe and
+    // correcting a rate DOWNWARD will not pull the item price back down — that
+    // stays a deliberate edit in the Item master.
+    if (dto.lines) {
+      await this.feedPurchasePrices(existing.type as TxnType, dto.lines);
+    }
+    return saved;
   }
 
   async remove(id: number) {

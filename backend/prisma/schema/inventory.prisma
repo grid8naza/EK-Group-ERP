@@ -349,6 +349,24 @@ model Product {
   intercompanyProfitPct Float @default(0)
   retailPrice           Float @default(0)
   retailProfitPct       Float @default(0)
+  /// The profit % each channel is MEANT to earn — a deliberate commercial
+  /// decision, set here and nowhere else. Distinct from the `*ProfitPct` fields
+  /// above, which merely record what the current price happens to earn: those
+  /// move whenever a price is set, while a target moves only when the intent
+  /// does. Price Review measures one against the other.
+  ///
+  /// Per channel, because they differ by a lot in practice (intercompany runs
+  /// far thinner than retail). NULL means no target has been set, and that
+  /// channel is left out of the review rather than being read as a 0% target.
+  intercompanyTargetPct Float?
+  wholesaleTargetPct    Float?
+  retailTargetPct       Float?
+  /// How far a channel's actual margin may sit from its target before Price
+  /// Review raises an alert, in percentage points. Applied in BOTH directions:
+  /// an overshoot can mean the price is uncompetitive or the target is stale,
+  /// which is worth knowing too. One tolerance covers all three channels. NULL
+  /// means no alerting for this product.
+  maxVariancePct        Float?
   /// Maximum Retail Price — the single price printed on the pack label, set in
   /// Packing Master. It is entered against RETAIL only: the label carries one
   /// statutory figure, not one per customer type. Distinct from the retail

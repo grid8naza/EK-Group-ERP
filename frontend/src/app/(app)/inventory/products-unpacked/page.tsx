@@ -80,6 +80,10 @@ const empty = {
   intercompanyProfitPct: '',
   retailPrice: '',
   retailProfitPct: '',
+  intercompanyTargetPct: '',
+  wholesaleTargetPct: '',
+  retailTargetPct: '',
+  maxVariancePct: '',
   // Box packing is optional per product, so the two fields below only show
   // once it is ticked. Form-only: what's stored is the box qty/unit themselves.
   boxApplicable: false,
@@ -107,6 +111,13 @@ const empty = {
 // matching price/% pair in sync as either side is edited.
 const round2 = (v: number) => Math.round(v * 100) / 100;
 const toN = (s: string) => Number(s) || 0;
+/**
+ * A blank target box means NO target, which is different from a 0% one: an
+ * unset target is reported but never alerted on, while 0% would demand the
+ * product merely break even. So blank travels as null, not as zero.
+ */
+const numOrNull = (s: string) =>
+  s.trim() === '' || !Number.isFinite(Number(s)) ? null : Number(s);
 const pctFromPrice = (price: number, cost: number) =>
   cost > 0 ? round2(((price - cost) / cost) * 100) : 0;
 const priceFromPct = (pct: number, cost: number) =>
@@ -321,7 +332,11 @@ export default function ProductsPage() {
         | 'intercompanyPrice'
         | 'intercompanyProfitPct'
         | 'retailPrice'
-        | 'retailProfitPct',
+        | 'retailProfitPct'
+        | 'intercompanyTargetPct'
+        | 'wholesaleTargetPct'
+        | 'retailTargetPct'
+        | 'maxVariancePct',
     ) =>
     () =>
       setForm((f) => ({ ...f, [key]: dec2(f[key]) }));
@@ -351,6 +366,12 @@ export default function ProductsPage() {
     ),
     retailPrice: dec2(String(p.retailPrice ?? 0)),
     retailProfitPct: pctDisplay(String(p.retailPrice ?? 0), p.costPrice ?? 0),
+    intercompanyTargetPct:
+      p.intercompanyTargetPct != null ? String(p.intercompanyTargetPct) : '',
+    wholesaleTargetPct:
+      p.wholesaleTargetPct != null ? String(p.wholesaleTargetPct) : '',
+    retailTargetPct: p.retailTargetPct != null ? String(p.retailTargetPct) : '',
+    maxVariancePct: p.maxVariancePct != null ? String(p.maxVariancePct) : '',
     // Ticked for anything already boxed, so the saved values stay visible.
     boxApplicable: !!(p.boxUnitId || p.boxQty),
     boxQty: String(p.boxQty ?? 0),
@@ -453,6 +474,11 @@ export default function ProductsPage() {
       intercompanyProfitPct: num(form.intercompanyProfitPct),
       retailPrice: num(form.retailPrice),
       retailProfitPct: num(form.retailProfitPct),
+      // Blank means NO target rather than a 0% one, so it is sent as null.
+      intercompanyTargetPct: numOrNull(form.intercompanyTargetPct),
+      wholesaleTargetPct: numOrNull(form.wholesaleTargetPct),
+      retailTargetPct: numOrNull(form.retailTargetPct),
+      maxVariancePct: numOrNull(form.maxVariancePct),
       // Cleared outright when box packing does not apply.
       boxQty: form.boxApplicable ? num(form.boxQty) : 0,
       boxUnitId: form.boxApplicable ? idOrNull(form.boxUnitId) : null,
@@ -1022,6 +1048,10 @@ export default function ProductsPage() {
                             wholesaleProfitPct: '',
                             retailPrice: '',
                             retailProfitPct: '',
+                            intercompanyTargetPct: '',
+                            wholesaleTargetPct: '',
+                            retailTargetPct: '',
+                            maxVariancePct: '',
                           },
                     );
                   }}
@@ -1308,6 +1338,71 @@ export default function ProductsPage() {
                       })
                     }
                   />
+                </div>
+
+                {/* Profit targets — what each channel is MEANT to earn, and how
+                    far the real margin may stray before Price Review raises an
+                    alert. Deliberate commercial intent, distinct from the profit
+                    percentages above, which merely record what the current price
+                    happens to earn. Blank = no target, so that channel is
+                    reported but never alerted on. */}
+                <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-700">
+                  <h4 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                    Profit targets
+                    <span className="ml-2 text-xs font-normal text-slate-400">
+                      reviewed in Production → Price Review
+                    </span>
+                  </h4>
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <Input
+                      label="Target Intercompany %"
+                      type="number"
+                      step="any"
+                      placeholder="none"
+                      value={form.intercompanyTargetPct}
+                      onBlur={blur2('intercompanyTargetPct')}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          intercompanyTargetPct: e.target.value,
+                        }))
+                      }
+                    />
+                    <Input
+                      label="Target Wholesale %"
+                      type="number"
+                      step="any"
+                      placeholder="none"
+                      value={form.wholesaleTargetPct}
+                      onBlur={blur2('wholesaleTargetPct')}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, wholesaleTargetPct: e.target.value }))
+                      }
+                    />
+                    <Input
+                      label="Target Retail %"
+                      type="number"
+                      step="any"
+                      placeholder="none"
+                      value={form.retailTargetPct}
+                      onBlur={blur2('retailTargetPct')}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, retailTargetPct: e.target.value }))
+                      }
+                    />
+                    <Input
+                      label="Max Variance %"
+                      type="number"
+                      min={0}
+                      step="any"
+                      placeholder="no alerts"
+                      value={form.maxVariancePct}
+                      onBlur={blur2('maxVariancePct')}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, maxVariancePct: e.target.value }))
+                      }
+                    />
+                  </div>
                 </div>
               </div>
             )}

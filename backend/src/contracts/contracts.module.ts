@@ -30,6 +30,8 @@ import { ASSET_RATE } from './asset-rate.port';
 import { AssetRateAdapter } from '../modules/asset/asset-rate.adapter';
 import { LABOUR_RATE } from './labour-rate.port';
 import { LabourRateAdapter } from '../modules/hr-designation/labour-rate.adapter';
+import { PURCHASE_PRICE } from './purchase-price.port';
+import { PurchasePriceAdapter } from '../modules/item/purchase-price.adapter';
 
 /**
  * Composition root for cross-module contracts (ports & adapters).
@@ -96,6 +98,10 @@ import { LabourRateAdapter } from '../modules/hr-designation/labour-rate.adapter
     // own those masters, so costing never imports Asset or HR.
     { provide: ASSET_RATE, useClass: AssetRateAdapter },
     { provide: LABOUR_RATE, useClass: LabourRateAdapter },
+    // What a Goods Receipt actually paid, fed back into the Item master so
+    // recipe costing follows a real purchase. Implemented by the item module,
+    // which owns lastPurchasePrice.
+    { provide: PURCHASE_PRICE, useClass: PurchasePriceAdapter },
     CpanelMetricsAdapter,
     ProductionMetricsAdapter,
     InventoryMetricsAdapter,
@@ -126,6 +132,7 @@ import { LabourRateAdapter } from '../modules/hr-designation/labour-rate.adapter
     DISPATCH,
     ASSET_RATE,
     LABOUR_RATE,
+    PURCHASE_PRICE,
   ],
 })
 export class ContractsModule {}

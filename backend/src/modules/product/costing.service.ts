@@ -46,30 +46,56 @@ export interface CostBreakdown {
 }
 
 export type PriceKey = 'intercompany' | 'wholesale' | 'retail';
+const PRICE_KEYS: PriceKey[] = ['intercompany', 'wholesale', 'retail'];
 
 /**
- * One selling price measured against the margin it was set to earn.
+ * One product's revisions from Price Review. Prices, targets and the tolerance
+ * are independent — send whichever the reviewer actually changed. A `null`
+ * target clears it, which is why `targets` is keyed rather than merged: an
+ * absent key means "leave alone", a present `null` means "clear".
+ */
+export interface Revision {
+  productId: number;
+  prices?: Partial<Record<PriceKey, number>>;
+  targets?: Partial<Record<PriceKey, number | null>>;
+  maxVariancePct?: number | null;
+}
+
+/**
+ * One selling price, measured three ways.
  *
- * The stored profit % IS the target. It was written when a human last decided
- * this price — in Recipe Master, Packing Master or the Product Master — so it
- * records the margin that price was meant to give. Nothing derived may overwrite
- * it: a cost rise must show up as the ACTUAL margin falling below the target,
- * not as the target quietly moving down to meet the new cost.
+ * The target is a deliberate commercial decision held on the product; it is not
+ * inferred from any price and nothing automatic writes it. The two actuals ask
+ * the same question of two different costs, and the gap between them is exactly
+ * the cost drift this service exists to surface:
+ *
+ *   targetProfitPct — what this channel is meant to earn (Product Master)
+ *   masterProfitPct — what the price earns against the Product Master's cost
+ *   actualProfitPct — what it earns against the recomputed cost (the truth)
+ *
+ * `null` target means none has been set: the channel is reported but never
+ * alerted on, rather than being read as a 0% target.
  */
 export interface PriceVariance {
   key: PriceKey;
   label: string;
   price: number;
-  /** The margin this price was set to earn. Never rewritten by a recost. */
-  targetProfitPct: number;
-  /** What it actually earns at the recomputed cost. */
+  /** The margin this channel is meant to earn. Null when no target is set. */
+  targetProfitPct: number | null;
+  /** What the price earns against the cost the Product Master stores. */
+  masterProfitPct: number;
+  /** What the price earns against the recomputed cost — the real margin. */
   actualProfitPct: number;
-  /** actual − target. Negative means the margin has eroded. */
-  profitPctDelta: number;
-  /** True once the price no longer earns the margin it was set for. */
-  belowTarget: boolean;
-  /** The price that would restore the target margin at the recomputed cost. */
-  priceAtTarget: number;
+  /** actual − target. Negative means short of target. Null without a target. */
+  variancePct: number | null;
+  /**
+   * The variance has exceeded the product's tolerance, in EITHER direction —
+   * falling short eats margin, and overshooting can mean the price is
+   * uncompetitive or the target has gone stale.
+   */
+  alert: boolean;
+  /** The price that would hit the target exactly at the recomputed cost. */
+  priceAtTarget: number | null;
 }
 
 export interface ProductCostVariance {
@@ -98,8 +124,14 @@ export interface ProductCostVariance {
    * apart from real drift and never sweep them into a bulk update.
    */
   emptyBom: boolean;
-  /** Any selling price no longer earning the margin it was set for. */
-  belowTarget: boolean;
+  /** Any channel whose margin has strayed further from target than allowed. */
+  hasAlert: boolean;
+  /**
+   * How far a margin may sit from its target before alerting, in percentage
+   * points, applied in both directions. One tolerance covers all three channels.
+   * Null means no tolerance is set and this product never alerts.
+   */
+  maxVariancePct: number | null;
   breakdown: CostBreakdown;
   prices: PriceVariance[];
   /**
@@ -183,7 +215,7 @@ export class CostingService {
       const { basis, ...breakdown } = result;
       const storedCost = p.costPrice ?? 0;
       const costDelta = round1(breakdown.perUnit - storedCost);
-      const prices = this.priceVariances(p, breakdown.perUnit);
+      const prices = this.priceVariances(p, storedCost, breakdown.perUnit);
       const emptyBom =
         !p.bomLines.some((l) => l.kind === (basis === 'PACKING' ? 'PACKING' : 'RECIPE')) &&
         !p.processes.length &&
@@ -201,7 +233,8 @@ export class CostingService {
         costDelta,
         hasDrift: Math.abs(breakdown.perUnit - storedCost) >= COST_EPSILON,
         emptyBom,
-        belowTarget: prices.some((x) => x.belowTarget),
+        hasAlert: prices.some((x) => x.alert),
+        maxVariancePct: p.maxVariancePct,
         breakdown,
         prices,
         sourceNames:
@@ -293,9 +326,9 @@ export class CostingService {
    */
   async revisePrices(
     companyId: number | undefined,
-    revisions: { productId: number; prices: Partial<Record<PriceKey, number>> }[],
+    revisions: Revision[],
   ) {
-    const byId = new Map(revisions.map((r) => [r.productId, r.prices]));
+    const byId = new Map(revisions.map((r) => [r.productId, r]));
     const rows = (await this.variance(companyId)).filter((r) =>
       byId.has(r.productId),
     );
@@ -308,18 +341,43 @@ export class CostingService {
         continue;
       }
       const wanted = byId.get(row.productId)!;
-      // Margins are worked out against the CURRENT cost of making the product,
-      // which is the recomputed one — not a stale cache the reviewer cannot see.
+      // Margins are worked out against the CURRENT cost of making the product —
+      // the recomputed one, not a stale cache the reviewer cannot see. Where
+      // there is no BOM to compute from, the stored cost is all there is.
       const cost = row.emptyBom ? row.storedCost : row.computedCost;
-      const data: Record<string, number> = {};
-      for (const key of ['intercompany', 'wholesale', 'retail'] as PriceKey[]) {
-        const price = wanted[key];
-        if (price == null) continue;
-        data[`${key}Price`] = round1(price);
-        data[`${key}ProfitPct`] = cost
-          ? round1(((price - cost) / cost) * 100)
-          : 0;
+      const data: Record<string, number | null> = {};
+
+      for (const key of PRICE_KEYS) {
+        const price = wanted.prices?.[key];
+        if (price != null) {
+          data[`${key}Price`] = round1(price);
+          // The profit % follows the price it was set from. It is a derived
+          // figure — what this price earns — so Recipe Master, Packing Master
+          // and the Product Master all show the new margin straight away.
+          data[`${key}ProfitPct`] = cost ? round1(((price - cost) / cost) * 100) : 0;
+        }
+        // Resetting a target is a separate decision from repricing: it accepts
+        // a new margin as the intended one rather than trying to win the old
+        // one back. Either may be sent alone. `null` clears the target.
+        if (key in (wanted.targets ?? {})) {
+          const target = wanted.targets![key];
+          data[`${key}TargetPct`] = target == null ? null : round1(target);
+        }
       }
+      if ('maxVariancePct' in wanted) {
+        data.maxVariancePct =
+          wanted.maxVariancePct == null ? null : round1(wanted.maxVariancePct);
+      }
+
+      // A price was set against the recomputed cost, so that cost must be what
+      // the Product Master holds — otherwise it would show a price, a cost and
+      // a profit % that do not agree with one another. Skipped where there is
+      // no BOM, since the computed zero would destroy a hand-entered cost.
+      if (!row.emptyBom && row.hasDrift && Object.keys(data).length) {
+        data.costPrice = row.computedCost;
+        data.actualCostPrice = row.computedCost;
+      }
+
       if (!Object.keys(data).length) continue;
       await this.prisma.product.update({
         where: { id: row.productId },
@@ -375,6 +433,10 @@ export class CostingService {
         wholesaleProfitPct: true,
         retailPrice: true,
         retailProfitPct: true,
+        intercompanyTargetPct: true,
+        wholesaleTargetPct: true,
+        retailTargetPct: true,
+        maxVariancePct: true,
         category: { select: { name: true } },
         bomLines: {
           select: { kind: true, itemId: true, quantity: true, unitId: true },
@@ -538,59 +600,73 @@ export class CostingService {
   }
 
   /**
-   * How each selling price's margin reads before and after the refreshed cost.
-   * A price of zero is not offered (nothing is sold at it), so it is left out.
+   * Each selling price against its target, measured at both the stored and the
+   * recomputed cost. A price of zero is not offered at all, so it is left out.
    */
   private priceVariances(
     p: {
       intercompanyPrice: number;
-      intercompanyProfitPct: number;
+      intercompanyTargetPct: number | null;
       wholesalePrice: number;
-      wholesaleProfitPct: number;
+      wholesaleTargetPct: number | null;
       retailPrice: number;
-      retailProfitPct: number;
+      retailTargetPct: number | null;
+      maxVariancePct: number | null;
     },
+    storedCost: number,
     computedCost: number,
   ): PriceVariance[] {
-    const cols: { key: PriceVariance['key']; label: string; price: number; pct: number }[] =
-      [
-        {
-          key: 'intercompany',
-          label: 'Intercompany',
-          price: p.intercompanyPrice ?? 0,
-          pct: p.intercompanyProfitPct ?? 0,
-        },
-        {
-          key: 'wholesale',
-          label: 'Wholesale',
-          price: p.wholesalePrice ?? 0,
-          pct: p.wholesaleProfitPct ?? 0,
-        },
-        {
-          key: 'retail',
-          label: 'Retail',
-          price: p.retailPrice ?? 0,
-          pct: p.retailProfitPct ?? 0,
-        },
-      ];
+    const cols: {
+      key: PriceKey;
+      label: string;
+      price: number;
+      target: number | null;
+    }[] = [
+      {
+        key: 'intercompany',
+        label: 'Intercompany',
+        price: p.intercompanyPrice ?? 0,
+        target: p.intercompanyTargetPct,
+      },
+      {
+        key: 'wholesale',
+        label: 'Wholesale',
+        price: p.wholesalePrice ?? 0,
+        target: p.wholesaleTargetPct,
+      },
+      {
+        key: 'retail',
+        label: 'Retail',
+        price: p.retailPrice ?? 0,
+        target: p.retailTargetPct,
+      },
+    ];
+
+    const pctAt = (price: number, cost: number) =>
+      cost ? round1(((price - cost) / cost) * 100) : 0;
 
     return cols
       .filter((c) => c.price > 0)
       .map((c) => {
-        const actualProfitPct = computedCost
-          ? round1(((c.price - computedCost) / computedCost) * 100)
-          : 0;
+        const actualProfitPct = pctAt(c.price, computedCost);
+        const variancePct =
+          c.target == null ? null : round1(actualProfitPct - c.target);
         return {
           key: c.key,
           label: c.label,
           price: c.price,
-          targetProfitPct: c.pct,
+          targetProfitPct: c.target,
+          masterProfitPct: pctAt(c.price, storedCost),
           actualProfitPct,
-          profitPctDelta: round1(actualProfitPct - c.pct),
-          // A margin counts as eroded once it slips a tenth of a point below
-          // target — the precision the percentages are held at.
-          belowTarget: actualProfitPct < c.pct - 0.05,
-          priceAtTarget: round1(computedCost * (1 + c.pct / 100)),
+          variancePct,
+          // No target or no tolerance set means no alerting for this channel —
+          // silence is the right default for something nobody has configured.
+          alert:
+            variancePct != null &&
+            p.maxVariancePct != null &&
+            Math.abs(variancePct) > p.maxVariancePct,
+          priceAtTarget:
+            c.target == null ? null : round1(computedCost * (1 + c.target / 100)),
         };
       });
   }

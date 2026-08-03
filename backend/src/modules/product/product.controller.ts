@@ -100,14 +100,29 @@ export class ProductController {
   ) {
     return this.costing.revisePrices(
       companyId,
-      dto.revisions.map((r) => ({
-        productId: r.productId,
-        prices: {
-          intercompany: r.intercompanyPrice,
-          wholesale: r.wholesalePrice,
-          retail: r.retailPrice,
-        },
-      })),
+      dto.revisions.map((r) => {
+        // A target is only touched when its key is PRESENT — an absent key
+        // leaves it alone, an explicit null clears it. So the map is built
+        // from what the payload actually carries, not from undefined lookups.
+        const targets: Record<string, number | null> = {};
+        if ('intercompanyTargetPct' in r)
+          targets.intercompany = r.intercompanyTargetPct ?? null;
+        if ('wholesaleTargetPct' in r)
+          targets.wholesale = r.wholesaleTargetPct ?? null;
+        if ('retailTargetPct' in r) targets.retail = r.retailTargetPct ?? null;
+        return {
+          productId: r.productId,
+          prices: {
+            intercompany: r.intercompanyPrice,
+            wholesale: r.wholesalePrice,
+            retail: r.retailPrice,
+          },
+          targets,
+          ...('maxVariancePct' in r
+            ? { maxVariancePct: r.maxVariancePct ?? null }
+            : {}),
+        };
+      }),
     );
   }
 

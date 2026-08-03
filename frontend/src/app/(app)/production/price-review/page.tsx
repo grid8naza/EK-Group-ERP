@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Tags, AlertTriangle, TrendingDown, RotateCcw } from 'lucide-react';
+import { Tags, AlertTriangle, TriangleAlert, RotateCcw, Crosshair } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useFetch, useUnsavedChangesGuard } from '@/lib/hooks';
@@ -38,19 +38,22 @@ const PRICE_LABEL: Record<PriceKey, string> = {
 
 /**
  * The four states a SELLABLE product can be in:
- *  - below  : a selling price no longer earns the margin it was set to earn.
- *             THE POINT OF THE SCREEN — needs a human pricing decision.
- *  - drift  : cost has moved but every margin still holds. Cost is a
- *             calculation, so it can simply be applied.
- *  - inStep : cost matches and every margin holds.
- *  - empty  : no BOM entered, so it recomputes to zero. Not a finding, and its
- *             cost is NOT updatable — zero would destroy a hand-entered figure.
- *             Prices stay reviewable against whatever cost is stored.
+ *  - alert  : a channel's margin has strayed further from its target than the
+ *             product's tolerance allows, in EITHER direction. THE POINT OF THE
+ *             SCREEN — needs a human decision: reprice, or accept the new margin
+ *             by resetting the target.
+ *  - drift  : cost has moved but every margin is still within tolerance. Cost is
+ *             a calculation, so it can simply be applied.
+ *  - inStep : cost matches and nothing is off target.
+ *  - empty  : no BOM entered, so it recomputes to zero. Its cost is NOT
+ *             updatable — zero would destroy a hand-entered figure — but its
+ *             prices stay reviewable against whatever cost is stored.
  */
-type Tab = 'below' | 'drift' | 'inStep' | 'empty';
+type Tab = 'alert' | 'drift' | 'inStep' | 'empty';
 
-/** Editable price fields, keyed `${productId}:${priceKey}`. */
-const editKey = (productId: number, key: PriceKey) => `${productId}:${key}`;
+/** Editable cells, keyed `${productId}:${priceKey}` / `${productId}:${key}#t`. */
+const priceKeyOf = (productId: number, key: PriceKey) => `${productId}:${key}`;
+const targetKeyOf = (productId: number, key: PriceKey) => `${productId}:${key}#t`;
 
 export default function PriceReviewPage() {
   const { can } = useAuth();
@@ -60,7 +63,7 @@ export default function PriceReviewPage() {
     '/products/costing/variance',
   );
 
-  const [tab, setTab] = useState<Tab>('below');
+  const [tab, setTab] = useState<Tab>('alert');
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState('');
@@ -71,42 +74,59 @@ export default function PriceReviewPage() {
   // reviewed on cost alone, in Cost Review.
   const all = useMemo(() => (data ?? []).filter((r) => r.canSell), [data]);
 
-  // A product below target appears there and nowhere else, so a pricing problem
-  // is never buried under a cost-drift row.
   const groups = useMemo(
     () => ({
-      below: all.filter((r) => r.belowTarget && !r.emptyBom),
-      drift: all.filter((r) => r.hasDrift && !r.belowTarget && !r.emptyBom),
-      inStep: all.filter((r) => !r.hasDrift && !r.belowTarget && !r.emptyBom),
+      alert: all.filter((r) => r.hasAlert && !r.emptyBom),
+      drift: all.filter((r) => r.hasDrift && !r.hasAlert && !r.emptyBom),
+      inStep: all.filter((r) => !r.hasDrift && !r.hasAlert && !r.emptyBom),
       empty: all.filter((r) => r.emptyBom),
     }),
     [all],
   );
   const rows = groups[tab];
 
-  // ---- price revisions ----
-  const priceOf = (r: ProductCostVariance, key: PriceKey) => {
-    const edited = edits[editKey(r.productId, key)];
+  // ---- edits ----
+  const shownPrice = (r: ProductCostVariance, key: PriceKey) => {
+    const edited = edits[priceKeyOf(r.productId, key)];
     if (edited != null) return edited;
     const p = r.prices.find((x) => x.key === key);
     return p ? p.price.toFixed(2) : '';
   };
-  const setPrice = (productId: number, key: PriceKey, value: string) =>
-    setEdits((prev) => ({ ...prev, [editKey(productId, key)]: value }));
+  const shownTarget = (r: ProductCostVariance, key: PriceKey) => {
+    const edited = edits[targetKeyOf(r.productId, key)];
+    if (edited != null) return edited;
+    const p = r.prices.find((x) => x.key === key);
+    return p?.targetProfitPct != null ? p.targetProfitPct.toFixed(2) : '';
+  };
+  const setCell = (cellKey: string, value: string) =>
+    setEdits((prev) => ({ ...prev, [cellKey]: value }));
 
-  /** The revisions actually pending — an entered price that differs. */
+  /** The revisions actually pending — an entered value that differs. */
   const pending = useMemo(() => {
     const out: PriceRevision[] = [];
     for (const r of all) {
       const rev: PriceRevision = { productId: r.productId };
       let any = false;
       for (const key of PRICE_KEYS) {
-        const edited = edits[editKey(r.productId, key)];
-        if (edited == null) continue;
-        const current = r.prices.find((x) => x.key === key)?.price ?? 0;
-        if (round1(num(edited)) === round1(current)) continue;
-        rev[`${key}Price` as const] = round1(num(edited));
-        any = true;
+        const p = r.prices.find((x) => x.key === key);
+        if (!p) continue;
+
+        const ep = edits[priceKeyOf(r.productId, key)];
+        if (ep != null && round1(num(ep)) !== round1(p.price)) {
+          rev[`${key}Price` as const] = round1(num(ep));
+          any = true;
+        }
+
+        const et = edits[targetKeyOf(r.productId, key)];
+        if (et != null) {
+          // Blank clears the target; the key must still be SENT so the server
+          // can tell "cleared" from "left alone".
+          const next = et.trim() === '' ? null : round1(num(et));
+          if (next !== p.targetProfitPct) {
+            rev[`${key}TargetPct` as const] = next;
+            any = true;
+          }
+        }
       }
       if (any) out.push(rev);
     }
@@ -127,27 +147,37 @@ export default function PriceReviewPage() {
     await refetch();
   };
 
-  /** Fill a product's price boxes with what restores each target margin. */
-  const restoreTargets = (r: ProductCostVariance) =>
+  /** Reprice: fill in what hits each off-target channel's target margin. */
+  const repriceToTarget = (r: ProductCostVariance) =>
     setEdits((prev) => {
       const next = { ...prev };
       for (const p of r.prices) {
-        if (p.belowTarget)
-          next[editKey(r.productId, p.key)] = p.priceAtTarget.toFixed(2);
+        if (p.alert && p.priceAtTarget != null)
+          next[priceKeyOf(r.productId, p.key)] = p.priceAtTarget.toFixed(2);
       }
       return next;
     });
 
-  const savePrices = async () => {
+  /** Reset targets: accept each off-target channel's actual margin as intended. */
+  const resetTargets = (r: ProductCostVariance) =>
+    setEdits((prev) => {
+      const next = { ...prev };
+      for (const p of r.prices) {
+        if (p.alert) next[targetKeyOf(r.productId, p.key)] = p.actualProfitPct.toFixed(2);
+      }
+      return next;
+    });
+
+  const save = async () => {
     if (!pending.length) return;
     const ok = await confirm({
-      title: 'Revise selling prices',
+      title: 'Save price review',
       message:
-        `Update the selling prices of ${pending.length} product` +
-        `${pending.length === 1 ? '' : 's'}? Each revised price sets a new ` +
-        `target margin against the current cost. Recipe Master, Packing Master ` +
-        `and the Product Master all read these same figures, so all three follow.`,
-      confirmText: 'Update prices',
+        `Update ${pending.length} product${pending.length === 1 ? '' : 's'}? ` +
+        `A revised price also refreshes its profit % and the product's cost, so ` +
+        `Recipe Master, Packing Master and the Product Master all agree. A reset ` +
+        `target accepts the current margin as the intended one.`,
+      confirmText: 'Save',
       cancelText: 'Cancel',
     });
     if (!ok) return;
@@ -156,15 +186,13 @@ export default function PriceReviewPage() {
       const res = await api.post<RevisePricesResult>('/products/costing/prices', {
         revisions: pending,
       });
-      toast.success(
-        `${res.updated} product${res.updated === 1 ? '' : 's'} repriced.`,
-      );
+      toast.success(`${res.updated} product${res.updated === 1 ? '' : 's'} updated.`);
       if (res.skippedLocked.length) {
         toast.error(`Skipped (locked): ${res.skippedLocked.join(', ')}`);
       }
       await reload();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Failed to update prices.');
+      toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
     } finally {
       setBusy(false);
     }
@@ -183,7 +211,7 @@ export default function PriceReviewPage() {
       message:
         `Write the recomputed cost onto ${costable.length} product` +
         `${costable.length === 1 ? '' : 's'}? Only the cost is written — selling ` +
-        `prices and the target margins they were set to earn are left untouched.`,
+        `prices and their targets are left untouched.`,
       confirmText: 'Update costs',
       cancelText: 'Cancel',
     });
@@ -207,48 +235,91 @@ export default function PriceReviewPage() {
     }
   };
 
-  // ---- table ----
+  // ---- price cell ----
   const priceCell = (r: ProductCostVariance, key: PriceKey) => {
     const p = r.prices.find((x) => x.key === key);
     if (!p) return <span className="text-slate-300">—</span>;
-    const edited = edits[editKey(r.productId, key)];
-    const live = edited != null ? num(edited) : p.price;
-    // The margin recalculates as you type, against the cost being reviewed.
-    const pct = profitPctAt(live, costBasisOf(r));
-    const short = pct < p.targetProfitPct - 0.05;
-    const changed = edited != null && round1(live) !== round1(p.price);
+
+    const ep = edits[priceKeyOf(r.productId, key)];
+    const livePrice = ep != null ? num(ep) : p.price;
+    const priceChanged = ep != null && round1(livePrice) !== round1(p.price);
+
+    const et = edits[targetKeyOf(r.productId, key)];
+    const liveTarget =
+      et != null ? (et.trim() === '' ? null : num(et)) : p.targetProfitPct;
+    const targetChanged = et != null && liveTarget !== p.targetProfitPct;
+
+    // Both actuals recalculate as you type: one against the Product Master's
+    // cost, one against the recomputed cost.
+    const masterPct = profitPctAt(livePrice, r.storedCost);
+    const costingPct = profitPctAt(livePrice, costBasisOf(r));
+    const variance = liveTarget == null ? null : round1(costingPct - liveTarget);
+    // Alerting mirrors the server exactly: outside tolerance in either
+    // direction. No tolerance set means this product never alerts.
+    const off =
+      variance != null &&
+      r.maxVariancePct != null &&
+      Math.abs(variance) > r.maxVariancePct;
 
     return (
-      <div className="flex flex-col items-end gap-0.5">
+      <div className="flex flex-col items-end gap-1">
         {canEdit ? (
           <input
             className={cn(
               'w-24 rounded border px-2 py-1 text-right text-sm tabular-nums',
-              changed
+              priceChanged
                 ? 'border-brand-400 bg-brand-50 dark:border-brand-500 dark:bg-brand-950/40'
                 : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900',
             )}
             type="number"
             min={0}
             step="any"
-            value={priceOf(r, key)}
+            value={shownPrice(r, key)}
             onClick={(e) => e.stopPropagation()}
-            onChange={(e) => setPrice(r.productId, key, e.target.value)}
-            onBlur={(e) => setPrice(r.productId, key, toPrice(e.target.value))}
+            onChange={(e) => setCell(priceKeyOf(r.productId, key), e.target.value)}
+            onBlur={(e) => setCell(priceKeyOf(r.productId, key), toPrice(e.target.value))}
           />
         ) : (
           <span className="tabular-nums">{money(p.price)}</span>
         )}
-        <span className="text-[11px] tabular-nums">
+
+        {/* target · master · costing — see the legend above the table */}
+        <div className="flex items-center gap-1 text-[11px] tabular-nums">
+          {canEdit ? (
+            <input
+              className={cn(
+                'w-14 rounded border px-1 py-0.5 text-right text-[11px] tabular-nums',
+                targetChanged
+                  ? 'border-brand-400 bg-brand-50 dark:border-brand-500 dark:bg-brand-950/40'
+                  : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900',
+              )}
+              type="number"
+              step="any"
+              placeholder="—"
+              title="Target profit % for this channel (blank = no target)"
+              value={shownTarget(r, key)}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => setCell(targetKeyOf(r.productId, key), e.target.value)}
+            />
+          ) : (
+            <span className="text-slate-500">
+              {liveTarget == null ? '—' : money(liveTarget)}
+            </span>
+          )}
+          <span className="text-slate-300">·</span>
+          <span className="text-slate-400" title="Margin at the Product Master's cost">
+            {money(masterPct)}
+          </span>
+          <span className="text-slate-300">·</span>
           <span
             className={cn(
-              short ? 'font-semibold text-rose-600 dark:text-rose-400' : 'text-slate-400',
+              off ? 'font-semibold text-rose-600 dark:text-rose-400' : 'text-slate-600 dark:text-slate-300',
             )}
+            title="Margin at the recomputed cost"
           >
-            {money(pct)}%
+            {money(costingPct)}
           </span>
-          <span className="text-slate-300"> / {money(p.targetProfitPct)}%</span>
-        </span>
+        </div>
       </div>
     );
   };
@@ -261,12 +332,15 @@ export default function PriceReviewPage() {
       render: (r) => (
         <div>
           <div className="flex items-center gap-1.5 font-medium text-slate-800 dark:text-slate-100">
+            {r.hasAlert && (
+              <TriangleAlert className="h-4 w-4 flex-none text-rose-500" />
+            )}
             {r.name}
             {r.isLocked && <span title="Locked — not updated">🔒</span>}
           </div>
           <div className="text-xs text-slate-400">
             {r.code} · {r.basis === 'PACKING' ? 'Packing' : 'Recipe'}
-            {r.categoryName ? ` · ${r.categoryName}` : ''}
+            {r.maxVariancePct != null ? ` · ±${money(r.maxVariancePct)}%` : ' · no tolerance set'}
           </div>
         </div>
       ),
@@ -317,19 +391,31 @@ export default function PriceReviewPage() {
             key: 'fix',
             header: '',
             sortable: false,
-            className: 'w-10',
+            className: 'w-20',
             render: (r: ProductCostVariance) =>
-              r.belowTarget ? (
-                <button
-                  title="Fill in the prices that restore each target margin"
-                  className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    restoreTargets(r);
-                  }}
-                >
-                  <RotateCcw className="h-4 w-4" />
-                </button>
+              r.hasAlert ? (
+                <div className="flex items-center gap-0.5">
+                  <button
+                    title="Reprice: fill in the prices that hit each target margin"
+                    className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      repriceToTarget(r);
+                    }}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                  </button>
+                  <button
+                    title="Reset target: accept the current margin as the intended one"
+                    className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      resetTargets(r);
+                    }}
+                  >
+                    <Crosshair className="h-4 w-4" />
+                  </button>
+                </div>
               ) : null,
           },
         ]
@@ -337,26 +423,26 @@ export default function PriceReviewPage() {
   ];
 
   const tabs: { key: Tab; label: string; count: number }[] = [
-    { key: 'below', label: 'Below target margin', count: groups.below.length },
+    { key: 'alert', label: 'Off target', count: groups.alert.length },
     { key: 'drift', label: 'Cost drifted', count: groups.drift.length },
     { key: 'inStep', label: 'In step', count: groups.inStep.length },
     { key: 'empty', label: 'No BOM yet', count: groups.empty.length },
   ];
 
   const note =
-    tab === 'below'
-      ? 'These products no longer earn the margin their prices were set for — the cost of making them has risen underneath the price. Nothing is changed automatically: revise a price below, or use ↺ to fill in what restores each target margin, then save. A revised price sets a new target.'
+    tab === 'alert'
+      ? 'A channel here earns a margin further from its target than this product allows. Nothing changes automatically — either reprice (↺ fills in the price that hits the target) or accept the new reality by resetting the target (⌖), then save. Saving a price also refreshes the product’s cost and profit %, so every screen agrees.'
       : tab === 'drift'
-        ? 'The recipe or packing now costs something other than what the Product Master holds, but every margin still holds. Cost is a calculation, so "Update costs" can simply write it — target margins are left untouched.'
+        ? 'The recipe or packing now costs something other than what the Product Master holds, but every margin is still within tolerance. "Update costs" writes the cost alone — prices and targets are untouched.'
         : tab === 'inStep'
-          ? 'Cost matches the Product Master and every price still earns its target margin. Nothing to do — prices remain editable if you want to revise one anyway.'
-          : 'No recipe or packing has been entered for these, so there is nothing to cost from. Their cost cannot be updated here (writing zero would lose the hand-entered figure), but their prices are still reviewable against it. Enter the BOM in Recipe or Packing Master.';
+          ? 'Cost matches the Product Master and every margin sits within its tolerance. Prices and targets remain editable if you want to revise one anyway.'
+          : 'No recipe or packing has been entered, so there is nothing to cost from. The cost cannot be updated here (writing zero would lose the hand-entered figure), but prices stay reviewable against it. Enter the BOM in Recipe or Packing Master.';
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader
         title="Price Review"
-        description="Products you sell — whether each selling price still earns the margin it was set to earn."
+        description="Products you sell — whether each channel still earns the margin it is meant to."
         icon={<Tags className="h-5 w-5" />}
         actions={
           canEdit ? (
@@ -372,11 +458,9 @@ export default function PriceReviewPage() {
               <button
                 className="btn-primary"
                 disabled={!pending.length || busy}
-                onClick={savePrices}
+                onClick={save}
               >
-                {busy
-                  ? 'Saving…'
-                  : `Save price revisions${pending.length ? ` (${pending.length})` : ''}`}
+                {busy ? 'Saving…' : `Save${pending.length ? ` (${pending.length})` : ''}`}
               </button>
             </div>
           ) : null
@@ -393,14 +477,14 @@ export default function PriceReviewPage() {
               tab === t.key
                 ? 'bg-brand-600 text-white'
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700',
-              t.key === 'below' &&
+              t.key === 'alert' &&
                 t.count > 0 &&
                 tab !== t.key &&
                 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-950/60 dark:text-rose-300',
             )}
           >
-            {t.key === 'below' && t.count > 0 && (
-              <TrendingDown className="mr-1.5 inline h-4 w-4" />
+            {t.key === 'alert' && t.count > 0 && (
+              <TriangleAlert className="mr-1.5 inline h-4 w-4" />
             )}
             {t.label}
             <span className="ml-2 tabular-nums opacity-70">{t.count}</span>
@@ -420,6 +504,20 @@ export default function PriceReviewPage() {
         <span>{note}</span>
       </div>
 
+      {/* Legend — three percentages sit under every price and need naming. */}
+      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+        <span className="font-medium text-slate-600 dark:text-slate-300">
+          Under each price:
+        </span>
+        <span>
+          <b className="text-slate-700 dark:text-slate-200">target %</b> (editable)
+        </span>
+        <span className="text-slate-300">·</span>
+        <span>actual at Product Master cost</span>
+        <span className="text-slate-300">·</span>
+        <span>actual at recomputed cost</span>
+      </div>
+
       <div className="min-h-0 flex-1">
         <DataTable
           columns={columns}
@@ -431,8 +529,8 @@ export default function PriceReviewPage() {
           searchPlaceholder="Search product…"
           onRefresh={reload}
           emptyMessage={
-            tab === 'below'
-              ? 'Every product is still earning the margin it was priced for.'
+            tab === 'alert'
+              ? 'Every channel is earning a margin within its target tolerance.'
               : tab === 'drift'
                 ? 'No costs have drifted.'
                 : 'Nothing here.'

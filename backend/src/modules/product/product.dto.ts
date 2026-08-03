@@ -269,6 +269,28 @@ export class CreateProductDto {
   @IsNumber()
   retailProfitPct?: number;
 
+  /**
+   * Profit % each channel is MEANT to earn (null = no target set, so that
+   * channel is left out of Price Review rather than read as a 0% target), and
+   * how far the actual margin may sit from it before an alert is raised.
+   */
+  @IsOptional()
+  @IsNumber()
+  intercompanyTargetPct?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  wholesaleTargetPct?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  retailTargetPct?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maxVariancePct?: number | null;
+
   /** Maximum Retail Price — the single figure printed on the pack label. */
   @IsOptional()
   @IsNumber()
@@ -519,6 +541,28 @@ export class UpdateProductDto {
   @IsNumber()
   retailProfitPct?: number;
 
+  /**
+   * Profit % each channel is MEANT to earn (null = no target set, so that
+   * channel is left out of Price Review rather than read as a 0% target), and
+   * how far the actual margin may sit from it before an alert is raised.
+   */
+  @IsOptional()
+  @IsNumber()
+  intercompanyTargetPct?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  wholesaleTargetPct?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  retailTargetPct?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maxVariancePct?: number | null;
+
   /** Maximum Retail Price — the single figure printed on the pack label. */
   @IsOptional()
   @IsNumber()
@@ -711,9 +755,31 @@ export class PriceRevisionDto {
   @IsNumber()
   @Min(0)
   retailPrice?: number;
+
+  /**
+   * Target resets. Independent of the prices — a reviewer may accept a new
+   * margin as the intended one instead of repricing to win the old one back.
+   * A null clears the target; omit the field to leave it alone.
+   */
+  @IsOptional()
+  @IsNumber()
+  intercompanyTargetPct?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  wholesaleTargetPct?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  retailTargetPct?: number | null;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  maxVariancePct?: number | null;
 }
 
-/** The batch of revisions saved from the Cost Review screen. */
+/** The batch of revisions saved from the Price Review screen. */
 export class RevisePricesDto {
   @IsArray()
   @ValidateNested({ each: true })

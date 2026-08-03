@@ -833,6 +833,12 @@ export interface Product {
   intercompanyProfitPct: number;
   retailPrice: number;
   retailProfitPct: number;
+  /** Profit % each channel is MEANT to earn; null = no target set. */
+  intercompanyTargetPct?: number | null;
+  wholesaleTargetPct?: number | null;
+  retailTargetPct?: number | null;
+  /** How far actual may sit from target (either way) before an alert. */
+  maxVariancePct?: number | null;
   /**
    * Maximum Retail Price — the single figure printed on the pack label, set in
    * Packing Master against RETAIL only. Distinct from the retail "Total Price"
@@ -1935,16 +1941,20 @@ export interface PriceVariance {
   key: PriceKey;
   label: string;
   price: number;
-  /** The margin this price was set to earn. */
-  targetProfitPct: number;
-  /** What it actually earns at the recomputed cost. */
+  /** The margin this channel is MEANT to earn (Product Master). Null = unset. */
+  targetProfitPct: number | null;
+  /** What the price earns against the cost the Product Master stores. */
+  masterProfitPct: number;
+  /** What it earns against the recomputed cost — the real margin. */
   actualProfitPct: number;
-  /** actual − target; negative means the margin has eroded. */
-  profitPctDelta: number;
-  belowTarget: boolean;
-  /** The price that would restore the target margin at the recomputed cost. */
-  priceAtTarget: number;
+  /** actual − target. Null without a target. */
+  variancePct: number | null;
+  /** Variance exceeded the product's tolerance, in either direction. */
+  alert: boolean;
+  /** The price that hits the target exactly at the recomputed cost. */
+  priceAtTarget: number | null;
 }
+
 
 export interface ProductCostVariance {
   productId: number;
@@ -1961,8 +1971,10 @@ export interface ProductCostVariance {
   hasDrift: boolean;
   /** No BOM entered at all — computes to zero, so it is not a finding. */
   emptyBom: boolean;
-  /** Any selling price no longer earning the margin it was set for. */
-  belowTarget: boolean;
+  /** Any channel whose margin has strayed further from target than allowed. */
+  hasAlert: boolean;
+  /** Tolerance around each target before alerting, either way. Null = never. */
+  maxVariancePct: number | null;
   breakdown: CostBreakdown;
   prices: PriceVariance[];
   /** Pack sources, to explain a delta caused by a source product's cost. */
@@ -1983,6 +1995,11 @@ export interface PriceRevision {
   intercompanyPrice?: number;
   wholesalePrice?: number;
   retailPrice?: number;
+  /** Target resets. Present-and-null clears a target; omit to leave it alone. */
+  intercompanyTargetPct?: number | null;
+  wholesaleTargetPct?: number | null;
+  retailTargetPct?: number | null;
+  maxVariancePct?: number | null;
 }
 
 export interface RevisePricesResult {
