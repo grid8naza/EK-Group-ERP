@@ -31,6 +31,7 @@ import { RackModule } from './modules/rack/rack.module';
 import { OpeningStockModule } from './modules/opening-stock/opening-stock.module';
 import { StockTransactionModule } from './modules/stock-transaction/stock-transaction.module';
 import { SupplierModule } from './modules/supplier/supplier.module';
+import { AccountsModule } from './modules/accounts/accounts.module';
 import { AssetCategoryModule } from './modules/asset-category/asset-category.module';
 import { AssetGroupModule } from './modules/asset-group/asset-group.module';
 import { AssetModule } from './modules/asset/asset.module';
@@ -79,6 +80,7 @@ import { ScaffoldModule } from './scaffold/scaffold.module';
     OpeningStockModule,
     StockTransactionModule,
     SupplierModule,
+    AccountsModule,
     AssetCategoryModule,
     AssetGroupModule,
     AssetModule,

@@ -2011,3 +2011,76 @@ export interface RevisePricesResult {
   updatedNames: string[];
   skippedLocked: string[];
 }
+
+// ---- Accounts: Chart of Accounts (SRS Annexure D) ----
+export type AccountNature =
+  | 'ASSET'
+  | 'LIABILITY'
+  | 'EQUITY'
+  | 'INCOME'
+  | 'EXPENSE';
+export type BalanceSide = 'DR' | 'CR';
+export type StatementType = 'BS' | 'PL';
+export type CcRequirement = 'MANDATORY' | 'OPTIONAL' | 'NOT_APPLICABLE';
+export type PartyKind =
+  | 'SUPPLIER'
+  | 'CUSTOMER'
+  | 'EMPLOYEE'
+  | 'COMPANY'
+  | 'OTHER';
+
+/** A heading in the account hierarchy. Never posted to. */
+export interface AccountGroup {
+  id: number;
+  code: string;
+  name: string;
+  parentGroupId: number | null;
+  nature: AccountNature;
+  normalSide: BalanceSide;
+  statement: StatementType;
+  tallyGroup: string | null;
+  sortOrder: number;
+  isActive: boolean;
+}
+
+/** A postable ledger account, with this company's adoption folded in. */
+export interface CoaAccount {
+  id: number;
+  code: string;
+  name: string;
+  groupId: number;
+  group: { id: number; code: string; name: string };
+  nature: AccountNature;
+  normalSide: BalanceSide;
+  statement: StatementType;
+  tallyGroup: string | null;
+  isContra: boolean;
+  isControl: boolean;
+  controlParty: PartyKind | null;
+  ccRequirement: CcRequirement;
+  isGstRelevant: boolean;
+  isBankOrCash: boolean;
+  isReconcilable: boolean;
+  isIntercompany: boolean;
+  eliminationPair: string | null;
+  allowManualJe: boolean;
+  isSystem: boolean;
+  notes: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  /** Whether the ACTIVE company has adopted this account. */
+  adopted: boolean;
+  adoptionId: number | null;
+  localName: string | null;
+  allowPosting: boolean | null;
+  adoptionActive: boolean | null;
+}
+
+export interface CostCentreCategory {
+  code: string;
+  name: string;
+  description: string | null;
+  isMandatory: boolean;
+  sortOrder: number;
+  isActive: boolean;
+}

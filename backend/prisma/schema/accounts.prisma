@@ -25,3 +25,205 @@ model Supplier {
   @@index([companyId])
   @@map("suppliers")
 }
+
+// -----------------------------------------------------------------------------
+// Chart of Accounts — Annexure D to the SRS.
+//
+// The account master is a GROUP-LEVEL master: one Chart of Accounts shared by
+// every company, with per-company adoption recorded separately. That is what
+// makes consolidation map one-to-one, and it is why AccountGroup and Account
+// carry no companyId while AccountCompany does.
+//
+// The annexure ships this as its own `acct` PostgreSQL schema with UUID keys and
+// Row-Level Security. It is modelled here in Prisma instead, keeping every code,
+// flag and rule but using this ERP's own tenant model (Int ids, one public
+// schema, company scoping by X-Company-Id) so there is a single notion of a
+// company rather than two to keep in step.
+// -----------------------------------------------------------------------------
+
+enum AccountNature {
+  ASSET
+  LIABILITY
+  EQUITY
+  INCOME
+  EXPENSE
+}
+
+/// Which side a balance sits on when it is normal rather than unusual.
+enum BalanceSide {
+  DR
+  CR
+}
+
+/// Balance Sheet or Profit and Loss. Fixed by nature — see the check on both
+/// AccountGroup and Account in the annexure (D.4, D.5).
+enum StatementType {
+  BS
+  PL
+}
+
+/// Whether a posting to this account must name a cost centre. NOT_APPLICABLE
+/// means a cost centre is silently dropped rather than rejected.
+enum CcRequirement {
+  MANDATORY
+  OPTIONAL
+  NOT_APPLICABLE
+}
+
+/// The sub-ledger a control account is aged by.
+enum PartyKind {
+  SUPPLIER
+  CUSTOMER
+  EMPLOYEE
+  COMPANY
+  OTHER
+}
+
+/// The group hierarchy the ledger accounts hang from. A code ending in 00 is a
+/// group. Groups are HEADINGS, never posted to — nothing in the ledger will ever
+/// reference this table, which is what keeps the trial balance flat and the
+/// balance-sheet roll-up unambiguous.
+model AccountGroup {
+  id            Int           @id @default(autoincrement())
+  code          String        @unique // 10000, 10100, …
+  name          String
+  parentGroupId Int?
+  nature        AccountNature
+  normalSide    BalanceSide
+  statement     StatementType
+  /// The Tally primary group this corresponds to — the migration key for the
+  /// books the finance team keeps today.
+  tallyGroup    String?
+  sortOrder     Int           @default(0)
+  /// Shipped by the annexure. May be renamed or deactivated, never deleted.
+  isSystem      Boolean       @default(false)
+  isActive      Boolean       @default(true)
+  isLocked      Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  parent   AccountGroup?  @relation("AccountGroupTree", fields: [parentGroupId], references: [id], onDelete: Restrict)
+  children AccountGroup[] @relation("AccountGroupTree")
+  accounts Account[]
+
+  @@index([parentGroupId])
+  @@map("account_groups")
+}
+
+/// The group-level master Chart of Accounts. Shared by all companies; which of
+/// them may post to a given account is in AccountCompany.
+model Account {
+  id         Int           @id @default(autoincrement())
+  code       String        @unique // five digits, per D.3
+  name       String
+  groupId    Int
+  nature     AccountNature
+  normalSide BalanceSide
+  statement  StatementType
+  tallyGroup String?
+
+  /// Offsets the group it sits in rather than forming a block of its own — e.g.
+  /// accumulated depreciation under Fixed Assets, mess recovery under Mess
+  /// Expenses. Each nets against its own parent in the statements.
+  isContra      Boolean    @default(false)
+  /// Balance is detailed by a party sub-ledger; a posting without a party would
+  /// put the control account out of step with the sub-ledger, so it is rejected.
+  isControl     Boolean    @default(false)
+  controlParty  PartyKind?
+  ccRequirement CcRequirement @default(OPTIONAL)
+
+  isGstRelevant  Boolean @default(false)
+  isBankOrCash   Boolean @default(false)
+  isReconcilable Boolean @default(false)
+  /// Eliminated on consolidation, against the account named by eliminationPair.
+  isIntercompany Boolean @default(false)
+  /// Code of the mirror account — a code rather than an id so the seed can be
+  /// loaded in any order and re-run without a second pass.
+  eliminationPair String?
+  /// System-only accounts refuse a hand-written journal.
+  allowManualJe   Boolean @default(true)
+  /// Shipped by the annexure and not deletable.
+  isSystem        Boolean @default(false)
+  notes           String?
+
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  isLocked  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// NULL = a group master account available to every company. Set = a private
+  /// account created by one company; it still carries a globally unique code so
+  /// consolidation never collides.
+  ownerCompanyId Int? // -> Cpanel Company (plain id)
+
+  group     AccountGroup     @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  companies AccountCompany[]
+
+  @@index([groupId])
+  @@index([isActive])
+  @@map("accounts")
+}
+
+/// Which company has adopted which account. A company posts only to the accounts
+/// it has adopted, so the trading company never sees a production account and the
+/// factory never sees a cafe sales account.
+model AccountCompany {
+  id           Int          @id @default(autoincrement())
+  companyId    Int // -> Cpanel Company (plain id)
+  accountId    Int
+  /// Optional company-specific label; the master name shows when unset.
+  localName    String?
+  allowPosting Boolean      @default(true)
+  openingSide  BalanceSide?
+  isActive     Boolean      @default(true)
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, accountId])
+  @@index([companyId, isActive])
+  @@map("account_companies")
+}
+
+/// The kinds of cost centre — branch, department, kitchen, cafe, counter, mess,
+/// vehicle, project. Global, like the account master.
+model CostCentreCategory {
+  code        String  @id // BRANCH, DEPT, KITCHEN, …
+  name        String
+  description String?
+  /// Mandatory on all operating postings (only BRANCH, per the annexure).
+  isMandatory Boolean @default(false)
+  sortOrder   Int     @default(0)
+  isActive    Boolean @default(true)
+
+  costCentres CostCentre[]
+
+  @@map("cost_centre_categories")
+}
+
+/// The cost centres themselves, hierarchical within a branch. Analysis is by
+/// cost centre rather than by proliferating accounts: one account carries the
+/// cost and the cost centre says where it landed, so cost per meal, per counter
+/// and per vehicle comes out of the ledger rather than a side report.
+model CostCentre {
+  id           Int      @id @default(autoincrement())
+  companyId    Int // -> Cpanel Company (plain id)
+  branchId     Int? // -> Cpanel Branch (plain id)
+  categoryCode String
+  parentId     Int?
+  code         String
+  name         String
+  isActive     Boolean  @default(true)
+  isLocked     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  category CostCentreCategory @relation(fields: [categoryCode], references: [code], onDelete: Restrict)
+  parent   CostCentre?        @relation("CostCentreTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children CostCentre[]       @relation("CostCentreTree")
+
+  @@unique([companyId, code])
+  @@index([companyId, branchId])
+  @@index([categoryCode])
+  @@map("cost_centres")
+}

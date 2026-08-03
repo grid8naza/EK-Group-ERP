@@ -1,0 +1,351 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { Wallet } from 'lucide-react';
+import { api, ApiError } from '@/lib/api';
+import { useToast } from '@/providers/ToastProvider';
+import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
+import { Checkbox, Input, Select, Textarea } from '@/components/ui/Field';
+import type { AccountGroup, CoaAccount } from '@/lib/types';
+
+const CC_OPTIONS = [
+  { value: 'OPTIONAL', label: 'Optional' },
+  { value: 'MANDATORY', label: 'Mandatory — a posting without one is rejected' },
+  { value: 'NOT_APPLICABLE', label: 'Not applicable — silently dropped' },
+];
+const PARTY_OPTIONS = [
+  { value: 'SUPPLIER', label: 'Supplier' },
+  { value: 'CUSTOMER', label: 'Customer' },
+  { value: 'EMPLOYEE', label: 'Employee' },
+  { value: 'COMPANY', label: 'Company' },
+  { value: 'OTHER', label: 'Other' },
+];
+const SIDE_OPTIONS = [
+  { value: 'DR', label: 'Debit' },
+  { value: 'CR', label: 'Credit' },
+];
+
+type Form = {
+  groupId: string;
+  code: string;
+  name: string;
+  scope: 'GROUP' | 'PRIVATE';
+  normalSide: string;
+  isContra: boolean;
+  isControl: boolean;
+  controlParty: string;
+  ccRequirement: string;
+  isGstRelevant: boolean;
+  isBankOrCash: boolean;
+  isReconcilable: boolean;
+  allowManualJe: boolean;
+  notes: string;
+  isActive: boolean;
+};
+
+const EMPTY: Form = {
+  groupId: '',
+  code: '',
+  name: '',
+  scope: 'GROUP',
+  normalSide: '',
+  isContra: false,
+  isControl: false,
+  controlParty: '',
+  ccRequirement: 'OPTIONAL',
+  isGstRelevant: false,
+  isBankOrCash: false,
+  isReconcilable: false,
+  allowManualJe: true,
+  notes: '',
+  isActive: true,
+};
+
+/**
+ * Add or edit a ledger account.
+ *
+ * On an EXISTING account most of the form is read-only. Code, group, nature and
+ * side decide which statement a balance lands in and how it rolls up, so
+ * changing one after the fact would move money between statements silently —
+ * the annexure treats them as structural and so does this.
+ */
+export function AccountDrawer({
+  open,
+  account,
+  groups,
+  companyName,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  /** null = creating. */
+  account: CoaAccount | null;
+  groups: AccountGroup[];
+  companyName: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const toast = useToast();
+  const [form, setForm] = useState<Form>(EMPTY);
+  const [saving, setSaving] = useState(false);
+  const editing = !!account;
+
+  useEffect(() => {
+    if (!open) return;
+    setForm(
+      account
+        ? {
+            ...EMPTY,
+            groupId: String(account.groupId),
+            code: account.code,
+            name: account.name,
+            scope: account.isSystem ? 'GROUP' : 'GROUP',
+            normalSide: account.normalSide,
+            isContra: account.isContra,
+            isControl: account.isControl,
+            controlParty: account.controlParty ?? '',
+            ccRequirement: account.ccRequirement,
+            isGstRelevant: account.isGstRelevant,
+            isBankOrCash: account.isBankOrCash,
+            isReconcilable: account.isReconcilable,
+            allowManualJe: account.allowManualJe,
+            notes: account.notes ?? '',
+            isActive: account.isActive,
+          }
+        : EMPTY,
+    );
+  }, [open, account]);
+
+  const group = groups.find((g) => String(g.id) === form.groupId);
+
+  /**
+   * Choosing a group fixes the nature and side, and proposes the next free code
+   * in that group's hundred — the annexure's numbering, offered rather than
+   * imposed.
+   */
+  const onGroupChange = async (groupId: string) => {
+    const g = groups.find((x) => String(x.id) === groupId);
+    setForm((f) => ({ ...f, groupId, normalSide: g?.normalSide ?? '' }));
+    if (!groupId) return;
+    try {
+      const { code } = await api.get<{ code: string | null }>(
+        `/coa/groups/${groupId}/next-account-code`,
+      );
+      setForm((f) => (f.groupId === groupId ? { ...f, code: code ?? '' } : f));
+    } catch {
+      /* the field stays blank and the server assigns one */
+    }
+  };
+
+  const save = async () => {
+    if (!form.name.trim()) return toast.error('Give the account a name.');
+    if (!editing && !form.groupId) return toast.error('Choose a group.');
+    if (form.isControl && !form.controlParty) {
+      return toast.error('A control account must say which party ages it.');
+    }
+    setSaving(true);
+    try {
+      if (editing) {
+        await api.patch(`/coa/accounts/${account!.id}`, {
+          name: form.name,
+          notes: form.notes,
+          ccRequirement: form.ccRequirement,
+          allowManualJe: form.allowManualJe,
+          isActive: form.isActive,
+        });
+      } else {
+        await api.post('/coa/accounts', {
+          groupId: Number(form.groupId),
+          code: form.code.trim() || undefined,
+          name: form.name,
+          scope: form.scope,
+          normalSide: form.normalSide || undefined,
+          isContra: form.isContra,
+          isControl: form.isControl,
+          controlParty: form.isControl ? form.controlParty : undefined,
+          ccRequirement: form.ccRequirement,
+          isGstRelevant: form.isGstRelevant,
+          isBankOrCash: form.isBankOrCash,
+          isReconcilable: form.isReconcilable,
+          allowManualJe: form.allowManualJe,
+          notes: form.notes || undefined,
+        });
+      }
+      toast.success(editing ? 'Account saved.' : 'Account added.');
+      onSaved();
+      onClose();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Failed to save the account.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Drawer
+      open={open}
+      onClose={onClose}
+      title={editing ? `${account!.code} — ${account!.name}` : 'New Account'}
+      subtitle={
+        editing
+          ? account!.isSystem
+            ? 'Part of the Annexure D master — name, notes and rules only'
+            : 'Added here'
+          : 'The code, nature and statement follow the group'
+      }
+      icon={<Wallet className="h-5 w-5" />}
+      width="md"
+      footer={<DrawerFooter onCancel={onClose} onSave={save} saving={saving} />}
+    >
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        {!editing && (
+          <>
+            <Select
+              label="Scope"
+              required
+              value={form.scope}
+              onChange={(e) =>
+                setForm({ ...form, scope: e.target.value as Form['scope'] })
+              }
+              options={[
+                { value: 'GROUP', label: 'Group master — every company may adopt it' },
+                { value: 'PRIVATE', label: `Private to ${companyName}` },
+              ]}
+              className="sm:col-span-2"
+            />
+            <Select
+              label="Group"
+              required
+              openOnFocus
+              value={form.groupId}
+              onChange={(e) => void onGroupChange(e.target.value)}
+              options={groups.map((g) => ({
+                value: String(g.id),
+                label: `${g.code} — ${g.name}`,
+              }))}
+              placeholder="Choose a group"
+              className="sm:col-span-2"
+            />
+          </>
+        )}
+
+        <Input
+          label="Code"
+          value={form.code}
+          disabled={editing}
+          onChange={(e) => setForm({ ...form, code: e.target.value })}
+          placeholder={group ? `${group.code.slice(0, 3)}01 – ${group.code.slice(0, 3)}99` : '—'}
+        />
+        <Input
+          label="Name"
+          required
+          value={form.name}
+          onChange={(e) => setForm({ ...form, name: e.target.value })}
+        />
+
+        {/* Fixed by the group — shown so the consequence of the choice is
+            visible, never editable. */}
+        {group && (
+          <div className="sm:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-900">
+            <span className="text-slate-500">From the group: </span>
+            <span className="font-medium text-slate-700 dark:text-slate-200">
+              {group.nature}
+            </span>
+            <span className="text-slate-400">
+              {' '}
+              · {group.statement === 'BS' ? 'Balance Sheet' : 'Profit & Loss'}
+            </span>
+            {group.tallyGroup && (
+              <span className="text-slate-400"> · Tally: {group.tallyGroup}</span>
+            )}
+          </div>
+        )}
+
+        {!editing && (
+          <div>
+            <Select
+              label="Normal side"
+              value={form.normalSide}
+              onChange={(e) => setForm({ ...form, normalSide: e.target.value })}
+              options={SIDE_OPTIONS}
+              placeholder="Follow the group"
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Flip it only for a contra account, e.g. Purchase Returns.
+            </p>
+          </div>
+        )}
+        <Select
+          label="Cost centre"
+          value={form.ccRequirement}
+          onChange={(e) => setForm({ ...form, ccRequirement: e.target.value })}
+          options={CC_OPTIONS}
+        />
+
+        <div className="sm:col-span-2 flex flex-wrap gap-x-6 gap-y-2 border-t border-slate-200 pt-3 dark:border-slate-700">
+          <Checkbox
+            label="Contra — offsets its own group"
+            checked={form.isContra}
+            disabled={editing}
+            onChange={(e) => setForm({ ...form, isContra: e.target.checked })}
+          />
+          <Checkbox
+            label="Control — aged by a party"
+            checked={form.isControl}
+            disabled={editing}
+            onChange={(e) => setForm({ ...form, isControl: e.target.checked })}
+          />
+          <Checkbox
+            label="GST relevant"
+            checked={form.isGstRelevant}
+            disabled={editing}
+            onChange={(e) => setForm({ ...form, isGstRelevant: e.target.checked })}
+          />
+          <Checkbox
+            label="Bank or cash"
+            checked={form.isBankOrCash}
+            disabled={editing}
+            onChange={(e) => setForm({ ...form, isBankOrCash: e.target.checked })}
+          />
+          <Checkbox
+            label="Reconcilable"
+            checked={form.isReconcilable}
+            disabled={editing}
+            onChange={(e) => setForm({ ...form, isReconcilable: e.target.checked })}
+          />
+          <Checkbox
+            label="Allow manual journal"
+            checked={form.allowManualJe}
+            onChange={(e) => setForm({ ...form, allowManualJe: e.target.checked })}
+          />
+          {editing && (
+            <Checkbox
+              label="Active"
+              checked={form.isActive}
+              onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+            />
+          )}
+        </div>
+
+        {form.isControl && !editing && (
+          <Select
+            label="Aged by"
+            required
+            value={form.controlParty}
+            onChange={(e) => setForm({ ...form, controlParty: e.target.value })}
+            options={PARTY_OPTIONS}
+            placeholder="Which party"
+          />
+        )}
+
+        <Textarea
+          label="Notes"
+          rows={2}
+          value={form.notes}
+          onChange={(e) => setForm({ ...form, notes: e.target.value })}
+          className="sm:col-span-2"
+        />
+      </div>
+    </Drawer>
+  );
+}
