@@ -1,7 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Tags, AlertTriangle, TriangleAlert, RotateCcw, Crosshair } from 'lucide-react';
+import {
+  Tags,
+  AlertTriangle,
+  TriangleAlert,
+  RotateCcw,
+  Crosshair,
+  Info,
+} from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useFetch, useUnsavedChangesGuard } from '@/lib/hooks';
@@ -10,6 +17,7 @@ import { useToast } from '@/providers/ToastProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
+import { CostBreakdownDrawer } from '@/components/production/CostBreakdownDrawer';
 import {
   costBasisOf,
   costedAgo,
@@ -67,6 +75,7 @@ export default function PriceReviewPage() {
 
   const [tab, setTab] = useState<Tab>('alert');
   const [edits, setEdits] = useState<Record<string, string>>({});
+  const [detail, setDetail] = useState<ProductCostVariance | null>(null);
   const [busy, setBusy] = useState(false);
   const [search, setSearch] = useState('');
 
@@ -413,41 +422,52 @@ export default function PriceReviewPage() {
       sortable: false,
       render: (r: ProductCostVariance) => priceCell(r, key),
     })),
-    ...(canEdit
-      ? [
-          {
-            key: 'fix',
-            header: '',
-            sortable: false,
-            className: 'w-20',
-            render: (r: ProductCostVariance) =>
-              r.hasAlert ? (
-                <div className="flex items-center gap-0.5">
-                  <button
-                    title="Reprice: fill in the prices that hit each target margin"
-                    className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      repriceToTarget(r);
-                    }}
-                  >
-                    <RotateCcw className="h-4 w-4" />
-                  </button>
-                  <button
-                    title="Reset target: accept the current margin as the intended one"
-                    className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      resetTargets(r);
-                    }}
-                  >
-                    <Crosshair className="h-4 w-4" />
-                  </button>
-                </div>
-              ) : null,
-          },
-        ]
-      : []),
+    {
+      key: 'actions',
+      header: '',
+      sortable: false,
+      className: 'w-28',
+      // The row is dense with inputs, so the breakdown opens from an explicit
+      // button rather than a row click that a stray tap could fire.
+      render: (r: ProductCostVariance) => (
+        <div className="flex items-center gap-0.5">
+          <button
+            title="Where this cost comes from"
+            className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800"
+            onClick={(e) => {
+              e.stopPropagation();
+              setDetail(r);
+            }}
+          >
+            <Info className="h-4 w-4" />
+          </button>
+          {canEdit && r.hasAlert && (
+            <>
+              <button
+                title="Reprice: fill in the prices that hit each target margin"
+                className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  repriceToTarget(r);
+                }}
+              >
+                <RotateCcw className="h-4 w-4" />
+              </button>
+              <button
+                title="Reset target: accept the current margin as the intended one"
+                className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  resetTargets(r);
+                }}
+              >
+                <Crosshair className="h-4 w-4" />
+              </button>
+            </>
+          )}
+        </div>
+      ),
+    },
   ];
 
   const tabs: { key: Tab; label: string; count: number }[] = [
@@ -565,6 +585,8 @@ export default function PriceReviewPage() {
           }
         />
       </div>
+
+      <CostBreakdownDrawer row={detail} onClose={() => setDetail(null)} />
     </div>
   );
 }

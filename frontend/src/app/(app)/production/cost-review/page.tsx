@@ -10,7 +10,7 @@ import { useToast } from '@/providers/ToastProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
-import { Drawer } from '@/components/ui/Drawer';
+import { CostBreakdownDrawer } from '@/components/production/CostBreakdownDrawer';
 import { costedAgo, isCostStale, money, signed } from '@/lib/costing';
 import type { ApplyCostingResult, ProductCostVariance } from '@/lib/types';
 
@@ -256,81 +256,7 @@ export default function CostReviewPage() {
         />
       </div>
 
-      {/* Where the recomputed figure comes from, line by line. */}
-      <Drawer
-        open={!!detail}
-        onClose={() => setDetail(null)}
-        title={detail?.name ?? ''}
-        subtitle={detail ? `Costed from Recipe Master · ${detail.code}` : ''}
-        icon={<Scale className="h-5 w-5" />}
-        width="sm"
-      >
-        {detail && (
-          <div className="space-y-5">
-            <table className="w-full border-collapse text-sm">
-              <tbody>
-                {detail.basis === 'PACKING' && (
-                  <Row label="Product Cost (from source)">
-                    {money(detail.breakdown.productCost)}
-                  </Row>
-                )}
-                <Row label="Material Cost">{money(detail.breakdown.materialCost)}</Row>
-                <Row label="Equipment Cost">{money(detail.breakdown.equipmentCost)}</Row>
-                <Row label="Manpower Cost">{money(detail.breakdown.manpowerCost)}</Row>
-                <Row label="Fuel Cost">{money(detail.breakdown.fuelCost)}</Row>
-                <Row label="Overheads">{money(detail.breakdown.overheadCost)}</Row>
-                <Row label="Cost Price" strong>
-                  {money(detail.breakdown.total)}
-                </Row>
-                <Row label={`÷ yield of ${money(detail.breakdown.yieldQty)}`}>
-                  {money(detail.breakdown.perUnit)}
-                </Row>
-              </tbody>
-            </table>
-
-            <div className="rounded-xl bg-slate-50 p-4 text-sm dark:bg-slate-900">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Product Master holds</span>
-                <span className="tabular-nums">{money(detail.storedCost)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Recomputed</span>
-                <span className="tabular-nums">{money(detail.computedCost)}</span>
-              </div>
-              <div className="mt-2 flex justify-between border-t border-slate-200 pt-2 font-semibold dark:border-slate-700">
-                <span>Difference</span>
-                <span className="tabular-nums">{signed(detail.costDelta)}</span>
-              </div>
-            </div>
-          </div>
-        )}
-      </Drawer>
+      <CostBreakdownDrawer row={detail} onClose={() => setDetail(null)} />
     </div>
-  );
-}
-
-function Row({
-  label,
-  strong,
-  children,
-}: {
-  label: string;
-  strong?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <tr className="border-t border-slate-100 dark:border-slate-800">
-      <td
-        className={cn(
-          'py-1.5 text-slate-600 dark:text-slate-300',
-          strong && 'font-semibold text-slate-800 dark:text-slate-100',
-        )}
-      >
-        {label}
-      </td>
-      <td className={cn('py-1.5 text-right tabular-nums', strong && 'font-semibold')}>
-        {children}
-      </td>
-    </tr>
   );
 }
