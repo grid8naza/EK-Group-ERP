@@ -1953,6 +1953,8 @@ export interface ProductCostVariance {
   categoryName: string | null;
   basis: CostBasis;
   isLocked: boolean;
+  /** Sold or not — splits the review: Price Review (true) vs Cost Review (false). */
+  canSell: boolean;
   storedCost: number;
   computedCost: number;
   costDelta: number;

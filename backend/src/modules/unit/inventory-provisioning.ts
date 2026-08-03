@@ -79,9 +79,13 @@ export const PRODUCTION_SUBS = [
   { name: 'Material Request', route: '/production/material-requests', icon: 'clipboard-check', order: 6 },
   // Production Receipt — finished goods banked into stock from a work order.
   { name: 'Production Receipt', route: '/production/receipts', icon: 'package-plus', order: 7 },
-  // Cost Review — recosts every recipe / packing BOM at today's master rates and
-  // writes the difference back to the Product Master. Not a report: it edits.
-  { name: 'Cost Review', route: '/production/cost-review', icon: 'scale', order: 10 },
+  // The two review screens, split by whether the product is sold. Both recost
+  // every BOM at today's master rates; they differ in what there is to review.
+  // Price Review asks whether a sellable product still earns its target margin;
+  // Cost Review covers what is never sold (semi-finished intermediates), where
+  // cost is the whole story. Reports that can also act, not read-only reports.
+  { name: 'Price Review', route: '/production/price-review', icon: 'tags', order: 10 },
+  { name: 'Cost Review', route: '/production/cost-review', icon: 'scale', order: 11 },
   // Per-module reference data. Super-admin-only; isolated from other modules.
   {
     name: 'Lookups',

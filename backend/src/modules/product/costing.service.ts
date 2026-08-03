@@ -79,6 +79,13 @@ export interface ProductCostVariance {
   categoryName: string | null;
   basis: CostBasis;
   isLocked: boolean;
+  /**
+   * Whether the product is sold. It splits the review in two: a sellable
+   * product is reviewed on PRICE (does it still earn its margin?), while one
+   * that is never sold — a semi-finished intermediate — has only a cost to
+   * review, and no prices to hold it against.
+   */
+  canSell: boolean;
   storedCost: number;
   computedCost: number;
   costDelta: number;
@@ -188,6 +195,7 @@ export class CostingService {
         categoryName: p.category?.name ?? null,
         basis,
         isLocked: !!p.isLocked,
+        canSell: !!p.canSell,
         storedCost,
         computedCost: breakdown.perUnit,
         costDelta,
@@ -355,6 +363,7 @@ export class CostingService {
         hasRecipe: true,
         hasPacking: true,
         isLocked: true,
+        canSell: true,
         unitId: true,
         yieldQty: true,
         costPrice: true,
