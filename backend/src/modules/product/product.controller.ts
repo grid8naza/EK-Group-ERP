@@ -19,7 +19,13 @@ import { CompanyId } from '../../auth/company.decorator';
 import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
 import { LockDto } from '../../common/lock.dto';
 import { ProductService } from './product.service';
-import { CreateProductDto, UpdateProductDto } from './product.dto';
+import { CostingService } from './costing.service';
+import {
+  ApplyCostingDto,
+  CreateProductDto,
+  RevisePricesDto,
+  UpdateProductDto,
+} from './product.dto';
 import { PRODUCT_UPLOAD_DIR } from './product.constants';
 
 /** Minimal multer file shape (avoids needing @types/multer). */
@@ -45,7 +51,10 @@ const imageFilter = (
 @ApiBearerAuth()
 @Controller('products')
 export class ProductController {
-  constructor(private readonly service: ProductService) {}
+  constructor(
+    private readonly service: ProductService,
+    private readonly costing: CostingService,
+  ) {}
 
   @Get()
   findAll(
@@ -57,6 +66,49 @@ export class ProductController {
   ) {
     const scoped = forCompanyId ? Number(forCompanyId) : companyId;
     return this.service.findAll(scoped, search);
+  }
+
+  // Declared BEFORE `:id` — otherwise "costing" is parsed as a product id.
+  //
+  // What each manufactured product's recipe / packing BOM costs at today's
+  // master rates, against what the Product Master stores. The stored figure is
+  // a cache written when someone last saved the BOM, so it drifts whenever a
+  // purchase price or a machine / labour rate changes underneath it.
+  @Get('costing/variance')
+  costingVariance(@CompanyId() companyId: number | undefined) {
+    return this.costing.variance(companyId);
+  }
+
+  // Write the recomputed cost onto the named products — the cost and nothing
+  // else. Selling prices are commercial decisions, and each stored profit % is
+  // the margin its price was set to earn, so both are left alone. Figures are
+  // recomputed server-side, so the caller cannot name a cost.
+  @Post('costing/apply')
+  costingApply(
+    @CompanyId() companyId: number | undefined,
+    @Body() dto: ApplyCostingDto,
+  ) {
+    return this.costing.apply(companyId, dto.productIds);
+  }
+
+  // Revise selling prices after review. This is the one path that rewrites a
+  // profit %: setting a price is what establishes the margin it must earn.
+  @Post('costing/prices')
+  costingRevisePrices(
+    @CompanyId() companyId: number | undefined,
+    @Body() dto: RevisePricesDto,
+  ) {
+    return this.costing.revisePrices(
+      companyId,
+      dto.revisions.map((r) => ({
+        productId: r.productId,
+        prices: {
+          intercompany: r.intercompanyPrice,
+          wholesale: r.wholesalePrice,
+          retail: r.retailPrice,
+        },
+      })),
+    );
   }
 
   @Get(':id')

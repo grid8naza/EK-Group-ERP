@@ -26,6 +26,10 @@ import { StockTransactionService } from '../modules/stock-transaction/stock-tran
 import { DISPATCH } from './dispatch.port';
 import { DispatchLinkAdapter } from '../modules/crm/dispatch-link.adapter';
 import { DispatchLinkService } from '../modules/crm/dispatch-link.service';
+import { ASSET_RATE } from './asset-rate.port';
+import { AssetRateAdapter } from '../modules/asset/asset-rate.adapter';
+import { LABOUR_RATE } from './labour-rate.port';
+import { LabourRateAdapter } from '../modules/hr-designation/labour-rate.adapter';
 
 /**
  * Composition root for cross-module contracts (ports & adapters).
@@ -87,6 +91,11 @@ import { DispatchLinkService } from '../modules/crm/dispatch-link.service';
     // this from cycling back into STOCK_POSTING above.
     DispatchLinkService,
     { provide: DISPATCH, useClass: DispatchLinkAdapter },
+    // The two rates product costing needs but does not own: a machine's running
+    // cost/hour and a designation's cost/hour. Implemented by the modules that
+    // own those masters, so costing never imports Asset or HR.
+    { provide: ASSET_RATE, useClass: AssetRateAdapter },
+    { provide: LABOUR_RATE, useClass: LabourRateAdapter },
     CpanelMetricsAdapter,
     ProductionMetricsAdapter,
     InventoryMetricsAdapter,
@@ -115,6 +124,8 @@ import { DispatchLinkService } from '../modules/crm/dispatch-link.service';
     RECIPE,
     STOCK_POSTING,
     DISPATCH,
+    ASSET_RATE,
+    LABOUR_RATE,
   ],
 })
 export class ContractsModule {}

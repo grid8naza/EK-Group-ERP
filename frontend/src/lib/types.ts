@@ -1904,3 +1904,87 @@ export interface DocumentNumberingRow {
   lastNumber: number;
   preview: string;
 }
+
+// ---- Production: Cost Review (recipe / packing recost vs Product Master) ----
+/** Which master establishes a product's cost. */
+export type CostBasis = 'RECIPE' | 'PACKING';
+
+export interface CostBreakdown {
+  /** Packing only: Σ (source product's per-unit cost × quantity per pack). */
+  productCost: number;
+  materialCost: number;
+  equipmentCost: number;
+  manpowerCost: number;
+  fuelCost: number;
+  overheadCost: number;
+  /** The batch total — the editor's "Cost Price" row. */
+  total: number;
+  yieldQty: number;
+  /** total ÷ yieldQty, rounded — what lands on Product.costPrice. */
+  perUnit: number;
+}
+
+export type PriceKey = 'intercompany' | 'wholesale' | 'retail';
+
+/**
+ * One selling price measured against the margin it was set to earn. The stored
+ * profit % IS the target — written when a human last decided this price, and
+ * never rewritten by a recost.
+ */
+export interface PriceVariance {
+  key: PriceKey;
+  label: string;
+  price: number;
+  /** The margin this price was set to earn. */
+  targetProfitPct: number;
+  /** What it actually earns at the recomputed cost. */
+  actualProfitPct: number;
+  /** actual − target; negative means the margin has eroded. */
+  profitPctDelta: number;
+  belowTarget: boolean;
+  /** The price that would restore the target margin at the recomputed cost. */
+  priceAtTarget: number;
+}
+
+export interface ProductCostVariance {
+  productId: number;
+  code: string;
+  name: string;
+  categoryName: string | null;
+  basis: CostBasis;
+  isLocked: boolean;
+  storedCost: number;
+  computedCost: number;
+  costDelta: number;
+  hasDrift: boolean;
+  /** No BOM entered at all — computes to zero, so it is not a finding. */
+  emptyBom: boolean;
+  /** Any selling price no longer earning the margin it was set for. */
+  belowTarget: boolean;
+  breakdown: CostBreakdown;
+  prices: PriceVariance[];
+  /** Pack sources, to explain a delta caused by a source product's cost. */
+  sourceNames: string[];
+}
+
+export interface ApplyCostingResult {
+  updated: number;
+  updatedIds: number[];
+  skippedLocked: string[];
+  skippedEmpty: string[];
+  notFound: number[];
+}
+
+/** One product's revised selling prices, saved from Cost Review. */
+export interface PriceRevision {
+  productId: number;
+  intercompanyPrice?: number;
+  wholesalePrice?: number;
+  retailPrice?: number;
+}
+
+export interface RevisePricesResult {
+  updated: number;
+  updatedNames: string[];
+  skippedLocked: string[];
+}

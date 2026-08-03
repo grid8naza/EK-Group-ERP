@@ -79,6 +79,9 @@ export const PRODUCTION_SUBS = [
   { name: 'Material Request', route: '/production/material-requests', icon: 'clipboard-check', order: 6 },
   // Production Receipt — finished goods banked into stock from a work order.
   { name: 'Production Receipt', route: '/production/receipts', icon: 'package-plus', order: 7 },
+  // Cost Review — recosts every recipe / packing BOM at today's master rates and
+  // writes the difference back to the Product Master. Not a report: it edits.
+  { name: 'Cost Review', route: '/production/cost-review', icon: 'scale', order: 10 },
   // Per-module reference data. Super-admin-only; isolated from other modules.
   {
     name: 'Lookups',

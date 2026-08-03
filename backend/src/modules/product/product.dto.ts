@@ -681,3 +681,42 @@ export class UpdateProductDto {
   @Min(0)
   actualSalesPrice?: number;
 }
+
+/** Which products to write the recomputed cost onto (Cost Review screen). */
+export class ApplyCostingDto {
+  @IsArray()
+  @ArrayUnique()
+  @IsInt({ each: true })
+  @IsPositive({ each: true })
+  productIds!: number[];
+}
+
+/** One product's revised selling prices (Cost Review → price revision). */
+export class PriceRevisionDto {
+  @IsInt()
+  @IsPositive()
+  productId!: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  intercompanyPrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  wholesalePrice?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  retailPrice?: number;
+}
+
+/** The batch of revisions saved from the Cost Review screen. */
+export class RevisePricesDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PriceRevisionDto)
+  revisions!: PriceRevisionDto[];
+}
