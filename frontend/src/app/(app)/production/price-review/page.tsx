@@ -64,6 +64,36 @@ const PRICE_LABEL: Record<PriceKey, string> = {
  */
 type Tab = 'alert' | 'drift' | 'inStep' | 'empty';
 
+/**
+ * One definition per tab, feeding both the hover tip and the note below it, so
+ * the two can never tell different stories. `hint` states the RULE that puts a
+ * product in that tab — only discoverable by hovering, since the note describes
+ * the tab you are already on. `note` adds what to do about it.
+ */
+const TAB_ORDER: Tab[] = ['alert', 'drift', 'inStep', 'empty'];
+const TAB_META: Record<Tab, { label: string; hint: string; note: string }> = {
+  alert: {
+    label: 'Off target',
+    hint: 'A channel earns a margin further from its target than this product’s variance allows — in either direction. Measured at the recomputed cost. Needs a pricing decision.',
+    note: 'A channel here earns a margin further from its target than this product allows. Nothing changes automatically — either reprice (↺ fills in the price that hits the target) or accept the new reality by resetting the target (⌖), then save. Saving a price also refreshes the product’s cost and profit %, so every screen agrees.',
+  },
+  drift: {
+    label: 'Cost drifted',
+    hint: 'The recomputed cost differs from the one the Product Master holds, but every margin is still on target. Cost is a calculation, so it can simply be written.',
+    note: 'The recipe or packing now costs something other than what the Product Master holds, but every margin is still within tolerance. "Update costs" writes the cost alone — prices and targets are untouched.',
+  },
+  inStep: {
+    label: 'In step',
+    hint: 'Cost matches the Product Master and every margin is on target. Nothing needs doing.',
+    note: 'Cost matches the Product Master and every margin sits within its tolerance. Prices and targets remain editable if you want to revise one anyway.',
+  },
+  empty: {
+    label: 'No BOM yet',
+    hint: 'No recipe or packing entered, so there is nothing to cost from and the cost recomputes to zero. Not a finding — and the cost cannot be updated here.',
+    note: 'No recipe or packing has been entered, so there is nothing to cost from. The cost cannot be updated here (writing zero would lose the hand-entered figure), but prices stay reviewable against it. Enter the BOM in Recipe or Packing Master.',
+  },
+};
+
 /** Editable cells, keyed `${productId}:${priceKey}` / `${productId}:${key}#t`. */
 const priceKeyOf = (productId: number, key: PriceKey) => `${productId}:${key}`;
 const targetKeyOf = (productId: number, key: PriceKey) => `${productId}:${key}#t`;
@@ -522,21 +552,13 @@ export default function PriceReviewPage() {
     },
   ];
 
-  const tabs: { key: Tab; label: string; count: number }[] = [
-    { key: 'alert', label: 'Off target', count: groups.alert.length },
-    { key: 'drift', label: 'Cost drifted', count: groups.drift.length },
-    { key: 'inStep', label: 'In step', count: groups.inStep.length },
-    { key: 'empty', label: 'No BOM yet', count: groups.empty.length },
-  ];
+  const tabs = TAB_ORDER.map((key) => ({
+    key,
+    ...TAB_META[key],
+    count: groups[key].length,
+  }));
 
-  const note =
-    tab === 'alert'
-      ? 'A channel here earns a margin further from its target than this product allows. Nothing changes automatically — either reprice (↺ fills in the price that hits the target) or accept the new reality by resetting the target (⌖), then save. Saving a price also refreshes the product’s cost and profit %, so every screen agrees.'
-      : tab === 'drift'
-        ? 'The recipe or packing now costs something other than what the Product Master holds, but every margin is still within tolerance. "Update costs" writes the cost alone — prices and targets are untouched.'
-        : tab === 'inStep'
-          ? 'Cost matches the Product Master and every margin sits within its tolerance. Prices and targets remain editable if you want to revise one anyway.'
-          : 'No recipe or packing has been entered, so there is nothing to cost from. The cost cannot be updated here (writing zero would lose the hand-entered figure), but prices stay reviewable against it. Enter the BOM in Recipe or Packing Master.';
+  const note = TAB_META[tab].note;
 
   return (
     <div className="flex h-full flex-col">
@@ -571,6 +593,7 @@ export default function PriceReviewPage() {
         {tabs.map((t) => (
           <button
             key={t.key}
+            title={t.hint}
             onClick={() => setTab(t.key)}
             className={cn(
               'rounded-full px-4 py-1.5 text-sm font-medium transition',

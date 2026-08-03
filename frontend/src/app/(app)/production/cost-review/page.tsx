@@ -29,6 +29,31 @@ const ROUTE = '/production/cost-review';
  */
 type Tab = 'drift' | 'inStep' | 'empty';
 
+/**
+ * One definition per tab, feeding both the hover tip and the note below it, so
+ * the two can never tell different stories. `hint` states the RULE that puts a
+ * product in that tab — only discoverable by hovering, since the note describes
+ * the tab you are already on. `note` adds what to do about it.
+ */
+const TAB_ORDER: Tab[] = ['drift', 'inStep', 'empty'];
+const TAB_META: Record<Tab, { label: string; hint: string; note: string }> = {
+  drift: {
+    label: 'Cost drifted',
+    hint: 'The recomputed cost differs from the one the Product Master holds. No selling price is at stake here, but packed products made from these are costed off this figure.',
+    note: 'The recipe now costs something other than what the Product Master holds. These products are not sold, so no selling price is at stake — but each one is a source for the packed products made from it, and their cost is worked out from this figure. Review, then update.',
+  },
+  inStep: {
+    label: 'In step',
+    hint: 'The recomputed cost matches the one the Product Master holds. Nothing needs doing.',
+    note: 'Cost matches the Product Master. Nothing to do.',
+  },
+  empty: {
+    label: 'No BOM yet',
+    hint: 'No recipe entered, so there is nothing to cost from and the cost recomputes to zero. Not a finding — and the cost cannot be updated here.',
+    note: 'No recipe has been entered for these, so there is nothing to cost from and they recompute to zero. Any cost shown was typed into the Product Master by hand; it cannot be updated here, because writing zero over it would lose it. Enter the recipe in Recipe Master instead.',
+  },
+};
+
 export default function CostReviewPage() {
   const { can } = useAuth();
   const toast = useToast();
@@ -175,18 +200,12 @@ export default function CostReviewPage() {
     },
   ];
 
-  const tabs: { key: Tab; label: string; count: number }[] = [
-    { key: 'drift', label: 'Cost drifted', count: groups.drift.length },
-    { key: 'inStep', label: 'In step', count: groups.inStep.length },
-    { key: 'empty', label: 'No BOM yet', count: groups.empty.length },
-  ];
-
-  const note =
-    tab === 'drift'
-      ? 'The recipe now costs something other than what the Product Master holds. These products are not sold, so no selling price is at stake — but each one is a source for the packed products made from it, and their cost is worked out from this figure. Review, then update.'
-      : tab === 'inStep'
-        ? 'Cost matches the Product Master. Nothing to do.'
-        : 'No recipe has been entered for these, so there is nothing to cost from and they recompute to zero. Any cost shown was typed into the Product Master by hand; it cannot be updated here, because writing zero over it would lose it. Enter the recipe in Recipe Master instead.';
+  const tabs = TAB_ORDER.map((key) => ({
+    key,
+    ...TAB_META[key],
+    count: groups[key].length,
+  }));
+  const note = TAB_META[tab].note;
 
   return (
     <div className="flex h-full flex-col">
@@ -213,6 +232,7 @@ export default function CostReviewPage() {
         {tabs.map((t) => (
           <button
             key={t.key}
+            title={t.hint}
             onClick={() => setTab(t.key)}
             className={cn(
               'rounded-full px-4 py-1.5 text-sm font-medium transition',
