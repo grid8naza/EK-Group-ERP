@@ -2035,6 +2035,7 @@ export type PartyKind =
 export type MainGroup =
   | 'NON_CURRENT_ASSET'
   | 'CURRENT_ASSET'
+  | 'EQUITY_AND_RESERVES'
   | 'NON_CURRENT_LIABILITY'
   | 'CURRENT_LIABILITY'
   | 'DIRECT_INCOME'

@@ -9,11 +9,12 @@ import type { AccountNature, MainGroup } from '@/lib/types';
  * mainGroup) rather than inferred.
  *
  * Order is the order a statement is read in: the balance sheet pair first, and
- * within each side non-current before current, as Schedule III sets them out.
+ * within each side owners' funds, then non-current, then current, as Schedule
+ * III sets them out.
  *
  * EQUITY reports with the liabilities — capital and reserves are what the
  * business owes its owners, which is why they carry a credit balance and sit on
- * that side of the sheet.
+ * that side of the sheet, at its head.
  */
 export interface PrimaryGroup {
   key: string;
@@ -37,6 +38,8 @@ export const PRIMARY_GROUPS: PrimaryGroup[] = [
     label: 'Liabilities',
     natures: ['LIABILITY', 'EQUITY'],
     mains: [
+      // Owners' funds lead the side they sit on, as the balance sheet reads.
+      { key: 'EQUITY_AND_RESERVES', label: 'Equity & Reserves' },
       { key: 'NON_CURRENT_LIABILITY', label: 'Non-current Liabilities' },
       { key: 'CURRENT_LIABILITY', label: 'Current Liabilities' },
     ],

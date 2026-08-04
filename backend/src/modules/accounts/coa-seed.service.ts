@@ -1,6 +1,9 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { COA_MAIN_GROUPS } from './main-groups';
+import {
+  COA_MAIN_GROUPS,
+  COA_MAIN_GROUP_CORRECTIONS,
+} from './main-groups';
 import {
   CcRequirement,
   COA_ACCOUNTS,
@@ -150,8 +153,23 @@ export class CoaSeedService implements OnApplicationBootstrap {
       });
       updated += res.count;
     }
-    if (updated) {
-      this.logger.log(`Main group set on ${updated} account groups.`);
+
+    // Where the SHIPPED classification itself has changed, move the group on —
+    // but only from the value it was shipped with, so a considered
+    // reclassification is left alone.
+    let corrected = 0;
+    for (const c of COA_MAIN_GROUP_CORRECTIONS) {
+      const res = await this.prisma.accountGroup.updateMany({
+        where: { code: c.code, mainGroup: c.from, parentGroupId: null },
+        data: { mainGroup: c.to },
+      });
+      corrected += res.count;
+    }
+
+    if (updated || corrected) {
+      this.logger.log(
+        `Main group set on ${updated} account groups, ${corrected} reclassified.`,
+      );
     }
   }
 

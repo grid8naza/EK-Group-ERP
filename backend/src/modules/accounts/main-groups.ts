@@ -28,7 +28,8 @@ export const COA_MAIN_GROUPS: Record<string, MainGroup> = {
   '16000': 'CURRENT_ASSET', // GST Input Tax Credit
   '17000': 'CURRENT_ASSET', // Intercompany and Inter-branch Receivable
 
-  // ---- Liabilities (equity included: owners' funds sit on this side) ----
+  // ---- Liabilities, with owners' funds first: capital and reserves are what
+  //      the business owes its owners, so they lead the side they sit on ----
   '20000': 'CURRENT_LIABILITY', // Trade Payables
   '21000': 'CURRENT_LIABILITY', // Duties and Taxes Payable
   '22000': 'CURRENT_LIABILITY', // Employee Related Liabilities
@@ -36,8 +37,8 @@ export const COA_MAIN_GROUPS: Record<string, MainGroup> = {
   '24000': 'NON_CURRENT_LIABILITY', // Borrowings
   '25000': 'CURRENT_LIABILITY', // Provisions
   '27000': 'CURRENT_LIABILITY', // Intercompany Payable
-  '30000': 'NON_CURRENT_LIABILITY', // Capital Account
-  '31000': 'NON_CURRENT_LIABILITY', // Reserves and Surplus
+  '30000': 'EQUITY_AND_RESERVES', // Capital Account
+  '31000': 'EQUITY_AND_RESERVES', // Reserves and Surplus
   '90000': 'CURRENT_LIABILITY', // Control, Clearing and Suspense
 
   // ---- Income ----
@@ -64,14 +65,36 @@ export const COA_MAIN_GROUPS: Record<string, MainGroup> = {
 };
 
 /**
- * Which schedules a group of this nature may report under. Equity reports with
- * the liabilities: capital and reserves are what the business owes its owners,
- * which is why they carry a credit balance and sit on that side of the sheet.
+ * Which schedules a group of this nature may report under. Equity reports on
+ * the liabilities side — capital and reserves are what the business owes its
+ * owners, which is why they carry a credit balance and sit there — so both
+ * natures may use any of that side's three schedules. A partner's current
+ * account is a liability by nature and belongs with the owners' funds.
  */
 export const MAIN_GROUPS_BY_NATURE: Record<AccountNature, MainGroup[]> = {
   ASSET: ['NON_CURRENT_ASSET', 'CURRENT_ASSET'],
-  LIABILITY: ['NON_CURRENT_LIABILITY', 'CURRENT_LIABILITY'],
-  EQUITY: ['NON_CURRENT_LIABILITY', 'CURRENT_LIABILITY'],
+  LIABILITY: [
+    'EQUITY_AND_RESERVES',
+    'NON_CURRENT_LIABILITY',
+    'CURRENT_LIABILITY',
+  ],
+  EQUITY: ['EQUITY_AND_RESERVES', 'NON_CURRENT_LIABILITY', 'CURRENT_LIABILITY'],
   INCOME: ['DIRECT_INCOME', 'INDIRECT_INCOME'],
   EXPENSE: ['PURCHASE', 'DIRECT_EXPENSE', 'INDIRECT_EXPENSE'],
 };
+
+/**
+ * Codes whose seeded schedule changed after the first release, with the value
+ * they were shipped with. Applied ONLY where the group still carries the old
+ * one, so a reclassification made on the Groups screen is never undone.
+ */
+export const COA_MAIN_GROUP_CORRECTIONS: {
+  code: string;
+  from: MainGroup;
+  to: MainGroup;
+}[] = [
+  // Owners' funds were first shipped among the non-current liabilities; they
+  // are their own schedule now, at the head of that side.
+  { code: '30000', from: 'NON_CURRENT_LIABILITY', to: 'EQUITY_AND_RESERVES' },
+  { code: '31000', from: 'NON_CURRENT_LIABILITY', to: 'EQUITY_AND_RESERVES' },
+];
