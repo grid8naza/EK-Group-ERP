@@ -90,7 +90,14 @@ export interface ReportColumn<T> {
   weight: number;
   cell: (row: T) => Cell;
   status?: boolean;
+  /** The column that names the record: bold, in the primary text colour. */
   bold?: boolean;
+  /**
+   * Primary text colour WITHOUT the bolding — for a name column in a report
+   * whose emphasis belongs to its headings rather than its rows. Ignored on a
+   * column already flagged `bold`.
+   */
+  dark?: boolean;
   /**
    * Numeric column — right-aligned in every output. Set this when the cell is a
    * pre-formatted number string (e.g. money() / qty()); columns that return a
@@ -113,6 +120,8 @@ export interface SelectedColumns<T> {
   weights: number[];
   statusCol?: number;
   boldCol?: number;
+  /** Index of the column shown in the primary text colour but not bolded. */
+  darkCol?: number;
   /** Indices of the visible columns that are numeric (right-aligned). */
   numericCols: number[];
   /** Build a row's cells for the visible columns, in order. */
@@ -135,12 +144,14 @@ export function selectColumns<T>(
   const visible = all.filter((c) => !hidden.has(c.key));
   const statusIdx = visible.findIndex((c) => c.status);
   const boldIdx = visible.findIndex((c) => c.bold);
+  const darkIdx = visible.findIndex((c) => c.dark && !c.bold);
   const grouped = visible.some((c) => c.group);
   return {
     columns: visible.map((c) => c.header),
     weights: visible.map((c) => c.weight),
     statusCol: statusIdx === -1 ? undefined : statusIdx,
     boldCol: boldIdx === -1 ? undefined : boldIdx,
+    darkCol: darkIdx === -1 ? undefined : darkIdx,
     numericCols: visible
       .map((c, i) => (c.numeric ? i : -1))
       .filter((i) => i >= 0),

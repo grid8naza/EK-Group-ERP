@@ -69,6 +69,8 @@ interface ReportViewProps {
   statusCol?: number;
   /** Column index rendered in bold (e.g. the name). */
   boldCol?: number;
+  /** Column index rendered in the primary text colour but NOT bolded. */
+  darkCol?: number;
   /** Prepend a "Sl. No" column, numbered per table (per parent group). */
   serial?: boolean;
   /** Totals shown in a summary strip under the report. */
@@ -168,6 +170,7 @@ export function ReportView({
   loading,
   statusCol,
   boldCol,
+  darkCol,
   serial,
   summary,
   numericCols,
@@ -206,6 +209,7 @@ export function ReportView({
   const shift = serial ? 1 : 0;
   const statusColX = statusCol == null ? undefined : statusCol + shift;
   const boldColX = boldCol == null ? undefined : boldCol + shift;
+  const darkColX = darkCol == null ? undefined : darkCol + shift;
   // Output column indices to right-align: flagged numeric columns plus any
   // whose first data cell is a raw number.
   const firstRow = blocks
@@ -308,7 +312,9 @@ export function ReportView({
                       numericColX.has(ci) && 'text-right tabular-nums',
                       ci === boldColX
                         ? 'font-semibold text-slate-900 dark:text-slate-100'
-                        : 'text-slate-600 dark:text-slate-300',
+                        : ci === darkColX
+                          ? 'text-slate-900 dark:text-slate-100'
+                          : 'text-slate-600 dark:text-slate-300',
                     )}
                   >
                     {fmt(v)}
