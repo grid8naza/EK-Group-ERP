@@ -38,34 +38,20 @@ export class UpdateAdoptionDto {
 }
 
 /**
- * The master fields that may be edited. Code, group, nature, side and statement
- * are deliberately absent — they decide which statement an account lands in, so
- * changing one after the fact would move balances silently.
+ * An account is settled the moment it is created. Everything about it —
+ * its code, its group, what an entry to it is asked for, whether it takes a
+ * hand-written journal — is decided then and fixed after, because each of them
+ * changes what a posting to it MEANS, and the postings already made cannot be
+ * asked to mean something else.
+ *
+ * That leaves two things: correcting a name, and taking an account out of use.
+ * Anything else is a new account, which is a decision someone makes on purpose.
  */
 export class UpdateAccountDto {
   @IsOptional()
   @IsString()
   @MaxLength(160)
   name?: string;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  notes?: string;
-
-  /** Ask for a cost centre on a line to this account. */
-  @IsOptional()
-  @IsBoolean()
-  hasCostCenter?: boolean;
-
-  /** Ask for a cost object too. Implies hasCostCenter. */
-  @IsOptional()
-  @IsBoolean()
-  hasCostObject?: boolean;
-
-  @IsOptional()
-  @IsBoolean()
-  allowManualJe?: boolean;
 
   @IsOptional()
   @IsBoolean()
@@ -187,21 +173,18 @@ export class CreateGroupDto {
   tallyGroup?: string;
 }
 
+/**
+ * As with an account: a group's shape is fixed once it exists. Its code, its
+ * parent, what it holds and the schedule it reports under all decide where the
+ * balances beneath it are presented, and moving any of them would restate
+ * statements already published.
+ */
 export class UpdateGroupDto {
   @IsOptional()
   @IsString()
   @MinLength(2)
   @MaxLength(160)
   name?: string;
-
-  @IsOptional()
-  @IsEnum(MainGroup)
-  mainGroup?: MainGroup;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(120)
-  tallyGroup?: string;
 
   @IsOptional()
   @IsBoolean()

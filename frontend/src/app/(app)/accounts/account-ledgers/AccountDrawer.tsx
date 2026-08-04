@@ -61,10 +61,12 @@ const EMPTY: Form = {
 /**
  * Add or edit a ledger account.
  *
- * On an EXISTING account most of the form is read-only. Code, group, nature and
- * side decide which statement a balance lands in and how it rolls up, so
- * changing one after the fact would move money between statements silently —
- * the annexure treats them as structural and so does this.
+ * On an EXISTING account only the NAME and whether it is still in use may
+ * change. Everything else is settled at creation — the code and group decide
+ * where a balance lands, the cost boxes decide what a posting is asked for, and
+ * the postings already made cannot be asked to mean something else. The fields
+ * stay on screen rather than disappearing, because what an account is remains
+ * worth reading; they are simply not editable.
  */
 export function AccountDrawer({
   open,
@@ -144,12 +146,10 @@ export function AccountDrawer({
     setSaving(true);
     try {
       if (editing) {
+        // Only these two: everything else about an account is settled when it
+        // is created, because it changes what a posting to it means.
         await api.patch(`/coa/accounts/${account!.id}`, {
           name: form.name,
-          notes: form.notes,
-          hasCostCenter: form.hasCostCenter,
-          hasCostObject: form.hasCostObject,
-          allowManualJe: form.allowManualJe,
           isActive: form.isActive,
         });
       } else {
@@ -285,6 +285,7 @@ export function AccountDrawer({
             <Checkbox
               label="Cost centre (division)"
               checked={form.hasCostCenter}
+              disabled={editing}
               onChange={(e) =>
                 setForm({
                   ...form,
@@ -298,6 +299,7 @@ export function AccountDrawer({
             <Checkbox
               label="Cost object (department)"
               checked={form.hasCostObject}
+              disabled={editing}
               onChange={(e) =>
                 setForm({
                   ...form,
@@ -364,6 +366,7 @@ export function AccountDrawer({
           <Checkbox
             label="Allow manual journal"
             checked={form.allowManualJe}
+            disabled={editing}
             onChange={(e) => setForm({ ...form, allowManualJe: e.target.checked })}
           />
           {editing && (
@@ -390,6 +393,7 @@ export function AccountDrawer({
           label="Notes"
           rows={2}
           value={form.notes}
+          disabled={editing}
           onChange={(e) => setForm({ ...form, notes: e.target.value })}
           className="sm:col-span-2"
         />

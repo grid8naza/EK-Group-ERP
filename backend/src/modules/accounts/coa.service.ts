@@ -429,27 +429,59 @@ export class CoaService {
     return mainGroup;
   }
 
+  /**
+   * Rename a group, or take it out of use. Nothing else: see UpdateGroupDto.
+   *
+   * A heading is only out of use once everything filed under it is, so a group
+   * cannot be deactivated while a live sub-group or account still hangs from
+   * it — otherwise the chart would show a closed heading with open accounts
+   * inside, and nothing downstream would know which to believe. The same rule
+   * read the other way stops a group being reopened under a closed parent.
+   */
   async updateGroup(id: number, dto: UpdateGroupDto) {
     const existing = await this.prisma.accountGroup.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Account group not found');
-    if (dto.mainGroup && existing.parentGroupId) {
-      throw new BadRequestException(
-        'A sub-group reports under its parent group; set the schedule there.',
-      );
+
+    if (dto.isActive === false && existing.isActive) {
+      await this.assertEmptyOfLive(existing.id, `${existing.code} ${existing.name}`);
     }
+    if (dto.isActive === true && !existing.isActive && existing.parentGroupId) {
+      const parent = await this.prisma.accountGroup.findUnique({
+        where: { id: existing.parentGroupId },
+        select: { code: true, name: true, isActive: true },
+      });
+      if (parent && !parent.isActive) {
+        throw new BadRequestException(
+          `${parent.code} ${parent.name} is inactive. Reopen it before reopening what sits under it.`,
+        );
+      }
+    }
+
     return this.prisma.accountGroup.update({
       where: { id },
-      data: {
-        name: dto.name?.trim(),
-        mainGroup:
-          dto.mainGroup === undefined
-            ? undefined
-            : this.checkedMainGroup(dto.mainGroup, existing.nature),
-        tallyGroup:
-          dto.tallyGroup !== undefined ? dto.tallyGroup?.trim() || null : undefined,
-        isActive: dto.isActive,
-      },
+      data: { name: dto.name?.trim(), isActive: dto.isActive },
     });
+  }
+
+  /** Refuse to close a heading that still has anything live filed under it. */
+  private async assertEmptyOfLive(groupId: number, label: string) {
+    const [children, accounts] = await Promise.all([
+      this.prisma.accountGroup.count({
+        where: { parentGroupId: groupId, isActive: true },
+      }),
+      this.prisma.account.count({ where: { groupId, isActive: true } }),
+    ]);
+    if (children || accounts) {
+      const held = [
+        children ? `${children} active sub-group${children === 1 ? '' : 's'}` : null,
+        accounts ? `${accounts} active account${accounts === 1 ? '' : 's'}` : null,
+      ]
+        .filter(Boolean)
+        .join(' and ');
+      throw new BadRequestException(
+        `${label} still holds ${held}. Deactivate them first — a heading is only closed once everything under it is.`,
+      );
+    }
   }
 
   /**
@@ -496,35 +528,30 @@ export class CoaService {
    * side are structural — changing one would silently move an account between
    * statements — so they are not editable here.
    */
+  /**
+   * Rename an account, or take it out of use. Nothing else: see
+   * UpdateAccountDto.
+   *
+   * An account may only be reopened while its group is open, which is the other
+   * half of the rule that closes a heading only once everything under it is
+   * closed.
+   */
   async updateAccount(id: number, dto: UpdateAccountDto) {
-    const existing = await this.prisma.account.findUnique({ where: { id } });
+    const existing = await this.prisma.account.findUnique({
+      where: { id },
+      include: { group: { select: { code: true, name: true, isActive: true } } },
+    });
     if (!existing) throw new NotFoundException('Account not found');
 
-    // The two boxes are one decision, and a PATCH may carry either alone, so
-    // the missing half is read off the record. Clearing the centre clears the
-    // department with it — a department with no division to sit in is not a
-    // state the entry screen could honour.
-    let cost: Partial<Pick<typeof existing, 'hasCostCenter' | 'hasCostObject'>> =
-      {};
-    if (dto.hasCostCenter !== undefined || dto.hasCostObject !== undefined) {
-      cost =
-        dto.hasCostCenter === false && dto.hasCostObject !== true
-          ? { hasCostCenter: false, hasCostObject: false }
-          : costFlags(
-              dto.hasCostCenter ?? existing.hasCostCenter,
-              dto.hasCostObject ?? existing.hasCostObject,
-            );
+    if (dto.isActive === true && !existing.isActive && !existing.group.isActive) {
+      throw new BadRequestException(
+        `${existing.group.code} ${existing.group.name} is inactive. Reopen the group before the accounts under it.`,
+      );
     }
 
     return this.prisma.account.update({
       where: { id },
-      data: {
-        name: dto.name?.trim(),
-        notes: dto.notes !== undefined ? dto.notes?.trim() || null : undefined,
-        ...cost,
-        allowManualJe: dto.allowManualJe,
-        isActive: dto.isActive,
-      },
+      data: { name: dto.name?.trim(), isActive: dto.isActive },
     });
   }
 }

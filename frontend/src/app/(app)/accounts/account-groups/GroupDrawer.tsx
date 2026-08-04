@@ -24,9 +24,11 @@ const NATURE_OPTIONS = [
  * signifies. A child takes its nature from the parent it rolls up into — letting
  * it differ would put a balance in a different statement from its own parent.
  *
- * On an EXISTING group the code, parent and nature are read-only, for the same
- * reason the account form fixes its own structural fields: changing one would
- * move balances between statements after the fact.
+ * On an EXISTING group only the NAME and whether it is still in use may change.
+ * Its code, parent, nature and schedule decide where the balances beneath it
+ * are presented, so moving any of them would restate statements already
+ * published. A group is taken out of use only once everything filed under it
+ * is — the server refuses the rest.
  */
 export function GroupDrawer({
   open,
@@ -77,13 +79,9 @@ export function GroupDrawer({
     setSaving(true);
     try {
       if (editing) {
-        await api.patch(`/coa/groups/${group!.id}`, {
-          name,
-          // Only a top-level group carries a schedule of its own.
-          ...(group!.parentGroupId ? {} : { mainGroup: mainGroup || undefined }),
-          tallyGroup,
-          isActive,
-        });
+        // Only these two: a group's shape decides where the balances beneath
+        // it are presented, so it is settled when the group is created.
+        await api.patch(`/coa/groups/${group!.id}`, { name, isActive });
         toast.success('Group saved.');
       } else {
         await api.post('/coa/groups', {
@@ -192,7 +190,7 @@ export function GroupDrawer({
                 (editing ? group!.nature : nature) as AccountNature,
               ).map((m) => ({ value: m.key, label: m.label }))}
               placeholder={nature || editing ? 'Not classified' : 'Choose what it holds first'}
-              disabled={!editing && !nature}
+              disabled={editing || !nature}
             />
             <Hint>
               The schedule this block reports under — where it lands in the
@@ -205,6 +203,7 @@ export function GroupDrawer({
           <Input
             label="Tally primary group"
             value={tallyGroup}
+            disabled={editing}
             onChange={(e) => setTallyGroup(e.target.value)}
             placeholder={parent?.tallyGroup ?? 'Optional'}
           />
@@ -212,11 +211,17 @@ export function GroupDrawer({
         </div>
 
         {editing && (
-          <Checkbox
-            label="Active"
-            checked={isActive}
-            onChange={(e) => setIsActive(e.target.checked)}
-          />
+          <div>
+            <Checkbox
+              label="Active"
+              checked={isActive}
+              onChange={(e) => setIsActive(e.target.checked)}
+            />
+            <Hint>
+              A heading can only be closed once every sub-group and account under
+              it is closed.
+            </Hint>
+          </div>
         )}
       </div>
     </Drawer>
