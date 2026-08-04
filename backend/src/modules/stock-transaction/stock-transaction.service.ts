@@ -13,6 +13,7 @@ import {
   BatchNumberingPort,
 } from '../../contracts/batch-numbering.port';
 import { assertUnlocked } from '../../common/assert-unlocked';
+import { resolveEntryRules } from '../../common/entry-rules';
 import { assertBatchesFree } from '../../common/assert-batches-free';
 import { maxBatchSeq } from '../../common/max-batch-seq';
 import { withNumberRetry } from '../../common/with-number-retry';
@@ -1366,18 +1367,38 @@ export class StockTransactionService {
   /**
    * Validate the costing chosen on a document header.
    *
-   * Both must belong to the posting company, and the object must sit under the
-   * chosen centre — the ids come from the client, so a mismatched pair would
-   * otherwise charge another company's books. An object without a centre is
-   * rejected rather than silently kept: a cost object is only meaningful under
-   * its centre.
+   * A stock document names no ledger account, so only the first of the two
+   * entry checkpoints applies: what the COMPANY works in. A centre sent to a
+   * company that is not cost-centre-applicable is dropped rather than stored —
+   * it could never be reported on, and refusing the document would break a
+   * caller that stamps its costing on every save.
+   *
+   * Beyond that, both must belong to the posting company and the object must
+   * sit under the chosen centre — the ids come from the client, so a mismatched
+   * pair would otherwise charge another company's books. An object without a
+   * centre is rejected rather than silently kept: a cost object is only
+   * meaningful under its centre.
    */
   private async assertHeaderCosting(
     companyId: number,
     dto: { costCenterId?: number | null; costObjectId?: number | null },
   ): Promise<LineCosting> {
-    const costCenterId = dto.costCenterId ?? null;
-    const costObjectId = dto.costObjectId ?? null;
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: {
+        branchApplicable: true,
+        costCenterApplicable: true,
+        costObjectApplicable: true,
+      },
+    });
+    if (!company) throw new BadRequestException('Company not found.');
+    // No account: the rules come back OPTIONAL where the company allows the
+    // dimension and OFF where it does not.
+    const rules = resolveEntryRules(company, null);
+    const costCenterId =
+      rules.costCenter === 'OFF' ? null : (dto.costCenterId ?? null);
+    const costObjectId =
+      rules.costObject === 'OFF' ? null : (dto.costObjectId ?? null);
     if (costCenterId == null && costObjectId == null) return NO_COSTING;
     if (costCenterId == null) {
       throw new BadRequestException(

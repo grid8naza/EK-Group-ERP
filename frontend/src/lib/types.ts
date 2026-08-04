@@ -2078,6 +2078,20 @@ export interface CoaAccount {
   localName: string | null;
   allowPosting: boolean | null;
   adoptionActive: boolean | null;
+  /**
+   * Both checkpoints resolved — the company's setup and this account's own
+   * rule. Null when no company is active.
+   */
+  entryRules: EntryRules | null;
+}
+
+/** What a document asks for at data entry. */
+export type EntryFieldRule = 'REQUIRED' | 'OPTIONAL' | 'OFF';
+
+export interface EntryRules {
+  branch: EntryFieldRule;
+  costCenter: EntryFieldRule;
+  costObject: EntryFieldRule;
 }
 
 export interface CostCentreCategory {

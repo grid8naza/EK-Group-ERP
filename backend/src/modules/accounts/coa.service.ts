@@ -7,6 +7,10 @@ import {
 import { AccountNature, BalanceSide, StatementType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
+  CompanyEntrySetup,
+  resolveEntryRules,
+} from '../../common/entry-rules';
+import {
   CreateAccountDto,
   CreateGroupDto,
   UpdateAccountDto,
@@ -68,6 +72,11 @@ export class CoaService {
    * would make it impossible to adopt anything new from the UI.
    */
   async accounts(companyId: number | undefined) {
+    // Level 1 of the two checkpoints. What an account ASKS for is one thing;
+    // what this company is set up to work in is another, and the screen has to
+    // show the second, not the first — an account that asks for a cost centre
+    // in a company that does not use them asks for nothing.
+    const setup = companyId ? await this.companySetup(companyId) : null;
     const rows = await this.prisma.account.findMany({
       include: {
         group: { select: { id: true, code: true, name: true } },
@@ -88,6 +97,7 @@ export class CoaService {
     return rows.map(({ companies, ...a }) => {
       // A deactivated row is a dropped adoption, not an adoption.
       const mine = companies?.find((c) => c.isActive);
+      const rules = setup ? resolveEntryRules(setup, a) : null;
       return {
         ...a,
         adopted: !!mine,
@@ -95,8 +105,48 @@ export class CoaService {
         localName: mine?.localName ?? null,
         allowPosting: mine?.allowPosting ?? null,
         adoptionActive: mine?.isActive ?? null,
+        /** Both checkpoints together — what an entry here is actually asked for. */
+        entryRules: rules,
       };
     });
+  }
+
+  /** Level 1: what this company works in at all. */
+  private async companySetup(companyId: number): Promise<CompanyEntrySetup> {
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: {
+        branchApplicable: true,
+        costCenterApplicable: true,
+        costObjectApplicable: true,
+      },
+    });
+    if (!company) throw new NotFoundException('Company not found');
+    return company;
+  }
+
+  /**
+   * What a line to this account must carry in this company — the two
+   * checkpoints resolved into one answer, for the entry screen to build itself
+   * from and the posting engine to enforce.
+   */
+  async entryRules(companyId: number | undefined, accountId: number) {
+    if (!companyId) throw new NotFoundException('Select a company first.');
+    const account = await this.prisma.account.findUnique({
+      where: { id: accountId },
+      select: { id: true, code: true, name: true, hasCostCenter: true, hasCostObject: true },
+    });
+    if (!account) throw new NotFoundException('Account not found');
+    const setup = await this.companySetup(companyId);
+    return {
+      accountId: account.id,
+      company: setup,
+      account: {
+        hasCostCenter: account.hasCostCenter,
+        hasCostObject: account.hasCostObject,
+      },
+      rules: resolveEntryRules(setup, account),
+    };
   }
 
   costCentreCategories() {

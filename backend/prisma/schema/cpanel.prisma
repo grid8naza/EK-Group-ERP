@@ -109,6 +109,11 @@ model Company {
   financialYearStartMonth Int? // 1 = January … 12 = December
   financialYearEndMonth   Int? // 1 = January … 12 = December
   booksStartDate          DateTime? // books of accounts start from
+  // The FIRST of the two data-entry checkpoints: what this company works in at
+  // all. The second is per ledger account (Account.hasCostCenter /
+  // hasCostObject). Both are resolved together in src/common/entry-rules.ts —
+  // whichever is narrower wins, so a company with cost centres switched off is
+  // never asked for one whatever an account says.
   costCenterApplicable    Boolean   @default(false)
   costObjectApplicable    Boolean   @default(false) // when true, cost objects can be created (requires costCenterApplicable)
   branchApplicable        Boolean   @default(false) // when true, branches can be created for this company

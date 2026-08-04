@@ -311,6 +311,23 @@ export function AccountDrawer({
             Unticked, the entry screen does not ask and the field stays blank on
             the line. Company and branch are asked for on every entry.
           </p>
+          {/* Level 1 overrides level 2, so say so where it bites rather than
+              leaving a ticked box that nothing acts on. */}
+          {account?.entryRules && form.hasCostCenter &&
+            account.entryRules.costCenter === 'OFF' && (
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                {companyName} is not set up for cost centres, so nothing is asked
+                for here until that is turned on in the company master.
+              </p>
+            )}
+          {account?.entryRules && form.hasCostObject &&
+            account.entryRules.costObject === 'OFF' &&
+            account.entryRules.costCenter !== 'OFF' && (
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                {companyName} is not set up for cost objects, so only the cost
+                centre is asked for here.
+              </p>
+            )}
         </div>
 
         <div className="sm:col-span-2 flex flex-wrap gap-x-6 gap-y-2 border-t border-slate-200 pt-3 dark:border-slate-700">

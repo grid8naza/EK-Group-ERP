@@ -45,12 +45,27 @@ const NATURE_TONE: Record<AccountNature, string> = {
   EXPENSE: 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300',
 };
 
-/** Only what a posting needs to know shows as a chip; the rest stays in detail. */
+/**
+ * Only what a posting needs to know shows as a chip; the rest stays in detail.
+ *
+ * The cost chips read off the RESOLVED rules, not the account's own boxes: an
+ * account that asks for a cost centre in a company that does not work in cost
+ * centres asks for nothing, and the screen would be lying to say otherwise.
+ */
 const flagsOf = (a: CoaAccount) => {
   const out: string[] = [];
   if (a.isControl) out.push(`Control · ${a.controlParty}`);
-  if (a.hasCostObject) out.push('Cost centre + object');
-  else if (a.hasCostCenter) out.push('Cost centre');
+  const asksCentre = a.entryRules
+    ? a.entryRules.costCenter === 'REQUIRED'
+    : a.hasCostCenter;
+  const asksObject = a.entryRules
+    ? a.entryRules.costObject === 'REQUIRED'
+    : a.hasCostObject;
+  if (asksObject) out.push('Cost centre + object');
+  else if (asksCentre) out.push('Cost centre');
+  // Ticked on the account but switched off for this company — worth saying,
+  // because the box in the drawer will look ticked and nothing will ask.
+  else if (a.hasCostCenter) out.push('Cost centre — off for this company');
   if (a.isContra) out.push('Contra');
   if (a.isIntercompany) out.push('Intercompany');
   if (a.isBankOrCash) out.push('Bank / cash');

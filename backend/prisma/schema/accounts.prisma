@@ -135,6 +135,12 @@ model Account {
   /// it never asks and the line's costCenterId stays null. Company and branch
   /// are asked for on every entry regardless — they are not analysis
   /// dimensions but the tenant the entry belongs to.
+  ///
+  /// This is the SECOND of two checkpoints. The first is the company's own
+  /// setup (Company.costCenterApplicable / costObjectApplicable /
+  /// branchApplicable): a company that does not work in cost centres has none
+  /// to name, so nothing is asked for however this is set. Both are resolved
+  /// together, and only there — src/common/entry-rules.ts.
   hasCostCenter Boolean @default(false)
   /// The same for the cost object — the department under the centre. A
   /// department cannot be named without its division, so ticking this ticks

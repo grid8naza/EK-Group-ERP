@@ -46,6 +46,19 @@ export class CoaController {
     return this.service.costCentreCategories();
   }
 
+  /**
+   * What a line to this account must carry in the active company — the company
+   * setup and the account's own rule resolved into one answer, so an entry
+   * screen builds itself from this rather than working it out again.
+   */
+  @Get('accounts/:id/entry-rules')
+  entryRules(
+    @CompanyId() companyId: number | undefined,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.service.entryRules(companyId, id);
+  }
+
   /** The next free code in a group, so the form can propose one. */
   @Get('groups/:id/next-account-code')
   nextAccountCode(@Param('id', ParseIntPipe) id: number) {
