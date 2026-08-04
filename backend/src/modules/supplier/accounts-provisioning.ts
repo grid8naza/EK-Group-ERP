@@ -24,6 +24,22 @@ export const ACCOUNTS_SUBS = [
   },
 ];
 
+// Where the books are actually written. Its own main menu rather than a screen
+// under Accounts Setup: setting up a chart and posting to it daily are
+// different work, done by different people.
+export const ACCOUNTS_VOUCHER_MENU = {
+  name: 'Accounts Vouchers',
+  icon: 'book-open-check',
+  subs: [
+    {
+      name: 'Voucher Entry',
+      route: '/accounts/vouchers',
+      icon: 'pencil-line',
+      order: 1,
+    },
+  ],
+};
+
 // The Chart of Accounts itself is a REPORT — the master read as a statement
 // would be, groups over sub-groups over ledgers, with print and export. It
 // keeps the /accounts/chart-of-accounts route it has always had, so the

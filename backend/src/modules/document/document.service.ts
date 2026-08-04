@@ -34,6 +34,12 @@ const SYSTEM_DOCUMENTS: { code: string; name: string }[] = [
   { code: 'PRODUCT_TRANSFER', name: 'Product Transfer' },
   { code: 'STOCK_TRANSFER', name: 'Stock Transfer' },
   { code: 'STOCK_JOURNAL', name: 'Stock Journal' },
+  // Ledger vouchers. Each kind numbers separately, so a payment and a receipt
+  // raised on the same day do not share a series.
+  { code: 'JOURNAL_VOUCHER', name: 'Journal Voucher' },
+  { code: 'PAYMENT_VOUCHER', name: 'Payment Voucher' },
+  { code: 'RECEIPT_VOUCHER', name: 'Receipt Voucher' },
+  { code: 'CONTRA_VOUCHER', name: 'Contra Voucher' },
 ];
 
 // Inventory transaction type / subtype master lookups + per-document mapping,

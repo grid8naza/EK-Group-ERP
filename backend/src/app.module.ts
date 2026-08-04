@@ -41,6 +41,7 @@ import { HrDesignationModule } from './modules/hr-designation/hr-designation.mod
 import { WorkflowModule } from './modules/workflow/workflow.module';
 import { CrmModule } from './modules/crm/crm.module';
 import { PurchaseModule } from './modules/purchase/purchase.module';
+import { VoucherModule } from './modules/voucher/voucher.module';
 import { LoginScreenModule } from './modules/login-screen/login-screen.module';
 import { SoftwareInfoModule } from './modules/software-info/software-info.module';
 import { DocumentModule } from './modules/document/document.module';
@@ -90,6 +91,7 @@ import { ScaffoldModule } from './scaffold/scaffold.module';
     WorkflowModule,
     CrmModule,
     PurchaseModule,
+    VoucherModule,
     LoginScreenModule,
     SoftwareInfoModule,
     DocumentModule,

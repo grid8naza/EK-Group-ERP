@@ -2115,6 +2115,50 @@ export interface EntryRules {
   costObject: EntryFieldRule;
 }
 
+// ---- Accounts: the general ledger ----
+
+export type VoucherStatus = 'DRAFT' | 'POSTED' | 'CANCELLED';
+
+export interface VoucherType {
+  id: number;
+  code: string;
+  name: string;
+  nature: string;
+  isSystemOnly: boolean;
+  documentCode: string;
+  isActive: boolean;
+}
+
+/** Amounts arrive as strings — the ledger is DECIMAL, not float. */
+export interface VoucherLine {
+  id: number;
+  sequence: number;
+  accountId: number;
+  account?: { id: number; code: string; name: string; nature: AccountNature };
+  costCenterId: number | null;
+  costObjectId: number | null;
+  debit: string | number;
+  credit: string | number;
+  narration: string | null;
+}
+
+export interface Voucher {
+  id: number;
+  companyId: number;
+  branchId: number | null;
+  voucherTypeId: number;
+  type?: VoucherType;
+  voucherNo: string;
+  date: string;
+  narration: string | null;
+  status: VoucherStatus;
+  totalDebit: string | number;
+  totalCredit: string | number;
+  cancelReason: string | null;
+  postedAt: string | null;
+  lines: VoucherLine[];
+}
+
 export interface CostCentreCategory {
   code: string;
   name: string;

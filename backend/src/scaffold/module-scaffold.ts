@@ -27,6 +27,7 @@ import { PURCHASE_SUBS } from '../modules/purchase/purchase-provisioning';
 import {
   ACCOUNTS_SUBS,
   ACCOUNTS_REPORT_MENUS,
+  ACCOUNTS_VOUCHER_MENU,
 } from '../modules/supplier/accounts-provisioning';
 
 /**
@@ -127,7 +128,8 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     autoEnable: true, // on for every company so the Supplier Master appears
     menu: { name: 'Accounts Setup', icon: 'wallet' },
     subs: ACCOUNTS_SUBS,
-    extraMenus: ACCOUNTS_REPORT_MENUS,
+    // Order: Accounts Setup → Accounts Vouchers → Accounts Report.
+    extraMenus: [ACCOUNTS_VOUCHER_MENU, ...ACCOUNTS_REPORT_MENUS],
   },
   {
     code: 'INVENTORY',

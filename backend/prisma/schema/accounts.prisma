@@ -90,6 +90,33 @@ enum MainGroup {
   INDIRECT_EXPENSE
 }
 
+/// What a voucher IS — the kind of transaction it records (Annexure D.11).
+enum VoucherNature {
+  JOURNAL
+  PAYMENT
+  RECEIPT
+  CONTRA
+  SALES
+  PURCHASE
+  CREDIT_NOTE
+  DEBIT_NOTE
+  PAYROLL
+  DEPRECIATION
+  INTERCOMPANY
+  MESS
+  GST_SETOFF
+  OPENING
+}
+
+/// A voucher is written, then posted, and thereafter only cancelled. There is
+/// no fourth state: a posted voucher is never edited and never deleted, because
+/// the books have to say what they said (D.12).
+enum VoucherStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+}
+
 /// The sub-ledger a control account is aged by.
 enum PartyKind {
   SUPPLIER
@@ -197,8 +224,9 @@ model Account {
   /// consolidation never collides.
   ownerCompanyId Int? // -> Cpanel Company (plain id)
 
-  group     AccountGroup     @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  companies AccountCompany[]
+  group        AccountGroup     @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  companies    AccountCompany[]
+  voucherLines VoucherLine[]
 
   @@index([groupId])
   @@index([isActive])
@@ -254,4 +282,116 @@ model CostCentreCategory {
   isActive    Boolean @default(true)
 
   @@map("cost_centre_categories")
+}
+
+// -----------------------------------------------------------------------------
+// The general ledger — Annexure D.11.
+//
+// Amounts here are DECIMAL, not Float, which is the one place this schema
+// departs from the rest of the ERP on purpose: the annexure forbids
+// floating-point in the accounting schema (D.10), and a voucher that must
+// balance exactly is precisely where 0.1 + 0.2 stops being 0.3.
+//
+// company, branch, date and status are carried on the LINE as well as the
+// header, so a ledger or trial-balance query never has to join upward.
+// -----------------------------------------------------------------------------
+
+/// The kinds of voucher the books recognise. Seeded; a company may deactivate
+/// one it does not use but the set itself is not user data — the posting map
+/// (D.9) names these.
+model VoucherType {
+  id     Int           @id @default(autoincrement())
+  code   String        @unique // JOURNAL, PAYMENT, …
+  name   String
+  nature VoucherNature
+  /// Written by a module (a sale, a payroll run), never by hand — kept out of
+  /// the manual entry screen so nobody writes a sales voucher beside the
+  /// invoice that should have raised it.
+  isSystemOnly Boolean @default(false)
+  /// The Document Master code its numbering rule is keyed on, so each kind has
+  /// its own series and its own configurable prefix.
+  documentCode String
+  sortOrder    Int     @default(0)
+  isActive     Boolean @default(true)
+
+  vouchers Voucher[]
+
+  @@map("voucher_types")
+}
+
+/// A voucher header. One per transaction; the money is on its lines.
+model Voucher {
+  id            Int      @id @default(autoincrement())
+  companyId     Int // -> Cpanel Company (plain id)
+  branchId      Int? // -> Cpanel Branch (plain id)
+  voucherTypeId Int
+  voucherNo     String
+  date          DateTime
+  narration     String?
+
+  status VoucherStatus @default(DRAFT)
+  /// Running totals, kept on the header so a listing needs no aggregate. They
+  /// are equal on every POSTED voucher — that is what posting checks.
+  totalDebit  Decimal @default(0) @db.Decimal(18, 2)
+  totalCredit Decimal @default(0) @db.Decimal(18, 2)
+
+  /// Where a machine-written voucher came from, so a posting can be traced back
+  /// to the invoice or payroll run that raised it (and posted only once).
+  sourceModule  String?
+  sourceDocType String?
+  sourceDocId   Int?
+
+  /// The voucher this one reverses — a correction is a reversal, never an edit.
+  reversesVoucherId Int?
+  cancelReason      String?
+
+  createdByUserId Int?
+  postedByUserId  Int?
+  postedAt        DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  type  VoucherType   @relation(fields: [voucherTypeId], references: [id], onDelete: Restrict)
+  lines VoucherLine[]
+
+  /// One number per kind per company. Numbers are derived (MAX + 1), so the
+  /// constraint is what makes a race loud rather than silent.
+  @@unique([companyId, voucherTypeId, voucherNo])
+  @@index([companyId, date])
+  @@index([companyId, status])
+  @@index([sourceModule, sourceDocType, sourceDocId])
+  @@map("vouchers")
+}
+
+/// The general ledger itself: one row per debit or credit.
+model VoucherLine {
+  id        Int @id @default(autoincrement())
+  voucherId Int
+  sequence  Int @default(0)
+
+  companyId Int
+  branchId  Int?
+  accountId Int
+  /// Named only where the account asks for one — see Account.hasCostCenter and
+  /// src/common/entry-rules.ts, which decides that from the company's setup and
+  /// the account's own rule together.
+  costCenterId Int? // -> Cpanel CostCenter (plain id)
+  costObjectId Int? // -> Cpanel CostObject (plain id)
+
+  /// A line carries either a debit or a credit, never both and never neither.
+  debit     Decimal @default(0) @db.Decimal(18, 2)
+  credit    Decimal @default(0) @db.Decimal(18, 2)
+  narration String?
+
+  /// Denormalized from the header so the ledger reads without a join.
+  date   DateTime
+  status VoucherStatus @default(DRAFT)
+
+  voucher Voucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  account Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([voucherId])
+  @@index([companyId, accountId, date])
+  @@index([companyId, costCenterId, date])
+  @@map("voucher_lines")
 }

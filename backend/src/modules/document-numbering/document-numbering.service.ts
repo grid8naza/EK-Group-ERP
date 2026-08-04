@@ -46,7 +46,28 @@ type NumberSource = (
 /** Newest numbers first; zero-padding makes the string order the numeric one. */
 const SCAN_LIMIT = 200;
 
+/**
+ * Vouchers all live in one table, so a kind's issued numbers are its own rows —
+ * filtered by voucher type, or a payment would read a receipt's numbers back as
+ * its own and the two series would leapfrog each other.
+ */
+const voucherSource =
+  (typeCode: string): NumberSource =>
+  (p, companyId, voucherNo) =>
+    p.voucher
+      .findMany({
+        where: { companyId, voucherNo, type: { code: typeCode } },
+        select: { voucherNo: true },
+        orderBy: { voucherNo: 'desc' },
+        take: SCAN_LIMIT,
+      })
+      .then((r) => r.map((x) => x.voucherNo));
+
 const SOURCES: Record<string, NumberSource[]> = {
+  JOURNAL_VOUCHER: [voucherSource('JOURNAL')],
+  PAYMENT_VOUCHER: [voucherSource('PAYMENT')],
+  RECEIPT_VOUCHER: [voucherSource('RECEIPT')],
+  CONTRA_VOUCHER: [voucherSource('CONTRA')],
   OPENING_STOCK: [
     (p, companyId, docNo) =>
       p.openingStock
