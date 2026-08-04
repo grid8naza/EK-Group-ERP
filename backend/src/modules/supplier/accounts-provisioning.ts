@@ -40,6 +40,16 @@ export const ACCOUNTS_REPORT_MENUS = [
         order: 1,
         objectType: ObjectType.REPORT,
       },
+      // The headings on their own — the shape of the chart without the 253
+      // accounts hanging off it, which is what you print to agree the
+      // structure rather than the contents.
+      {
+        name: 'Account Groups',
+        route: '/accounts/reports/account-groups',
+        icon: 'network',
+        order: 2,
+        objectType: ObjectType.REPORT,
+      },
     ],
   },
 ];
