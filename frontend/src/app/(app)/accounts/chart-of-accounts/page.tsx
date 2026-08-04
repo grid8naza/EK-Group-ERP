@@ -140,6 +140,8 @@ export default function ChartOfAccountsReportPage() {
   // A chart is normally read for ONE company's books, so it opens on what this
   // company has adopted; the whole master is a filter away.
   const [scope, setScope] = useState('adopted'); // 'adopted' | 'all'
+  const [primary, setPrimary] = useState(''); // '' = all four
+  const [groupId, setGroupId] = useState(''); // '' = every group in scope
 
   const { hidden, toggle, selected } = useReportColumns(ROUTE, ALL_COLUMNS);
   const companyName = resolveCompanyName(
@@ -152,6 +154,16 @@ export default function ChartOfAccountsReportPage() {
     () => (accounts ?? []).filter((a) => scope === 'all' || a.adopted),
     [accounts, scope],
   );
+
+  // The blocks a group filter can pick from — top-level groups only, narrowed
+  // to the chosen primary group so the two filters read as one drill-down.
+  const groupOptions = useMemo(() => {
+    const natures = PRIMARY_GROUPS.find((p) => p.key === primary)?.natures;
+    return (groups ?? [])
+      .filter((g) => !g.parentGroupId && (!natures || natures.includes(g.nature)))
+      .sort((a, b) => a.code.localeCompare(b.code))
+      .map((g) => ({ value: String(g.id), label: `${g.code} · ${g.name}` }));
+  }, [groups, primary]);
 
   const { blocks, perPrimary } = useMemo(() => {
     const all = groups ?? [];
@@ -172,11 +184,23 @@ export default function ChartOfAccountsReportPage() {
     const blocks: ReportBlock[] = [];
     const perPrimary: number[] = [];
 
-    for (const primary of PRIMARY_GROUPS) {
+    for (const section of PRIMARY_GROUPS) {
+      // The counts under the summary describe the chart as filtered, so a
+      // section filtered out counts nought rather than being left to imply its
+      // unfiltered total.
+      if (primary && section.key !== primary) {
+        perPrimary.push(0);
+        continue;
+      }
       // The blocks of this primary group — 10000 Fixed Assets, 12000
       // Inventories, and so on.
       const roots = all
-        .filter((g) => !g.parentGroupId && primary.natures.includes(g.nature))
+        .filter(
+          (g) =>
+            !g.parentGroupId &&
+            section.natures.includes(g.nature) &&
+            (!groupId || String(g.id) === groupId),
+        )
         .sort((a, b) => a.code.localeCompare(b.code));
 
       const tables: ReportTable[] = [];
@@ -213,27 +237,41 @@ export default function ChartOfAccountsReportPage() {
       // "adopted only" a company can drop whole blocks, and a page of empty
       // headings is not a chart of accounts.
       if (!count) continue;
-      blocks.push({ heading: primary.label, count, tables });
+      blocks.push({ heading: section.label, count, tables });
     }
     return { blocks, perPrimary };
-  }, [groups, rows, selected]);
+  }, [groups, rows, selected, primary, groupId]);
+
+  /** What the chart is showing, once both filters have had their say. */
+  const shown = perPrimary.reduce((n, c) => n + c, 0);
 
   const summary = useMemo(
     () => [
+      // Only the sections actually on the page — a filtered chart listing three
+      // zeroes says nothing.
       ...PRIMARY_GROUPS.map((p, i) => ({
         label: p.label,
         value: perPrimary[i] ?? 0,
-      })),
-      { label: 'Ledger Accounts', value: rows.length },
+      })).filter((s) => s.value > 0),
+      { label: 'Ledger Accounts', value: shown },
     ],
-    [perPrimary, rows],
+    [perPrimary, shown],
   );
+
+  const filterNote = [
+    primary ? PRIMARY_GROUPS.find((p) => p.key === primary)?.label : null,
+    groupId ? groupOptions.find((o) => o.value === groupId)?.label : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   const spec: ReportSpec = {
     companyName,
-    subtitle: `Chart of Accounts - ${rows.length} ledger accounts${
+    // The subtitle carries the filters, so a printed page says what it is
+    // rather than looking like a chart with accounts missing.
+    subtitle: `Chart of Accounts - ${shown} ledger accounts${
       scope === 'adopted' ? ' in use' : ' (full master)'
-    }`,
+    }${filterNote ? ` - ${filterNote}` : ''}`,
     columns: selected.columns,
     weights: selected.weights,
     blocks,
@@ -242,7 +280,7 @@ export default function ChartOfAccountsReportPage() {
     numericCols: selected.numericCols,
   };
 
-  const has = rows.length > 0;
+  const has = shown > 0;
   const canPrint = can(ROUTE, 'print');
   const popupBlocked = () =>
     toast.error('Pop-up blocked — allow pop-ups to print.');
@@ -284,6 +322,25 @@ export default function ChartOfAccountsReportPage() {
               { value: 'adopted', label: 'Accounts this company uses' },
               { value: 'all', label: 'The whole master' },
             ]}
+            className="w-60"
+          />
+          <Select
+            value={primary}
+            onChange={(e) => {
+              setPrimary(e.target.value);
+              // The group list is drawn from the chosen primary, so a group
+              // held by the old one would filter everything away.
+              setGroupId('');
+            }}
+            options={PRIMARY_GROUPS.map((p) => ({ value: p.key, label: p.label }))}
+            placeholder="All primary groups"
+            className="w-48"
+          />
+          <Select
+            value={groupId}
+            onChange={(e) => setGroupId(e.target.value)}
+            options={groupOptions}
+            placeholder="All groups"
             className="w-64"
           />
           <div className="ml-auto flex items-center gap-2">
@@ -293,8 +350,8 @@ export default function ChartOfAccountsReportPage() {
               onToggle={toggle}
             />
             <span className="text-sm text-slate-500 dark:text-slate-400">
-              {rows.length} account{rows.length === 1 ? '' : 's'} in {blockCount}{' '}
-              group{blockCount === 1 ? '' : 's'}
+              {shown} account{shown === 1 ? '' : 's'} in {blockCount} group
+              {blockCount === 1 ? '' : 's'}
             </span>
           </div>
         </div>
@@ -308,7 +365,11 @@ export default function ChartOfAccountsReportPage() {
             // Thirty-six blocks over four sections is more than fits on a
             // screen, so the reader can fold away what they are not looking at.
             collapsible
-            emptyText="No accounts to show — this company has adopted none yet."
+            emptyText={
+              filterNote
+                ? 'No accounts under this filter.'
+                : 'No accounts to show — this company has adopted none yet.'
+            }
           />
         </div>
       </div>

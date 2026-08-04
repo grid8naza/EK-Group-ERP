@@ -194,6 +194,26 @@ export function ReportView({
       if (!next.delete(key)) next.add(key);
       return next;
     });
+  /** Fold or unfold a set of headings together. */
+  const foldAll = (keys: string[], shut: boolean) =>
+    setFolded((prev) => {
+      const next = new Set(prev);
+      for (const k of keys) {
+        if (shut) next.add(k);
+        else next.delete(k);
+      }
+      return next;
+    });
+
+  const keyOfBlock = (b: ReportBlock, bi: number) => b.heading ?? `#${bi}`;
+  const keyOfTable = (
+    blockKey: string,
+    t: ReportBlock['tables'][number],
+    ti: number,
+  ) => `${blockKey}/${t.subheading ?? ti}`;
+  // Sections collapse as one thing; "collapse all" therefore means the section
+  // headings, which takes the whole report down to its four or five lines.
+  const sectionKeys = blocks.map(keyOfBlock);
 
   if (loading)
     return <p className="py-12 text-center text-slate-400">Loading…</p>;
@@ -330,9 +350,35 @@ export function ReportView({
 
   return (
     <div className="pt-4">
+      {collapsible && sectionKeys.length > 0 && (
+        <div className="mb-1 flex justify-end gap-3 text-xs">
+          <button
+            type="button"
+            onClick={() => foldAll(sectionKeys, false)}
+            className="text-slate-500 hover:text-brand-600 dark:text-slate-400"
+          >
+            Expand all
+          </button>
+          <span className="text-slate-300 dark:text-slate-700">|</span>
+          <button
+            type="button"
+            onClick={() => foldAll(sectionKeys, true)}
+            className="text-slate-500 hover:text-brand-600 dark:text-slate-400"
+          >
+            Collapse all
+          </button>
+        </div>
+      )}
       {blocks.map((b, bi) => {
-        const blockKey = b.heading ?? `#${bi}`;
+        const blockKey = keyOfBlock(b, bi);
         const blockShut = collapsible && folded.has(blockKey);
+        // The groups inside this section, so it can be taken down to an
+        // outline of its own headings without touching the rest of the report.
+        const innerKeys = b.tables
+          .map((t, ti) => (t.subheading ? keyOfTable(blockKey, t, ti) : null))
+          .filter((k): k is string => !!k);
+        const innerShut =
+          innerKeys.length > 0 && innerKeys.every((k) => folded.has(k));
         return (
           <div key={bi} className="mb-6">
             {b.heading && (
@@ -350,11 +396,20 @@ export function ReportView({
                     {b.count}
                   </span>
                 )}
+                {collapsible && !blockShut && innerKeys.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => foldAll(innerKeys, !innerShut)}
+                    className="text-xs font-normal text-slate-400 hover:text-brand-600 dark:text-slate-500"
+                  >
+                    {innerShut ? 'Expand groups' : 'Collapse groups'}
+                  </button>
+                )}
               </h2>
             )}
             {!blockShut &&
               b.tables.map((t, ti) => {
-                const tableKey = `${blockKey}/${t.subheading ?? ti}`;
+                const tableKey = keyOfTable(blockKey, t, ti);
                 const shut = collapsible && folded.has(tableKey);
                 return (
                   <div key={ti} className="mb-4">
