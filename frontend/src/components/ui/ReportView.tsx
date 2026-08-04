@@ -222,6 +222,12 @@ export function ReportView({
                 'border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-100/70 dark:border-slate-800/60 dark:hover:bg-slate-800/50',
                 // Zebra striping — even rows carry a faint neutral tint.
                 ri % 2 === 1 && 'bg-slate-50/70 dark:bg-slate-900/40',
+                // A level-1 row (e.g. a group heading among its members). Last,
+                // so it wins over the zebra tint — and matching what print and
+                // PDF already did with the same flag, which on screen did
+                // nothing at all until now.
+                t.shade?.[ri] &&
+                  'bg-emerald-50 font-semibold dark:bg-emerald-950/30',
               )}
             >
               {(serial ? [ri + 1, ...row] : row).map((v, ci) =>
