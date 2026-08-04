@@ -20,6 +20,13 @@ export class CreateCostObjectDto {
   @IsNotEmpty()
   name: string;
 
+  /**
+   * What kind of department this is — DEPT, KITCHEN, CAFE, COUNTER, MESS,
+   * VEHICLE, PROJECT — from the cost-centre category master (Annexure D.7).
+   * Optional; blank clears it.
+   */
+  @IsOptional() @IsString() categoryCode?: string;
+
   @IsOptional() @IsString() description?: string;
   @IsOptional() @IsBoolean() isActive?: boolean;
 }

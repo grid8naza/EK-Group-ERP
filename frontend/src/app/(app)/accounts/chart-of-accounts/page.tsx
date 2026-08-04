@@ -49,7 +49,8 @@ const NATURE_TONE: Record<AccountNature, string> = {
 const flagsOf = (a: CoaAccount) => {
   const out: string[] = [];
   if (a.isControl) out.push(`Control · ${a.controlParty}`);
-  if (a.ccRequirement === 'MANDATORY') out.push('Cost centre required');
+  if (a.hasCostObject) out.push('Cost centre + object');
+  else if (a.hasCostCenter) out.push('Cost centre');
   if (a.isContra) out.push('Contra');
   if (a.isIntercompany) out.push('Intercompany');
   if (a.isBankOrCash) out.push('Bank / cash');
@@ -325,7 +326,8 @@ export default function ChartOfAccountsPage() {
         <p className="basis-full pt-1 text-xs">
           A code ending in 00 is a group heading and is never posted to; only the
           accounts below are. Codes are fixed by the annexure — the name, notes,
-          cost-centre rule and adoption are what you maintain here.
+          adoption and what an entry is asked for (cost centre, cost object) are
+          what you maintain here.
         </p>
       </div>
 

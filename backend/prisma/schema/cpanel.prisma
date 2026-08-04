@@ -79,8 +79,8 @@ model LookupValue {
 
   lookup Lookup @relation(fields: [lookupId], references: [id], onDelete: Cascade)
 
-  docsAsTxnType    Document[] @relation("DocTxnType")
-  docsAsTxnSubtype Document[] @relation("DocTxnSubtype")
+  docsAsTxnType             Document[]  @relation("DocTxnType")
+  docsAsTxnSubtype          Document[]  @relation("DocTxnSubtype")
   userGroupsAsDiscountLevel UserGroup[] @relation("UserGroupDiscountLevel")
 
   @@unique([lookupId, value])
@@ -92,10 +92,10 @@ model LookupValue {
 // ---------------------------------------------------------------------------
 
 model Company {
-  id        Int      @id @default(autoincrement())
-  code      String   @unique
+  id        Int     @id @default(autoincrement())
+  code      String  @unique
   name      String
-  shortName String?  // brand short name shown in the sidebar
+  shortName String? // brand short name shown in the sidebar
   legalName String?
   email     String?
   phone     String?
@@ -144,6 +144,16 @@ model Company {
 // Cost Center & Cost Object masters — per company. Only relevant when the
 // company has costCenterApplicable / costObjectApplicable. A cost object always
 // lives under a cost center.
+//
+// Two fixed levels, and they mean particular things:
+//   · a COST CENTER is a function of the company — Operations, Admin Support —
+//     i.e. its divisions;
+//   · a COST OBJECT is a department within that division.
+// Both are company-scoped and neither is branch-scoped: an accounting entry
+// carries its branch in its own right, so hanging a branch off the centre as
+// well would capture the same fact twice and split "Operations" into one
+// centre per branch. This is where this ERP departs from Annexure D.7, which
+// models an open hierarchy of centres within a branch.
 // ---------------------------------------------------------------------------
 
 model CostCenter {
@@ -171,6 +181,12 @@ model CostObject {
   code         String
   name         String
   description  String?
+  /// What KIND of department this is — DEPT, KITCHEN, CAFE, COUNTER, MESS,
+  /// VEHICLE, PROJECT. A plain code -> Accounts CostCentreCategory (no
+  /// relation: the cross-domain rule). Optional, and only used for reporting:
+  /// it is what lets cost per meal, contribution per counter and running cost
+  /// per vehicle come out of the ledger (Annexure D.7, D.14).
+  categoryCode String?
   isActive     Boolean  @default(true)
   isLocked     Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt    DateTime @default(now())
@@ -366,10 +382,10 @@ model SubMenu {
 // ---------------------------------------------------------------------------
 
 model UserGroup {
-  id          Int      @id @default(autoincrement())
-  companyId   Int
-  name        String
-  description String?
+  id              Int      @id @default(autoincrement())
+  companyId       Int
+  name            String
+  description     String?
   /// Discount authority of this group's members — a DISCOUNT_LEVEL LookupValue
   /// (Inventory module). This is what lets billing turn a login into a discount
   /// ceiling: the group gives the level, and the level indexes the product's
@@ -377,9 +393,9 @@ model UserGroup {
   /// the group may give no discount. Set here rather than per user so it is
   /// maintained once per role; both live in Cpanel, so it is a real relation.
   discountLevelId Int?
-  isLocked    Boolean  @default(false) // when locked, must be unlocked before edit/delete
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isLocked        Boolean  @default(false) // when locked, must be unlocked before edit/delete
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   company         Company                 @relation(fields: [companyId], references: [id], onDelete: Cascade)
   discountLevel   LookupValue?            @relation("UserGroupDiscountLevel", fields: [discountLevelId], references: [id], onDelete: SetNull)
@@ -477,20 +493,20 @@ model Widget {
 // ---------------------------------------------------------------------------
 
 model Dashboard {
-  id          Int      @id @default(autoincrement())
-  companyId   Int? // null = global (core modules like Cpanel); else company-scoped
-  moduleId    Int
-  branchId    Int? // null = company-wide; otherwise scoped to one branch
-  objectId    Int? // optional link to its ObjectMaster DASHBOARD object
-  name        String
-  icon        String?
-  header      Json? // header banner appearance (theme / colors / subtitle / layout)
-  sortOrder   Int      @default(0)
-  isDefault   Boolean  @default(false)
-  isActive    Boolean  @default(true)
-  isLocked    Boolean  @default(false) // when locked, must be unlocked before edit/delete
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        Int      @id @default(autoincrement())
+  companyId Int? // null = global (core modules like Cpanel); else company-scoped
+  moduleId  Int
+  branchId  Int? // null = company-wide; otherwise scoped to one branch
+  objectId  Int? // optional link to its ObjectMaster DASHBOARD object
+  name      String
+  icon      String?
+  header    Json? // header banner appearance (theme / colors / subtitle / layout)
+  sortOrder Int      @default(0)
+  isDefault Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  isLocked  Boolean  @default(false) // when locked, must be unlocked before edit/delete
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   company     Company?              @relation(fields: [companyId], references: [id], onDelete: Cascade)
   module      Module                @relation(fields: [moduleId], references: [id], onDelete: Cascade)
@@ -706,23 +722,23 @@ model SoftwareInfo {
 // rule also carries the running counter state so numbers reset per period.
 // ---------------------------------------------------------------------------
 model Document {
-  id          Int      @id @default(autoincrement())
-  code        String   @unique // stable code services reference (e.g. OPENING_STOCK)
-  name        String
-  description String?
-  isSystem    Boolean  @default(false) // seeded, wired to a real document flow
-  isActive    Boolean  @default(true)
-  isLocked    Boolean  @default(false)
+  id                   Int      @id @default(autoincrement())
+  code                 String   @unique // stable code services reference (e.g. OPENING_STOCK)
+  name                 String
+  description          String?
+  isSystem             Boolean  @default(false) // seeded, wired to a real document flow
+  isActive             Boolean  @default(true)
+  isLocked             Boolean  @default(false)
   // The inventory transaction type / subtype this document posts as, chosen from
   // the "Inventory Transaction Type" / "…Subtype" lookups.
   transactionTypeId    Int?
   transactionSubtypeId Int?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 
   numberingRules     DocumentNumberingRule[]
-  transactionType    LookupValue? @relation("DocTxnType", fields: [transactionTypeId], references: [id], onDelete: SetNull)
-  transactionSubtype LookupValue? @relation("DocTxnSubtype", fields: [transactionSubtypeId], references: [id], onDelete: SetNull)
+  transactionType    LookupValue?            @relation("DocTxnType", fields: [transactionTypeId], references: [id], onDelete: SetNull)
+  transactionSubtype LookupValue?            @relation("DocTxnSubtype", fields: [transactionSubtypeId], references: [id], onDelete: SetNull)
 
   @@map("documents")
 }
@@ -758,8 +774,8 @@ model DocumentNumberingRule {
   // documents themselves (MAX + 1, per period), so clearing a company's
   // documents restarts its numbering instead of stranding a counter nothing
   // backs. See DocumentNumberingService.
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
+  createdAt      DateTime                @default(now())
+  updatedAt      DateTime                @updatedAt
 
   document Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
 

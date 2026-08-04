@@ -9,12 +9,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
-import {
-  AccountNature,
-  BalanceSide,
-  CcRequirement,
-  PartyKind,
-} from '@prisma/client';
+import { AccountNature, BalanceSide, PartyKind } from '@prisma/client';
 
 /** Adopt or drop an account for the active company. */
 export class UpdateAdoptionDto {
@@ -53,9 +48,15 @@ export class UpdateAccountDto {
   @MaxLength(500)
   notes?: string;
 
+  /** Ask for a cost centre on a line to this account. */
   @IsOptional()
-  @IsEnum(CcRequirement)
-  ccRequirement?: CcRequirement;
+  @IsBoolean()
+  hasCostCenter?: boolean;
+
+  /** Ask for a cost object too. Implies hasCostCenter. */
+  @IsOptional()
+  @IsBoolean()
+  hasCostObject?: boolean;
 
   @IsOptional()
   @IsBoolean()
@@ -114,8 +115,12 @@ export class CreateAccountDto {
   controlParty?: PartyKind;
 
   @IsOptional()
-  @IsEnum(CcRequirement)
-  ccRequirement?: CcRequirement;
+  @IsBoolean()
+  hasCostCenter?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  hasCostObject?: boolean;
 
   @IsOptional()
   @IsBoolean()

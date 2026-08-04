@@ -15,10 +15,17 @@
 import {
   AccountNature,
   BalanceSide,
-  CcRequirement,
   PartyKind,
   StatementType,
 } from '@prisma/client';
+
+/**
+ * The annexure's cost-centre rule per account (D.5). It lives here rather than
+ * in the schema because it is a fact about the annexure, not a column: what the
+ * entry screen asks for is Account.hasCostCenter / hasCostObject, which the
+ * seed derives from this.
+ */
+export type CcRequirement = 'MANDATORY' | 'OPTIONAL' | 'NOT_APPLICABLE';
 
 /** The annexure's company codes, mapped to this ERP's companies by code. */
 export const COA_COMPANY_BY_CODE: Record<string, string> = {

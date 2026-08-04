@@ -1,12 +1,32 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
+  CcRequirement,
   COA_ACCOUNTS,
   COA_ADOPTIONS,
   COA_COMPANY_BY_CODE,
   COA_COST_CENTRE_CATEGORIES,
   COA_GROUPS,
 } from './coa-data';
+
+/**
+ * The annexure states a cost-centre rule per account (Mandatory / Optional /
+ * n/a); this ERP asks two plainer questions at data entry — does the line carry
+ * a cost centre, and does it carry a cost object. The starting position is read
+ * off the annexure rather than left to someone to set 253 times:
+ *
+ *   · anything the annexure allows a centre on asks for the DIVISION;
+ *   · anything it makes mandatory also asks for the DEPARTMENT beneath it,
+ *     since those are the operating accounts the department analysis is for;
+ *   · n/a — tax, control and clearing accounts — asks for neither.
+ *
+ * It is only a default. Either box can be changed per account afterwards, and
+ * the seed never writes over an account that already exists.
+ */
+export const ccDefaultsOf = (rule: CcRequirement) => ({
+  hasCostCenter: rule !== 'NOT_APPLICABLE',
+  hasCostObject: rule === 'MANDATORY',
+});
 
 /**
  * Loads the Annexure D Chart of Accounts on boot, so every database carries the
@@ -37,6 +57,7 @@ export class CoaSeedService implements OnApplicationBootstrap {
       const adoptions = await this.seedAdoptions();
       const categories = await this.seedCategories();
       await this.markShipped();
+      await this.backfillCostFlags();
       if (groups || accounts || adoptions || categories) {
         this.logger.log(
           `Chart of Accounts seeded: +${groups} groups, +${accounts} accounts, ` +
@@ -70,6 +91,44 @@ export class CoaSeedService implements OnApplicationBootstrap {
       where: { code: { in: COA_ACCOUNTS.map((a) => a.code) }, isSystem: false },
       data: { isSystem: true },
     });
+  }
+
+  /**
+   * Give the cost-centre / cost-object boxes their starting position in a
+   * database seeded before they existed — otherwise every one of the 253
+   * accounts would read "asks for neither" and the whole master would have to
+   * be ticked by hand.
+   *
+   * Runs at most once in practice: it is skipped the moment ANY account has
+   * either box ticked, which is true straight after this has run and true of a
+   * freshly seeded database (seedAccounts sets them on the way in). That guard
+   * is what stops a redeploy from re-ticking a box someone deliberately
+   * cleared.
+   */
+  private async backfillCostFlags(): Promise<void> {
+    const alreadySet = await this.prisma.account.count({
+      where: { OR: [{ hasCostCenter: true }, { hasCostObject: true }] },
+    });
+    if (alreadySet) return;
+
+    let updated = 0;
+    // Two writes rather than 253: the defaults take only two distinct shapes.
+    for (const rule of ['MANDATORY', 'OPTIONAL'] as const) {
+      const codes = COA_ACCOUNTS.filter((a) => a.ccRequirement === rule).map(
+        (a) => a.code,
+      );
+      if (!codes.length) continue;
+      const res = await this.prisma.account.updateMany({
+        where: { code: { in: codes } },
+        data: ccDefaultsOf(rule),
+      });
+      updated += res.count;
+    }
+    if (updated) {
+      this.logger.log(
+        `Cost-centre defaults applied to ${updated} existing accounts.`,
+      );
+    }
   }
 
   /**
@@ -143,7 +202,7 @@ export class CoaSeedService implements OnApplicationBootstrap {
           isContra: a.isContra,
           isControl: a.isControl,
           controlParty: a.controlParty,
-          ccRequirement: a.ccRequirement,
+          ...ccDefaultsOf(a.ccRequirement),
           isGstRelevant: a.isGstRelevant,
           isBankOrCash: a.isBankOrCash,
           isReconcilable: a.isReconcilable,

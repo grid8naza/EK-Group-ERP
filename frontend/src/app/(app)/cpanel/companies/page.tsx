@@ -34,6 +34,7 @@ import type {
   Currency,
   Branch,
   CostCenter,
+  CostCentreCategory,
   CostObject,
 } from '@/lib/types';
 
@@ -191,7 +192,10 @@ export default function CompaniesPage() {
   const [brSaving, setBrSaving] = useState(false);
 
   // ---- Per-company cost centers & cost objects ----
+  // A cost center is a FUNCTION of the company (Operations, Admin Support);
+  // the cost objects under it are its departments.
   const costEmpty = { code: '', name: '', description: '', isActive: true };
+  const coEmpty = { ...costEmpty, categoryCode: '' };
   // Cost centers
   const [ccOpen, setCcOpen] = useState(false);
   const [ccCompany, setCcCompany] = useState<Company | null>(null);
@@ -210,8 +214,13 @@ export default function CompaniesPage() {
   const [coLoading, setCoLoading] = useState(false);
   const [coEditing, setCoEditing] = useState<CostObject | null>(null);
   const [coFormOpen, setCoFormOpen] = useState(false);
-  const [coForm, setCoForm] = useState({ ...costEmpty });
+  const [coForm, setCoForm] = useState({ ...coEmpty });
   const [coSaving, setCoSaving] = useState(false);
+  // What kind of department each cost object is (Annexure D.7). Loaded with the
+  // drawer rather than the page — nothing else here needs it. BRANCH is left
+  // out on purpose: an entry carries its branch in its own right, so offering
+  // it as a department would capture the same fact twice.
+  const [coCategories, setCoCategories] = useState<CostCentreCategory[]>([]);
 
   const canAdd = can(ROUTE, 'add');
   const canEdit = can(ROUTE, 'edit');
@@ -564,8 +573,9 @@ export default function CompaniesPage() {
     setCoList([]);
     setCoEditing(null);
     setCoFormOpen(false);
-    setCoForm({ ...costEmpty });
+    setCoForm({ ...coEmpty });
     setCoOpen(true);
+    void loadCoCategories();
     try {
       const centers = await api.get<CostCenter[]>(
         `/cost-centers?companyId=${c.id}`,
@@ -581,6 +591,19 @@ export default function CompaniesPage() {
       );
     }
   };
+  const loadCoCategories = async () => {
+    if (coCategories.length) return;
+    try {
+      const data = await api.get<CostCentreCategory[]>(
+        '/coa/cost-centre-categories',
+      );
+      setCoCategories((data ?? []).filter((c) => c.isActive && c.code !== 'BRANCH'));
+    } catch {
+      // The category is optional analysis; the form still works without it.
+    }
+  };
+  const coCategoryName = (code?: string | null) =>
+    coCategories.find((c) => c.code === code)?.name ?? code ?? '';
   const reloadCostObjects = async (costCenterId: number) => {
     setCoLoading(true);
     try {
@@ -609,7 +632,7 @@ export default function CompaniesPage() {
       return;
     }
     setCoEditing(null);
-    setCoForm({ ...costEmpty });
+    setCoForm({ ...coEmpty });
     setCoFormOpen(true);
   };
   const openCoEdit = (c: CostObject) => {
@@ -617,6 +640,7 @@ export default function CompaniesPage() {
     setCoForm({
       code: c.code,
       name: c.name,
+      categoryCode: c.categoryCode ?? '',
       description: c.description ?? '',
       isActive: c.isActive,
     });
@@ -1293,7 +1317,7 @@ export default function CompaniesPage() {
         open={ccOpen}
         onClose={() => setCcOpen(false)}
         title={`Cost Centers — ${ccCompany?.name ?? ''}`}
-        subtitle="Manage this company's cost centers"
+        subtitle="The company's functions — its divisions, e.g. Operations, Admin Support"
         icon={<Network className="h-5 w-5" />}
         width="lg"
         footer={<CloseFooter onClose={() => setCcOpen(false)} />}
@@ -1431,7 +1455,7 @@ export default function CompaniesPage() {
         open={coOpen}
         onClose={() => setCoOpen(false)}
         title={`Cost Objects — ${coCompany?.name ?? ''}`}
-        subtitle="Manage cost objects under a cost center"
+        subtitle="The departments under a division"
         icon={<Boxes className="h-5 w-5" />}
         width="lg"
         footer={<CloseFooter onClose={() => setCoOpen(false)} />}
@@ -1479,6 +1503,22 @@ export default function CompaniesPage() {
                       onChange={(e) =>
                         setCoForm({ ...coForm, name: e.target.value })
                       }
+                    />
+                    {/* Optional, and only for reporting: it is what groups cost
+                        per meal, contribution per counter and running cost per
+                        vehicle out of the ledger. */}
+                    <Select
+                      label="Type"
+                      value={coForm.categoryCode}
+                      onChange={(e) =>
+                        setCoForm({ ...coForm, categoryCode: e.target.value })
+                      }
+                      placeholder="Not classified"
+                      options={coCategories.map((c) => ({
+                        value: c.code,
+                        label: c.name,
+                      }))}
+                      wrapClassName="sm:col-span-2"
                     />
                     <div className="sm:col-span-2">
                       <Checkbox
@@ -1545,6 +1585,11 @@ export default function CompaniesPage() {
                           <span className="text-xs font-normal text-slate-400">
                             {c.code}
                           </span>
+                          {c.categoryCode && (
+                            <Badge color="slate">
+                              {coCategoryName(c.categoryCode)}
+                            </Badge>
+                          )}
                           {!c.isActive && <Badge color="slate">Inactive</Badge>}
                           {c.isLocked && (
                             <Badge color="amber">

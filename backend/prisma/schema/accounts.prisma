@@ -62,13 +62,12 @@ enum StatementType {
   PL
 }
 
-/// Whether a posting to this account must name a cost centre. NOT_APPLICABLE
-/// means a cost centre is silently dropped rather than rejected.
-enum CcRequirement {
-  MANDATORY
-  OPTIONAL
-  NOT_APPLICABLE
-}
+// The annexure's own cost-centre rule per account (Mandatory / Optional / n/a,
+// D.5) is deliberately NOT a column here. This ERP asks the two plainer
+// questions the finance team wants at data entry — does a line to this account
+// carry a cost centre, and does it carry a cost object — and the seed derives
+// their starting position from the annexure's rule, which stays recorded in
+// `coa-data.ts`. See Account.hasCostCenter.
 
 /// The sub-ledger a control account is aged by.
 enum PartyKind {
@@ -125,18 +124,28 @@ model Account {
   /// Offsets the group it sits in rather than forming a block of its own — e.g.
   /// accumulated depreciation under Fixed Assets, mess recovery under Mess
   /// Expenses. Each nets against its own parent in the statements.
-  isContra      Boolean    @default(false)
+  isContra     Boolean    @default(false)
   /// Balance is detailed by a party sub-ledger; a posting without a party would
   /// put the control account out of step with the sub-ledger, so it is rejected.
-  isControl     Boolean    @default(false)
-  controlParty  PartyKind?
-  ccRequirement CcRequirement @default(OPTIONAL)
+  isControl    Boolean    @default(false)
+  controlParty PartyKind?
 
-  isGstRelevant  Boolean @default(false)
-  isBankOrCash   Boolean @default(false)
-  isReconcilable Boolean @default(false)
+  /// Does a voucher line on this account carry a cost centre? Checked, the
+  /// entry screen asks for one and will not post the line without it; cleared,
+  /// it never asks and the line's costCenterId stays null. Company and branch
+  /// are asked for on every entry regardless — they are not analysis
+  /// dimensions but the tenant the entry belongs to.
+  hasCostCenter Boolean @default(false)
+  /// The same for the cost object — the department under the centre. A
+  /// department cannot be named without its division, so ticking this ticks
+  /// hasCostCenter with it.
+  hasCostObject Boolean @default(false)
+
+  isGstRelevant   Boolean @default(false)
+  isBankOrCash    Boolean @default(false)
+  isReconcilable  Boolean @default(false)
   /// Eliminated on consolidation, against the account named by eliminationPair.
-  isIntercompany Boolean @default(false)
+  isIntercompany  Boolean @default(false)
   /// Code of the mirror account — a code rather than an id so the seed can be
   /// loaded in any order and re-run without a second pass.
   eliminationPair String?
@@ -185,24 +194,30 @@ model AccountCompany {
   @@map("account_companies")
 }
 
-/// The kinds of cost centre the annexure analyses by — branch, department,
+/// The kinds of thing the annexure analyses cost by — branch, department,
 /// kitchen, cafe, counter, mess, vehicle, project (D.7). Global, like the
 /// account master.
 ///
-/// The cost centres THEMSELVES are not modelled here: `CostCenter` in the Cpanel
+/// The centres THEMSELVES are not modelled here: `CostCenter` in the Cpanel
 /// domain already owns them, per company, with `CostObject` beneath — and
 /// product costing, the stock ledger and production plans all reference it
 /// already. A second table would have split the same idea in two.
 ///
-/// So this holds only the classification, which Cpanel's cost centres can carry
-/// via a plain `categoryCode` (no relation — the cross-domain rule). It is what
-/// makes the annexure's cost-per-meal, per-counter and per-vehicle analysis
-/// possible without one account per outlet.
+/// This ERP's shape is two fixed levels rather than the annexure's open tree:
+/// the CENTRE is the company's function — Operations, Admin Support — and the
+/// OBJECT beneath it is the department. So the classification hangs off the
+/// COST OBJECT, via a plain `categoryCode` (no relation — the cross-domain
+/// rule), which is what still makes the annexure's cost-per-meal,
+/// per-counter and per-vehicle analysis possible without one account per
+/// outlet. BRANCH is not among the kinds used: every entry carries its branch
+/// in its own right.
 model CostCentreCategory {
   code        String  @id // BRANCH, DEPT, KITCHEN, …
   name        String
   description String?
-  /// Mandatory on all operating postings (only BRANCH, per the annexure).
+  /// The annexure's own flag (only BRANCH). Not read here — branch is carried
+  /// on the entry itself, and what a line must name is decided per account by
+  /// Account.hasCostCenter / hasCostObject.
   isMandatory Boolean @default(false)
   sortOrder   Int     @default(0)
   isActive    Boolean @default(true)

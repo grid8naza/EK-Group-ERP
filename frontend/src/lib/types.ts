@@ -95,13 +95,15 @@ export interface CostCenter {
   isLocked?: boolean;
 }
 
-/** Cost object (per company, under a cost center). */
+/** Cost object — a department, under a cost center (its division). */
 export interface CostObject {
   id: number;
   companyId: number;
   costCenterId: number;
   code: string;
   name: string;
+  /** DEPT, KITCHEN, CAFE, COUNTER, MESS, VEHICLE, PROJECT — reporting only. */
+  categoryCode?: string | null;
   description?: string | null;
   isActive: boolean;
   isLocked?: boolean;
@@ -2021,7 +2023,6 @@ export type AccountNature =
   | 'EXPENSE';
 export type BalanceSide = 'DR' | 'CR';
 export type StatementType = 'BS' | 'PL';
-export type CcRequirement = 'MANDATORY' | 'OPTIONAL' | 'NOT_APPLICABLE';
 export type PartyKind =
   | 'SUPPLIER'
   | 'CUSTOMER'
@@ -2057,7 +2058,10 @@ export interface CoaAccount {
   isContra: boolean;
   isControl: boolean;
   controlParty: PartyKind | null;
-  ccRequirement: CcRequirement;
+  /** Ask for a cost centre (division) on a line to this account. */
+  hasCostCenter: boolean;
+  /** Ask for a cost object (department) too. Implies hasCostCenter. */
+  hasCostObject: boolean;
   isGstRelevant: boolean;
   isBankOrCash: boolean;
   isReconcilable: boolean;

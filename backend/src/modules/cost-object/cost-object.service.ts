@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -42,16 +43,52 @@ export class CostObjectService {
         'This company is not cost-object-applicable. Enable "Cost Object Applicable" on the company first.',
       );
     }
-    const { costCenterId, ...rest } = dto;
+    await this.assertCategory(dto.categoryCode);
+
+    const { costCenterId, categoryCode, ...rest } = dto;
     return this.prisma.costObject.create({
-      data: { ...rest, costCenterId, companyId: costCenter.companyId },
+      data: {
+        ...rest,
+        costCenterId,
+        companyId: costCenter.companyId,
+        categoryCode: categoryCode?.trim() || null,
+      },
     });
   }
 
   async update(id: number, dto: UpdateCostObjectDto) {
     const existing = await this.findOne(id);
     assertUnlocked(existing, 'cost object', 'editing');
-    return this.prisma.costObject.update({ where: { id }, data: dto });
+    await this.assertCategory(dto.categoryCode);
+    return this.prisma.costObject.update({
+      where: { id },
+      data: {
+        ...dto,
+        ...(dto.categoryCode !== undefined
+          ? { categoryCode: dto.categoryCode?.trim() || null }
+          : {}),
+      },
+    });
+  }
+
+  /**
+   * The kind of department this is, checked against the category master rather
+   * than taken as free text — cost per meal, contribution per counter and
+   * running cost per vehicle are grouped by this code, and a typo would quietly
+   * open a second bucket. Read directly by code with no foreign key, per the
+   * cross-domain rule.
+   */
+  private async assertCategory(code?: string | null): Promise<void> {
+    const value = code?.trim();
+    if (!value) return;
+    const category = await this.prisma.costCentreCategory.findUnique({
+      where: { code: value },
+    });
+    if (!category?.isActive) {
+      throw new BadRequestException(
+        `"${value}" is not an active cost-centre category.`,
+      );
+    }
   }
 
   async setLock(id: number, locked: boolean) {

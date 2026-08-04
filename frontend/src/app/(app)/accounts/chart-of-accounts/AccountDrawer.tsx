@@ -8,11 +8,6 @@ import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
 import { Checkbox, Input, Select, Textarea } from '@/components/ui/Field';
 import type { AccountGroup, CoaAccount } from '@/lib/types';
 
-const CC_OPTIONS = [
-  { value: 'OPTIONAL', label: 'Optional' },
-  { value: 'MANDATORY', label: 'Mandatory — a posting without one is rejected' },
-  { value: 'NOT_APPLICABLE', label: 'Not applicable — silently dropped' },
-];
 const PARTY_OPTIONS = [
   { value: 'SUPPLIER', label: 'Supplier' },
   { value: 'CUSTOMER', label: 'Customer' },
@@ -34,7 +29,8 @@ type Form = {
   isContra: boolean;
   isControl: boolean;
   controlParty: string;
-  ccRequirement: string;
+  hasCostCenter: boolean;
+  hasCostObject: boolean;
   isGstRelevant: boolean;
   isBankOrCash: boolean;
   isReconcilable: boolean;
@@ -52,7 +48,8 @@ const EMPTY: Form = {
   isContra: false,
   isControl: false,
   controlParty: '',
-  ccRequirement: 'OPTIONAL',
+  hasCostCenter: false,
+  hasCostObject: false,
   isGstRelevant: false,
   isBankOrCash: false,
   isReconcilable: false,
@@ -104,7 +101,8 @@ export function AccountDrawer({
             isContra: account.isContra,
             isControl: account.isControl,
             controlParty: account.controlParty ?? '',
-            ccRequirement: account.ccRequirement,
+            hasCostCenter: account.hasCostCenter,
+            hasCostObject: account.hasCostObject,
             isGstRelevant: account.isGstRelevant,
             isBankOrCash: account.isBankOrCash,
             isReconcilable: account.isReconcilable,
@@ -149,7 +147,8 @@ export function AccountDrawer({
         await api.patch(`/coa/accounts/${account!.id}`, {
           name: form.name,
           notes: form.notes,
-          ccRequirement: form.ccRequirement,
+          hasCostCenter: form.hasCostCenter,
+          hasCostObject: form.hasCostObject,
           allowManualJe: form.allowManualJe,
           isActive: form.isActive,
         });
@@ -163,7 +162,8 @@ export function AccountDrawer({
           isContra: form.isContra,
           isControl: form.isControl,
           controlParty: form.isControl ? form.controlParty : undefined,
-          ccRequirement: form.ccRequirement,
+          hasCostCenter: form.hasCostCenter,
+          hasCostObject: form.hasCostObject,
           isGstRelevant: form.isGstRelevant,
           isBankOrCash: form.isBankOrCash,
           isReconcilable: form.isReconcilable,
@@ -275,12 +275,43 @@ export function AccountDrawer({
             </p>
           </div>
         )}
-        <Select
-          label="Cost centre"
-          value={form.ccRequirement}
-          onChange={(e) => setForm({ ...form, ccRequirement: e.target.value })}
-          options={CC_OPTIONS}
-        />
+        {/* What an entry to this account is asked for. Company and branch are
+            asked for on every entry and are not settable here. */}
+        <div className="sm:col-span-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+          <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+            Asked for at data entry
+          </p>
+          <div className="mt-2 flex flex-wrap gap-x-6 gap-y-2">
+            <Checkbox
+              label="Cost centre (division)"
+              checked={form.hasCostCenter}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  hasCostCenter: e.target.checked,
+                  // A department has no division to sit in once the centre is
+                  // no longer asked for.
+                  hasCostObject: e.target.checked ? form.hasCostObject : false,
+                })
+              }
+            />
+            <Checkbox
+              label="Cost object (department)"
+              checked={form.hasCostObject}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  hasCostObject: e.target.checked,
+                  hasCostCenter: e.target.checked || form.hasCostCenter,
+                })
+              }
+            />
+          </div>
+          <p className="mt-2 text-xs text-slate-400">
+            Unticked, the entry screen does not ask and the field stays blank on
+            the line. Company and branch are asked for on every entry.
+          </p>
+        </div>
 
         <div className="sm:col-span-2 flex flex-wrap gap-x-6 gap-y-2 border-t border-slate-200 pt-3 dark:border-slate-700">
           <Checkbox

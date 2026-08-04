@@ -27,6 +27,17 @@ const defaultSideOf = (nature: AccountNature): BalanceSide =>
   nature === 'ASSET' || nature === 'EXPENSE' ? 'DR' : 'CR';
 
 /**
+ * What the entry screen asks for on a line to this account. A cost object is a
+ * department INSIDE a division, so asking for one without the other is not a
+ * position anyone can mean — asking for the object ticks the centre with it
+ * rather than being rejected.
+ */
+const costFlags = (hasCostCenter?: boolean, hasCostObject?: boolean) => ({
+  hasCostCenter: !!hasCostCenter || !!hasCostObject,
+  hasCostObject: !!hasCostObject,
+});
+
+/**
  * The Chart of Accounts as the application reads and maintains it.
  *
  * The 253 accounts and 44 groups shipped by Annexure D are the signed-off
@@ -254,7 +265,7 @@ export class CoaService {
         isContra: dto.isContra ?? false,
         isControl: dto.isControl ?? false,
         controlParty: dto.isControl ? dto.controlParty : null,
-        ccRequirement: dto.ccRequirement ?? 'OPTIONAL',
+        ...costFlags(dto.hasCostCenter, dto.hasCostObject),
         isGstRelevant: dto.isGstRelevant ?? false,
         isBankOrCash: dto.isBankOrCash ?? false,
         isReconcilable: dto.isReconcilable ?? false,
@@ -390,12 +401,29 @@ export class CoaService {
   async updateAccount(id: number, dto: UpdateAccountDto) {
     const existing = await this.prisma.account.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Account not found');
+
+    // The two boxes are one decision, and a PATCH may carry either alone, so
+    // the missing half is read off the record. Clearing the centre clears the
+    // department with it — a department with no division to sit in is not a
+    // state the entry screen could honour.
+    let cost: Partial<Pick<typeof existing, 'hasCostCenter' | 'hasCostObject'>> =
+      {};
+    if (dto.hasCostCenter !== undefined || dto.hasCostObject !== undefined) {
+      cost =
+        dto.hasCostCenter === false && dto.hasCostObject !== true
+          ? { hasCostCenter: false, hasCostObject: false }
+          : costFlags(
+              dto.hasCostCenter ?? existing.hasCostCenter,
+              dto.hasCostObject ?? existing.hasCostObject,
+            );
+    }
+
     return this.prisma.account.update({
       where: { id },
       data: {
         name: dto.name?.trim(),
         notes: dto.notes !== undefined ? dto.notes?.trim() || null : undefined,
-        ccRequirement: dto.ccRequirement,
+        ...cost,
         allowManualJe: dto.allowManualJe,
         isActive: dto.isActive,
       },
