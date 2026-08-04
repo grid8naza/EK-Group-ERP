@@ -72,10 +72,12 @@ const costAnalysis = (a: CoaAccount) => {
 const ALL_COLUMNS: ReportColumn<ChartRow>[] = [
   { key: 'code', header: 'Code', weight: 9, cell: (r) => r.code },
   {
+    // Deliberately not flagged `bold`: that would weight the column on every
+    // row, and in a chart the emphasis belongs to the headings and the group
+    // rows — an account is a leaf and reads as one.
     key: 'name',
     header: 'Account',
     weight: 30,
-    bold: true,
     cell: (r) => (r.kind === 'group' ? r.name : (r.localName ?? r.name)),
   },
   {
@@ -301,7 +303,9 @@ export default function ChartOfAccountsReportPage() {
             weights={selected.weights}
             blocks={blocks}
             loading={loading}
-            boldCol={selected.boldCol}
+            // Thirty-six blocks over four sections is more than fits on a
+            // screen, so the reader can fold away what they are not looking at.
+            collapsible
             emptyText="No accounts to show — this company has adopted none yet."
           />
         </div>

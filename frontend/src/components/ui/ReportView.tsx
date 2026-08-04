@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Eye, FileText, Printer, Sheet } from 'lucide-react';
+import { ChevronDown, Eye, FileText, Printer, Sheet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   colPercent,
@@ -81,6 +81,15 @@ interface ReportViewProps {
   groups?: (string | undefined)[];
   subHeaders?: (string | undefined)[];
   emptyText?: string;
+  /**
+   * Let the reader fold a section (block heading) or one of its tables
+   * (sub-heading) away. On-screen only — an export always carries everything,
+   * since a printed report the reader cannot unfold is just an incomplete one.
+   *
+   * Off by default: a chevron on every heading is noise in a report short
+   * enough to take in at once.
+   */
+  collapsible?: boolean;
 }
 
 const fmt = (v: Cell) => (typeof v === 'number' ? v.toLocaleString() : String(v));
@@ -113,6 +122,43 @@ function StatusPill({ value }: { value: string }) {
   );
 }
 
+/**
+ * A heading that can be folded away, or just the heading when it cannot.
+ *
+ * The chevron is part of the clickable heading rather than a control beside it,
+ * so the whole line is the target — a chevron alone is a small thing to hit in
+ * a report of forty of them.
+ */
+function Fold({
+  on,
+  shut,
+  onToggle,
+  label,
+  children,
+}: {
+  on: boolean;
+  shut: boolean;
+  onToggle: () => void;
+  label: string;
+  children: React.ReactNode;
+}) {
+  if (!on) return <>{children}</>;
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={!shut}
+      title={shut ? `Show ${label}` : `Hide ${label}`}
+      className="flex items-center gap-1 rounded text-left hover:text-brand-600 dark:hover:text-brand-400"
+    >
+      <ChevronDown
+        className={cn('h-4 w-4 shrink-0 transition-transform', shut && '-rotate-90')}
+      />
+      {children}
+    </button>
+  );
+}
+
 /** On-screen grouped report: centered block headings, left sub-headings, and
  *  fixed-width tables with centered column headers — matching the exports. */
 export function ReportView({
@@ -128,11 +174,23 @@ export function ReportView({
   groups,
   subHeaders,
   emptyText = 'No records found.',
+  collapsible = false,
 }: ReportViewProps) {
   const total = blocks.reduce(
     (n, b) => n + b.tables.reduce((m, t) => m + t.rows.length, 0),
     0,
   );
+
+  // Everything starts open, and only what the reader folds is remembered —
+  // keyed by heading text rather than index so the set survives a filter change
+  // that reorders the blocks.
+  const [folded, setFolded] = useState<Set<string>>(new Set());
+  const fold = (key: string) =>
+    setFolded((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
 
   if (loading)
     return <p className="py-12 text-center text-slate-400">Loading…</p>;
@@ -266,33 +324,61 @@ export function ReportView({
 
   return (
     <div className="pt-4">
-      {blocks.map((b, bi) => (
-        <div key={bi} className="mb-6">
-          {b.heading && (
-            <h2 className="sticky top-0 z-20 flex h-11 items-center gap-2 bg-white text-lg font-bold text-slate-900 dark:bg-slate-900 dark:text-slate-100">
-              {b.heading}
-              {b.count != null && (
-                <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-300">
-                  {b.count}
-                </span>
-              )}
-            </h2>
-          )}
-          {b.tables.map((t, ti) => (
-            <div key={ti} className="mb-4">
-              {t.subheading && (
-                <h3 className="mb-1 text-sm font-semibold text-slate-600 dark:text-slate-300">
-                  {t.subheading}{' '}
-                  {t.subcount != null && (
-                    <span className="text-slate-400">({t.subcount})</span>
-                  )}
-                </h3>
-              )}
-              {table(t, `${bi}-${ti}`, !!b.heading)}
-            </div>
-          ))}
-        </div>
-      ))}
+      {blocks.map((b, bi) => {
+        const blockKey = b.heading ?? `#${bi}`;
+        const blockShut = collapsible && folded.has(blockKey);
+        return (
+          <div key={bi} className="mb-6">
+            {b.heading && (
+              <h2 className="sticky top-0 z-20 flex h-11 items-center gap-2 bg-white text-lg font-bold text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+                <Fold
+                  on={collapsible}
+                  shut={blockShut}
+                  onToggle={() => fold(blockKey)}
+                  label={b.heading}
+                >
+                  {b.heading}
+                </Fold>
+                {b.count != null && (
+                  <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                    {b.count}
+                  </span>
+                )}
+              </h2>
+            )}
+            {!blockShut &&
+              b.tables.map((t, ti) => {
+                const tableKey = `${blockKey}/${t.subheading ?? ti}`;
+                const shut = collapsible && folded.has(tableKey);
+                return (
+                  <div key={ti} className="mb-4">
+                    {t.subheading && (
+                      // A shade deeper and a size up on the block heading: it is
+                      // the tier above the group rows inside the table, and the
+                      // two read as one level otherwise.
+                      <h3 className="mb-1 flex items-center gap-1.5 text-base font-bold text-slate-900 dark:text-slate-100">
+                        <Fold
+                          on={collapsible}
+                          shut={shut}
+                          onToggle={() => fold(tableKey)}
+                          label={t.subheading}
+                        >
+                          {t.subheading}
+                        </Fold>
+                        {t.subcount != null && (
+                          <span className="text-sm font-normal text-slate-400">
+                            ({t.subcount})
+                          </span>
+                        )}
+                      </h3>
+                    )}
+                    {!shut && table(t, `${bi}-${ti}`, !!b.heading)}
+                  </div>
+                );
+              })}
+          </div>
+        );
+      })}
 
       {summary && summary.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-900/50">
