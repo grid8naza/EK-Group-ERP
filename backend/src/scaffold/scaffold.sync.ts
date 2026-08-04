@@ -6,6 +6,7 @@ import {
   PRODUCTION_COSTING_MENU,
   PRODUCTION_REPORT_MENUS,
 } from '../modules/unit/inventory-provisioning';
+import { ACCOUNTS_REPORT_MENUS } from '../modules/supplier/accounts-provisioning';
 
 /**
  * Screen routes that were renamed or removed. The additive sync below never
@@ -641,6 +642,99 @@ async function migrateCrmPurchaseOrderRoutes(
   });
 }
 
+/**
+ * One-time migration: the Chart of Accounts was first shipped as a maintenance
+ * screen under "Accounts Setup". It is now a REPORT — the master read the way a
+ * statement is, groups over sub-groups over ledgers — and maintenance has moved
+ * to the Account Groups and Account Ledgers screens the sync creates alongside.
+ *
+ * The screen keeps its route, so this moves the row rather than replacing it:
+ * SubMenu.id is what GroupSubMenuPrivilege hangs off, and a delete-and-recreate
+ * would drop every privilege already granted on it. The sync reconciles its
+ * FORM → REPORT kind afterwards, which is what makes the Privileges matrix show
+ * Print / PDF / Excel instead of Add / Edit. Idempotent — a no-op once moved,
+ * and on a fresh DB where the sync creates it in place.
+ */
+async function migrateAccountsReportMenu(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  const acc = await prisma.module.findUnique({
+    where: { code: 'ACCOUNTS' },
+    select: { id: true },
+  });
+  if (!acc) return; // fresh DB: nothing to move
+  const report = ACCOUNTS_REPORT_MENUS[0];
+  const routes = report.subs.map((s) => s.route);
+
+  const menus = await prisma.mainMenu.findMany({
+    where: { moduleId: acc.id },
+    select: { id: true, companyId: true, menuName: true },
+    orderBy: { id: 'asc' },
+  });
+  const companyIds = [...new Set(menus.map((m) => m.companyId))];
+
+  for (const companyId of companyIds) {
+    const mine = menus.filter((m) => m.companyId === companyId);
+    // The primary menu is the oldest that is not the report menu (a renamed
+    // primary still qualifies).
+    const primary = mine.find((m) => m.menuName !== report.name);
+    if (!primary) continue;
+
+    let reportId = mine.find((m) => m.menuName === report.name)?.id;
+    if (!reportId) {
+      const created = await prisma.mainMenu.create({
+        data: {
+          companyId,
+          moduleId: acc.id,
+          menuName: report.name,
+          sortOrder: 2, // after Accounts Setup
+          objectType: ObjectType.FORM,
+          isUserMenu: true,
+          icon: report.icon,
+        },
+        select: { id: true },
+      });
+      reportId = created.id;
+    }
+
+    // Mirror the setup menu's group visibility so no group loses reach. Groups
+    // without privileges on the screen just see the menu empty, and the nav
+    // hides empty menus for non-super-admins.
+    const access = await prisma.groupMainMenuAccess.findMany({
+      where: { mainMenuId: primary.id },
+      select: { userGroupId: true, visible: true },
+    });
+    if (access.length) {
+      await prisma.groupMainMenuAccess.createMany({
+        data: access.map((a) => ({
+          userGroupId: a.userGroupId,
+          mainMenuId: reportId!,
+          visible: a.visible,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    await prisma.subMenu.updateMany({
+      where: { mainMenuId: primary.id, route: { in: routes } },
+      data: { mainMenuId: reportId },
+    });
+
+    // The additive sync never renumbers an existing screen, so the moved one
+    // would keep the order it had in the setup menu instead of this menu's own.
+    for (const sub of report.subs) {
+      await prisma.subMenu.updateMany({
+        where: { mainMenuId: reportId, route: sub.route },
+        data: { sortOrder: sub.order },
+      });
+    }
+  }
+
+  // A twin can only exist if an earlier boot created the report screen under
+  // the new menu before this migration moved the original across.
+  for (const route of routes) await dedupeScreenRows(prisma, route);
+}
+
 /** Rename the Accounts module's primary main menu "Accounts" → "Accounts Setup". */
 async function migrateAccountsMenuName(
   prisma: Prisma.TransactionClient,
@@ -691,8 +785,12 @@ export async function syncScaffold(
   //     before the sync so the extra menu is matched by its new name.
   await migrateInventoryVoucherMenu(prisma);
 
-  // 0e) Rename the Accounts module's main menu → "Accounts Setup".
+  // 0e) Rename the Accounts module's main menu → "Accounts Setup", then move
+  //     the Chart of Accounts out of it into "Accounts Report" (it is a report
+  //     now; Groups and Ledgers do the maintenance). Before the additive sync so
+  //     the moved screen is matched under its new menu rather than duplicated.
   await migrateAccountsMenuName(prisma);
+  await migrateAccountsReportMenu(prisma);
 
   // 0e2) Rename the product screens → Products - Semifinished / - Finished.
   await migrateProductScreenNames(prisma);

@@ -1,413 +1,255 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { BookOpen, Check, Minus, Pencil, Plus, Trash2 } from 'lucide-react';
-import { api, ApiError } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { ListTree } from 'lucide-react';
 import { useFetch } from '@/lib/hooks';
-import { useToast } from '@/providers/ToastProvider';
 import { useAuth } from '@/providers/AuthProvider';
+import { useToast } from '@/providers/ToastProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Select } from '@/components/ui/Field';
-import { useConfirm } from '@/providers/ConfirmProvider';
-import { AccountDrawer } from './AccountDrawer';
-import { GroupDrawer } from './GroupDrawer';
-import type {
-  AccountGroup,
-  AccountNature,
-  CoaAccount,
-} from '@/lib/types';
+import { ColumnToggle } from '@/components/ui/ColumnToggle';
+import {
+  ReportView,
+  ReportExportButtons,
+  useReportColumns,
+} from '@/components/ui/ReportView';
+import {
+  printReport,
+  pdfReport,
+  excelReport,
+  resolveCompanyName,
+  type ReportBlock,
+  type ReportColumn,
+  type ReportSpec,
+  type ReportTable,
+} from '@/lib/reportDoc';
+import type { AccountGroup, CoaAccount, Company } from '@/lib/types';
 
 const ROUTE = '/accounts/chart-of-accounts';
 
-/**
- * The five blocks the five-digit code sorts into (Annexure D.3). Derived from
- * the leading digit rather than stored, exactly as the numbering intends.
- */
-const BLOCKS: { digit: string; label: string }[] = [
-  { digit: '1', label: '1 · Assets' },
-  { digit: '2', label: '2 · Liabilities' },
-  { digit: '3', label: '3 · Equity and Reserves' },
-  { digit: '4', label: '4 · Income' },
-  { digit: '5', label: '5 · Purchases and Direct Expenses' },
-  { digit: '6', label: '6 · Indirect and Operating Expenses' },
-  { digit: '7', label: '7 · Other Income' },
-  { digit: '8', label: '8 · Finance Cost, Tax and Non-operating' },
-  { digit: '9', label: '9 · Control, Clearing and Suspense' },
+/** What an entry to this account is asked for, in one short phrase. */
+const costAnalysis = (a: CoaAccount) => {
+  const centre = a.entryRules ? a.entryRules.costCenter === 'REQUIRED' : a.hasCostCenter;
+  const object = a.entryRules ? a.entryRules.costObject === 'REQUIRED' : a.hasCostObject;
+  if (object) return 'Centre + Object';
+  if (centre) return 'Centre';
+  return '—';
+};
+
+const ALL_COLUMNS: ReportColumn<CoaAccount>[] = [
+  { key: 'code', header: 'Code', weight: 9, cell: (a) => a.code },
+  {
+    key: 'name',
+    header: 'Account',
+    weight: 30,
+    bold: true,
+    cell: (a) => a.localName ?? a.name,
+  },
+  { key: 'nature', header: 'Nature', weight: 10, cell: (a) => a.nature },
+  {
+    key: 'statement',
+    header: 'Statement',
+    weight: 12,
+    cell: (a) => (a.statement === 'BS' ? 'Balance Sheet' : 'Profit & Loss'),
+  },
+  { key: 'normalSide', header: 'Dr/Cr', weight: 7, cell: (a) => a.normalSide },
+  {
+    key: 'tallyGroup',
+    header: 'Tally Group',
+    weight: 15,
+    cell: (a) => a.tallyGroup ?? '',
+  },
+  {
+    key: 'costAnalysis',
+    header: 'Cost Analysis',
+    weight: 12,
+    cell: costAnalysis,
+  },
+  {
+    key: 'adopted',
+    header: 'Used Here',
+    weight: 9,
+    cell: (a) => (a.adopted ? 'Yes' : 'No'),
+  },
 ];
 
-const NATURE_TONE: Record<AccountNature, string> = {
-  ASSET: 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300',
-  LIABILITY: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',
-  EQUITY: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300',
-  INCOME: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
-  EXPENSE: 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300',
-};
-
 /**
- * Only what a posting needs to know shows as a chip; the rest stays in detail.
+ * The Chart of Accounts read the way a statement is: top-level block, the
+ * sub-groups beneath it, and the postable accounts under each.
  *
- * The cost chips read off the RESOLVED rules, not the account's own boxes: an
- * account that asks for a cost centre in a company that does not work in cost
- * centres asks for nothing, and the screen would be lying to say otherwise.
+ * This is the master as a REPORT — nothing is edited here. Groups and accounts
+ * are maintained on their own screens; what this adds is the shape, which is
+ * exactly what a printed chart is for.
  */
-const flagsOf = (a: CoaAccount) => {
-  const out: string[] = [];
-  if (a.isControl) out.push(`Control · ${a.controlParty}`);
-  const asksCentre = a.entryRules
-    ? a.entryRules.costCenter === 'REQUIRED'
-    : a.hasCostCenter;
-  const asksObject = a.entryRules
-    ? a.entryRules.costObject === 'REQUIRED'
-    : a.hasCostObject;
-  if (asksObject) out.push('Cost centre + object');
-  else if (asksCentre) out.push('Cost centre');
-  // Ticked on the account but switched off for this company — worth saying,
-  // because the box in the drawer will look ticked and nothing will ask.
-  else if (a.hasCostCenter) out.push('Cost centre — off for this company');
-  if (a.isContra) out.push('Contra');
-  if (a.isIntercompany) out.push('Intercompany');
-  if (a.isBankOrCash) out.push('Bank / cash');
-  if (a.isGstRelevant) out.push('GST');
-  if (!a.allowManualJe) out.push('No manual JE');
-  return out;
-};
-
-export default function ChartOfAccountsPage() {
-  const { can, activeCompany } = useAuth();
+export default function ChartOfAccountsReportPage() {
+  const { can, activeCompany, activeCompanyId } = useAuth();
   const toast = useToast();
-  const confirm = useConfirm();
-  const { data: accounts, loading, refetch } = useFetch<CoaAccount[]>('/coa/accounts');
+
+  const { data: accounts, loading } = useFetch<CoaAccount[]>('/coa/accounts');
   const { data: groups } = useFetch<AccountGroup[]>('/coa/groups');
+  const { data: companies } = useFetch<Company[]>('/companies');
 
-  const [search, setSearch] = useState('');
-  const [block, setBlock] = useState('');
-  const [groupFilter, setGroupFilter] = useState('');
-  const [adoption, setAdoption] = useState(''); // '' | 'yes' | 'no'
-  const [busy, setBusy] = useState<number | null>(null);
-  const [editing, setEditing] = useState<CoaAccount | null>(null);
-  const [addingAccount, setAddingAccount] = useState(false);
-  const [addingGroup, setAddingGroup] = useState(false);
+  // A chart is normally read for ONE company's books, so it opens on what this
+  // company has adopted; the whole master is a filter away.
+  const [scope, setScope] = useState('adopted'); // 'adopted' | 'all'
 
-  const canEdit = can(ROUTE, 'edit');
-  const canAdd = can(ROUTE, 'add');
-  const canDelete = can(ROUTE, 'delete');
-  const activeCompanyName = activeCompany?.name ?? 'this company';
-  const all = useMemo(() => accounts ?? [], [accounts]);
-
-  const groupOptions = useMemo(
-    () =>
-      (groups ?? [])
-        .filter((g) => !block || g.code.startsWith(block))
-        .map((g) => ({ value: String(g.id), label: `${g.code} — ${g.name}` })),
-    [groups, block],
+  const { hidden, toggle, selected } = useReportColumns(ROUTE, ALL_COLUMNS);
+  const companyName = resolveCompanyName(
+    companies,
+    activeCompanyId,
+    activeCompany?.name,
   );
 
-  const rows = useMemo(() => {
-    let out = all;
-    if (block) out = out.filter((a) => a.code.startsWith(block));
-    if (groupFilter) out = out.filter((a) => String(a.groupId) === groupFilter);
-    if (adoption === 'yes') out = out.filter((a) => a.adopted);
-    else if (adoption === 'no') out = out.filter((a) => !a.adopted);
+  const rows = useMemo(
+    () => (accounts ?? []).filter((a) => scope === 'all' || a.adopted),
+    [accounts, scope],
+  );
+
+  const blocks = useMemo<ReportBlock[]>(() => {
+    const all = groups ?? [];
+    if (!all.length) return [];
+
+    const byGroup = new Map<number, CoaAccount[]>();
+    for (const a of rows) {
+      const list = byGroup.get(a.groupId);
+      if (list) list.push(a);
+      else byGroup.set(a.groupId, [a]);
+    }
+    const sorted = (g: AccountGroup) =>
+      (byGroup.get(g.id) ?? []).sort((x, y) => x.code.localeCompare(y.code));
+
+    const roots = all
+      .filter((g) => !g.parentGroupId)
+      .sort((a, b) => a.code.localeCompare(b.code));
+
+    const out: ReportBlock[] = [];
+    for (const root of roots) {
+      const children = all
+        .filter((g) => g.parentGroupId === root.id)
+        .sort((a, b) => a.code.localeCompare(b.code));
+
+      const tables: ReportTable[] = [];
+      let count = 0;
+
+      // Accounts hanging straight off the block, before any sub-group — e.g.
+      // Inventories, which has no sub-groups at all.
+      const direct = sorted(root);
+      if (direct.length) {
+        tables.push({ rows: direct.map(selected.cells) });
+        count += direct.length;
+      }
+      for (const child of children) {
+        const kids = sorted(child);
+        if (!kids.length) continue;
+        tables.push({
+          subheading: `${child.code} · ${child.name}`,
+          subcount: kids.length,
+          rows: kids.map(selected.cells),
+        });
+        count += kids.length;
+      }
+      // An empty block is left out rather than printed as a bare heading: on
+      // "adopted only" most companies drop whole blocks, and a page of empty
+      // headings is not a chart of accounts.
+      if (!count) continue;
+      out.push({ heading: `${root.code} · ${root.name}`, count, tables });
+    }
     return out;
-  }, [all, block, groupFilter, adoption]);
+  }, [groups, rows, selected]);
 
-  const adoptedCount = all.filter((a) => a.adopted).length;
-
-  /**
-   * Adoption is what makes the shared master usable per company, so it toggles
-   * inline rather than behind a form — it is one decision, not a record to edit.
-   */
-  const toggleAdoption = async (a: CoaAccount) => {
-    setBusy(a.id);
-    try {
-      await api.patch(`/coa/accounts/${a.id}/adoption`, { adopted: !a.adopted });
-      toast.success(
-        `${a.code} ${a.name} ${a.adopted ? 'dropped from' : 'adopted by'} this company.`,
-      );
-      await refetch();
-    } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Failed to change adoption.');
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  /**
-   * Only accounts added here can be deleted; the annexure master is deactivated
-   * instead, and the server refuses it regardless of what the UI offers.
-   */
-  const remove = async (a: CoaAccount) => {
-    const ok = await confirm({
-      title: 'Delete account',
-      message:
-        `Delete ${a.code} ${a.name}? It was added here rather than shipped ` +
-        `with the annexure, so it can go. Any company's adoption of it goes too.`,
-      confirmText: 'Delete',
-      cancelText: 'Cancel',
-      danger: true,
-      defaultCancel: true,
-    });
-    if (!ok) return;
-    try {
-      await api.delete(`/coa/accounts/${a.id}`);
-      toast.success('Account deleted.');
-      await refetch();
-    } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Failed to delete.');
-    }
-  };
-
-  const columns: Column<CoaAccount>[] = [
-    {
-      key: 'code',
-      header: 'Code',
-      className: 'tabular-nums font-medium',
-      accessor: (a) => a.code,
-    },
-    {
-      key: 'name',
-      header: 'Account',
-      accessor: (a) => `${a.name} ${a.localName ?? ''} ${a.group.name}`,
-      render: (a) => (
-        <div>
-          <div className="font-medium text-slate-800 dark:text-slate-100">
-            {a.localName ?? a.name}
-            {a.localName && (
-              <span className="ml-2 text-xs font-normal text-slate-400">
-                ({a.name})
-              </span>
-            )}
-          </div>
-          <div className="text-xs text-slate-400">
-            {a.group.code} · {a.group.name}
-          </div>
-          {flagsOf(a).length > 0 && (
-            <div className="mt-1 flex flex-wrap gap-1">
-              {flagsOf(a).map((f) => (
-                <span
-                  key={f}
-                  className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-500 dark:bg-slate-800 dark:text-slate-400"
-                >
-                  {f}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'nature',
-      header: 'Nature',
-      accessor: (a) => a.nature,
-      render: (a) => (
-        <span
-          className={cn(
-            'rounded px-2 py-0.5 text-xs font-medium',
-            NATURE_TONE[a.nature],
-          )}
-        >
-          {a.nature}
-        </span>
-      ),
-    },
-    {
-      key: 'statement',
-      header: 'Statement',
-      accessor: (a) => a.statement,
-      render: (a) => (
-        <span className="text-xs text-slate-500">
-          {a.statement === 'BS' ? 'Balance Sheet' : 'Profit & Loss'} · {a.normalSide}
-        </span>
-      ),
-    },
-    {
-      key: 'tallyGroup',
-      header: 'Tally Group',
-      accessor: (a) => a.tallyGroup ?? '',
-      render: (a) => (
-        <span className="text-xs text-slate-400">{a.tallyGroup ?? '—'}</span>
-      ),
-    },
-    {
-      key: 'adopted',
-      header: 'Used here',
-      headerClassName: 'text-center',
-      className: 'text-center',
-      sortAccessor: (a) => (a.adopted ? 1 : 0),
-      render: (a) =>
-        canEdit ? (
-          <button
-            disabled={busy === a.id}
-            onClick={(e) => {
-              e.stopPropagation();
-              void toggleAdoption(a);
-            }}
-            title={
-              a.adopted
-                ? 'Adopted by this company — click to drop it'
-                : 'Not adopted — click to adopt it for this company'
-            }
-            className={cn(
-              'inline-flex h-6 w-6 items-center justify-center rounded-full transition',
-              a.adopted
-                ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300'
-                : 'bg-slate-100 text-slate-300 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-600',
-            )}
-          >
-            {a.adopted ? <Check className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
-          </button>
-        ) : a.adopted ? (
-          <Check className="mx-auto h-4 w-4 text-emerald-600" />
-        ) : (
-          <Minus className="mx-auto h-4 w-4 text-slate-300" />
+  const summary = useMemo(
+    () => [
+      { label: 'Groups', value: blocks.length },
+      {
+        label: 'Sub-groups',
+        value: blocks.reduce(
+          (n, b) => n + b.tables.filter((t) => t.subheading).length,
+          0,
         ),
-    },
-    {
-      key: 'actions',
-      header: '',
-      sortable: false,
-      className: 'w-20',
-      render: (a) => (
-        <div className="flex items-center gap-0.5">
-          {canEdit && (
-            <button
-              title="Edit name, notes and posting rules"
-              className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800"
-              onClick={(e) => {
-                e.stopPropagation();
-                setEditing(a);
-              }}
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-          )}
-          {/* Shipped accounts have no delete at all, rather than one that
-              always fails — the master is the signed-off baseline. */}
-          {canDelete && !a.isSystem && (
-            <button
-              title="Delete this account"
-              className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600 dark:hover:bg-slate-800"
-              onClick={(e) => {
-                e.stopPropagation();
-                void remove(a);
-              }}
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-      ),
-    },
-  ];
+      },
+      { label: 'Ledger Accounts', value: rows.length },
+    ],
+    [blocks, rows],
+  );
+
+  const spec: ReportSpec = {
+    companyName,
+    subtitle: `Chart of Accounts - ${rows.length} ledger accounts${
+      scope === 'adopted' ? ' in use' : ' (full master)'
+    }`,
+    columns: selected.columns,
+    weights: selected.weights,
+    blocks,
+    fileBase: 'chart-of-accounts',
+    summary,
+    numericCols: selected.numericCols,
+  };
+
+  const has = rows.length > 0;
+  const canPrint = can(ROUTE, 'print');
+  const popupBlocked = () =>
+    toast.error('Pop-up blocked — allow pop-ups to print.');
+  const onPreview = () => {
+    if (!printReport(spec, { allowPrint: canPrint })) popupBlocked();
+  };
+  const onPrint = () => {
+    if (!printReport(spec, { autoPrint: true })) popupBlocked();
+  };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="Chart of Accounts"
-        description="The group-level account master from Annexure D. Every company draws on the same master; “Used here” is what the active company has adopted."
-        icon={<BookOpen className="h-5 w-5" />}
+        description="The account master by group, sub-group and ledger — the Annexure D chart as it reads for this company"
+        icon={<ListTree className="h-5 w-5" />}
         actions={
-          canAdd ? (
-            <div className="flex items-center gap-2">
-              <button className="btn-secondary" onClick={() => setAddingGroup(true)}>
-                <Plus className="mr-1 inline h-4 w-4" />
-                New Group
-              </button>
-              <button
-                className="btn-primary"
-                onClick={() => setAddingAccount(true)}
-              >
-                <Plus className="mr-1 inline h-4 w-4" />
-                New Account
-              </button>
-            </div>
-          ) : null
+          <ReportExportButtons
+            canPrint={canPrint}
+            canPdf={can(ROUTE, 'downloadPdf')}
+            canExcel={can(ROUTE, 'downloadExcel')}
+            onPreview={onPreview}
+            onPrint={onPrint}
+            onPdf={() => pdfReport(spec)}
+            onExcel={() => excelReport(spec)}
+            disabled={!has}
+          />
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-start gap-2 text-sm text-slate-500 dark:text-slate-400">
-        <span className="rounded-full bg-slate-100 px-3 py-1 dark:bg-slate-800">
-          {all.length} accounts in the master
-        </span>
-        <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
-          {adoptedCount} adopted by this company
-        </span>
-        <span className="rounded-full bg-slate-100 px-3 py-1 dark:bg-slate-800">
-          {groups?.length ?? 0} groups
-        </span>
-        <p className="basis-full pt-1 text-xs">
-          A code ending in 00 is a group heading and is never posted to; only the
-          accounts below are. Codes are fixed by the annexure — the name, notes,
-          adoption and what an entry is asked for (cost centre, cost object) are
-          what you maintain here.
-        </p>
+      <div className="card flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-4 dark:border-slate-800">
+          <Select
+            value={scope}
+            onChange={(e) => setScope(e.target.value)}
+            options={[
+              { value: 'adopted', label: 'Accounts this company uses' },
+              { value: 'all', label: 'The whole master' },
+            ]}
+            className="w-64"
+          />
+          <div className="ml-auto flex items-center gap-2">
+            <ColumnToggle
+              columns={ALL_COLUMNS.map((c) => ({ key: c.key, label: c.header }))}
+              hidden={hidden}
+              onToggle={toggle}
+            />
+            <span className="text-sm text-slate-500 dark:text-slate-400">
+              {rows.length} account{rows.length === 1 ? '' : 's'} in{' '}
+              {blocks.length} group{blocks.length === 1 ? '' : 's'}
+            </span>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+          <ReportView
+            columns={selected.columns}
+            weights={selected.weights}
+            blocks={blocks}
+            loading={loading}
+            boldCol={selected.boldCol}
+            emptyText="No accounts to show — this company has adopted none yet."
+          />
+        </div>
       </div>
-
-      <div className="min-h-0 flex-1">
-        <DataTable
-          columns={columns}
-          rows={rows}
-          rowKey={(a) => a.id}
-          loading={loading}
-          search={search}
-          onSearchChange={setSearch}
-          searchPlaceholder="Search code, account or group…"
-          onRefresh={refetch}
-          emptyMessage="No accounts match these filters."
-          toolbar={
-            <div className="flex flex-wrap items-center gap-2">
-              <Select
-                value={block}
-                onChange={(e) => {
-                  setBlock(e.target.value);
-                  setGroupFilter('');
-                }}
-                options={BLOCKS.map((b) => ({ value: b.digit, label: b.label }))}
-                placeholder="All blocks"
-                className="w-56"
-              />
-              <Select
-                value={groupFilter}
-                onChange={(e) => setGroupFilter(e.target.value)}
-                options={groupOptions}
-                placeholder="All groups"
-                className="w-64"
-              />
-              <Select
-                value={adoption}
-                onChange={(e) => setAdoption(e.target.value)}
-                options={[
-                  { value: 'yes', label: 'Adopted here' },
-                  { value: 'no', label: 'Not adopted' },
-                ]}
-                placeholder="Any adoption"
-                className="w-44"
-              />
-            </div>
-          }
-        />
-      </div>
-
-      <AccountDrawer
-        open={addingAccount || !!editing}
-        account={editing}
-        groups={groups ?? []}
-        companyName={activeCompanyName}
-        onClose={() => {
-          setAddingAccount(false);
-          setEditing(null);
-        }}
-        onSaved={refetch}
-      />
-      <GroupDrawer
-        open={addingGroup}
-        groups={groups ?? []}
-        onClose={() => setAddingGroup(false)}
-        onSaved={refetch}
-      />
     </div>
   );
 }

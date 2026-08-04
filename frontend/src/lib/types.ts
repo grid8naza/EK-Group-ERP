@@ -2042,6 +2042,12 @@ export interface AccountGroup {
   tallyGroup: string | null;
   sortOrder: number;
   isActive: boolean;
+  /** Shipped by the annexure: renameable, never deletable. */
+  isSystem?: boolean;
+  /** Postable accounts hanging off this heading. */
+  accountCount?: number;
+  /** Sub-groups under it. */
+  childCount?: number;
 }
 
 /** A postable ledger account, with this company's adoption folded in. */

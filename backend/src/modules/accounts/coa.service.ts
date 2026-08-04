@@ -58,11 +58,21 @@ const costFlags = (hasCostCenter?: boolean, hasCostObject?: boolean) => ({
 export class CoaService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** The group hierarchy, parents before children. */
-  groups() {
-    return this.prisma.accountGroup.findMany({
+  /**
+   * The group hierarchy, parents before children, each with what hangs off it —
+   * the Groups screen has to say whether a heading is empty before anyone can
+   * decide to delete it, and the server refuses a group that isn't.
+   */
+  async groups() {
+    const rows = await this.prisma.accountGroup.findMany({
       orderBy: [{ sortOrder: 'asc' }, { code: 'asc' }],
+      include: { _count: { select: { accounts: true, children: true } } },
     });
+    return rows.map(({ _count, ...g }) => ({
+      ...g,
+      accountCount: _count.accounts,
+      childCount: _count.children,
+    }));
   }
 
   /**
