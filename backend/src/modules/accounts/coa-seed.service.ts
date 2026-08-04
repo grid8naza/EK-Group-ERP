@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { COA_MAIN_GROUPS } from './main-groups';
 import {
   CcRequirement,
   COA_ACCOUNTS,
@@ -58,6 +59,7 @@ export class CoaSeedService implements OnApplicationBootstrap {
       const categories = await this.seedCategories();
       await this.markShipped();
       await this.backfillCostFlags();
+      await this.backfillMainGroups();
       if (groups || accounts || adoptions || categories) {
         this.logger.log(
           `Chart of Accounts seeded: +${groups} groups, +${accounts} accounts, ` +
@@ -132,6 +134,28 @@ export class CoaSeedService implements OnApplicationBootstrap {
   }
 
   /**
+   * Classify the blocks of a database seeded before the schedules existed —
+   * otherwise the chart would have a tier with nothing in it and all 36 blocks
+   * would have to be classified by hand.
+   *
+   * Only fills a group that has NONE, so a reclassification (moving Borrowings
+   * to current, say) is never undone by a redeploy.
+   */
+  private async backfillMainGroups(): Promise<void> {
+    let updated = 0;
+    for (const [code, mainGroup] of Object.entries(COA_MAIN_GROUPS)) {
+      const res = await this.prisma.accountGroup.updateMany({
+        where: { code, mainGroup: null, parentGroupId: null },
+        data: { mainGroup },
+      });
+      updated += res.count;
+    }
+    if (updated) {
+      this.logger.log(`Main group set on ${updated} account groups.`);
+    }
+  }
+
+  /**
    * Groups reference their parent by code, so they are inserted parents-first:
    * sorting by code is enough, since a parent's code is always numerically lower
    * than its children's (10000 before 10100).
@@ -161,6 +185,9 @@ export class CoaSeedService implements OnApplicationBootstrap {
           normalSide: g.normalSide,
           statement: g.statement,
           tallyGroup: g.tallyGroup,
+          // Only a top-level group carries a schedule; a sub-group reports
+          // under its parent's.
+          mainGroup: g.parentCode ? null : (COA_MAIN_GROUPS[g.code] ?? null),
           sortOrder: g.sortOrder,
         },
         select: { id: true },

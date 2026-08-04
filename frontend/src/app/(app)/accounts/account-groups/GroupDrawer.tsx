@@ -6,7 +6,8 @@ import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/providers/ToastProvider';
 import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
 import { Checkbox, Input, Select } from '@/components/ui/Field';
-import type { AccountGroup } from '@/lib/types';
+import { mainGroupsFor } from '@/lib/accountGroups';
+import type { AccountGroup, AccountNature, MainGroup } from '@/lib/types';
 
 const NATURE_OPTIONS = [
   { value: 'ASSET', label: 'Asset — Balance Sheet' },
@@ -46,6 +47,7 @@ export function GroupDrawer({
   const [name, setName] = useState('');
   const [parentId, setParentId] = useState('');
   const [nature, setNature] = useState('');
+  const [mainGroup, setMainGroup] = useState<MainGroup | ''>('');
   const [tallyGroup, setTallyGroup] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -57,6 +59,7 @@ export function GroupDrawer({
     setName(group?.name ?? '');
     setParentId(group?.parentGroupId ? String(group.parentGroupId) : '');
     setNature(group?.nature ?? '');
+    setMainGroup(group?.mainGroup ?? '');
     setTallyGroup(group?.tallyGroup ?? '');
     setIsActive(group?.isActive ?? true);
   }, [open, group]);
@@ -76,6 +79,8 @@ export function GroupDrawer({
       if (editing) {
         await api.patch(`/coa/groups/${group!.id}`, {
           name,
+          // Only a top-level group carries a schedule of its own.
+          ...(group!.parentGroupId ? {} : { mainGroup: mainGroup || undefined }),
           tallyGroup,
           isActive,
         });
@@ -86,6 +91,7 @@ export function GroupDrawer({
           name,
           parentGroupId: parent ? parent.id : undefined,
           nature: parent ? undefined : nature,
+          mainGroup: parent ? undefined : mainGroup || undefined,
           tallyGroup: tallyGroup || undefined,
         });
         toast.success('Group added.');
@@ -162,11 +168,36 @@ export function GroupDrawer({
               label="Holds"
               required
               value={nature}
-              onChange={(e) => setNature(e.target.value)}
+              onChange={(e) => {
+                setNature(e.target.value);
+                // The schedules on offer follow the nature, so a schedule
+                // chosen under the old one would no longer be valid.
+                setMainGroup('');
+              }}
               options={NATURE_OPTIONS}
               placeholder="Choose"
             />
             <Hint>This fixes the statement; a child group follows its parent.</Hint>
+          </div>
+        )}
+
+        {/* Top-level groups only: a sub-group reports under its parent's. */}
+        {!parent && !(editing && group!.parentGroupId) && (
+          <div>
+            <Select
+              label="Main group"
+              value={mainGroup}
+              onChange={(e) => setMainGroup(e.target.value as MainGroup | '')}
+              options={mainGroupsFor(
+                (editing ? group!.nature : nature) as AccountNature,
+              ).map((m) => ({ value: m.key, label: m.label }))}
+              placeholder={nature || editing ? 'Not classified' : 'Choose what it holds first'}
+              disabled={!editing && !nature}
+            />
+            <Hint>
+              The schedule this block reports under — where it lands in the
+              balance sheet or the profit and loss.
+            </Hint>
           </div>
         )}
 

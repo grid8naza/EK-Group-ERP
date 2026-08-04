@@ -2031,12 +2031,26 @@ export type PartyKind =
   | 'OTHER';
 
 /** A heading in the account hierarchy. Never posted to. */
+/** The schedule a block of accounts reports under — the chart's second tier. */
+export type MainGroup =
+  | 'NON_CURRENT_ASSET'
+  | 'CURRENT_ASSET'
+  | 'NON_CURRENT_LIABILITY'
+  | 'CURRENT_LIABILITY'
+  | 'DIRECT_INCOME'
+  | 'INDIRECT_INCOME'
+  | 'PURCHASE'
+  | 'DIRECT_EXPENSE'
+  | 'INDIRECT_EXPENSE';
+
 export interface AccountGroup {
   id: number;
   code: string;
   name: string;
   parentGroupId: number | null;
   nature: AccountNature;
+  /** Top-level groups only; a sub-group reports under its parent's. */
+  mainGroup: MainGroup | null;
   normalSide: BalanceSide;
   statement: StatementType;
   tallyGroup: string | null;

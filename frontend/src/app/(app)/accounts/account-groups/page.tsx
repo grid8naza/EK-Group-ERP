@@ -13,7 +13,8 @@ import { Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { GroupDrawer } from './GroupDrawer';
-import type { AccountGroup, AccountNature } from '@/lib/types';
+import { PRIMARY_GROUPS, mainGroupLabel } from '@/lib/accountGroups';
+import type { AccountGroup, AccountNature, MainGroup } from '@/lib/types';
 
 const ROUTE = '/accounts/account-groups';
 
@@ -54,6 +55,7 @@ export default function AccountGroupsPage() {
 
   const [search, setSearch] = useState('');
   const [block, setBlock] = useState('');
+  const [main, setMain] = useState<MainGroup | ''>('');
   const [level, setLevel] = useState(''); // '' | 'top' | 'child'
   const [editing, setEditing] = useState<AccountGroup | null>(null);
   const [adding, setAdding] = useState(false);
@@ -67,14 +69,20 @@ export default function AccountGroupsPage() {
     () => new Map(all.map((g) => [g.id, g])),
     [all],
   );
+  /** A sub-group reports under its parent's schedule; only blocks carry one. */
+  const effectiveMain = (g: AccountGroup) =>
+    g.parentGroupId ? (byId.get(g.parentGroupId)?.mainGroup ?? null) : g.mainGroup;
 
   const rows = useMemo(() => {
     let out = all;
     if (block) out = out.filter((g) => g.code.startsWith(block));
+    if (main) out = out.filter((g) => effectiveMain(g) === main);
     if (level === 'top') out = out.filter((g) => !g.parentGroupId);
     else if (level === 'child') out = out.filter((g) => !!g.parentGroupId);
     return out;
-  }, [all, block, level]);
+    // effectiveMain reads byId, which is derived from `all`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [all, block, main, level, byId]);
 
   /**
    * Anything the annexure shipped is deactivated rather than deleted, and the
@@ -131,6 +139,29 @@ export default function AccountGroupsPage() {
               {parent ? `under ${parent.code} · ${parent.name}` : 'Top-level block'}
             </div>
           </div>
+        );
+      },
+    },
+    {
+      key: 'mainGroup',
+      header: 'Main Group',
+      // A sub-group reports under its parent's schedule, so it shows that
+      // rather than a blank that reads as "unclassified".
+      accessor: (g) => mainGroupLabel(effectiveMain(g)),
+      render: (g) => {
+        const own = !g.parentGroupId;
+        const value = effectiveMain(g);
+        if (!value) return <span className="text-xs text-slate-300">—</span>;
+        return (
+          <span
+            className={cn(
+              'text-xs',
+              own ? 'text-slate-600 dark:text-slate-300' : 'text-slate-400',
+            )}
+          >
+            {mainGroupLabel(value)}
+            {!own && ' (from parent)'}
+          </span>
         );
       },
     },
@@ -281,6 +312,15 @@ export default function AccountGroupsPage() {
                 options={BLOCKS.map((b) => ({ value: b.digit, label: b.label }))}
                 placeholder="All blocks"
                 className="w-56"
+              />
+              <Select
+                value={main}
+                onChange={(e) => setMain(e.target.value as MainGroup | '')}
+                options={PRIMARY_GROUPS.flatMap((p) =>
+                  p.mains.map((m) => ({ value: m.key, label: m.label })),
+                )}
+                placeholder="All main groups"
+                className="w-52"
               />
               <Select
                 value={level}

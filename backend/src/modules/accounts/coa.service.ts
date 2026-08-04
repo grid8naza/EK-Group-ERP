@@ -4,8 +4,14 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { AccountNature, BalanceSide, StatementType } from '@prisma/client';
+import {
+  AccountNature,
+  BalanceSide,
+  MainGroup,
+  StatementType,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MAIN_GROUPS_BY_NATURE } from './main-groups';
 import {
   CompanyEntrySetup,
   resolveEntryRules,
@@ -393,6 +399,9 @@ export class CoaService {
         nature,
         statement: statementOf(nature),
         normalSide: dto.normalSide ?? parent?.normalSide ?? defaultSideOf(nature),
+        // A sub-group reports under its parent's schedule, so it carries none
+        // of its own however the form was filled in.
+        mainGroup: parent ? null : this.checkedMainGroup(dto.mainGroup, nature),
         tallyGroup: dto.tallyGroup?.trim() || parent?.tallyGroup || null,
         isSystem: false,
         sortOrder: 0,
@@ -400,13 +409,42 @@ export class CoaService {
     });
   }
 
+  /**
+   * A schedule has to belong to the side of the books its group is on — an
+   * asset group reported under Current Liabilities would put a balance in the
+   * wrong half of the balance sheet, and nothing downstream would notice.
+   */
+  private checkedMainGroup(
+    mainGroup: MainGroup | undefined,
+    nature: AccountNature,
+  ): MainGroup | null {
+    if (!mainGroup) return null;
+    if (!MAIN_GROUPS_BY_NATURE[nature].includes(mainGroup)) {
+      throw new BadRequestException(
+        `A ${nature.toLowerCase()} group cannot report under ${mainGroup
+          .toLowerCase()
+          .replace(/_/g, ' ')}.`,
+      );
+    }
+    return mainGroup;
+  }
+
   async updateGroup(id: number, dto: UpdateGroupDto) {
     const existing = await this.prisma.accountGroup.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Account group not found');
+    if (dto.mainGroup && existing.parentGroupId) {
+      throw new BadRequestException(
+        'A sub-group reports under its parent group; set the schedule there.',
+      );
+    }
     return this.prisma.accountGroup.update({
       where: { id },
       data: {
         name: dto.name?.trim(),
+        mainGroup:
+          dto.mainGroup === undefined
+            ? undefined
+            : this.checkedMainGroup(dto.mainGroup, existing.nature),
         tallyGroup:
           dto.tallyGroup !== undefined ? dto.tallyGroup?.trim() || null : undefined,
         isActive: dto.isActive,

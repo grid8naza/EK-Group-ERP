@@ -18,6 +18,13 @@ export interface ReportTable {
   shade?: boolean[];
 }
 export interface ReportBlock {
+  /**
+   * A tier ABOVE the heading, for a report with three levels of grouping (e.g.
+   * primary group › schedule › block). Printed once, over the first block that
+   * carries it, and again whenever it changes — so consecutive blocks of the
+   * same section sit under one banner.
+   */
+  section?: string;
   heading?: string;
   count?: number;
   tables: ReportTable[];
@@ -309,8 +316,13 @@ export function printReport(
           )
           .join('')}</div>`
       : '';
+  let printedSection: string | undefined;
   const body = spec.blocks
     .map((b) => {
+      // The section banner repeats only when it changes, so a run of blocks in
+      // the same section reads as one part of the report.
+      const s = b.section && b.section !== printedSection ? b.section : '';
+      if (b.section) printedSection = b.section;
       const h = b.heading
         ? `<h2>${esc(b.heading)}${b.count != null ? ` <span class="muted">(${b.count})</span>` : ''}</h2>`
         : '';
@@ -322,7 +334,7 @@ export function printReport(
           return sub + tableFor(t);
         })
         .join('');
-      return h + tables;
+      return (s ? `<div class="section">${esc(s)}</div>` : '') + h + tables;
     })
     .join('');
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(spec.subtitle)}</title>
@@ -331,6 +343,7 @@ export function printReport(
       h1{font-size:20px;font-weight:bold;margin:0 0 2px;text-align:center}
       .sub{font-size:14px;margin:0;text-align:center}
       .date{color:#64748b;font-size:12px;margin:2px 0 16px;text-align:center}
+      .section{font-size:16px;font-weight:bold;margin:20px 0 2px;text-align:center;letter-spacing:.04em;text-transform:uppercase;color:#0f172a;page-break-after:avoid}
       h2{font-size:14px;margin:18px 0 4px;border-bottom:2px solid #cbd5e1;padding-bottom:2px;text-align:center}
       h3{font-size:12px;margin:10px 0 4px;color:#475569}
       .muted{color:#94a3b8;font-weight:normal}
@@ -426,7 +439,17 @@ export function pdfReport(spec: ReportSpec): void {
       ]
     : [columns as unknown as string[]];
 
+  let pdfSection: string | undefined;
   for (const b of spec.blocks) {
+    // Section banner — once per run of blocks that share one (see ReportBlock).
+    if (b.section && b.section !== pdfSection) {
+      ensure(16);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.text(b.section.toUpperCase(), cx, y, { align: 'center' });
+      y += 6;
+    }
+    if (b.section) pdfSection = b.section;
     if (b.heading) {
       ensure(12);
       doc.setFont('helvetica', 'bold');
@@ -520,15 +543,20 @@ export function pdfReport(spec: ReportSpec): void {
 }
 
 /**
- * Flat worksheet. Optional `headingLabel`/`subheadingLabel` prepend the block
- * heading / table sub-heading as leading columns (e.g. Category, Group) so the
- * grouping is preserved in a spreadsheet-friendly flat form.
+ * Flat worksheet. Optional `sectionLabel`/`headingLabel`/`subheadingLabel`
+ * prepend the block's section / heading / table sub-heading as leading columns
+ * (e.g. Primary Group, Schedule, Group) so the grouping survives as data a
+ * pivot table can work with, rather than as banners a spreadsheet cannot sort.
  */
 export function excelReport(
   spec: ReportSpec,
-  grouping?: { headingLabel?: string; subheadingLabel?: string },
+  grouping?: {
+    sectionLabel?: string;
+    headingLabel?: string;
+    subheadingLabel?: string;
+  },
 ): void {
-  const { headingLabel, subheadingLabel } = grouping ?? {};
+  const { sectionLabel, headingLabel, subheadingLabel } = grouping ?? {};
   // Grouped headers are flattened into single descriptive labels (e.g.
   // "Intercompany Price") so the sheet stays flat, as documented above.
   const colLabels = spec.columns.map((c, i) => {
@@ -537,6 +565,7 @@ export function excelReport(
   });
   const header = [
     ...(spec.serial ? ['Sl. No'] : []),
+    ...(sectionLabel ? [sectionLabel] : []),
     ...(headingLabel ? [headingLabel] : []),
     ...(subheadingLabel ? [subheadingLabel] : []),
     ...colLabels,
@@ -547,6 +576,7 @@ export function excelReport(
       t.rows.forEach((r, i) =>
         rows.push([
           ...(spec.serial ? [i + 1] : []),
+          ...(sectionLabel ? [b.section ?? ''] : []),
           ...(headingLabel ? [b.heading ?? ''] : []),
           ...(subheadingLabel ? [t.subheading ?? ''] : []),
           ...r,

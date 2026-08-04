@@ -69,6 +69,26 @@ enum StatementType {
 // their starting position from the annexure's rule, which stays recorded in
 // `coa-data.ts`. See Account.hasCostCenter.
 
+/// The second level of the chart: the schedule a block of accounts is reported
+/// under, between its primary group (asset, liability, income, expense) and the
+/// block itself.
+///
+/// Not from the annexure, which stops at the block — this is the tier the
+/// statements are actually read in. It is a classification rather than a group
+/// row because the five-digit numbering (D.3) has no room above 10000: a parent
+/// of both 10000 and 11000 could share two digits with neither.
+enum MainGroup {
+  NON_CURRENT_ASSET
+  CURRENT_ASSET
+  NON_CURRENT_LIABILITY
+  CURRENT_LIABILITY
+  DIRECT_INCOME
+  INDIRECT_INCOME
+  PURCHASE
+  DIRECT_EXPENSE
+  INDIRECT_EXPENSE
+}
+
 /// The sub-ledger a control account is aged by.
 enum PartyKind {
   SUPPLIER
@@ -90,6 +110,10 @@ model AccountGroup {
   nature        AccountNature
   normalSide    BalanceSide
   statement     StatementType
+  /// Which schedule this block reports under. Carried by TOP-LEVEL groups only;
+  /// a sub-group reports under whatever its parent does, so storing it on both
+  /// would only create two answers to one question.
+  mainGroup     MainGroup?
   /// The Tally primary group this corresponds to — the migration key for the
   /// books the finance team keeps today.
   tallyGroup    String?

@@ -9,7 +9,12 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
-import { AccountNature, BalanceSide, PartyKind } from '@prisma/client';
+import {
+  AccountNature,
+  BalanceSide,
+  MainGroup,
+  PartyKind,
+} from '@prisma/client';
 
 /** Adopt or drop an account for the active company. */
 export class UpdateAdoptionDto {
@@ -171,6 +176,11 @@ export class CreateGroupDto {
   @IsEnum(BalanceSide)
   normalSide?: BalanceSide;
 
+  /** The schedule this block reports under. Top-level groups only. */
+  @IsOptional()
+  @IsEnum(MainGroup)
+  mainGroup?: MainGroup;
+
   @IsOptional()
   @IsString()
   @MaxLength(120)
@@ -183,6 +193,10 @@ export class UpdateGroupDto {
   @MinLength(2)
   @MaxLength(160)
   name?: string;
+
+  @IsOptional()
+  @IsEnum(MainGroup)
+  mainGroup?: MainGroup;
 
   @IsOptional()
   @IsString()

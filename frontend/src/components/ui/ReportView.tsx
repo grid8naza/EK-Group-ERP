@@ -205,15 +205,21 @@ export function ReportView({
       return next;
     });
 
-  const keyOfBlock = (b: ReportBlock, bi: number) => b.heading ?? `#${bi}`;
+  const keyOfSection = (s: string) => `§${s}`;
+  const keyOfBlock = (b: ReportBlock, bi: number) =>
+    `${b.section ?? ''}/${b.heading ?? `#${bi}`}`;
   const keyOfTable = (
     blockKey: string,
     t: ReportBlock['tables'][number],
     ti: number,
   ) => `${blockKey}/${t.subheading ?? ti}`;
-  // Sections collapse as one thing; "collapse all" therefore means the section
-  // headings, which takes the whole report down to its four or five lines.
-  const sectionKeys = blocks.map(keyOfBlock);
+  // "Collapse all" folds the TOP tier — the sections where a report has them,
+  // otherwise the block headings — which takes it down to a handful of lines.
+  const sections = [...new Set(blocks.map((b) => b.section).filter(Boolean))] as
+    string[];
+  const topKeys = sections.length
+    ? sections.map(keyOfSection)
+    : blocks.map(keyOfBlock);
 
   if (loading)
     return <p className="py-12 text-center text-slate-400">Loading…</p>;
@@ -350,11 +356,11 @@ export function ReportView({
 
   return (
     <div className="pt-4">
-      {collapsible && sectionKeys.length > 0 && (
+      {collapsible && topKeys.length > 0 && (
         <div className="mb-1 flex justify-end gap-3 text-xs">
           <button
             type="button"
-            onClick={() => foldAll(sectionKeys, false)}
+            onClick={() => foldAll(topKeys, false)}
             className="text-slate-500 hover:text-brand-600 dark:text-slate-400"
           >
             Expand all
@@ -362,7 +368,7 @@ export function ReportView({
           <span className="text-slate-300 dark:text-slate-700">|</span>
           <button
             type="button"
-            onClick={() => foldAll(sectionKeys, true)}
+            onClick={() => foldAll(topKeys, true)}
             className="text-slate-500 hover:text-brand-600 dark:text-slate-400"
           >
             Collapse all
@@ -372,6 +378,19 @@ export function ReportView({
       {blocks.map((b, bi) => {
         const blockKey = keyOfBlock(b, bi);
         const blockShut = collapsible && folded.has(blockKey);
+        // The section banner heads the first block that carries it and every
+        // time it changes, so a run of blocks reads as one part of the report.
+        const newSection = b.section && b.section !== blocks[bi - 1]?.section;
+        const sectionShut =
+          !!b.section && collapsible && folded.has(keyOfSection(b.section));
+        // Everything under this section, so it folds to its own banner.
+        const sectionInner = b.section
+          ? blocks.flatMap((x, xi) =>
+              x.section === b.section ? [keyOfBlock(x, xi)] : [],
+            )
+          : [];
+        const sectionInnerShut =
+          sectionInner.length > 0 && sectionInner.every((k) => folded.has(k));
         // The groups inside this section, so it can be taken down to an
         // outline of its own headings without touching the rest of the report.
         const innerKeys = b.tables
@@ -380,8 +399,32 @@ export function ReportView({
         const innerShut =
           innerKeys.length > 0 && innerKeys.every((k) => folded.has(k));
         return (
-          <div key={bi} className="mb-6">
-            {b.heading && (
+          <div key={bi} className={cn(newSection ? 'mb-6 mt-6 first:mt-0' : 'mb-6')}>
+            {newSection && b.section && (
+              // The banner above the block headings. Deliberately not sticky —
+              // the block heading below it already is, and two stacked sticky
+              // bars eat the screen the report is meant to fill.
+              <div className="mb-1 flex items-center gap-2 border-b-2 border-slate-300 pb-1 text-xl font-bold uppercase tracking-wide text-slate-900 dark:border-slate-700 dark:text-slate-100">
+                <Fold
+                  on={collapsible}
+                  shut={sectionShut}
+                  onToggle={() => fold(keyOfSection(b.section!))}
+                  label={b.section}
+                >
+                  {b.section}
+                </Fold>
+                {collapsible && !sectionShut && sectionInner.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => foldAll(sectionInner, !sectionInnerShut)}
+                    className="text-xs font-normal normal-case tracking-normal text-slate-400 hover:text-brand-600 dark:text-slate-500"
+                  >
+                    {sectionInnerShut ? 'Expand schedules' : 'Collapse schedules'}
+                  </button>
+                )}
+              </div>
+            )}
+            {!sectionShut && b.heading && (
               <h2 className="sticky top-0 z-20 flex h-11 items-center gap-2 bg-white text-lg font-bold text-slate-900 dark:bg-slate-900 dark:text-slate-100">
                 <Fold
                   on={collapsible}
@@ -407,7 +450,8 @@ export function ReportView({
                 )}
               </h2>
             )}
-            {!blockShut &&
+            {!sectionShut &&
+              !blockShut &&
               b.tables.map((t, ti) => {
                 const tableKey = keyOfTable(blockKey, t, ti);
                 const shut = collapsible && folded.has(tableKey);

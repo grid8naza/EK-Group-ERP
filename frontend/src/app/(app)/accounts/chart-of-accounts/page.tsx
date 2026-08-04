@@ -23,32 +23,10 @@ import {
   type ReportSpec,
   type ReportTable,
 } from '@/lib/reportDoc';
-import type {
-  AccountGroup,
-  AccountNature,
-  CoaAccount,
-  Company,
-} from '@/lib/types';
+import { PRIMARY_GROUPS, mainGroupLabel } from '@/lib/accountGroups';
+import type { AccountGroup, CoaAccount, Company, MainGroup } from '@/lib/types';
 
 const ROUTE = '/accounts/chart-of-accounts';
-
-/**
- * The four primary groups every account ultimately rolls into, in the order the
- * statements are read: the balance sheet pair first, then the two that make up
- * the profit and loss.
- *
- * EQUITY sits under Liabilities rather than forming a fifth section — capital
- * and reserves are what the business owes its owners, which is why they carry a
- * credit balance and sit on that side of the balance sheet (and why Tally shows
- * Capital Account there too).
- */
-const PRIMARY_GROUPS: { key: string; label: string; natures: AccountNature[] }[] =
-  [
-    { key: 'ASSET', label: 'Assets', natures: ['ASSET'] },
-    { key: 'LIABILITY', label: 'Liabilities', natures: ['LIABILITY', 'EQUITY'] },
-    { key: 'INCOME', label: 'Income', natures: ['INCOME'] },
-    { key: 'EXPENSE', label: 'Expenses', natures: ['EXPENSE'] },
-  ];
 
 /**
  * A line of the chart: either a group heading or a postable account. Both go
@@ -141,6 +119,7 @@ export default function ChartOfAccountsReportPage() {
   // company has adopted; the whole master is a filter away.
   const [scope, setScope] = useState('adopted'); // 'adopted' | 'all'
   const [primary, setPrimary] = useState(''); // '' = all four
+  const [main, setMain] = useState<MainGroup | ''>(''); // '' = every schedule
   const [groupId, setGroupId] = useState(''); // '' = every group in scope
 
   const { hidden, toggle, selected } = useReportColumns(ROUTE, ALL_COLUMNS);
@@ -155,15 +134,31 @@ export default function ChartOfAccountsReportPage() {
     [accounts, scope],
   );
 
+  // The schedules a filter can pick from — those of the chosen primary group,
+  // or all nine.
+  const mainOptions = useMemo(
+    () =>
+      (primary
+        ? (PRIMARY_GROUPS.find((p) => p.key === primary)?.mains ?? [])
+        : PRIMARY_GROUPS.flatMap((p) => p.mains)
+      ).map((m) => ({ value: m.key, label: m.label })),
+    [primary],
+  );
+
   // The blocks a group filter can pick from — top-level groups only, narrowed
-  // to the chosen primary group so the two filters read as one drill-down.
+  // by whatever is chosen above it, so the three filters read as one drill-down.
   const groupOptions = useMemo(() => {
     const natures = PRIMARY_GROUPS.find((p) => p.key === primary)?.natures;
     return (groups ?? [])
-      .filter((g) => !g.parentGroupId && (!natures || natures.includes(g.nature)))
+      .filter(
+        (g) =>
+          !g.parentGroupId &&
+          (!natures || natures.includes(g.nature)) &&
+          (!main || g.mainGroup === main),
+      )
       .sort((a, b) => a.code.localeCompare(b.code))
       .map((g) => ({ value: String(g.id), label: `${g.code} · ${g.name}` }));
-  }, [groups, primary]);
+  }, [groups, primary, main]);
 
   const { blocks, perPrimary } = useMemo(() => {
     const all = groups ?? [];
@@ -192,55 +187,68 @@ export default function ChartOfAccountsReportPage() {
         perPrimary.push(0);
         continue;
       }
-      // The blocks of this primary group — 10000 Fixed Assets, 12000
-      // Inventories, and so on.
-      const roots = all
-        .filter(
-          (g) =>
-            !g.parentGroupId &&
-            section.natures.includes(g.nature) &&
-            (!groupId || String(g.id) === groupId),
-        )
-        .sort((a, b) => a.code.localeCompare(b.code));
+      let inSection = 0;
+      // Each schedule of this primary group is its own block — Non-current
+      // Assets, then Current Assets — with the numbered blocks under it.
+      for (const schedule of section.mains) {
+        if (main && schedule.key !== main) continue;
 
-      const tables: ReportTable[] = [];
-      let count = 0;
+        const roots = all
+          .filter(
+            (g) =>
+              !g.parentGroupId &&
+              section.natures.includes(g.nature) &&
+              g.mainGroup === schedule.key &&
+              (!groupId || String(g.id) === groupId),
+          )
+          .sort((a, b) => a.code.localeCompare(b.code));
 
-      for (const root of roots) {
-        const lines: ChartRow[] = [];
-        // Accounts hanging straight off the block, before any sub-group — e.g.
-        // Inventories, which has no sub-groups at all.
-        lines.push(...accountsOf(root));
-        for (const child of all
-          .filter((g) => g.parentGroupId === root.id)
-          .sort((a, b) => a.code.localeCompare(b.code))) {
-          const kids = accountsOf(child);
-          if (!kids.length) continue;
-          // The sub-group heads its own accounts as a row of the table, so it
-          // keeps its place in the chart when the report is printed.
-          lines.push({ kind: 'group', code: child.code, name: child.name });
-          lines.push(...kids);
+        const tables: ReportTable[] = [];
+        let count = 0;
+
+        for (const root of roots) {
+          const lines: ChartRow[] = [];
+          // Accounts hanging straight off the block, before any sub-group —
+          // e.g. Inventories, which has no sub-groups at all.
+          lines.push(...accountsOf(root));
+          for (const child of all
+            .filter((g) => g.parentGroupId === root.id)
+            .sort((a, b) => a.code.localeCompare(b.code))) {
+            const kids = accountsOf(child);
+            if (!kids.length) continue;
+            // The sub-group heads its own accounts as a row of the table, so it
+            // keeps its place in the chart when the report is printed.
+            lines.push({ kind: 'group', code: child.code, name: child.name });
+            lines.push(...kids);
+          }
+          const held = lines.filter((l) => l.kind === 'account').length;
+          if (!held) continue;
+          tables.push({
+            subheading: `${root.code} · ${root.name}`,
+            subcount: held,
+            rows: lines.map(selected.cells),
+            shade: lines.map((l) => l.kind === 'group'),
+          });
+          count += held;
         }
-        const held = lines.filter((l) => l.kind === 'account').length;
-        if (!held) continue;
-        tables.push({
-          subheading: `${root.code} · ${root.name}`,
-          subcount: held,
-          rows: lines.map(selected.cells),
-          shade: lines.map((l) => l.kind === 'group'),
+
+        // An empty schedule is left out rather than printed as a bare heading:
+        // on "adopted only" a company can drop whole blocks, and a page of
+        // empty headings is not a chart of accounts.
+        if (!count) continue;
+        blocks.push({
+          section: section.label,
+          heading: schedule.label,
+          count,
+          tables,
         });
-        count += held;
+        inSection += count;
       }
 
-      perPrimary.push(count);
-      // An empty section is left out rather than printed as a bare heading: on
-      // "adopted only" a company can drop whole blocks, and a page of empty
-      // headings is not a chart of accounts.
-      if (!count) continue;
-      blocks.push({ heading: section.label, count, tables });
+      perPrimary.push(inSection);
     }
     return { blocks, perPrimary };
-  }, [groups, rows, selected, primary, groupId]);
+  }, [groups, rows, selected, primary, main, groupId]);
 
   /** What the chart is showing, once both filters have had their say. */
   const shown = perPrimary.reduce((n, c) => n + c, 0);
@@ -260,6 +268,7 @@ export default function ChartOfAccountsReportPage() {
 
   const filterNote = [
     primary ? PRIMARY_GROUPS.find((p) => p.key === primary)?.label : null,
+    main ? mainGroupLabel(main) : null,
     groupId ? groupOptions.find((o) => o.value === groupId)?.label : null,
   ]
     .filter(Boolean)
@@ -307,7 +316,15 @@ export default function ChartOfAccountsReportPage() {
             onPreview={onPreview}
             onPrint={onPrint}
             onPdf={() => pdfReport(spec)}
-            onExcel={() => excelReport(spec)}
+            // The sheet carries the three tiers as columns rather than as
+            // banners, so it can be sorted and pivoted like the data it is.
+            onExcel={() =>
+              excelReport(spec, {
+                sectionLabel: 'Primary Group',
+                headingLabel: 'Main Group',
+                subheadingLabel: 'Group',
+              })
+            }
             disabled={!has}
           />
         }
@@ -328,20 +345,31 @@ export default function ChartOfAccountsReportPage() {
             value={primary}
             onChange={(e) => {
               setPrimary(e.target.value);
-              // The group list is drawn from the chosen primary, so a group
-              // held by the old one would filter everything away.
+              // Each list below is drawn from the one above it, so a schedule
+              // or group held by the old primary would filter everything away.
+              setMain('');
               setGroupId('');
             }}
             options={PRIMARY_GROUPS.map((p) => ({ value: p.key, label: p.label }))}
             placeholder="All primary groups"
-            className="w-48"
+            className="w-44"
+          />
+          <Select
+            value={main}
+            onChange={(e) => {
+              setMain(e.target.value as MainGroup | '');
+              setGroupId('');
+            }}
+            options={mainOptions}
+            placeholder="All main groups"
+            className="w-52"
           />
           <Select
             value={groupId}
             onChange={(e) => setGroupId(e.target.value)}
             options={groupOptions}
             placeholder="All groups"
-            className="w-64"
+            className="w-60"
           />
           <div className="ml-auto flex items-center gap-2">
             <ColumnToggle
