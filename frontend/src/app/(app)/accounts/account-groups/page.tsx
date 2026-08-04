@@ -18,19 +18,6 @@ import type { AccountGroup, AccountNature, MainGroup } from '@/lib/types';
 
 const ROUTE = '/accounts/account-groups';
 
-/** The five blocks the five-digit code sorts into (Annexure D.3). */
-const BLOCKS: { digit: string; label: string }[] = [
-  { digit: '1', label: '1 · Assets' },
-  { digit: '2', label: '2 · Liabilities' },
-  { digit: '3', label: '3 · Equity and Reserves' },
-  { digit: '4', label: '4 · Income' },
-  { digit: '5', label: '5 · Purchases and Direct Expenses' },
-  { digit: '6', label: '6 · Indirect and Operating Expenses' },
-  { digit: '7', label: '7 · Other Income' },
-  { digit: '8', label: '8 · Finance Cost, Tax and Non-operating' },
-  { digit: '9', label: '9 · Control, Clearing and Suspense' },
-];
-
 const NATURE_TONE: Record<AccountNature, string> = {
   ASSET: 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300',
   LIABILITY: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',
@@ -54,7 +41,7 @@ export default function AccountGroupsPage() {
   const { data: groups, loading, refetch } = useFetch<AccountGroup[]>('/coa/groups');
 
   const [search, setSearch] = useState('');
-  const [block, setBlock] = useState('');
+  const [primary, setPrimary] = useState(''); // '' = all four
   const [main, setMain] = useState<MainGroup | ''>('');
   const [level, setLevel] = useState(''); // '' | 'top' | 'child'
   const [editing, setEditing] = useState<AccountGroup | null>(null);
@@ -73,16 +60,32 @@ export default function AccountGroupsPage() {
   const effectiveMain = (g: AccountGroup) =>
     g.parentGroupId ? (byId.get(g.parentGroupId)?.mainGroup ?? null) : g.mainGroup;
 
+  // The main groups on offer are those of the chosen primary — the two filters
+  // are one drill-down, not two independent lists.
+  const mainOptions = useMemo(
+    () =>
+      (primary
+        ? (PRIMARY_GROUPS.find((p) => p.key === primary)?.mains ?? [])
+        : PRIMARY_GROUPS.flatMap((p) => p.mains)
+      ).map((m) => ({ value: m.key, label: m.label })),
+    [primary],
+  );
+
   const rows = useMemo(() => {
     let out = all;
-    if (block) out = out.filter((g) => g.code.startsWith(block));
+    if (primary) {
+      // A group's primary group is its nature; a child inherits its parent's,
+      // so this catches both tiers without walking the tree.
+      const natures = PRIMARY_GROUPS.find((p) => p.key === primary)?.natures;
+      out = out.filter((g) => natures?.includes(g.nature));
+    }
     if (main) out = out.filter((g) => effectiveMain(g) === main);
     if (level === 'top') out = out.filter((g) => !g.parentGroupId);
     else if (level === 'child') out = out.filter((g) => !!g.parentGroupId);
     return out;
     // effectiveMain reads byId, which is derived from `all`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [all, block, main, level, byId]);
+  }, [all, primary, main, level, byId]);
 
   /**
    * Anything the annexure shipped is deactivated rather than deleted, and the
@@ -307,18 +310,24 @@ export default function AccountGroupsPage() {
           toolbar={
             <div className="flex flex-wrap items-center gap-2">
               <Select
-                value={block}
-                onChange={(e) => setBlock(e.target.value)}
-                options={BLOCKS.map((b) => ({ value: b.digit, label: b.label }))}
-                placeholder="All blocks"
-                className="w-56"
+                value={primary}
+                onChange={(e) => {
+                  setPrimary(e.target.value);
+                  // The main groups below are drawn from the primary, so one
+                  // held by the old primary would filter everything away.
+                  setMain('');
+                }}
+                options={PRIMARY_GROUPS.map((p) => ({
+                  value: p.key,
+                  label: p.label,
+                }))}
+                placeholder="All primary groups"
+                className="w-48"
               />
               <Select
                 value={main}
                 onChange={(e) => setMain(e.target.value as MainGroup | '')}
-                options={PRIMARY_GROUPS.flatMap((p) =>
-                  p.mains.map((m) => ({ value: m.key, label: m.label })),
-                )}
+                options={mainOptions}
                 placeholder="All main groups"
                 className="w-52"
               />
