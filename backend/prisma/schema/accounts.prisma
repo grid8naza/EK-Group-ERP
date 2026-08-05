@@ -153,6 +153,25 @@ enum VoucherStatus {
   CANCELLED
 }
 
+/// How an amount posted to a party is attached to that party's bills — Tally's
+/// method of adjustment.
+///
+/// A party balance is not one number but a stack of bills, each either settled
+/// or still standing. Every amount that touches a party has to say which of
+/// those it is doing, or the balance agrees while the detail behind it does not.
+enum BillRefType {
+  /// Raises a new outstanding bill. An invoice.
+  NEW
+  /// Settles part or all of an existing one. A receipt or payment.
+  AGAINST
+  /// Money taken or paid before there is a bill to attach it to.
+  ADVANCE
+  /// Against the party generally, no bill named. The honest answer when nobody
+  /// yet knows which invoice a payment covers — it stays visible as unallocated
+  /// rather than being forced onto the wrong bill.
+  ON_ACCOUNT
+}
+
 /// The sub-ledger a control account is aged by.
 enum PartyKind {
   SUPPLIER
@@ -449,8 +468,11 @@ model VoucherLine {
   date   DateTime
   status VoucherStatus @default(DRAFT)
 
-  voucher Voucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
-  account Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  voucher     Voucher          @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  account     Account          @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  /// How this line's amount attaches to the party's bills. Present only on a
+  /// control-account line, and summing to that line's amount.
+  billRefs    BillAllocation[]
 
   @@index([voucherId])
   @@index([companyId, accountId, date])
@@ -461,4 +483,56 @@ model VoucherLine {
   @@index([companyId, partyKind, partyId, date])
   @@index([companyId, costCenterId, date])
   @@map("voucher_lines")
+}
+
+/// Bill-wise details — which of a party's bills an amount belongs to.
+///
+/// A party's balance is a STACK OF BILLS, not one number, and this is the stack.
+/// A NEW row is a bill coming into existence; AGAINST rows point back at it and
+/// chip away at it; what is left is what is outstanding. Nothing stores that
+/// remainder — it is derived, the same rule the document numbers follow, so a
+/// deleted or cancelled entry cannot leave a bill claiming to be settled by a
+/// payment that no longer exists.
+///
+/// Rows hang off the VOUCHER LINE that created them, so they die with it. Party,
+/// account, company, branch, date and status are copied down for the same reason
+/// they are copied onto the line: an ageing report reads this table alone.
+model BillAllocation {
+  id            Int @id @default(autoincrement())
+  voucherLineId Int
+  companyId     Int
+  branchId      Int?
+  accountId     Int
+  partyKind     PartyKind
+  partyId       Int
+
+  refType BillRefType
+  /// The bill's own number. Required on NEW — it is the bill's NAME, what a
+  /// statement lists and what a payment is matched against. Null on ADVANCE and
+  /// ON_ACCOUNT, which are by definition attached to no bill.
+  billRef String?
+  /// The NEW allocation this one settles. Set only on AGAINST.
+  againstId Int?
+  amount    Decimal @db.Decimal(18, 2)
+  /// When the bill falls due — its date plus the party's agreed credit period,
+  /// snapshotted at the moment it was raised. Stored rather than recomputed
+  /// because the terms may be renegotiated later, and a bill is aged by the
+  /// terms it was raised under.
+  dueDate DateTime?
+
+  /// Denormalised from the voucher, exactly as on VoucherLine.
+  date   DateTime
+  status VoucherStatus @default(DRAFT)
+
+  line     VoucherLine      @relation(fields: [voucherLineId], references: [id], onDelete: Cascade)
+  against  BillAllocation?  @relation("BillSettlement", fields: [againstId], references: [id], onDelete: Restrict)
+  payments BillAllocation[] @relation("BillSettlement")
+
+  @@index([voucherLineId])
+  // The outstanding list, and the ageing built on it: one party's bills by date.
+  @@index([companyId, partyKind, partyId, status])
+  @@index([againstId])
+  // A bill number is a party's own — two suppliers may both send "INV-001".
+  @@unique([companyId, partyKind, partyId, billRef])
+  @@map("bill_allocations")
 }

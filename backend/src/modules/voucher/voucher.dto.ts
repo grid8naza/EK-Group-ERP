@@ -3,6 +3,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsISO8601,
   IsNumber,
@@ -13,6 +14,41 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+
+/**
+ * One bill-wise allocation on a line — which of the party's bills this slice of
+ * the amount belongs to.
+ *
+ * NEW names a bill coming into existence. AGAINST points back at one and settles
+ * part of it. ADVANCE is money moved before there is a bill. ON_ACCOUNT is the
+ * honest "we don't know yet", which stays visible as unallocated rather than
+ * being forced onto the wrong invoice.
+ */
+export class BillAllocationInput {
+  @IsIn(['NEW', 'AGAINST', 'ADVANCE', 'ON_ACCOUNT'])
+  refType!: 'NEW' | 'AGAINST' | 'ADVANCE' | 'ON_ACCOUNT';
+
+  /** The bill's own number. Required on NEW; ignored on the rest. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  billRef?: string;
+
+  /** The bill being settled. Required on AGAINST. */
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  againstId?: number;
+
+  @IsNumber()
+  @IsPositive()
+  amount!: number;
+
+  /** Overrides the party's credit period for this bill. NEW only. */
+  @IsOptional()
+  @IsISO8601()
+  dueDate?: string;
+}
 
 /**
  * One line of a voucher. A line carries EITHER a debit or a credit — both, or
@@ -63,6 +99,17 @@ export class VoucherLineInput {
   @IsInt()
   @IsPositive()
   partyId?: number;
+
+  /**
+   * Which of the party's bills this line's amount belongs to. Required on a
+   * control-account line and must sum to the line amount — that is what
+   * bill-wise tracking IS.
+   */
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => BillAllocationInput)
+  bills?: BillAllocationInput[];
 
   /**
    * What the transaction WAS, where this line differs from the header — one

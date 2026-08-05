@@ -2166,6 +2166,37 @@ export interface VoucherLine {
   /** Whose balance this line moves — set only on a control account. */
   partyKind: PartyKind | null;
   partyId: number | null;
+  /** Which of that party's bills the amount belongs to. */
+  billRefs?: BillAllocation[];
+}
+
+/** Tally's method of adjustment — how an amount attaches to a party's bills. */
+export type BillRefType = 'NEW' | 'AGAINST' | 'ADVANCE' | 'ON_ACCOUNT';
+
+export interface BillAllocation {
+  id: number;
+  refType: BillRefType;
+  /** The bill's own number. Only a NEW row has one; a settlement points by id. */
+  billRef: string | null;
+  againstId: number | null;
+  amount: string | number;
+  dueDate: string | null;
+  date: string;
+  status: VoucherStatus;
+}
+
+/** A bill still standing against a party — what a settlement may be posted to. */
+export interface OutstandingBill {
+  id: number;
+  billRef: string | null;
+  accountId: number;
+  date: string;
+  dueDate: string | null;
+  amount: number;
+  settled: number;
+  pending: number;
+  /** Days past due; negative while still inside the credit period. */
+  overdueDays: number;
 }
 
 export interface Voucher {

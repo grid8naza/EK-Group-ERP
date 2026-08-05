@@ -10,7 +10,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { VoucherStatus } from '@prisma/client';
+import { PartyKind, VoucherStatus } from '@prisma/client';
 import { CompanyId } from '../../auth/company.decorator';
 import { BranchId } from '../../auth/branch.decorator';
 import { AuthUser, CurrentUser } from '../../auth/current-user.decorator';
@@ -56,6 +56,20 @@ export class VoucherController {
       from,
       to,
     });
+  }
+
+  /** A party's still-standing bills — what a settlement may be posted against. */
+  @Get('bills')
+  bills(
+    @CompanyId() companyId: number | undefined,
+    @Query('partyKind') partyKind: string,
+    @Query('partyId') partyId: string,
+  ) {
+    return this.service.outstandingBills(
+      companyId,
+      partyKind as PartyKind,
+      Number(partyId),
+    );
   }
 
   @Get(':id')

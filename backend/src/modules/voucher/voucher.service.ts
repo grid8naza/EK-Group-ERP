@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PartyKind, Prisma, VoucherStatus } from '@prisma/client';
+import { BillRefType, PartyKind, Prisma, VoucherStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   NUMBERING,
@@ -22,6 +22,7 @@ import {
   CreateVoucherDto,
   UpdateVoucherDto,
   VoucherLineInput,
+  BillAllocationInput,
 } from './voucher.dto';
 import { VOUCHER_NUMBER_PREFIX } from './voucher-types';
 
@@ -37,6 +38,7 @@ const withLines = {
       account: {
         select: { id: true, code: true, name: true, nature: true },
       },
+      billRefs: { orderBy: { id: 'asc' as const } },
     },
   },
 };
@@ -55,6 +57,13 @@ const asInput = (l: {
   transactionTypeId: number | null;
   transactionSubtypeId: number | null;
   partyId: number | null;
+  billRefs?: {
+    refType: BillRefType;
+    billRef: string | null;
+    againstId: number | null;
+    amount: Prisma.Decimal;
+    dueDate: Date | null;
+  }[];
 }): VoucherLineInput => ({
   accountId: l.accountId,
   debit: Number(l.debit),
@@ -63,6 +72,15 @@ const asInput = (l: {
   costObjectId: l.costObjectId ?? undefined,
   narration: l.narration ?? undefined,
   partyId: l.partyId ?? undefined,
+  // The stack as stored, so re-checking a draft runs the same rules over the
+  // same facts rather than finding no bills and refusing the line.
+  bills: l.billRefs?.map((b) => ({
+    refType: b.refType,
+    billRef: b.billRef ?? undefined,
+    againstId: b.againstId ?? undefined,
+    amount: Number(b.amount),
+    dueDate: b.dueDate?.toISOString(),
+  })),
   // Carried back so a re-resolve keeps a line's own classification. Without
   // this an override would quietly collapse to the header's on the next save.
   transactionTypeId: l.transactionTypeId ?? undefined,
@@ -75,8 +93,18 @@ interface ResolvedTransaction {
   transactionSubtypeId: number | null;
 }
 
+/** One bill-wise allocation, checked and ready to be written. */
+interface ResolvedBill {
+  refType: BillRefType;
+  billRef: string | null;
+  againstId: number | null;
+  amount: number;
+  dueDate: Date | null;
+}
+
 /** A line once the rules have had their say, ready to be written. */
 interface ResolvedLine extends ResolvedTransaction {
+  bills: ResolvedBill[];
   accountId: number;
   debit: number;
   credit: number;
@@ -145,6 +173,68 @@ export class VoucherService {
     });
   }
 
+  /**
+   * A party's bills that are still standing — what a settlement may be posted
+   * against, and the raw material of both the statement of account and the
+   * ageing.
+   *
+   * Outstanding is derived here as it is everywhere: raised, less what has been
+   * posted against it. Only POSTED bills appear, because a bill that is not in
+   * the books is not yet a bill; and a bill settled to the penny drops out
+   * rather than lingering at zero.
+   */
+  async outstandingBills(
+    companyId: number | undefined,
+    partyKind: PartyKind,
+    partyId: number,
+  ) {
+    if (!companyId) throw new BadRequestException('Select a company first.');
+    const raised = await this.prisma.billAllocation.findMany({
+      where: {
+        companyId,
+        partyKind,
+        partyId,
+        refType: 'NEW',
+        status: 'POSTED',
+      },
+      select: {
+        id: true,
+        billRef: true,
+        amount: true,
+        date: true,
+        dueDate: true,
+        accountId: true,
+        payments: {
+          where: { status: 'POSTED' },
+          select: { amount: true },
+        },
+      },
+      orderBy: [{ date: 'asc' }, { id: 'asc' }],
+    });
+
+    const today = new Date();
+    return raised
+      .map((b) => {
+        const settled = b.payments.reduce((s, p) => s + paise(Number(p.amount)), 0);
+        const pending = paise(Number(b.amount)) - settled;
+        return {
+          id: b.id,
+          billRef: b.billRef,
+          accountId: b.accountId,
+          date: b.date,
+          dueDate: b.dueDate,
+          amount: Number(b.amount),
+          settled: fromPaise(settled),
+          pending: fromPaise(pending),
+          /** Days past due — negative while still within the credit period. */
+          overdueDays: b.dueDate
+            ? Math.floor((today.getTime() - b.dueDate.getTime()) / 86_400_000)
+            : 0,
+        };
+      })
+      .filter((b) => paise(b.pending) > 0);
+  }
+
   async findOne(companyId: number | undefined, id: number) {
     const voucher = await this.prisma.voucher.findUnique({
       where: { id },
@@ -177,6 +267,7 @@ export class VoucherService {
       dto.lines,
       branch,
       txn,
+      date,
     );
     if (dto.post) this.assertBalanced(lines);
 
@@ -200,13 +291,35 @@ export class VoucherService {
           postedByUserId: dto.post ? userId : null,
           postedAt: dto.post ? new Date() : null,
           lines: {
-            create: lines.map((l, i) => ({
+            create: lines.map(({ bills, ...l }, i) => ({
               sequence: i,
-              companyId,
+              companyId: companyId,
               branchId: branch,
               date,
               status,
               ...l,
+              // The bill stack this line moves. Party/account/date/status are
+              // copied down so an ageing report reads that table alone.
+              ...(bills.length
+                ? {
+                    billRefs: {
+                      create: bills.map((b) => ({
+                        companyId: companyId,
+                        branchId: branch,
+                        accountId: l.accountId,
+                        partyKind: l.partyKind!,
+                        partyId: l.partyId!,
+                        refType: b.refType,
+                        billRef: b.billRef,
+                        againstId: b.againstId,
+                        amount: b.amount,
+                        dueDate: b.dueDate,
+                        date,
+                        status,
+                      })),
+                    },
+                  }
+                : {}),
             })),
           },
         },
@@ -257,6 +370,7 @@ export class VoucherService {
       dto.lines ?? existing.lines.map(asInput),
       branch,
       txn,
+      date,
     );
     if (dto.post) this.assertBalanced(lines);
 
@@ -279,13 +393,35 @@ export class VoucherService {
           postedByUserId: dto.post ? userId : null,
           postedAt: dto.post ? new Date() : null,
           lines: {
-            create: lines.map((l, i) => ({
+            create: lines.map(({ bills, ...l }, i) => ({
               sequence: i,
               companyId: existing.companyId,
               branchId: branch,
               date,
               status,
               ...l,
+              // The bill stack this line moves. Party/account/date/status are
+              // copied down so an ageing report reads that table alone.
+              ...(bills.length
+                ? {
+                    billRefs: {
+                      create: bills.map((b) => ({
+                        companyId: existing.companyId,
+                        branchId: branch,
+                        accountId: l.accountId,
+                        partyKind: l.partyKind!,
+                        partyId: l.partyId!,
+                        refType: b.refType,
+                        billRef: b.billRef,
+                        againstId: b.againstId,
+                        amount: b.amount,
+                        dueDate: b.dueDate,
+                        date,
+                        status,
+                      })),
+                    },
+                  }
+                : {}),
             })),
           },
         },
@@ -311,12 +447,19 @@ export class VoucherService {
       // The header's own classification is re-checked too — the taxonomy may
       // have been edited since the draft was written.
       await this.resolveTransaction(existing),
+      existing.date,
     );
     this.assertBalanced(checked);
 
     return this.prisma.$transaction(async (tx) => {
       await tx.voucherLine.updateMany({
         where: { voucherId: id },
+        data: { status: 'POSTED' },
+      });
+      // The bill stack moves with its lines: a bill only exists, and a
+      // settlement only counts, once the voucher is in the books.
+      await tx.billAllocation.updateMany({
+        where: { line: { voucherId: id } },
         data: { status: 'POSTED' },
       });
       return tx.voucher.update({
@@ -343,6 +486,12 @@ export class VoucherService {
     return this.prisma.$transaction(async (tx) => {
       await tx.voucherLine.updateMany({
         where: { voucherId: id },
+        data: { status: 'CANCELLED' },
+      });
+      // Cancelling a receipt puts the bill it settled back where it was —
+      // nothing has to remember to, because outstanding is derived.
+      await tx.billAllocation.updateMany({
+        where: { line: { voucherId: id } },
         data: { status: 'CANCELLED' },
       });
       return tx.voucher.update({
@@ -460,6 +609,9 @@ export class VoucherService {
       transactionTypeId: null,
       transactionSubtypeId: null,
     },
+    /** The voucher's date — a new bill is dated from it, and falls due the
+     *  party's credit period later. */
+    date: Date = new Date(),
   ): Promise<ResolvedLine[]> {
     if (!inputs?.length) throw new BadRequestException('A voucher needs lines.');
 
@@ -545,6 +697,14 @@ export class VoucherService {
         : header;
 
       const party = await this.resolveParty(companyId, account, line.partyId, at);
+      const bills = await this.resolveBills(
+        companyId,
+        party,
+        fromPaise(debit || credit),
+        line.bills,
+        date,
+        at,
+      );
 
       resolved.push({
         accountId: account.id,
@@ -555,6 +715,7 @@ export class VoucherService {
         narration: line.narration?.trim() || null,
         ...txn,
         ...party,
+        bills,
       });
     }
     return resolved;
@@ -666,6 +827,190 @@ export class VoucherService {
       );
     }
     return { partyKind: kind, partyId };
+  }
+
+  /**
+   * Which of the party's bills this line's amount belongs to.
+   *
+   * The one rule everything else follows from: the allocations must add up to
+   * the line. A line that moves 1,000 of a party's balance has moved it against
+   * some combination of that party's bills, and if the parts do not sum to the
+   * whole then the account and the sub-ledger have begun to disagree — quietly,
+   * and in a way no later report can repair.
+   *
+   * A control-account line must therefore carry allocations. ON_ACCOUNT is the
+   * escape hatch, not an omission: it records that the bill is not yet known,
+   * which is a fact worth storing and is what an unallocated-receipts report is
+   * built from.
+   */
+  private async resolveBills(
+    companyId: number,
+    party: { partyKind: PartyKind | null; partyId: number | null },
+    amount: number,
+    inputs: BillAllocationInput[] | undefined,
+    date: Date,
+    at: string,
+  ): Promise<ResolvedBill[]> {
+    // No party, no bills — an ordinary account has no stack to allocate against.
+    if (!party.partyKind || !party.partyId) return [];
+
+    if (!inputs?.length) {
+      throw new BadRequestException(
+        `Say which bill ${at} belongs to — this account is kept bill by bill.`,
+      );
+    }
+
+    const total = inputs.reduce((s, b) => s + paise(b.amount), 0);
+    if (total !== paise(amount)) {
+      throw new BadRequestException(
+        `The bills on ${at} come to ${fromPaise(total).toFixed(2)}, but the line is ${amount.toFixed(2)}.`,
+      );
+    }
+
+    // Everything an AGAINST row points at, read once.
+    const targetIds = inputs
+      .filter((b) => b.refType === 'AGAINST')
+      .map((b) => b.againstId)
+      .filter((id): id is number => !!id);
+    const targets = targetIds.length
+      ? await this.prisma.billAllocation.findMany({
+          where: { id: { in: targetIds } },
+          select: {
+            id: true,
+            billRef: true,
+            amount: true,
+            companyId: true,
+            partyKind: true,
+            partyId: true,
+            refType: true,
+            status: true,
+          },
+        })
+      : [];
+    const byId = new Map(targets.map((t) => [t.id, t]));
+
+    const creditDays = await this.creditDays(party.partyKind, party.partyId);
+    const resolved: ResolvedBill[] = [];
+
+    for (const b of inputs) {
+      if (b.refType === 'NEW') {
+        const ref = b.billRef?.trim();
+        if (!ref) {
+          throw new BadRequestException(
+            `A new bill on ${at} needs its bill number.`,
+          );
+        }
+        // Due date: the party's agreed terms, snapshotted now, unless the entry
+        // overrides them. A bill is aged by the terms it was raised under.
+        const due = b.dueDate
+          ? new Date(b.dueDate)
+          : creditDays != null
+            ? new Date(date.getTime() + creditDays * 86_400_000)
+            : date;
+        resolved.push({
+          refType: 'NEW',
+          billRef: ref,
+          againstId: null,
+          amount: b.amount,
+          dueDate: due,
+        });
+        continue;
+      }
+
+      if (b.refType === 'AGAINST') {
+        if (!b.againstId) {
+          throw new BadRequestException(
+            `Choose which bill is being settled on ${at}.`,
+          );
+        }
+        const target = byId.get(b.againstId);
+        if (
+          !target ||
+          target.companyId !== companyId ||
+          target.refType !== 'NEW' ||
+          target.partyKind !== party.partyKind ||
+          target.partyId !== party.partyId
+        ) {
+          throw new BadRequestException(
+            `That bill is not one of this party's (${at}).`,
+          );
+        }
+        if (target.status !== 'POSTED') {
+          throw new BadRequestException(
+            `Bill ${target.billRef} is not in the books yet — post it before settling it (${at}).`,
+          );
+        }
+        const left = await this.outstanding(target.id, Number(target.amount));
+        if (paise(b.amount) > paise(left)) {
+          throw new BadRequestException(
+            `Only ${left.toFixed(2)} is outstanding on bill ${target.billRef} — ${b.amount.toFixed(2)} would over-settle it (${at}).`,
+          );
+        }
+        resolved.push({
+          refType: 'AGAINST',
+          // NOT the target's ref. `billRef` is the bill's NAME, and only the
+          // NEW row that raised it holds one — which is exactly what makes
+          // [company, party, billRef] unique mean "a bill number is a party's
+          // own". A settlement identifies its bill by `againstId`; copying the
+          // ref here would make two receipts against one invoice collide.
+          billRef: null,
+          againstId: target.id,
+          amount: b.amount,
+          dueDate: null,
+        });
+        continue;
+      }
+
+      // ADVANCE / ON_ACCOUNT — attached to no bill by definition.
+      resolved.push({
+        refType: b.refType as BillRefType,
+        billRef: null,
+        againstId: null,
+        amount: b.amount,
+        dueDate: null,
+      });
+    }
+    return resolved;
+  }
+
+  /**
+   * What is still standing on a bill: what it was raised for, less everything
+   * posted against it. Derived rather than stored, so a cancelled settlement
+   * puts the bill back where it was without anything having to remember to.
+   */
+  private async outstanding(billId: number, raised: number): Promise<number> {
+    // Only POSTED settlements reduce a bill. A draft has not happened yet, so
+    // it holds nothing back — and re-checking a draft therefore never counts
+    // its own allocation against it. Two drafts may each claim the whole
+    // amount; whichever posts second is refused, which is the right moment to
+    // find out.
+    const settled = await this.prisma.billAllocation.aggregate({
+      where: { againstId: billId, status: 'POSTED' },
+      _sum: { amount: true },
+    });
+    return fromPaise(paise(raised) - paise(Number(settled._sum.amount ?? 0)));
+  }
+
+  /** The party's agreed credit period, for dating a new bill. */
+  private async creditDays(
+    kind: PartyKind,
+    partyId: number,
+  ): Promise<number | null> {
+    if (kind === 'SUPPLIER') {
+      const s = await this.prisma.supplier.findUnique({
+        where: { id: partyId },
+        select: { creditDays: true },
+      });
+      return s?.creditDays ?? null;
+    }
+    if (kind === 'CUSTOMER') {
+      const c = await this.prisma.customer.findUnique({
+        where: { id: partyId },
+        select: { creditDays: true },
+      });
+      return c?.creditDays ?? null;
+    }
+    return null;
   }
 
   /** Is this party one of the company's, and still live? */

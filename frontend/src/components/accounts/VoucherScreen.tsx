@@ -12,17 +12,42 @@ import { useAuth } from '@/providers/AuthProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Input, Select, Textarea } from '@/components/ui/Field';
+import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
 import { Badge } from '@/components/ui/Badge';
 import type {
+  BillRefType,
   CoaAccount,
   CostCenter,
   CostObject,
   Customer,
+  OutstandingBill,
   Supplier,
   Voucher,
   VoucherStatus,
   VoucherType,
 } from '@/lib/types';
+
+/** One bill-wise allocation as the form holds it — amounts as text until saved. */
+type DraftBill = {
+  refType: BillRefType;
+  billRef: string;
+  againstId: string;
+  amount: string;
+};
+
+const emptyBill = (): DraftBill => ({
+  refType: 'NEW',
+  billRef: '',
+  againstId: '',
+  amount: '',
+});
+
+const BILL_TYPES: { value: BillRefType; label: string }[] = [
+  { value: 'NEW', label: 'New bill' },
+  { value: 'AGAINST', label: 'Against a bill' },
+  { value: 'ADVANCE', label: 'Advance' },
+  { value: 'ON_ACCOUNT', label: 'On account' },
+];
 
 type Mode = 'list' | 'edit' | 'view';
 
@@ -53,6 +78,8 @@ type DraftLine = {
   txnSubtypeId: string;
   /** Whose balance the line moves. Asked for only on a control account. */
   partyId: string;
+  /** Which of that party's bills the amount belongs to. */
+  bills: DraftBill[];
 };
 
 const emptyLine = (): DraftLine => ({
@@ -64,6 +91,7 @@ const emptyLine = (): DraftLine => ({
   narration: '',
   txnSubtypeId: '',
   partyId: '',
+  bills: [],
 });
 
 const num = (v: string | number | null | undefined) => Number(v ?? 0) || 0;
@@ -226,10 +254,49 @@ export function VoucherScreen({
             ? String(l.transactionSubtypeId)
             : '',
         partyId: l.partyId ? String(l.partyId) : '',
+        bills: (l.billRefs ?? []).map((b) => ({
+          refType: b.refType,
+          billRef: b.billRef ?? '',
+          againstId: b.againstId ? String(b.againstId) : '',
+          amount: String(b.amount),
+        })),
       })),
     );
     setMode(next);
   };
+
+  // ---- bill-wise editor -------------------------------------------------------
+  // Which line's bill stack is open, and that party's still-standing bills. The
+  // outstanding list is fetched when the editor opens rather than up front: it
+  // is per party, and most lines never need it.
+  const [billsFor, setBillsFor] = useState<number | null>(null);
+  const [openBills, setOpenBills] = useState<OutstandingBill[]>([]);
+
+  const openBillEditor = async (i: number) => {
+    const l = lines[i];
+    const account = accountById.get(Number(l.accountId));
+    setBillsFor(i);
+    setOpenBills([]);
+    if (!account?.controlParty || !l.partyId) return;
+    try {
+      setOpenBills(
+        await api.get<OutstandingBill[]>(
+          `/vouchers/bills?partyKind=${account.controlParty}&partyId=${l.partyId}`,
+        ),
+      );
+    } catch {
+      setOpenBills([]);
+    }
+  };
+
+  const setBill = (li: number, bi: number, patch: Partial<DraftBill>) =>
+    setLines((ls) =>
+      ls.map((l, x) =>
+        x === li
+          ? { ...l, bills: l.bills.map((b, y) => (y === bi ? { ...b, ...patch } : b)) }
+          : l,
+      ),
+    );
 
   const setLine = (i: number, patch: Partial<DraftLine>) =>
     setLines((ls) => ls.map((l, x) => (x === i ? { ...l, ...patch } : l)));
@@ -295,6 +362,19 @@ export function VoucherScreen({
           ? Number(l.txnSubtypeId)
           : undefined,
         partyId: l.partyId ? Number(l.partyId) : undefined,
+        bills: l.bills.length
+          ? l.bills
+              .filter((b) => num(b.amount) > 0)
+              .map((b) => ({
+                refType: b.refType,
+                billRef: b.refType === 'NEW' ? b.billRef.trim() : undefined,
+                againstId:
+                  b.refType === 'AGAINST' && b.againstId
+                    ? Number(b.againstId)
+                    : undefined,
+                amount: num(b.amount),
+              }))
+          : undefined,
       })),
   });
 
@@ -646,6 +726,7 @@ export function VoucherScreen({
                 {txnTypeId && (
                   <th className="w-[14%] px-3 py-2 text-left">Transaction</th>
                 )}
+                <th className="w-[10%] px-3 py-2 text-left">Bills</th>
                 <th className="px-3 py-2 text-left">Narration</th>
                 <th className="w-10" />
               </tr>
@@ -679,6 +760,7 @@ export function VoucherScreen({
                             // A different account may be kept by a different
                             // party, or by none.
                             partyId: '',
+                            bills: [],
                           })
                         }
                         options={accountOptions}
@@ -693,7 +775,8 @@ export function VoucherScreen({
                           value={l.partyId}
                           disabled={readOnly}
                           onChange={(e) =>
-                            setLine(i, { partyId: e.target.value })
+                            // The bills belonged to the old party.
+                            setLine(i, { partyId: e.target.value, bills: [] })
                           }
                           options={partyOptions(asks.partyKind)}
                           placeholder={
@@ -790,6 +873,48 @@ export function VoucherScreen({
                       </td>
                     )}
                     <td className="px-2 py-1.5">
+                      {/* The bill stack, on a control line only. The label is
+                          the check itself: allocated against the line. */}
+                      {asks.party ? (
+                        (() => {
+                          const alloc = l.bills.reduce(
+                            (t, b) => t + Math.round(num(b.amount) * 100),
+                            0,
+                          );
+                          const want = Math.round(num(l.amount) * 100);
+                          const agree = alloc === want && want > 0;
+                          return (
+                            <button
+                              type="button"
+                              disabled={!l.partyId}
+                              onClick={() => void openBillEditor(i)}
+                              title={
+                                l.partyId
+                                  ? 'Which bills this amount belongs to'
+                                  : 'Choose the party first'
+                              }
+                              className={cn(
+                                'w-full rounded border px-2 py-1 text-xs',
+                                !l.partyId
+                                  ? 'border-slate-200 text-slate-300 dark:border-slate-700'
+                                  : agree
+                                    ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-400 dark:hover:bg-emerald-950/40'
+                                    : 'border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-950/40',
+                              )}
+                            >
+                              {l.bills.length === 0
+                                ? 'Set bills'
+                                : agree
+                                  ? `${l.bills.length} bill${l.bills.length === 1 ? '' : 's'}`
+                                  : `Out by ${money(Math.abs(want - alloc) / 100)}`}
+                            </button>
+                          );
+                        })()
+                      ) : (
+                        <span className="px-1 text-xs text-slate-300">—</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5">
                       <Input
                         value={l.narration}
                         disabled={readOnly}
@@ -829,7 +954,7 @@ export function VoucherScreen({
                   <div className="text-slate-500">Dr {money(totals.dr)}</div>
                   <div className="text-slate-500">Cr {money(totals.cr)}</div>
                 </td>
-                <td className="px-3 py-2" colSpan={txnTypeId ? 5 : 4}>
+                <td className="px-3 py-2" colSpan={txnTypeId ? 6 : 5}>
                   <span
                     className={cn(
                       'text-sm',
@@ -860,6 +985,200 @@ export function VoucherScreen({
           asked for only where the account calls for one.
         </p>
       </div>
+
+      {/* Bill-wise details for one line. A party's balance is a stack of bills,
+          and this is where the line's amount is spread across them. */}
+      <Drawer
+        open={billsFor !== null}
+        onClose={() => setBillsFor(null)}
+        title="Bill-wise details"
+        subtitle={
+          billsFor !== null
+            ? `Line ${billsFor + 1} · ${money(lines[billsFor]?.amount ?? 0)}`
+            : undefined
+        }
+        width="lg"
+        footer={
+          <DrawerFooter
+            onCancel={() => setBillsFor(null)}
+            onSave={() => setBillsFor(null)}
+            saveLabel="Done"
+          />
+        }
+      >
+        {billsFor !== null &&
+          (() => {
+            const li = billsFor;
+            const l = lines[li];
+            const alloc = l.bills.reduce(
+              (t, b) => t + Math.round(num(b.amount) * 100),
+              0,
+            );
+            const want = Math.round(num(l.amount) * 100);
+            const left = (want - alloc) / 100;
+            return (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Every part of this line has to say which bill it belongs to.
+                  Raise a <b>new bill</b> for an invoice, post{' '}
+                  <b>against a bill</b> to settle one, or leave it{' '}
+                  <b>on account</b> when the bill is not yet known — that is an
+                  answer, not a gap, and it stays visible as unallocated.
+                </p>
+
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-xs uppercase text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+                    <tr>
+                      <th className="w-[26%] px-2 py-2 text-left">Method</th>
+                      <th className="px-2 py-2 text-left">Bill</th>
+                      <th className="w-[22%] px-2 py-2 text-right">Amount</th>
+                      <th className="w-10" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {l.bills.map((b, bi) => (
+                      <tr
+                        key={bi}
+                        className="border-t border-slate-100 dark:border-slate-800"
+                      >
+                        <td className="px-2 py-1.5">
+                          <Select
+                            value={b.refType}
+                            disabled={readOnly}
+                            onChange={(e) =>
+                              setBill(li, bi, {
+                                refType: e.target.value as BillRefType,
+                                billRef: '',
+                                againstId: '',
+                              })
+                            }
+                            options={BILL_TYPES}
+                          />
+                        </td>
+                        <td className="px-2 py-1.5">
+                          {b.refType === 'NEW' ? (
+                            <Input
+                              value={b.billRef}
+                              disabled={readOnly}
+                              placeholder="Bill number, e.g. INV-001"
+                              onChange={(e) =>
+                                setBill(li, bi, { billRef: e.target.value })
+                              }
+                            />
+                          ) : b.refType === 'AGAINST' ? (
+                            <Select
+                              value={b.againstId}
+                              disabled={readOnly}
+                              onChange={(e) => {
+                                const picked = openBills.find(
+                                  (o) => String(o.id) === e.target.value,
+                                );
+                                setBill(li, bi, {
+                                  againstId: e.target.value,
+                                  // Default to clearing it, capped by what is
+                                  // still unallocated on this line.
+                                  amount: picked
+                                    ? String(
+                                        Math.min(
+                                          picked.pending,
+                                          Math.max(
+                                            picked.pending,
+                                            num(b.amount) || picked.pending,
+                                          ),
+                                        ),
+                                      )
+                                    : b.amount,
+                                });
+                              }}
+                              options={openBills.map((o) => ({
+                                value: String(o.id),
+                                label: `${o.billRef} · ${money(o.pending)} pending${
+                                  o.overdueDays > 0
+                                    ? ` · ${o.overdueDays}d overdue`
+                                    : ''
+                                }`,
+                              }))}
+                              placeholder={
+                                openBills.length
+                                  ? 'Which bill'
+                                  : 'Nothing outstanding'
+                              }
+                            />
+                          ) : (
+                            <span className="text-xs text-slate-400">
+                              Attached to no bill
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-2 py-1.5">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={b.amount}
+                            disabled={readOnly}
+                            onChange={(e) =>
+                              setBill(li, bi, { amount: e.target.value })
+                            }
+                          />
+                        </td>
+                        <td className="px-2 py-1.5 text-center">
+                          {!readOnly && (
+                            <button
+                              className="rounded p-1 text-slate-400 hover:text-rose-600"
+                              title="Remove"
+                              onClick={() =>
+                                setLine(li, {
+                                  bills: l.bills.filter((_, y) => y !== bi),
+                                })
+                              }
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <div className="flex items-center justify-between">
+                  {!readOnly && (
+                    <button
+                      className="text-xs text-brand-600 hover:underline"
+                      onClick={() =>
+                        setLine(li, {
+                          bills: [
+                            ...l.bills,
+                            // Seed the amount with whatever is still unspread,
+                            // which is the answer most of the time.
+                            { ...emptyBill(), amount: left > 0 ? String(left) : '' },
+                          ],
+                        })
+                      }
+                    >
+                      + Add a bill
+                    </button>
+                  )}
+                  <span
+                    className={cn(
+                      'text-sm',
+                      left === 0 && want > 0
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-amber-600 dark:text-amber-400',
+                    )}
+                  >
+                    {want === 0
+                      ? 'Enter the line amount first'
+                      : left === 0
+                        ? 'Fully allocated'
+                        : `${money(Math.abs(left))} ${left > 0 ? 'unallocated' : 'over-allocated'}`}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
+      </Drawer>
     </div>
   );
 }
