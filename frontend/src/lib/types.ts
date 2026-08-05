@@ -1911,8 +1911,12 @@ export interface DocumentNumberingRow {
   renumber: NumberingRenumber;
   periodPosition: NumberingPeriodPosition;
   isLocked: boolean;
+  /** Highest number issued so far IN THE ACTIVE BRANCH (0 when none). */
   lastNumber: number;
+  /** The number this document would take next in the active branch. */
   preview: string;
+  /** Branch code stamped into that number; '' when the company has no branches. */
+  branchCode: string;
 }
 
 // ---- Production: Cost Review (recipe / packing recost vs Product Master) ----

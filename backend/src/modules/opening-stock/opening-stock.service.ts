@@ -363,8 +363,10 @@ export class OpeningStockService {
     const resolved = await this.resolveLines(dto.lines);
     const docDate = new Date(dto.docDate);
     const ymd = this.ymd(dto.docDate);
-    const docNo = await this.nextDocNo(companyId, docDate);
+    // The branch is settled BEFORE the number is drawn: where the company works
+    // in branches, the number comes out of that branch's own series.
     const txnBranchId = store.branchId ?? branchId ?? null;
+    const docNo = await this.nextDocNo(companyId, txnBranchId, docDate);
     const ruleBatchNos = await this.ruleBatchNumbers(
       companyId,
       txnBranchId,
@@ -377,6 +379,7 @@ export class OpeningStockService {
       const header = await tx.openingStock.create({
         data: {
           companyId,
+          branchId: txnBranchId,
           docNo,
           docDate,
           storeId: dto.storeId,
@@ -671,11 +674,15 @@ export class OpeningStockService {
     return `${y.slice(2)}${m}${d}`;
   }
 
-  private async nextDocNo(companyId: number, date: Date): Promise<string> {
+  private async nextDocNo(
+    companyId: number,
+    branchId: number | null,
+    date: Date,
+  ): Promise<string> {
     // Use the company's configured numbering rule when present; otherwise fall
     // back to the built-in OS-##### scheme.
     return this.numbering.nextOrDefault(
-      companyId,
+      { companyId, branchId },
       'OPENING_STOCK',
       { prefix: 'OS-', padding: 5 },
       date,

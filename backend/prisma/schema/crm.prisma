@@ -22,8 +22,11 @@ enum PurchaseOrderStatus {
 
 model PurchaseOrder {
   id                 Int                 @id @default(autoincrement())
-  companyId          Int // supplier company that owns / receives this order
-  orderNo            String // per-supplier sequential number (PO-#####)
+  companyId          Int // supplier company that receives this order
+  // Numbered by the company+branch that RAISED it (orderingCompanyId /
+  // orderingBranchId below), not by the supplier: a document belongs to whoever
+  // initiates it, and it is the buyer who writes an ICPO.
+  orderNo            String // per-buyer-branch sequential number (PO-#####)
   orderDate          DateTime            @default(now())
   deliveryAt         DateTime? // requested delivery date & time (carried to the sales order)
   // Requester (who raised it) — an intercompany branch today.
@@ -40,7 +43,10 @@ model PurchaseOrder {
 
   lines PurchaseOrderLine[]
 
-  @@unique([companyId, orderNo])
+  // Unique per BUYER, matching who the series belongs to. Were it per supplier,
+  // two buyers drawing on their own sequences would both offer PO-00001 to the
+  // same supplier and one would be rejected for a clash it did not cause.
+  @@unique([orderingCompanyId, orderNo])
   @@index([companyId, status])
   @@index([orderingCompanyId])
   @@map("purchase_orders")
@@ -110,6 +116,9 @@ enum SalesOrderStatus {
 model SalesOrder {
   id        Int @id @default(autoincrement())
   companyId Int // the SELLER — owns the order, its numbering and its visibility
+  branchId  Int? // -> Branch OF THE SELLER (the one that took the order). Distinct
+  //                 from buyerBranchId below, which belongs to the other company.
+  //                 This is the branch the order NUMBER is drawn against.
 
   // Counterparty — exactly one, enforced in SalesOrderService (Prisma has no XOR).
   buyerCompanyId Int? // -> Company (the group company that raised the ICPO)

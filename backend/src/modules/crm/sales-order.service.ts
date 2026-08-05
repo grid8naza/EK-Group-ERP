@@ -16,7 +16,11 @@ import {
   WorkflowPort,
   WorkflowStatus,
 } from '../../contracts/workflow.port';
-import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
+import {
+  NUMBERING,
+  NumberingPort,
+  NumberingScope,
+} from '../../contracts/numbering.port';
 import { STOCK, StockPort } from '../../contracts/stock.port';
 import { WORK_ORDER, WorkOrderPort } from '../../contracts/work-order.port';
 import { DispatchService } from './dispatch.service';
@@ -74,6 +78,10 @@ export class SalesOrderService {
   async convertFromPurchaseOrder(
     userId: number,
     companyId: number,
+    /** The SELLER's active branch — the one taking the order, and whose
+        numbering series the order draws on. Not the buyer's branch, which
+        arrives on the ICPO as orderingBranchId. */
+    branchId: number | undefined,
     purchaseOrderId: number,
   ) {
     if (!companyId) {
@@ -121,10 +129,13 @@ export class SalesOrderService {
 
     const lines = await this.priceFromBatches(po.id, supplying);
 
-    const order = await this.withOrderNoRetry(companyId, (orderNo) =>
+    const order = await this.withOrderNoRetry(
+      { companyId, branchId },
+      (orderNo) =>
       this.prisma.salesOrder.create({
         data: {
           companyId,
+          branchId: branchId ?? null,
           buyerCompanyId: po.orderingCompanyId,
           buyerBranchId: po.orderingBranchId,
           purchaseOrderId: po.id,
@@ -617,12 +628,12 @@ export class SalesOrderService {
 
   /** Generate the next per-seller order number, retrying on a unique clash. */
   private async withOrderNoRetry<T>(
-    companyId: number,
+    scope: NumberingScope,
     fn: (orderNo: string) => Promise<T>,
     attempts = 5,
   ): Promise<T> {
     for (let i = 0; ; i++) {
-      const orderNo = await this.nextOrderNo(companyId, i);
+      const orderNo = await this.nextOrderNo(scope, i);
       try {
         return await fn(orderNo);
       } catch (e) {
@@ -643,9 +654,12 @@ export class SalesOrderService {
    * configured Document Numbering rule; falls back to the built-in SO-##### when
    * no rule is set for this document.
    */
-  private async nextOrderNo(companyId: number, attempt: number): Promise<string> {
+  private async nextOrderNo(
+    scope: NumberingScope,
+    attempt: number,
+  ): Promise<string> {
     return this.numbering.nextOrDefault(
-      companyId,
+      scope,
       ICSO_DOCUMENT_CODE,
       { prefix: 'SO-', padding: 5 },
       undefined,

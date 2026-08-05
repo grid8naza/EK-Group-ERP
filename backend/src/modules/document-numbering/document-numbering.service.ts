@@ -5,7 +5,11 @@ import {
   StockTxnType,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { NumberingDefault, NumberingPort } from '../../contracts/numbering.port';
+import {
+  NumberingDefault,
+  NumberingPort,
+  NumberingScope,
+} from '../../contracts/numbering.port';
 import { SaveNumberingRuleDto } from './document-numbering.dto';
 
 /** The rule as stored (the shape format()/periodKey() read). */
@@ -85,11 +89,14 @@ const SOURCES: Record<string, NumberSource[]> = {
         })
         .then((r) => r.map((x) => x.docNo)),
   ],
+  // An ICPO belongs to the BUYER who raised it, so its issued numbers are read
+  // back from orderingCompanyId — not companyId, which on this model is the
+  // supplier receiving the order.
   PURCHASE_ORDER_IC: [
     (p, companyId, orderNo) =>
       p.purchaseOrder
         .findMany({
-          where: { companyId, orderNo },
+          where: { orderingCompanyId: companyId, orderNo },
           select: { orderNo: true },
           orderBy: { orderNo: 'desc' },
           take: SCAN_LIMIT,
@@ -254,8 +261,42 @@ function stockTransactionSource(type: StockTxnType): NumberSource {
 export class DocumentNumberingService implements NumberingPort {
   constructor(private prisma: PrismaService) {}
 
-  /** Every active document plus this company's rule (or defaults if unset). */
-  async overview(companyId: number | undefined) {
+  /**
+   * The branch's own mark on its numbers, or '' when the company does not work
+   * in branches.
+   *
+   * Two checkpoints, the same shape the rest of the app uses: the COMPANY must
+   * have branches switched on at all, and the branch must be one of ITS
+   * branches. A company with branches off is numbered exactly as it was before
+   * branches existed — so switching the setting on cannot silently re-shape
+   * numbers already issued, and a branch id arriving in a header from some
+   * other company is ignored rather than trusted.
+   */
+  private async branchToken(
+    companyId: number,
+    branchId: number | null | undefined,
+  ): Promise<string> {
+    if (!branchId) return '';
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: { branchApplicable: true },
+    });
+    if (!company?.branchApplicable) return '';
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: branchId },
+      select: { code: true, companyId: true },
+    });
+    if (!branch || branch.companyId !== companyId) return '';
+    return branch.code.trim().toUpperCase();
+  }
+
+  /**
+   * Every active document plus this company's rule (or defaults if unset).
+   *
+   * The preview and last-issued number are shown for ONE branch — the active
+   * one — because that is the series a document raised right now would take.
+   */
+  async overview(companyId: number | undefined, branchId?: number | null) {
     const docs = await this.prisma.document.findMany({
       where: { isActive: true },
       orderBy: { name: 'asc' },
@@ -265,6 +306,7 @@ export class DocumentNumberingService implements NumberingPort {
       : [];
     const byDoc = new Map(rules.map((r) => [r.documentId, r]));
     const now = new Date();
+    const branch = companyId ? await this.branchToken(companyId, branchId) : '';
     return Promise.all(
       docs.map(async (d) => {
       const r = byDoc.get(d.id);
@@ -283,7 +325,7 @@ export class DocumentNumberingService implements NumberingPort {
       // and show the number this rule would hand out next.
       const issued =
         companyId != null
-          ? await this.maxIssued(companyId, d.code, shape, now)
+          ? await this.maxIssued(companyId, d.code, shape, now, branch)
           : null;
       const nextNo = Math.max(issued == null ? shape.startingNo : issued + 1, shape.startingNo);
       return {
@@ -304,7 +346,9 @@ export class DocumentNumberingService implements NumberingPort {
         /** Highest number issued in the current period (0 when none yet). */
         lastNumber: issued ?? 0,
         // The number this document would actually take next.
-        preview: this.format(shape, nextNo, now),
+        preview: this.format(shape, nextNo, now, branch),
+        /** Which branch the two numbers above belong to ('' = company-wide). */
+        branchCode: branch,
       };
       }),
     );
@@ -389,23 +433,26 @@ export class DocumentNumberingService implements NumberingPort {
   // ---- NumberingPort ----
 
   async next(
-    companyId: number,
+    scope: NumberingScope,
     documentCode: string,
     date: Date = new Date(),
   ): Promise<string | null> {
+    const { companyId } = scope;
     const rule = await this.ruleFor(companyId, documentCode);
     if (!rule) return null;
-    const n = await this.nextSeq(companyId, documentCode, rule, date, 0);
-    return this.format(rule, n, date);
+    const branch = await this.branchToken(companyId, scope.branchId);
+    const n = await this.nextSeq(companyId, documentCode, rule, date, 0, branch);
+    return this.format(rule, n, date, branch);
   }
 
   async nextOrDefault(
-    companyId: number,
+    scope: NumberingScope,
     documentCode: string,
     fallback: NumberingDefault,
     date: Date = new Date(),
     attempt = 0,
   ): Promise<string> {
+    const { companyId } = scope;
     const rule = await this.ruleFor(companyId, documentCode);
     // No rule configured: the caller's own scheme, numbered the same way.
     const effective: RuleState = rule ?? {
@@ -418,14 +465,16 @@ export class DocumentNumberingService implements NumberingPort {
       renumber: 'NEVER',
       periodPosition: 'BEFORE_SUFFIX',
     };
+    const branch = await this.branchToken(companyId, scope.branchId);
     const n = await this.nextSeq(
       companyId,
       documentCode,
       effective,
       date,
       attempt,
+      branch,
     );
-    return this.format(effective, n, date);
+    return this.format(effective, n, date, branch);
   }
 
   // ---- deriving the next sequence ----
@@ -457,8 +506,9 @@ export class DocumentNumberingService implements NumberingPort {
     rule: RuleState,
     date: Date,
     attempt: number,
+    branch: string,
   ): Promise<number> {
-    const max = await this.maxIssued(companyId, documentCode, rule, date);
+    const max = await this.maxIssued(companyId, documentCode, rule, date, branch);
     // Nothing issued yet — the rule's "Starting no" decides where to begin, so
     // a company that sets 100 gets 00100 first, not 00001. It is also a FLOOR:
     // raising the starting number later moves the sequence up to it.
@@ -466,17 +516,27 @@ export class DocumentNumberingService implements NumberingPort {
     return Math.max(max == null ? start : max + 1, start) + attempt;
   }
 
-  /** The highest sequence issued in this period, or null when there is none. */
+  /**
+   * The highest sequence issued in this period, or null when there is none.
+   *
+   * Scoped to one BRANCH without the source queries knowing about branches: the
+   * branch's code is part of the number's fixed left-hand side, so matching on
+   * that side already excludes every other branch's numbers. Documents raised
+   * before branch numbering — or by a company with branches off — carry no
+   * branch mark, and so form their own company-wide series that a branch can
+   * neither read nor disturb.
+   */
   private async maxIssued(
     companyId: number,
     documentCode: string,
     rule: RuleState,
     date: Date,
+    branch: string,
   ): Promise<number | null> {
     const sources = SOURCES[documentCode];
     if (!sources?.length) return null;
-    // The number's fixed parts around the sequence, for this period.
-    const { left, right } = this.affixes(rule, date);
+    // The number's fixed parts around the sequence, for this period and branch.
+    const { left, right } = this.affixes(rule, date, branch);
     const match: NumberFilter = { startsWith: left, endsWith: right };
 
     const found = await Promise.all(
@@ -497,26 +557,45 @@ export class DocumentNumberingService implements NumberingPort {
   private affixes(
     rule: RuleState,
     date: Date,
+    branch: string,
   ): { left: string; right: string } {
     // Formatting a known sequence and splitting on it keeps this in step with
     // format() by construction — one place decides the shape.
     // The marker must be alphanumeric like a real sequence, or the period
     // separator joins differently and the affixes come out wrong.
     const marker = 'SEQMARKER';
-    const shaped = this.format({ ...rule, paddingLength: 0 }, marker, date);
+    const shaped = this.format(
+      { ...rule, paddingLength: 0 },
+      marker,
+      date,
+      branch,
+    );
     const [left, right] = shaped.split(marker);
     return { left, right: right ?? '' };
   }
 
   // ---- formatting ----
 
-  /** `num` is a sequence, or the placeholder affixes() splits the shape on. */
-  private format(rule: RuleState, num: number | string, date: Date): string {
+  /**
+   * `num` is a sequence, or the placeholder affixes() splits the shape on.
+   *
+   * The branch's code leads the number — before the configured prefix, so it
+   * reads as the outermost thing about the document ("Kadathy's cash receipt
+   * 1", not "cash receipt 1, of Kadathy"). It is also what makes each branch's
+   * numbers a namespace of their own; see maxIssued.
+   */
+  private format(
+    rule: RuleState,
+    num: number | string,
+    date: Date,
+    branch = '',
+  ): string {
     const body =
       typeof num === 'number'
         ? String(num).padStart(rule.paddingLength || 5, '0')
         : num;
-    const prefix = rule.prefixEnabled ? rule.prefixValue ?? '' : '';
+    const head = branch ? `${branch}/` : '';
+    const prefix = head + (rule.prefixEnabled ? rule.prefixValue ?? '' : '');
     const suffix = rule.suffixEnabled ? rule.suffixValue ?? '' : '';
     const period = this.periodToken(rule.renumber, date);
     if (!period) return `${prefix}${body}${suffix}`;

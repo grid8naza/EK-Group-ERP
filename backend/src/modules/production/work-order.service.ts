@@ -8,7 +8,11 @@ import {
 import { Prisma, WorkOrderStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
-import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
+import {
+  NUMBERING,
+  NumberingPort,
+  NumberingScope,
+} from '../../contracts/numbering.port';
 import {
   CreateWorkOrderInput,
   WorkOrderRef,
@@ -49,7 +53,9 @@ export class WorkOrderService {
         `A work order already exists for this sales order (${existing.orderNo}).`,
       );
     }
-    const created = await this.withOrderNoRetry(input.companyId, (orderNo) =>
+    const created = await this.withOrderNoRetry(
+      { companyId: input.companyId, branchId: input.branchId },
+      (orderNo) =>
       this.prisma.workOrder.create({
         data: {
           companyId: input.companyId,
@@ -151,12 +157,12 @@ export class WorkOrderService {
   // --- helpers ---
 
   private async withOrderNoRetry<T>(
-    companyId: number,
+    scope: NumberingScope,
     fn: (orderNo: string) => Promise<T>,
     attempts = 5,
   ): Promise<T> {
     for (let i = 0; ; i++) {
-      const orderNo = await this.nextOrderNo(companyId, i);
+      const orderNo = await this.nextOrderNo(scope, i);
       try {
         return await fn(orderNo);
       } catch (e) {
@@ -173,9 +179,12 @@ export class WorkOrderService {
   }
 
   /** Next WO number: the company's configured rule, else built-in WO-#####. */
-  private async nextOrderNo(companyId: number, attempt: number): Promise<string> {
+  private async nextOrderNo(
+    scope: NumberingScope,
+    attempt: number,
+  ): Promise<string> {
     return this.numbering.nextOrDefault(
-      companyId,
+      scope,
       WORK_ORDER_DOCUMENT_CODE,
       { prefix: 'WO-', padding: 5 },
       undefined,

@@ -12,6 +12,7 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { DocumentNumberingService } from './document-numbering.service';
 import { CompanyId } from '../../auth/company.decorator';
+import { BranchId } from '../../auth/branch.decorator';
 import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
 import { LockDto } from '../../common/lock.dto';
 import { SaveNumberingRuleDto } from './document-numbering.dto';
@@ -23,9 +24,17 @@ import { SaveNumberingRuleDto } from './document-numbering.dto';
 export class DocumentNumberingController {
   constructor(private readonly service: DocumentNumberingService) {}
 
+  /**
+   * The rules, previewed for the ACTIVE branch — the series a document raised
+   * right now would actually take. The rule itself is per company; only the
+   * running number is the branch's own.
+   */
   @Get()
-  overview(@CompanyId() companyId: number | undefined) {
-    return this.service.overview(companyId);
+  overview(
+    @CompanyId() companyId: number | undefined,
+    @BranchId() branchId: number | undefined,
+  ) {
+    return this.service.overview(companyId, branchId);
   }
 
   @Put()

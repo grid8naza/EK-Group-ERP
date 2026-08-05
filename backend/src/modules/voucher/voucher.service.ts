@@ -7,7 +7,11 @@ import {
 } from '@nestjs/common';
 import { Prisma, VoucherStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
+import {
+  NUMBERING,
+  NumberingPort,
+  NumberingScope,
+} from '../../contracts/numbering.port';
 import {
   applyEntryRules,
   resolveEntryRules,
@@ -152,7 +156,7 @@ export class VoucherService {
     const totals = this.totals(lines);
     const status: VoucherStatus = dto.post ? 'POSTED' : 'DRAFT';
 
-    return this.withNumberRetry(companyId, type.documentCode, type.code, date, (voucherNo) =>
+    return this.withNumberRetry({ companyId, branchId: branch }, type.documentCode, type.code, date, (voucherNo) =>
       this.prisma.voucher.create({
         data: {
           companyId,
@@ -543,7 +547,7 @@ export class VoucherService {
    * after — the same retry the other numbered documents use.
    */
   private async withNumberRetry<T>(
-    companyId: number,
+    scope: NumberingScope,
     documentCode: string,
     typeCode: string,
     date: Date,
@@ -551,7 +555,7 @@ export class VoucherService {
   ): Promise<T> {
     for (let attempt = 0; attempt < 5; attempt++) {
       const voucherNo = await this.numbering.nextOrDefault(
-        companyId,
+        scope,
         documentCode,
         { prefix: VOUCHER_NUMBER_PREFIX[typeCode] ?? 'VCH-', padding: 5 },
         date,

@@ -816,7 +816,8 @@ model StockLedger {
 model OpeningStock {
   id        Int      @id @default(autoincrement())
   companyId Int
-  docNo     String // OS-##### per company
+  branchId  Int? // -> Cpanel Branch (the branch it was taken for); null when the company has no branches
+  docNo     String // OS-##### per company, or per BRANCH where the company works in branches
   docDate   DateTime
   storeId   Int
   reference String?

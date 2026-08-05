@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CompanyId } from '../../auth/company.decorator';
+import { BranchId } from '../../auth/branch.decorator';
 import { AuthUser, CurrentUser } from '../../auth/current-user.decorator';
 import { SalesOrderService } from './sales-order.service';
 import { ActSalesOrderDto, UpdateSalesOrderDto } from './sales-order.dto';
@@ -48,11 +49,13 @@ export class SalesOrderController {
   convert(
     @CurrentUser() user: AuthUser,
     @CompanyId() companyId: number | undefined,
+    @BranchId() branchId: number | undefined,
     @Param('purchaseOrderId', ParseIntPipe) purchaseOrderId: number,
   ) {
     return this.service.convertFromPurchaseOrder(
       user.id,
       companyId ?? 0,
+      branchId,
       purchaseOrderId,
     );
   }

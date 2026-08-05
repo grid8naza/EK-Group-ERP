@@ -137,9 +137,10 @@ export class PurchaseOrderController {
   @Post(':id/act')
   act(
     @CurrentUser() user: AuthUser,
+    @BranchId() branchId: number | undefined,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ActPurchaseOrderDto,
   ) {
-    return this.service.act(user.id, id, dto);
+    return this.service.act(user.id, branchId, id, dto);
   }
 }

@@ -10,7 +10,11 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
 import { withNumberRetry } from '../../common/with-number-retry';
-import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
+import {
+  NUMBERING,
+  NumberingPort,
+  NumberingScope,
+} from '../../contracts/numbering.port';
 import {
   STOCK_POSTING,
   StockPostingPort,
@@ -139,7 +143,7 @@ export class DispatchService {
     // derived, so a dispatch raised at the same instant can take the ones we
     // computed; retry with the next rather than failing the shipment.
     const header = await withNumberRetry(
-      (attempt) => this.docNumbers(companyId, attempt),
+      (attempt) => this.docNumbers({ companyId, branchId }, attempt),
       ([dispatchNo, invoiceNo, deliveryNoteNo, ewayBillNo]) =>
         this.prisma.dispatch.create({
           data: {
@@ -209,14 +213,14 @@ export class DispatchService {
 
   // --- helpers ---
 
-  /** dispatch / invoice / delivery-note / e-way-bill numbers for the company. */
+  /** dispatch / invoice / delivery-note / e-way-bill numbers for the branch. */
   private docNumbers(
-    companyId: number,
+    scope: NumberingScope,
     attempt = 0,
   ): Promise<[string, string, string, string]> {
     const next = (code: string, prefix: string) =>
       this.numbering.nextOrDefault(
-        companyId,
+        scope,
         code,
         { prefix, padding: 4 },
         undefined,

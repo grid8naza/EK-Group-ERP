@@ -7,7 +7,11 @@ import {
 import { Prisma, MaterialRequestStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
-import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
+import {
+  NUMBERING,
+  NumberingPort,
+  NumberingScope,
+} from '../../contracts/numbering.port';
 import { RECIPE, RecipePort } from '../../contracts/recipe.port';
 import { STOCK, StockPort } from '../../contracts/stock.port';
 import {
@@ -163,7 +167,7 @@ export class MaterialRequestService {
         unitId: m.unitId,
       }));
 
-      await this.withRequestNoRetry(companyId, (requestNo) =>
+      await this.withRequestNoRetry({ companyId, branchId }, (requestNo) =>
         this.prisma.materialRequest.create({
           data: {
             companyId,
@@ -255,7 +259,10 @@ export class MaterialRequestService {
       );
     }
 
-    const issueNo = await this.nextIssueNo(companyId);
+    const issueNo = await this.nextIssueNo({
+      companyId,
+      branchId: branchId ?? mr.branchId ?? null,
+    });
 
     // Record the issue, then move the stock. The store either hands over the
     // whole requisition or none of it, so a posting failure puts the request
@@ -381,12 +388,12 @@ export class MaterialRequestService {
   }
 
   private async withRequestNoRetry<T>(
-    companyId: number,
+    scope: NumberingScope,
     fn: (requestNo: string) => Promise<T>,
     attempts = 5,
   ): Promise<T> {
     for (let i = 0; ; i++) {
-      const requestNo = await this.nextRequestNo(companyId, i);
+      const requestNo = await this.nextRequestNo(scope, i);
       try {
         return await fn(requestNo);
       } catch (e) {
@@ -403,19 +410,19 @@ export class MaterialRequestService {
   }
 
   /** The goods-issue number for this store issue (GIN-#### when no rule set). */
-  private async nextIssueNo(companyId: number): Promise<string> {
-    return this.numbering.nextOrDefault(companyId, GOODS_ISSUE_DOCUMENT_CODE, {
+  private async nextIssueNo(scope: NumberingScope): Promise<string> {
+    return this.numbering.nextOrDefault(scope, GOODS_ISSUE_DOCUMENT_CODE, {
       prefix: 'GIN-',
       padding: 4,
     });
   }
 
   private async nextRequestNo(
-    companyId: number,
+    scope: NumberingScope,
     attempt: number,
   ): Promise<string> {
     return this.numbering.nextOrDefault(
-      companyId,
+      scope,
       MATERIAL_REQUEST_DOCUMENT_CODE,
       { prefix: 'MR-', padding: 4 },
       undefined,

@@ -7,7 +7,11 @@ import {
 } from '@nestjs/common';
 import { Prisma, StockTxnType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
+import {
+  NUMBERING,
+  NumberingPort,
+  NumberingScope,
+} from '../../contracts/numbering.port';
 import {
   BATCH_NUMBERING,
   BatchNumberingPort,
@@ -799,7 +803,13 @@ export class StockTransactionService {
     // The document number is derived, so an entry posted at the same instant can
     // take it; retry with the next one rather than failing the post.
     const header = await withNumberRetry(
-      (attempt) => this.nextDocNo(companyId, type, docDate, attempt),
+      (attempt) =>
+        this.nextDocNo(
+          { companyId, branchId: txnBranchId },
+          type,
+          docDate,
+          attempt,
+        ),
       (docNo) =>
         this.prisma.$transaction(async (tx) => {
           const base = await maxBatchSeq(tx, companyId, `${companyCode}-${ymd}-`);
@@ -1515,16 +1525,16 @@ export class StockTransactionService {
     return `${y.slice(2)}${m}${d}`;
   }
 
-  /** Next document number: the company's numbering rule, else a built-in prefix. */
+  /** Next document number: the branch's numbering rule, else a built-in prefix. */
   private async nextDocNo(
-    companyId: number,
+    scope: NumberingScope,
     type: TxnType,
     date: Date,
     attempt = 0,
   ): Promise<string> {
     const cfg = TXN_CONFIG[type];
     return this.numbering.nextOrDefault(
-      companyId,
+      scope,
       cfg.documentCode,
       { prefix: `${cfg.prefix}-`, padding: 5 },
       date,

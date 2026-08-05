@@ -48,12 +48,16 @@ const emptyForm = {
 };
 
 export default function DocumentNumberingPage() {
-  const { can } = useAuth();
+  const { can, activeBranchId, activeBranch } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
+  // Re-read when the branch switches: the rule is the company's, but the running
+  // number and the preview belong to whichever branch is active.
   const { data, loading, refetch } = useFetch<DocumentNumberingRow[]>(
     '/document-numbering',
+    [activeBranchId],
   );
+  const branchCode = data?.[0]?.branchCode ?? '';
 
   const canAdd = can(ROUTE, 'add');
   const canEditPriv = can(ROUTE, 'edit');
@@ -271,7 +275,7 @@ export default function DocumentNumberingPage() {
     { key: 'renumber', header: 'Renumber', accessor: (r) => cap(r.renumber) },
     {
       key: 'preview',
-      header: 'Next (example)',
+      header: branchCode ? `Next (${branchCode})` : 'Next (example)',
       render: (r) => (
         <span className="font-mono text-xs text-slate-500">{r.preview}</span>
       ),
@@ -282,7 +286,11 @@ export default function DocumentNumberingPage() {
     <div className="mx-auto flex h-full max-w-[1500px] flex-col">
       <PageHeader
         title="Document Numbering"
-        description="Per-company sequencer for each document — prefix, suffix, padding & renumber period"
+        description={
+          branchCode
+            ? `Sequencer for each document — prefix, suffix, padding & renumber period. The rule is the company's; the running number is ${activeBranch?.name ?? 'this branch'}'s own, and its code (${branchCode}) leads every number it issues.`
+            : 'Per-company sequencer for each document — prefix, suffix, padding & renumber period'
+        }
         icon={<Hash className="h-5 w-5" />}
         actions={
           canAdd && (

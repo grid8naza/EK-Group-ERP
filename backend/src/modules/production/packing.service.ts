@@ -7,7 +7,11 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
-import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
+import {
+  NUMBERING,
+  NumberingPort,
+  NumberingScope,
+} from '../../contracts/numbering.port';
 import { RECIPE, RecipePort } from '../../contracts/recipe.port';
 import {
   ProducedBatch,
@@ -108,7 +112,7 @@ export class PackingService {
     }
 
     // Header first — it is the document the stock movements belong to.
-    const header = await this.withPackingNoRetry(companyId, (packingNo) =>
+    const header = await this.withPackingNoRetry({ companyId, branchId }, (packingNo) =>
       this.prisma.packing.create({
         data: {
           companyId,
@@ -213,12 +217,12 @@ export class PackingService {
   }
 
   private async withPackingNoRetry<T>(
-    companyId: number,
+    scope: NumberingScope,
     fn: (packingNo: string) => Promise<T>,
     attempts = 5,
   ): Promise<T> {
     for (let i = 0; ; i++) {
-      const packingNo = await this.nextPackingNo(companyId, i);
+      const packingNo = await this.nextPackingNo(scope, i);
       try {
         return await fn(packingNo);
       } catch (e) {
@@ -235,11 +239,11 @@ export class PackingService {
   }
 
   private async nextPackingNo(
-    companyId: number,
+    scope: NumberingScope,
     attempt: number,
   ): Promise<string> {
     return this.numbering.nextOrDefault(
-      companyId,
+      scope,
       PACKING_DOCUMENT_CODE,
       { prefix: 'PK-', padding: 4 },
       undefined,

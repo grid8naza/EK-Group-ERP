@@ -7,7 +7,11 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
-import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
+import {
+  NUMBERING,
+  NumberingPort,
+  NumberingScope,
+} from '../../contracts/numbering.port';
 import { RECIPE, RecipePort } from '../../contracts/recipe.port';
 import { CreateProductionPlanDto } from './production-plan.dto';
 
@@ -140,7 +144,7 @@ export class ProductionPlanService {
     });
 
     const woIds = workOrders.map((w) => w.id);
-    const plan = await this.withPlanNoRetry(companyId, (planNo) =>
+    const plan = await this.withPlanNoRetry({ companyId, branchId }, (planNo) =>
       this.prisma.$transaction(async (tx) => {
         const created = await tx.productionPlan.create({
           data: {
@@ -216,12 +220,12 @@ export class ProductionPlanService {
   }
 
   private async withPlanNoRetry<T>(
-    companyId: number,
+    scope: NumberingScope,
     fn: (planNo: string) => Promise<T>,
     attempts = 5,
   ): Promise<T> {
     for (let i = 0; ; i++) {
-      const planNo = await this.nextPlanNo(companyId, i);
+      const planNo = await this.nextPlanNo(scope, i);
       try {
         return await fn(planNo);
       } catch (e) {
@@ -237,9 +241,12 @@ export class ProductionPlanService {
     }
   }
 
-  private async nextPlanNo(companyId: number, attempt: number): Promise<string> {
+  private async nextPlanNo(
+    scope: NumberingScope,
+    attempt: number,
+  ): Promise<string> {
     return this.numbering.nextOrDefault(
-      companyId,
+      scope,
       PRODUCTION_PLAN_DOCUMENT_CODE,
       { prefix: 'PP-', padding: 4 },
       undefined,

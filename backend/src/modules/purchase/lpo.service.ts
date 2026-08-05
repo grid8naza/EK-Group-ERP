@@ -15,7 +15,11 @@ import {
   WorkflowPort,
   WorkflowStatus,
 } from '../../contracts/workflow.port';
-import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
+import {
+  NUMBERING,
+  NumberingPort,
+  NumberingScope,
+} from '../../contracts/numbering.port';
 import { ActLpoDto, CreateLpoDto, LpoLineInput, UpdateLpoDto } from './lpo.dto';
 
 // The LPO is raised by the buyer, so its workflow binds to the LPO screen —
@@ -92,7 +96,7 @@ export class LpoService {
       );
     }
 
-    const order = await this.withOrderNoRetry(companyId, (orderNo) =>
+    const order = await this.withOrderNoRetry({ companyId, branchId }, (orderNo) =>
       this.prisma.localPurchaseOrder.create({
         data: {
           companyId,
@@ -495,12 +499,12 @@ export class LpoService {
 
   /** Generate the next per-buyer order number, retrying on a unique clash. */
   private async withOrderNoRetry<T>(
-    companyId: number,
+    scope: NumberingScope,
     fn: (orderNo: string) => Promise<T>,
     attempts = 5,
   ): Promise<T> {
     for (let i = 0; ; i++) {
-      const orderNo = await this.nextOrderNo(companyId, i);
+      const orderNo = await this.nextOrderNo(scope, i);
       try {
         return await fn(orderNo);
       } catch (e) {
@@ -522,9 +526,12 @@ export class LpoService {
    * yields a fresh number); falls back to the built-in LPO-##### when no rule is
    * set for this document.
    */
-  private async nextOrderNo(companyId: number, attempt: number): Promise<string> {
+  private async nextOrderNo(
+    scope: NumberingScope,
+    attempt: number,
+  ): Promise<string> {
     return this.numbering.nextOrDefault(
-      companyId,
+      scope,
       LPO_DOCUMENT_CODE,
       { prefix: 'LPO-', padding: 5 },
       undefined,

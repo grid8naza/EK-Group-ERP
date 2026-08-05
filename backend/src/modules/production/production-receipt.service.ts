@@ -8,7 +8,11 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
-import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
+import {
+  NUMBERING,
+  NumberingPort,
+  NumberingScope,
+} from '../../contracts/numbering.port';
 import {
   ProducedBatch,
   STOCK_POSTING,
@@ -114,7 +118,7 @@ export class ProductionReceiptService {
     // Create the receipt header first — it is the document the stock movements
     // belong to — then post stock, fill the lines with their batches, and
     // complete the work order.
-    const header = await this.withReceiptNoRetry(companyId, (receiptNo) =>
+    const header = await this.withReceiptNoRetry({ companyId, branchId }, (receiptNo) =>
       this.prisma.productionReceipt.create({
         data: {
           companyId,
@@ -225,12 +229,12 @@ export class ProductionReceiptService {
   }
 
   private async withReceiptNoRetry<T>(
-    companyId: number,
+    scope: NumberingScope,
     fn: (receiptNo: string) => Promise<T>,
     attempts = 5,
   ): Promise<T> {
     for (let i = 0; ; i++) {
-      const receiptNo = await this.nextReceiptNo(companyId, i);
+      const receiptNo = await this.nextReceiptNo(scope, i);
       try {
         return await fn(receiptNo);
       } catch (e) {
@@ -247,11 +251,11 @@ export class ProductionReceiptService {
   }
 
   private async nextReceiptNo(
-    companyId: number,
+    scope: NumberingScope,
     attempt: number,
   ): Promise<string> {
     return this.numbering.nextOrDefault(
-      companyId,
+      scope,
       PRODUCTION_RECEIPT_DOCUMENT_CODE,
       { prefix: 'PR-', padding: 4 },
       undefined,

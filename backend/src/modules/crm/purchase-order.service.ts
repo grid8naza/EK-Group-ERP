@@ -16,7 +16,11 @@ import {
   WorkflowPort,
   WorkflowStatus,
 } from '../../contracts/workflow.port';
-import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
+import {
+  NUMBERING,
+  NumberingPort,
+  NumberingScope,
+} from '../../contracts/numbering.port';
 import { STOCK, StockPort } from '../../contracts/stock.port';
 import {
   ActPurchaseOrderDto,
@@ -102,7 +106,11 @@ export class PurchaseOrderService {
       );
     }
 
-    const order = await this.withOrderNoRetry(dto.supplierCompanyId, (orderNo) =>
+    // Numbered against the REQUESTER — the order is theirs, and their branch's
+    // series is the one it comes out of.
+    const order = await this.withOrderNoRetry(
+      { companyId: orderingCompanyId, branchId: orderingBranchId },
+      (orderNo) =>
       this.prisma.purchaseOrder.create({
         data: {
           companyId: dto.supplierCompanyId,
@@ -241,7 +249,15 @@ export class PurchaseOrderService {
   }
 
   /** Act on the order's workflow task (forward / approve / reject / cancel). */
-  async act(userId: number, id: number, dto: ActPurchaseOrderDto) {
+  async act(
+    userId: number,
+    /** The approver's active branch. They are acting for the SUPPLIER, so this
+        is a supplier branch — the one a CONVERT_ICSO step hands the resulting
+        sales order to, and whose numbering series it takes. */
+    branchId: number | undefined,
+    id: number,
+    dto: ActPurchaseOrderDto,
+  ) {
     const order = await this.ensureOrder(id);
     const ref = await this.docRef(order.id);
 
@@ -309,6 +325,7 @@ export class PurchaseOrderService {
         await this.salesOrders.convertFromPurchaseOrder(
           userId,
           order.companyId, // the supplier company — it is the seller
+          branchId,
           order.id,
         );
       } catch (e) {
@@ -670,14 +687,14 @@ export class PurchaseOrderService {
     return { moduleId, objectId, documentId };
   }
 
-  /** Generate the next per-supplier order number, retrying on a unique clash. */
+  /** Generate the next per-buyer order number, retrying on a unique clash. */
   private async withOrderNoRetry<T>(
-    companyId: number,
+    scope: NumberingScope,
     fn: (orderNo: string) => Promise<T>,
     attempts = 5,
   ): Promise<T> {
     for (let i = 0; ; i++) {
-      const orderNo = await this.nextOrderNo(companyId, i);
+      const orderNo = await this.nextOrderNo(scope, i);
       try {
         return await fn(orderNo);
       } catch (e) {
@@ -694,14 +711,22 @@ export class PurchaseOrderService {
   }
 
   /**
-   * The next Purchase Order - IC number for the supplier company. Prefers the
-   * company's configured Document Numbering rule (which advances its own counter,
-   * so each retry yields a fresh number); falls back to the built-in PO-##### when
-   * no rule is set for this document.
+   * The next Purchase Order - IC number for the BUYER's branch. Prefers that
+   * company's configured Document Numbering rule (which advances its own
+   * counter, so each retry yields a fresh number); falls back to the built-in
+   * PO-##### when no rule is set for this document.
+   *
+   * The buyer, not the supplier whose id sits in `companyId` on this model: a
+   * document belongs to whoever initiates it, and it is the requesting branch
+   * that writes an ICPO. Its counterpart, the ICSO, is owned by the supplier
+   * for the same reason — they are the ones who raise it.
    */
-  private async nextOrderNo(companyId: number, attempt: number): Promise<string> {
+  private async nextOrderNo(
+    scope: NumberingScope,
+    attempt: number,
+  ): Promise<string> {
     return this.numbering.nextOrDefault(
-      companyId,
+      scope,
       PO_IC_DOCUMENT_CODE,
       { prefix: 'PO-', padding: 5 },
       undefined,
