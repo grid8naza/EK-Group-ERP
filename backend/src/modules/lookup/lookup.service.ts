@@ -22,12 +22,18 @@ export class LookupService {
   constructor(private prisma: PrismaService) {}
 
   // ---- Lookups ----
-  // When `moduleId` is given, scope to that module only (strict per-module
-  // isolation for the module-hosted Lookups screens). No filter = every lookup,
-  // used by consumers that resolve a lookup by code (e.g. Object Master Author).
+  // When `moduleId` is given, scope to that module — PLUS the global lookups
+  // (moduleId null), which belong to no one module and are meant to be reachable
+  // from every module's Lookups screen. Without them a global list would exist
+  // in the database with no screen able to edit it. No filter at all = every
+  // lookup, used by consumers that resolve one by code (e.g. Object Master
+  // Author).
   findAll(moduleId?: number) {
     return this.prisma.lookup.findMany({
-      where: moduleId !== undefined ? { moduleId } : undefined,
+      where:
+        moduleId !== undefined
+          ? { OR: [{ moduleId }, { moduleId: null }] }
+          : undefined,
       include: {
         _count: { select: { values: true } },
         module: { select: { id: true, name: true } },
@@ -39,7 +45,14 @@ export class LookupService {
   async findOne(id: number) {
     const lookup = await this.prisma.lookup.findUnique({
       where: { id },
-      include: { values: { orderBy: { label: 'asc' } } },
+      include: {
+        values: {
+          orderBy: { label: 'asc' },
+          // The type a subtype sits under, so a two-level list can be shown and
+          // filtered without a second round trip.
+          include: { parent: { select: { id: true, value: true, label: true } } },
+        },
+      },
     });
     if (!lookup) throw new NotFoundException('Lookup not found');
     return lookup;
@@ -96,7 +109,10 @@ export class LookupService {
     await this.ensureLookup(lookupId);
     return this.prisma.lookupValue.findMany({
       where: { lookupId },
-      orderBy: { label: 'asc' },
+      // sortOrder first: a seeded taxonomy is ordered deliberately (Sale before
+      // Sale Return), and alphabetical would scatter it.
+      orderBy: [{ sortOrder: 'asc' }, { label: 'asc' }],
+      include: { parent: { select: { id: true, value: true, label: true } } },
     });
   }
 

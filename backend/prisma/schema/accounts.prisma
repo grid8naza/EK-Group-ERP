@@ -329,6 +329,14 @@ model Voucher {
   date          DateTime
   narration     String?
 
+  /// WHAT the transaction was, over and above which kind of voucher recorded it.
+  /// The voucher type says a sale was made; these say it was a B2C sale rather
+  /// than an intercompany one — the distinction the statements are cut by and
+  /// the one GST turns on. Both -> Cpanel LookupValue (TRANSACTION_TYPE /
+  /// TRANSACTION_SUBTYPE); the subtype's parentValueId is the type.
+  transactionTypeId    Int?
+  transactionSubtypeId Int?
+
   status VoucherStatus @default(DRAFT)
   /// Running totals, kept on the header so a listing needs no aggregate. They
   /// are equal on every POSTED voucher — that is what posting checks.
@@ -382,6 +390,12 @@ model VoucherLine {
   debit     Decimal @default(0) @db.Decimal(18, 2)
   credit    Decimal @default(0) @db.Decimal(18, 2)
   narration String?
+  /// Inherited from the header unless this line says otherwise — one voucher may
+  /// carry both a B2B and a B2C line. Denormalised like companyId/date/status
+  /// above it, for the same reason: a statement cut by transaction type reads
+  /// this table alone and never joins up to the header.
+  transactionTypeId    Int?
+  transactionSubtypeId Int?
 
   /// Denormalized from the header so the ledger reads without a join.
   date   DateTime
@@ -392,6 +406,8 @@ model VoucherLine {
 
   @@index([voucherId])
   @@index([companyId, accountId, date])
+  // Statements cut by what the transaction WAS (B2B vs B2C vs intercompany).
+  @@index([companyId, transactionTypeId, date])
   @@index([companyId, costCenterId, date])
   @@map("voucher_lines")
 }

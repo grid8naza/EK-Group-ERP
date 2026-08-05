@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { ArrowLeft, Ban, Check, Plus, Trash2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { useFetch } from '@/lib/hooks';
+import { useFetch, useLookupValues } from '@/lib/hooks';
 import { resolveIcon } from '@/lib/icons';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -46,6 +46,9 @@ type DraftLine = {
   costCenterId: string;
   costObjectId: string;
   narration: string;
+  /** Empty = take the header's. Only a subtype is overridden per line; the type
+      is whatever that subtype belongs to. */
+  txnSubtypeId: string;
 };
 
 const emptyLine = (): DraftLine => ({
@@ -55,6 +58,7 @@ const emptyLine = (): DraftLine => ({
   costCenterId: '',
   costObjectId: '',
   narration: '',
+  txnSubtypeId: '',
 });
 
 const num = (v: string | number | null | undefined) => Number(v ?? 0) || 0;
@@ -101,6 +105,10 @@ export function VoucherScreen({
   const { data: accounts } = useFetch<CoaAccount[]>('/coa/accounts');
   const { data: centres } = useFetch<CostCenter[]>('/cost-centers');
   const { data: objects } = useFetch<CostObject[]>('/cost-objects');
+  // What the transaction WAS, over and above which voucher recorded it. One
+  // global taxonomy, shared with stock movements and documents.
+  const txnTypes = useLookupValues('TRANSACTION_TYPE');
+  const txnSubtypes = useLookupValues('TRANSACTION_SUBTYPE');
 
   // The kind's id in THIS database — the screen knows its code, the server
   // assigns the id.
@@ -131,7 +139,23 @@ export function VoucherScreen({
 
   const [date, setDate] = useState(today());
   const [narration, setNarration] = useState('');
+  const [txnTypeId, setTxnTypeId] = useState('');
+  const [txnSubtypeId, setTxnSubtypeId] = useState('');
   const [lines, setLines] = useState<DraftLine[]>([emptyLine(), emptyLine()]);
+
+  /** Only the subtypes belonging to the chosen type — a Sale is never a B2B
+      purchase, and the server refuses the pair anyway. */
+  const subtypesOfType = useMemo(
+    () =>
+      txnTypeId
+        ? txnSubtypes.filter((s) => String(s.parentValueId ?? '') === txnTypeId)
+        : [],
+    [txnSubtypes, txnTypeId],
+  );
+  const txnLabel = useMemo(
+    () => new Map(txnSubtypes.map((s) => [s.id, s.label])),
+    [txnSubtypes],
+  );
 
   const canAdd = can(route, 'add');
   const canEdit = can(route, 'edit');
@@ -163,6 +187,8 @@ export function VoucherScreen({
     setEditing(null);
     setDate(today());
     setNarration('');
+    setTxnTypeId('');
+    setTxnSubtypeId('');
     setLines([emptyLine(), emptyLine()]);
     setMode('edit');
   };
@@ -171,6 +197,10 @@ export function VoucherScreen({
     setEditing(v);
     setDate(v.date.slice(0, 10));
     setNarration(v.narration ?? '');
+    setTxnTypeId(v.transactionTypeId ? String(v.transactionTypeId) : '');
+    setTxnSubtypeId(
+      v.transactionSubtypeId ? String(v.transactionSubtypeId) : '',
+    );
     setLines(
       v.lines.map((l) => ({
         accountId: String(l.accountId),
@@ -179,6 +209,13 @@ export function VoucherScreen({
         costCenterId: l.costCenterId ? String(l.costCenterId) : '',
         costObjectId: l.costObjectId ? String(l.costObjectId) : '',
         narration: l.narration ?? '',
+        // Only a line that says something DIFFERENT from the header is an
+        // override; one that merely matches was inherited and stays so.
+        txnSubtypeId:
+          l.transactionSubtypeId &&
+          l.transactionSubtypeId !== v.transactionSubtypeId
+            ? String(l.transactionSubtypeId)
+            : '',
       })),
     );
     setMode(next);
@@ -216,6 +253,8 @@ export function VoucherScreen({
     voucherTypeId: voucherType?.id ?? 0,
     date,
     narration,
+    transactionTypeId: txnTypeId ? Number(txnTypeId) : undefined,
+    transactionSubtypeId: txnSubtypeId ? Number(txnSubtypeId) : undefined,
     lines: lines
       .filter((l) => l.accountId && num(l.amount) > 0)
       .map((l) => ({
@@ -225,6 +264,10 @@ export function VoucherScreen({
         costCenterId: l.costCenterId ? Number(l.costCenterId) : undefined,
         costObjectId: l.costObjectId ? Number(l.costObjectId) : undefined,
         narration: l.narration || undefined,
+        // Sent only when overridden; otherwise the server applies the header's.
+        transactionSubtypeId: l.txnSubtypeId
+          ? Number(l.txnSubtypeId)
+          : undefined,
       })),
   });
 
@@ -334,6 +377,9 @@ export function VoucherScreen({
             {v.narration || '—'}
           </div>
           <div className="text-xs text-slate-400">
+            {v.transactionSubtypeId
+              ? `${txnLabel.get(v.transactionSubtypeId) ?? '—'} · `
+              : ''}
             {v.lines.length} line{v.lines.length === 1 ? '' : 's'}
             {v.lines[0]?.account
               ? ` · ${v.lines[0].account.code} ${v.lines[0].account.name}`
@@ -512,7 +558,9 @@ export function VoucherScreen({
       />
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-6">
-        {/* No voucher-type field — the menu already decided the kind. */}
+        {/* No voucher-type field — the menu already decided the kind. What the
+            transaction WAS is a separate question, and this is where it is
+            answered: the subtype list follows the type above it. */}
         <div className="card grid grid-cols-1 gap-4 p-4 sm:grid-cols-4">
           <Input
             type="date"
@@ -522,13 +570,39 @@ export function VoucherScreen({
             disabled={readOnly}
             onChange={(e) => setDate(e.target.value)}
           />
+          <Select
+            label="Transaction type"
+            value={txnTypeId}
+            disabled={readOnly}
+            onChange={(e) => {
+              setTxnTypeId(e.target.value);
+              // The old subtype belonged to the old type — it cannot survive.
+              setTxnSubtypeId('');
+              setLines((ls) => ls.map((l) => ({ ...l, txnSubtypeId: '' })));
+            }}
+            options={txnTypes.map((t) => ({
+              value: String(t.id),
+              label: t.label,
+            }))}
+            placeholder="Not classified"
+          />
+          <Select
+            label="Transaction subtype"
+            value={txnSubtypeId}
+            disabled={readOnly || !txnTypeId}
+            onChange={(e) => setTxnSubtypeId(e.target.value)}
+            options={subtypesOfType.map((s) => ({
+              value: String(s.id),
+              label: s.label,
+            }))}
+            placeholder={txnTypeId ? 'Any' : 'Choose a type first'}
+          />
           <Textarea
             label="Narration"
             rows={1}
             value={narration}
             disabled={readOnly}
             onChange={(e) => setNarration(e.target.value)}
-            wrapClassName="sm:col-span-3"
           />
         </div>
 
@@ -539,8 +613,11 @@ export function VoucherScreen({
                 <th className="w-[28%] px-3 py-2 text-left">Account</th>
                 <th className="w-[8%] px-3 py-2 text-left">Dr/Cr</th>
                 <th className="w-[14%] px-3 py-2 text-right">Amount</th>
-                <th className="w-[16%] px-3 py-2 text-left">Cost Centre</th>
-                <th className="w-[16%] px-3 py-2 text-left">Cost Object</th>
+                <th className="w-[14%] px-3 py-2 text-left">Cost Centre</th>
+                <th className="w-[14%] px-3 py-2 text-left">Cost Object</th>
+                {txnTypeId && (
+                  <th className="w-[14%] px-3 py-2 text-left">Transaction</th>
+                )}
                 <th className="px-3 py-2 text-left">Narration</th>
                 <th className="w-10" />
               </tr>
@@ -635,6 +712,29 @@ export function VoucherScreen({
                         <span className="px-1 text-xs text-slate-300">—</span>
                       )}
                     </td>
+                    {/* Offered only once the header says what this is. Blank
+                        means "as the header" — one voucher may still carry a
+                        B2B line beside a B2C one. */}
+                    {txnTypeId && (
+                      <td className="px-2 py-1.5">
+                        <Select
+                          value={l.txnSubtypeId}
+                          disabled={readOnly}
+                          onChange={(e) =>
+                            setLine(i, { txnSubtypeId: e.target.value })
+                          }
+                          options={subtypesOfType.map((s) => ({
+                            value: String(s.id),
+                            label: s.label,
+                          }))}
+                          placeholder={
+                            txnSubtypeId
+                              ? txnLabel.get(Number(txnSubtypeId)) ?? 'As header'
+                              : 'As header'
+                          }
+                        />
+                      </td>
+                    )}
                     <td className="px-2 py-1.5">
                       <Input
                         value={l.narration}
@@ -675,7 +775,7 @@ export function VoucherScreen({
                   <div className="text-slate-500">Dr {money(totals.dr)}</div>
                   <div className="text-slate-500">Cr {money(totals.cr)}</div>
                 </td>
-                <td className="px-3 py-2" colSpan={4}>
+                <td className="px-3 py-2" colSpan={txnTypeId ? 5 : 4}>
                   <span
                     className={cn(
                       'text-sm',

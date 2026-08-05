@@ -184,6 +184,12 @@ export interface LookupValue {
   /** Free-text remarks (was "extra"). */
   remarks?: string | null;
   sortOrder?: number | null;
+  /**
+   * The value in another lookup this one sits under — a transaction subtype
+   * under its type. Null in a flat lookup, which is most of them.
+   */
+  parentValueId?: number | null;
+  parent?: { id: number; value: string; label: string } | null;
   isActive: boolean;
   isLocked?: boolean;
 }
@@ -2144,6 +2150,9 @@ export interface VoucherLine {
   debit: string | number;
   credit: string | number;
   narration: string | null;
+  /** Inherited from the header unless the line overrides it. */
+  transactionTypeId: number | null;
+  transactionSubtypeId: number | null;
 }
 
 export interface Voucher {
@@ -2156,6 +2165,9 @@ export interface Voucher {
   date: string;
   narration: string | null;
   status: VoucherStatus;
+  /** What the transaction WAS — TRANSACTION_TYPE / TRANSACTION_SUBTYPE values. */
+  transactionTypeId: number | null;
+  transactionSubtypeId: number | null;
   totalDebit: string | number;
   totalCredit: string | number;
   cancelReason: string | null;

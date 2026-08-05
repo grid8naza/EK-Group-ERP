@@ -45,6 +45,11 @@ export class CreateLookupValueDto {
 
   @IsOptional() @IsString() alias?: string;
   @IsOptional() @IsString() remarks?: string;
+  /**
+   * The value in ANOTHER lookup that this one sits under — a transaction
+   * subtype under its type. Null in a flat lookup, which is most of them.
+   */
+  @IsOptional() @IsInt() parentValueId?: number | null;
   @IsOptional() @IsBoolean() isActive?: boolean;
 }
 

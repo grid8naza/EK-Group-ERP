@@ -49,6 +49,21 @@ export class VoucherLineInput {
   @IsString()
   @MaxLength(300)
   narration?: string;
+
+  /**
+   * What the transaction WAS, where this line differs from the header — one
+   * voucher may carry both a B2B and a B2C line. Left unset, the line inherits
+   * the header's classification.
+   */
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  transactionTypeId?: number;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  transactionSubtypeId?: number;
 }
 
 export class CreateVoucherDto {
@@ -63,6 +78,21 @@ export class CreateVoucherDto {
   @IsString()
   @MaxLength(500)
   narration?: string;
+
+  /**
+   * What the transaction was, over and above which kind of voucher recorded it:
+   * a sale, and a B2C one. The subtype must belong to the type — see
+   * VoucherService.resolveTransaction.
+   */
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  transactionTypeId?: number;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  transactionSubtypeId?: number;
 
   @IsArray()
   @ArrayMinSize(2)
@@ -86,6 +116,21 @@ export class UpdateVoucherDto {
   @IsString()
   @MaxLength(500)
   narration?: string;
+
+  /**
+   * What the transaction was, over and above which kind of voucher recorded it:
+   * a sale, and a B2C one. The subtype must belong to the type — see
+   * VoucherService.resolveTransaction.
+   */
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  transactionTypeId?: number;
+
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  transactionSubtypeId?: number;
 
   @IsOptional()
   @IsArray()

@@ -56,32 +56,52 @@ const SYSTEM_DOCUMENTS: { code: string; name: string }[] = [
  */
 const RETIRED_DOCUMENTS = ['PAYMENT_VOUCHER', 'RECEIPT_VOUCHER'];
 
-// Inventory transaction type / subtype master lookups + per-document mapping,
-// from the "Inventory Transaction types" reference sheet.
-const TXN_TYPE_LOOKUP = { code: 'INVENTORY_TXN_TYPE', name: 'Inventory Transaction Type' };
-const TXN_SUBTYPE_LOOKUP = { code: 'INVENTORY_TXN_SUBTYPE', name: 'Inventory Transaction Subtype' };
+// Transaction type / subtype master lookups + per-document mapping, from the
+// "Inventory Transaction types" reference sheet, since widened.
+//
+// GLOBAL (moduleId null) rather than owned by Inventory: the same taxonomy now
+// classifies stock movements AND ledger vouchers, so a sale is the same kind of
+// sale in the stock book and in the books of account. Two module-scoped copies
+// would drift, and a figure that reconciles in one place would not in the other.
+const TXN_TYPE_LOOKUP = {
+  code: 'TRANSACTION_TYPE',
+  name: 'Transaction Type',
+  /** What it was called when Inventory owned it; renamed in place on boot. */
+  legacyCode: 'INVENTORY_TXN_TYPE',
+};
+const TXN_SUBTYPE_LOOKUP = {
+  code: 'TRANSACTION_SUBTYPE',
+  name: 'Transaction Subtype',
+  legacyCode: 'INVENTORY_TXN_SUBTYPE',
+};
 
-const TXN_TYPE_VALUES = [
-  'Opening Stock',
-  'Production',
-  'Stock Transfer',
-  'Purchase',
-  'Sale',
-  'Purchase Return',
-  'Sale Return',
-  'Material Issue',
-  'Adjustment',
-];
-const TXN_SUBTYPE_VALUES = [
-  'Opening Stock',
-  'Internal Production',
-  'Intercompany Transfer',
-  'Intercompany Purchase',
-  'Intercompany Sale',
-  'Intercompany Purchase Return',
-  'Intercompany Sale Return',
-  'Consumption',
-  'Missing',
+/**
+ * The taxonomy, as the two levels it is actually read in: each type followed by
+ * the subtypes that belong to it. A subtype is stored with its type as
+ * `parentValueId`, so choosing "Sale" offers only the three ways of selling and
+ * a Sale voucher cannot be filed under a purchase subtype.
+ *
+ * The order here is the order shown — deliberate, not alphabetical.
+ */
+const TXN_TAXONOMY: { type: string; subtypes: string[] }[] = [
+  { type: 'Opening Stock', subtypes: ['Opening Stock'] },
+  { type: 'Production', subtypes: ['Internal Production'] },
+  { type: 'Stock Transfer', subtypes: ['Intercompany Transfer'] },
+  {
+    type: 'Purchase',
+    subtypes: ['Intercompany Purchase', 'B2B Purchase', 'B2C Purchase'],
+  },
+  { type: 'Sale', subtypes: ['Intercompany Sale', 'B2B Sale', 'B2C Sale'] },
+  {
+    type: 'Purchase Return',
+    subtypes: ['Intercompany Purchase Return', 'B2B Purchase Return'],
+  },
+  {
+    type: 'Sale Return',
+    subtypes: ['Intercompany Sale Return', 'B2B Sale Return', 'B2C Sale Return'],
+  },
+  { type: 'Material Issue', subtypes: ['Consumption'] },
+  { type: 'Adjustment', subtypes: ['Missing'] },
 ];
 
 /** Document code → its transaction type + subtype (lookup value strings). */
@@ -125,42 +145,87 @@ export class DocumentService implements OnApplicationBootstrap {
   }
 
   /**
-   * Seed the Inventory Transaction Type / Subtype lookups + their values, then
-   * link each system document to its type + subtype. The document link is set
-   * only when unset, so an admin's later choice is preserved.
+   * Seed the Transaction Type / Subtype lookups + their values, then link each
+   * system document to its type + subtype. The document link is set only when
+   * unset, so an admin's later choice is preserved.
+   *
+   * Each subtype is planted UNDER its type (`parentValueId`), which is what lets
+   * a form offer only the subtypes belonging to the type in hand.
    */
   private async seedTransactionLookups(): Promise<void> {
-    const inv = await this.prisma.module.findUnique({
-      where: { code: 'INVENTORY' },
-      select: { id: true },
-    });
-    const moduleId = inv?.id ?? null;
+    // Both lookups began life owned by Inventory. Rename in place rather than
+    // create afresh: documents point at their VALUES by id, and a second pair
+    // would leave those pointing at a list nothing maintains.
+    const claim = async (l: { code: string; name: string; legacyCode: string }) => {
+      const [legacy, current] = await Promise.all([
+        this.prisma.lookup.findUnique({
+          where: { code: l.legacyCode },
+          select: { id: true, _count: { select: { values: true } } },
+        }),
+        this.prisma.lookup.findUnique({
+          where: { code: l.code },
+          select: { id: true, _count: { select: { values: true } } },
+        }),
+      ]);
 
-    const typeLookup = await this.prisma.lookup.upsert({
-      where: { code: TXN_TYPE_LOOKUP.code },
-      create: { code: TXN_TYPE_LOOKUP.code, name: TXN_TYPE_LOOKUP.name, moduleId, isSystem: true },
-      update: { name: TXN_TYPE_LOOKUP.name, ...(moduleId ? { moduleId } : {}) },
-    });
-    const subtypeLookup = await this.prisma.lookup.upsert({
-      where: { code: TXN_SUBTYPE_LOOKUP.code },
-      create: { code: TXN_SUBTYPE_LOOKUP.code, name: TXN_SUBTYPE_LOOKUP.name, moduleId, isSystem: true },
-      update: { name: TXN_SUBTYPE_LOOKUP.name, ...(moduleId ? { moduleId } : {}) },
-    });
-
-    const upsertValues = async (lookupId: number, values: string[]) => {
-      const map = new Map<string, number>();
-      for (let i = 0; i < values.length; i++) {
-        const v = await this.prisma.lookupValue.upsert({
-          where: { lookupId_value: { lookupId, value: values[i] } },
-          create: { lookupId, value: values[i], label: values[i], sortOrder: i },
-          update: { label: values[i], sortOrder: i },
+      if (legacy) {
+        // Both codes present: an empty row under the new code is the residue of
+        // a half-finished rename, and the legacy one still holds the values and
+        // every document pointing at them. Clear the empty one out of the way so
+        // the rename can go through — `code` is unique. An occupied one is not
+        // ours to touch, so say so rather than guess.
+        if (current && current.id !== legacy.id) {
+          if (current._count.values > 0) {
+            this.logger.error(
+              `Cannot rename ${l.legacyCode} to ${l.code}: a different lookup already uses that code and has values.`,
+            );
+            return current;
+          }
+          await this.prisma.lookup.delete({ where: { id: current.id } });
+        }
+        return this.prisma.lookup.update({
+          where: { id: legacy.id },
+          data: { code: l.code, name: l.name, moduleId: null, isSystem: true },
         });
-        map.set(values[i], v.id);
       }
-      return map;
+
+      return this.prisma.lookup.upsert({
+        where: { code: l.code },
+        create: { code: l.code, name: l.name, moduleId: null, isSystem: true },
+        update: { name: l.name, moduleId: null, isSystem: true },
+      });
     };
-    const typeMap = await upsertValues(typeLookup.id, TXN_TYPE_VALUES);
-    const subtypeMap = await upsertValues(subtypeLookup.id, TXN_SUBTYPE_VALUES);
+    const typeLookup = await claim(TXN_TYPE_LOOKUP);
+    const subtypeLookup = await claim(TXN_SUBTYPE_LOOKUP);
+
+    const upsertValue = async (
+      lookupId: number,
+      value: string,
+      sortOrder: number,
+      parentValueId: number | null,
+    ) => {
+      const v = await this.prisma.lookupValue.upsert({
+        where: { lookupId_value: { lookupId, value } },
+        create: { lookupId, value, label: value, sortOrder, parentValueId },
+        update: { label: value, sortOrder, parentValueId },
+      });
+      return v.id;
+    };
+
+    const typeMap = new Map<string, number>();
+    const subtypeMap = new Map<string, number>();
+    let t = 0;
+    let s = 0;
+    for (const entry of TXN_TAXONOMY) {
+      const typeId = await upsertValue(typeLookup.id, entry.type, t++, null);
+      typeMap.set(entry.type, typeId);
+      for (const sub of entry.subtypes) {
+        subtypeMap.set(
+          sub,
+          await upsertValue(subtypeLookup.id, sub, s++, typeId),
+        );
+      }
+    }
 
     for (const [code, m] of Object.entries(DOC_TXN_MAP)) {
       const transactionTypeId = typeMap.get(m.type) ?? null;

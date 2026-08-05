@@ -52,6 +52,8 @@ const asInput = (l: {
   costCenterId: number | null;
   costObjectId: number | null;
   narration: string | null;
+  transactionTypeId: number | null;
+  transactionSubtypeId: number | null;
 }): VoucherLineInput => ({
   accountId: l.accountId,
   debit: Number(l.debit),
@@ -59,10 +61,20 @@ const asInput = (l: {
   costCenterId: l.costCenterId ?? undefined,
   costObjectId: l.costObjectId ?? undefined,
   narration: l.narration ?? undefined,
+  // Carried back so a re-resolve keeps a line's own classification. Without
+  // this an override would quietly collapse to the header's on the next save.
+  transactionTypeId: l.transactionTypeId ?? undefined,
+  transactionSubtypeId: l.transactionSubtypeId ?? undefined,
 });
 
+/** A voucher's classification, once checked against the taxonomy. */
+interface ResolvedTransaction {
+  transactionTypeId: number | null;
+  transactionSubtypeId: number | null;
+}
+
 /** A line once the rules have had their say, ready to be written. */
-interface ResolvedLine {
+interface ResolvedLine extends ResolvedTransaction {
   accountId: number;
   debit: number;
   credit: number;
@@ -70,6 +82,10 @@ interface ResolvedLine {
   costObjectId: number | null;
   narration: string | null;
 }
+
+/** Codes of the two global lookups the classification is drawn from. */
+const TXN_TYPE_LOOKUP_CODE = 'TRANSACTION_TYPE';
+const TXN_SUBTYPE_LOOKUP_CODE = 'TRANSACTION_SUBTYPE';
 
 /**
  * Vouchers — the general ledger's write side.
@@ -150,7 +166,14 @@ export class VoucherService {
     const date = this.assertDate(dto.date);
     const setup = await this.companySetup(companyId);
     const branch = await this.assertBranch(companyId, branchId, setup);
-    const lines = await this.resolveLines(companyId, setup, dto.lines, branch);
+    const txn = await this.resolveTransaction(dto);
+    const lines = await this.resolveLines(
+      companyId,
+      setup,
+      dto.lines,
+      branch,
+      txn,
+    );
     if (dto.post) this.assertBalanced(lines);
 
     const totals = this.totals(lines);
@@ -165,6 +188,7 @@ export class VoucherService {
           voucherNo,
           date,
           narration: dto.narration?.trim() || null,
+          ...txn,
           status,
           totalDebit: totals.debit,
           totalCredit: totals.credit,
@@ -209,6 +233,18 @@ export class VoucherService {
         ? existing.branchId
         : await this.assertBranch(existing.companyId, branchId, setup);
 
+    // A classification left out of the patch keeps what the draft already said.
+    const txn = await this.resolveTransaction({
+      transactionTypeId:
+        dto.transactionTypeId !== undefined
+          ? dto.transactionTypeId
+          : existing.transactionTypeId,
+      transactionSubtypeId:
+        dto.transactionSubtypeId !== undefined
+          ? dto.transactionSubtypeId
+          : existing.transactionSubtypeId,
+    });
+
     // Lines left alone still go through the rules: the date may have moved and
     // the company's setup may have changed since the draft was written.
     const lines = await this.resolveLines(
@@ -216,6 +252,7 @@ export class VoucherService {
       setup,
       dto.lines ?? existing.lines.map(asInput),
       branch,
+      txn,
     );
     if (dto.post) this.assertBalanced(lines);
 
@@ -231,6 +268,7 @@ export class VoucherService {
           branchId: branch,
           narration:
             dto.narration !== undefined ? dto.narration?.trim() || null : undefined,
+          ...txn,
           status,
           totalDebit: totals.debit,
           totalCredit: totals.credit,
@@ -266,6 +304,9 @@ export class VoucherService {
       setup,
       existing.lines.map(asInput),
       existing.branchId,
+      // The header's own classification is re-checked too — the taxonomy may
+      // have been edited since the draft was written.
+      await this.resolveTransaction(existing),
     );
     this.assertBalanced(checked);
 
@@ -409,6 +450,12 @@ export class VoucherService {
     /** The header's branch — every line belongs to it, so it is not asked for
      *  again per line, only carried into the rules that check all three. */
     branchId: number | null,
+    /** The header's classification, which each line takes unless it says
+     *  otherwise. Already checked, so an inheriting line costs no query. */
+    header: ResolvedTransaction = {
+      transactionTypeId: null,
+      transactionSubtypeId: null,
+    },
   ): Promise<ResolvedLine[]> {
     if (!inputs?.length) throw new BadRequestException('A voucher needs lines.');
 
@@ -475,6 +522,22 @@ export class VoucherService {
       );
       await this.assertDimensions(companyId, dims);
 
+      // The header's classification unless this line overrides it. A line that
+      // names only a subtype is read against the header's type, so overriding
+      // "B2C Sale" to "B2B Sale" needs the one field the user actually changed.
+      const named =
+        line.transactionTypeId != null || line.transactionSubtypeId != null;
+      const txn = named
+        ? await this.resolveTransaction(
+            {
+              transactionTypeId:
+                line.transactionTypeId ?? header.transactionTypeId,
+              transactionSubtypeId: line.transactionSubtypeId,
+            },
+            at,
+          )
+        : header;
+
       resolved.push({
         accountId: account.id,
         debit: fromPaise(debit),
@@ -482,9 +545,72 @@ export class VoucherService {
         costCenterId: dims.costCenterId,
         costObjectId: dims.costObjectId,
         narration: line.narration?.trim() || null,
+        ...txn,
       });
     }
     return resolved;
+  }
+
+  /**
+   * Check a classification against the taxonomy: the type must be a live
+   * TRANSACTION_TYPE, the subtype a live TRANSACTION_SUBTYPE, and the subtype
+   * must sit UNDER that type. A subtype without its type is refused rather than
+   * kept alone — "B2C Sale" filed under nothing tells a statement nothing.
+   *
+   * `at` names where the fault is, so a bad line says which line.
+   */
+  private async resolveTransaction(
+    input: { transactionTypeId?: number | null; transactionSubtypeId?: number | null },
+    at = 'this voucher',
+  ): Promise<ResolvedTransaction> {
+    const typeId = input.transactionTypeId ?? null;
+    const subtypeId = input.transactionSubtypeId ?? null;
+    if (!typeId && !subtypeId) {
+      return { transactionTypeId: null, transactionSubtypeId: null };
+    }
+    if (!typeId) {
+      throw new BadRequestException(
+        `Choose a transaction type before its subtype (${at}).`,
+      );
+    }
+
+    const ids = subtypeId ? [typeId, subtypeId] : [typeId];
+    const values = await this.prisma.lookupValue.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true,
+        label: true,
+        isActive: true,
+        parentValueId: true,
+        lookup: { select: { code: true } },
+      },
+    });
+    const byId = new Map(values.map((v) => [v.id, v]));
+
+    const type = byId.get(typeId);
+    if (
+      !type ||
+      type.lookup.code !== TXN_TYPE_LOOKUP_CODE ||
+      !type.isActive
+    ) {
+      throw new BadRequestException(`Choose a valid transaction type (${at}).`);
+    }
+    if (!subtypeId) return { transactionTypeId: typeId, transactionSubtypeId: null };
+
+    const subtype = byId.get(subtypeId);
+    if (
+      !subtype ||
+      subtype.lookup.code !== TXN_SUBTYPE_LOOKUP_CODE ||
+      !subtype.isActive
+    ) {
+      throw new BadRequestException(`Choose a valid transaction subtype (${at}).`);
+    }
+    if (subtype.parentValueId !== typeId) {
+      throw new BadRequestException(
+        `“${subtype.label}” is not a kind of “${type.label}” (${at}).`,
+      );
+    }
+    return { transactionTypeId: typeId, transactionSubtypeId: subtypeId };
   }
 
   /** The cost centre and object must be this company's, and belong together. */

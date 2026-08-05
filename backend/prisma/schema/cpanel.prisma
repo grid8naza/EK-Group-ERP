@@ -71,6 +71,15 @@ model LookupValue {
   label     String
   alias     String? // optional custom name for this value (used where a bespoke label is needed)
   remarks   String? // free-text remarks (was "extra")
+  /// The value this one sits UNDER, where a pair of lookups is read as one
+  /// two-level list — a transaction subtype under its type ("B2C Sale" under
+  /// "Sale"). Null in a flat lookup, which is most of them.
+  ///
+  /// The parent lives in a DIFFERENT lookup (subtype values point at type
+  /// values), so this is a link across two lists rather than a tree within one.
+  /// That is what lets the type list stay short and the subtype list stay
+  /// filtered to the type in hand.
+  parentValueId Int?
   sortOrder Int      @default(0)
   isActive  Boolean  @default(true)
   isLocked  Boolean  @default(false) // when locked, must be unlocked before edit/delete
@@ -79,11 +88,17 @@ model LookupValue {
 
   lookup Lookup @relation(fields: [lookupId], references: [id], onDelete: Cascade)
 
+  // Restrict, not Cascade: removing "Sale" must not silently take its three
+  // subtypes — and every document already classified by them — with it.
+  parent   LookupValue?  @relation("LookupValueTree", fields: [parentValueId], references: [id], onDelete: Restrict)
+  children LookupValue[] @relation("LookupValueTree")
+
   docsAsTxnType             Document[]  @relation("DocTxnType")
   docsAsTxnSubtype          Document[]  @relation("DocTxnSubtype")
   userGroupsAsDiscountLevel UserGroup[] @relation("UserGroupDiscountLevel")
 
   @@unique([lookupId, value])
+  @@index([parentValueId])
   @@map("lookup_values")
 }
 
