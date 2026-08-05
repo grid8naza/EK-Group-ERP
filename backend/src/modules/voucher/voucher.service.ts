@@ -93,13 +93,22 @@ export class VoucherService {
 
   async list(
     companyId: number | undefined,
-    filter: { typeId?: number; status?: VoucherStatus; from?: string; to?: string },
+    filter: {
+      typeId?: number;
+      /** The kind by code — what a per-kind screen asks for, since it knows
+          which voucher it writes but not that kind's id in this database. */
+      typeCode?: string;
+      status?: VoucherStatus;
+      from?: string;
+      to?: string;
+    },
   ) {
     if (!companyId) throw new BadRequestException('Select a company first.');
     return this.prisma.voucher.findMany({
       where: {
         companyId,
         voucherTypeId: filter.typeId,
+        type: filter.typeCode ? { code: filter.typeCode } : undefined,
         status: filter.status,
         date: {
           gte: filter.from ? new Date(filter.from) : undefined,

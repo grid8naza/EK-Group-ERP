@@ -64,10 +64,16 @@ const voucherSource =
       .then((r) => r.map((x) => x.voucherNo));
 
 const SOURCES: Record<string, NumberSource[]> = {
+  CASH_RECEIPT_VOUCHER: [voucherSource('CASH_RECEIPT')],
+  CASH_PAYMENT_VOUCHER: [voucherSource('CASH_PAYMENT')],
+  BANK_RECEIPT_VOUCHER: [voucherSource('BANK_RECEIPT')],
+  BANK_PAYMENT_VOUCHER: [voucherSource('BANK_PAYMENT')],
+  PURCHASE_VOUCHER: [voucherSource('PURCHASE')],
+  SALES_VOUCHER: [voucherSource('SALES')],
   JOURNAL_VOUCHER: [voucherSource('JOURNAL')],
-  PAYMENT_VOUCHER: [voucherSource('PAYMENT')],
-  RECEIPT_VOUCHER: [voucherSource('RECEIPT')],
   CONTRA_VOUCHER: [voucherSource('CONTRA')],
+  DEBIT_NOTE_VOUCHER: [voucherSource('DEBIT_NOTE')],
+  CREDIT_NOTE_VOUCHER: [voucherSource('CREDIT_NOTE')],
   OPENING_STOCK: [
     (p, companyId, docNo) =>
       p.openingStock

@@ -4,14 +4,25 @@ import { VoucherNature } from '@prisma/client';
  * The kinds of voucher the books recognise (Annexure D.11), and which of them a
  * person may write by hand.
  *
- * The four manual kinds are the ones an accountant raises directly. Everything
- * else is SYSTEM-ONLY: a sale is posted by the invoice that made it, payroll by
- * the payroll run. Letting those be hand-written would mean the same event
- * could reach the ledger twice, by two routes, with nothing to reconcile them.
+ * The ten manual kinds each get their own SCREEN rather than a type dropdown on
+ * one shared form. An accountant does not sit down to "write a voucher" — they
+ * sit down to enter the day's cash receipts, or to pass a journal. The kind is
+ * decided before the form is opened, not on it, and each kind is then free to
+ * grow the fields it alone needs.
+ *
+ * Receipts and payments split by WHERE the money moved, because that is the
+ * only thing that distinguishes them in practice: a cash receipt hits the cash
+ * account and a bank receipt the bank account, and the two are counted,
+ * reconciled and questioned separately.
+ *
+ * Everything else is SYSTEM-ONLY: payroll is posted by the payroll run, an
+ * intercompany transfer by the transfer. Letting those be hand-written would
+ * mean the same event could reach the ledger twice, by two routes, with nothing
+ * to reconcile them.
  *
  * `documentCode` keys the numbering rule, so each kind has its own series and
- * its own prefix — a payment and a receipt raised on the same day do not share
- * a number.
+ * its own prefix — a cash receipt and a bank receipt raised on the same day do
+ * not share a number.
  */
 export interface VoucherTypeSeed {
   code: string;
@@ -22,26 +33,54 @@ export interface VoucherTypeSeed {
 }
 
 export const VOUCHER_TYPES: VoucherTypeSeed[] = [
-  // ---- written by hand ----
+  // ---- written by hand, one screen each ----
+  {
+    code: 'CASH_RECEIPT',
+    name: 'Cash Receipt',
+    nature: 'RECEIPT',
+    documentCode: 'CASH_RECEIPT_VOUCHER',
+    isSystemOnly: false,
+  },
+  {
+    code: 'CASH_PAYMENT',
+    name: 'Cash Payment',
+    nature: 'PAYMENT',
+    documentCode: 'CASH_PAYMENT_VOUCHER',
+    isSystemOnly: false,
+  },
+  {
+    code: 'BANK_RECEIPT',
+    name: 'Bank Receipt',
+    nature: 'RECEIPT',
+    documentCode: 'BANK_RECEIPT_VOUCHER',
+    isSystemOnly: false,
+  },
+  {
+    code: 'BANK_PAYMENT',
+    name: 'Bank Payment',
+    nature: 'PAYMENT',
+    documentCode: 'BANK_PAYMENT_VOUCHER',
+    isSystemOnly: false,
+  },
+  {
+    code: 'PURCHASE',
+    name: 'Purchase Voucher',
+    nature: 'PURCHASE',
+    documentCode: 'PURCHASE_VOUCHER',
+    isSystemOnly: false,
+  },
+  {
+    code: 'SALES',
+    name: 'Sales Voucher',
+    nature: 'SALES',
+    documentCode: 'SALES_VOUCHER',
+    isSystemOnly: false,
+  },
   {
     code: 'JOURNAL',
     name: 'Journal Voucher',
     nature: 'JOURNAL',
     documentCode: 'JOURNAL_VOUCHER',
-    isSystemOnly: false,
-  },
-  {
-    code: 'PAYMENT',
-    name: 'Payment Voucher',
-    nature: 'PAYMENT',
-    documentCode: 'PAYMENT_VOUCHER',
-    isSystemOnly: false,
-  },
-  {
-    code: 'RECEIPT',
-    name: 'Receipt Voucher',
-    nature: 'RECEIPT',
-    documentCode: 'RECEIPT_VOUCHER',
     isSystemOnly: false,
   },
   {
@@ -51,11 +90,21 @@ export const VOUCHER_TYPES: VoucherTypeSeed[] = [
     documentCode: 'CONTRA_VOUCHER',
     isSystemOnly: false,
   },
+  {
+    code: 'DEBIT_NOTE',
+    name: 'Debit Note',
+    nature: 'DEBIT_NOTE',
+    documentCode: 'DEBIT_NOTE_VOUCHER',
+    isSystemOnly: false,
+  },
+  {
+    code: 'CREDIT_NOTE',
+    name: 'Credit Note',
+    nature: 'CREDIT_NOTE',
+    documentCode: 'CREDIT_NOTE_VOUCHER',
+    isSystemOnly: false,
+  },
   // ---- written by the module that owns the event ----
-  { code: 'SALES', name: 'Sales Voucher', nature: 'SALES', documentCode: 'SALES_VOUCHER', isSystemOnly: true },
-  { code: 'PURCHASE', name: 'Purchase Voucher', nature: 'PURCHASE', documentCode: 'PURCHASE_VOUCHER', isSystemOnly: true },
-  { code: 'CREDIT_NOTE', name: 'Credit Note', nature: 'CREDIT_NOTE', documentCode: 'CREDIT_NOTE_VOUCHER', isSystemOnly: true },
-  { code: 'DEBIT_NOTE', name: 'Debit Note', nature: 'DEBIT_NOTE', documentCode: 'DEBIT_NOTE_VOUCHER', isSystemOnly: true },
   { code: 'PAYROLL', name: 'Payroll Voucher', nature: 'PAYROLL', documentCode: 'PAYROLL_VOUCHER', isSystemOnly: true },
   { code: 'DEPRECIATION', name: 'Depreciation Voucher', nature: 'DEPRECIATION', documentCode: 'DEPRECIATION_VOUCHER', isSystemOnly: true },
   { code: 'INTERCOMPANY', name: 'Intercompany Voucher', nature: 'INTERCOMPANY', documentCode: 'INTERCOMPANY_VOUCHER', isSystemOnly: true },
@@ -64,16 +113,26 @@ export const VOUCHER_TYPES: VoucherTypeSeed[] = [
   { code: 'OPENING', name: 'Opening Voucher', nature: 'OPENING', documentCode: 'OPENING_VOUCHER', isSystemOnly: true },
 ];
 
+/**
+ * Kinds that no longer exist as a screen. PAYMENT and RECEIPT each split into a
+ * cash and a bank kind, so the undivided originals are switched OFF rather than
+ * deleted — a voucher already raised under one still points at its type row,
+ * and the books have to be able to say what they said.
+ */
+export const RETIRED_VOUCHER_TYPES = ['PAYMENT', 'RECEIPT'];
+
 /** Numbering falls back to this when a company has configured no rule. */
 export const VOUCHER_NUMBER_PREFIX: Record<string, string> = {
-  JOURNAL: 'JV-',
-  PAYMENT: 'PV-',
-  RECEIPT: 'RV-',
-  CONTRA: 'CV-',
-  SALES: 'SV-',
+  CASH_RECEIPT: 'CRV-',
+  CASH_PAYMENT: 'CPV-',
+  BANK_RECEIPT: 'BRV-',
+  BANK_PAYMENT: 'BPV-',
   PURCHASE: 'PUV-',
-  CREDIT_NOTE: 'CN-',
+  SALES: 'SV-',
+  JOURNAL: 'JV-',
+  CONTRA: 'CV-',
   DEBIT_NOTE: 'DN-',
+  CREDIT_NOTE: 'CN-',
   PAYROLL: 'PRV-',
   DEPRECIATION: 'DPV-',
   INTERCOMPANY: 'ICV-',

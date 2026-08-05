@@ -43,6 +43,7 @@ export class VoucherController {
   list(
     @CompanyId() companyId: number | undefined,
     @Query('typeId') typeId?: string,
+    @Query('typeCode') typeCode?: string,
     @Query('status') status?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
@@ -50,6 +51,7 @@ export class VoucherController {
     // Parsed by hand: ParseIntPipe rejects an absent optional query param.
     return this.service.list(companyId, {
       typeId: typeId ? Number(typeId) : undefined,
+      typeCode: typeCode || undefined,
       status: (status as VoucherStatus) || undefined,
       from,
       to,

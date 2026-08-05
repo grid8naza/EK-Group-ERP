@@ -77,6 +77,19 @@ import {
   UserCheck,
   Briefcase,
   Utensils,
+  // Accounts — the chart, and the vouchers written against it
+  HandCoins,
+  Banknote,
+  Landmark,
+  Receipt,
+  PencilLine,
+  ArrowLeftRight,
+  FileMinus,
+  FilePlus,
+  FolderTree,
+  BookOpen,
+  BookOpenCheck,
+  Network,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -233,6 +246,27 @@ const MAP: Record<string, LucideIcon> = {
   utensils: Utensils,
   mess: Utensils,
   canteen: Utensils,
+  // Accounts. Unmapped names fall back to a plain folder, which is why every
+  // screen in this module used to look alike in the sidebar.
+  'hand-coins': HandCoins,
+  banknote: Banknote,
+  cash: Banknote,
+  landmark: Landmark,
+  bank: Landmark,
+  receipt: Receipt,
+  invoice: Receipt,
+  'pencil-line': PencilLine,
+  journal: PencilLine,
+  'arrow-left-right': ArrowLeftRight,
+  contra: ArrowLeftRight,
+  'file-minus': FileMinus,
+  'file-plus': FilePlus,
+  'folder-tree': FolderTree,
+  'book-open': BookOpen,
+  ledger: BookOpen,
+  'book-open-check': BookOpenCheck,
+  'list-tree': ListTree,
+  network: Network,
 };
 
 export function resolveIcon(name?: string | null): LucideIcon {

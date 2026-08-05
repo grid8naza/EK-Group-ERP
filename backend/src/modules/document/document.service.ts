@@ -34,13 +34,27 @@ const SYSTEM_DOCUMENTS: { code: string; name: string }[] = [
   { code: 'PRODUCT_TRANSFER', name: 'Product Transfer' },
   { code: 'STOCK_TRANSFER', name: 'Stock Transfer' },
   { code: 'STOCK_JOURNAL', name: 'Stock Journal' },
-  // Ledger vouchers. Each kind numbers separately, so a payment and a receipt
-  // raised on the same day do not share a series.
+  // Ledger vouchers — one per hand-written kind. Each numbers separately, so a
+  // cash receipt and a bank receipt raised on the same day do not share a
+  // series.
+  { code: 'CASH_RECEIPT_VOUCHER', name: 'Cash Receipt Voucher' },
+  { code: 'CASH_PAYMENT_VOUCHER', name: 'Cash Payment Voucher' },
+  { code: 'BANK_RECEIPT_VOUCHER', name: 'Bank Receipt Voucher' },
+  { code: 'BANK_PAYMENT_VOUCHER', name: 'Bank Payment Voucher' },
+  { code: 'PURCHASE_VOUCHER', name: 'Purchase Voucher' },
+  { code: 'SALES_VOUCHER', name: 'Sales Voucher' },
   { code: 'JOURNAL_VOUCHER', name: 'Journal Voucher' },
-  { code: 'PAYMENT_VOUCHER', name: 'Payment Voucher' },
-  { code: 'RECEIPT_VOUCHER', name: 'Receipt Voucher' },
   { code: 'CONTRA_VOUCHER', name: 'Contra Voucher' },
+  { code: 'DEBIT_NOTE_VOUCHER', name: 'Debit Note Voucher' },
+  { code: 'CREDIT_NOTE_VOUCHER', name: 'Credit Note Voucher' },
 ];
+
+/**
+ * System documents that no longer back a screen. Deactivated rather than
+ * deleted: a company may have configured a numbering rule against one, and the
+ * rule points at the document's id.
+ */
+const RETIRED_DOCUMENTS = ['PAYMENT_VOUCHER', 'RECEIPT_VOUCHER'];
 
 // Inventory transaction type / subtype master lookups + per-document mapping,
 // from the "Inventory Transaction types" reference sheet.
@@ -98,6 +112,10 @@ export class DocumentService implements OnApplicationBootstrap {
           update: { isSystem: true },
         });
       }
+      await this.prisma.document.updateMany({
+        where: { code: { in: RETIRED_DOCUMENTS }, isActive: true },
+        data: { isActive: false },
+      });
       await this.seedTransactionLookups();
     } catch (e) {
       this.logger.error(
