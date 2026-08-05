@@ -2185,6 +2185,74 @@ export interface BillAllocation {
   status: VoucherStatus;
 }
 
+// ---- Accounts: the party sub-ledger read back ----
+
+export interface PartyLite {
+  id: number;
+  partyKind: PartyKind;
+  code: string;
+  name: string;
+  creditDays: number | null;
+  creditLimit: string | number | null;
+}
+
+export interface StatementRow {
+  id: number;
+  date: string;
+  voucherNo: string;
+  voucherType: string;
+  accountCode: string;
+  accountName: string;
+  narration: string | null;
+  debit: number;
+  credit: number;
+  /** Running balance, carried down the page. */
+  balance: number;
+  bills: { refType: BillRefType; billRef: string | null; amount: number }[];
+}
+
+export interface PartyStatement {
+  party: PartyLite;
+  from: string | null;
+  to: string | null;
+  openingBalance: number;
+  closingBalance: number;
+  rows: StatementRow[];
+}
+
+export interface AgeingBill {
+  id: number;
+  billRef: string | null;
+  date: string;
+  dueDate: string | null;
+  amount: number;
+  pending: number;
+  overdueDays: number;
+  bucket: string;
+}
+
+export interface AgeingParty {
+  partyId: number;
+  partyKind: PartyKind;
+  code: string;
+  name: string;
+  creditDays: number | null;
+  creditLimit: number | null;
+  total: number;
+  /** One figure per bucket, in the order of `AgeingReport.buckets`. */
+  buckets: number[];
+  bills: AgeingBill[];
+}
+
+export interface AgeingReport {
+  asOn: string;
+  partyKind: PartyKind;
+  buckets: string[];
+  parties: AgeingParty[];
+  totals: number[];
+  grandTotal: number;
+}
+
 /** A bill still standing against a party — what a settlement may be posted to. */
 export interface OutstandingBill {
   id: number;

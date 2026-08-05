@@ -85,6 +85,23 @@ export const ACCOUNTS_REPORT_MENUS = [
         order: 2,
         objectType: ObjectType.REPORT,
       },
+      // The party sub-ledger read back. A control account's balance is a total;
+      // these are the two ways anyone actually needs to see behind it — what one
+      // party's account says, and how old the money is.
+      {
+        name: 'Statement of Account',
+        route: '/accounts/reports/statement-of-account',
+        icon: 'book-open',
+        order: 3,
+        objectType: ObjectType.REPORT,
+      },
+      {
+        name: 'Bill Ageing',
+        route: '/accounts/reports/bill-ageing',
+        icon: 'hourglass',
+        order: 4,
+        objectType: ObjectType.REPORT,
+      },
     ],
   },
 ];

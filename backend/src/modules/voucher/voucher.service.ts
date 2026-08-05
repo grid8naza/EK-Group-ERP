@@ -371,6 +371,7 @@ export class VoucherService {
       branch,
       txn,
       date,
+      existing.id,
     );
     if (dto.post) this.assertBalanced(lines);
 
@@ -448,6 +449,7 @@ export class VoucherService {
       // have been edited since the draft was written.
       await this.resolveTransaction(existing),
       existing.date,
+      existing.id,
     );
     this.assertBalanced(checked);
 
@@ -612,6 +614,9 @@ export class VoucherService {
     /** The voucher's date — a new bill is dated from it, and falls due the
      *  party's credit period later. */
     date: Date = new Date(),
+    /** Set when re-checking a voucher that already exists, so its own bills are
+     *  not mistaken for duplicates of themselves. */
+    excludeVoucherId?: number,
   ): Promise<ResolvedLine[]> {
     if (!inputs?.length) throw new BadRequestException('A voucher needs lines.');
 
@@ -704,6 +709,7 @@ export class VoucherService {
         line.bills,
         date,
         at,
+        excludeVoucherId,
       );
 
       resolved.push({
@@ -850,6 +856,7 @@ export class VoucherService {
     inputs: BillAllocationInput[] | undefined,
     date: Date,
     at: string,
+    excludeVoucherId: number | undefined,
   ): Promise<ResolvedBill[]> {
     // No party, no bills — an ordinary account has no stack to allocate against.
     if (!party.partyKind || !party.partyId) return [];
@@ -891,6 +898,10 @@ export class VoucherService {
 
     const creditDays = await this.creditDays(party.partyKind, party.partyId);
     const resolved: ResolvedBill[] = [];
+    // Bill numbers this voucher is raising, so two lines of one entry cannot
+    // both raise "INV-001" — the database would catch it, but only after the
+    // rest of the voucher had been accepted.
+    const raising = new Set<string>();
 
     for (const b of inputs) {
       if (b.refType === 'NEW') {
@@ -900,6 +911,16 @@ export class VoucherService {
             `A new bill on ${at} needs its bill number.`,
           );
         }
+        await this.assertBillRefFree(
+          companyId,
+          party.partyKind,
+          party.partyId,
+          ref,
+          raising,
+          at,
+          excludeVoucherId,
+        );
+        raising.add(ref.toLowerCase());
         // Due date: the party's agreed terms, snapshotted now, unless the entry
         // overrides them. A bill is aged by the terms it was raised under.
         const due = b.dueDate
@@ -971,6 +992,55 @@ export class VoucherService {
       });
     }
     return resolved;
+  }
+
+  /**
+   * A bill number is a party's own, and may be raised against them once.
+   *
+   * PER PARTY, not per company: a purchase bill's number is written by the
+   * supplier, so two suppliers may both send "INV-001" and refusing the second
+   * would be refusing a real document. Within one party it is an identity — a
+   * second "INV-001" would leave two bills that no payment could tell apart.
+   *
+   * The database enforces this too. This check exists so the entry is refused
+   * where the fault is, naming the bill and the party, rather than surfacing a
+   * constraint violation after everything else has been accepted.
+   */
+  private async assertBillRefFree(
+    companyId: number,
+    partyKind: PartyKind,
+    partyId: number,
+    ref: string,
+    raising: Set<string>,
+    at: string,
+    /** The voucher being rewritten or posted — its OWN bills are not clashes
+     *  with itself. Absent on a first save, where nothing of it exists yet. */
+    excludeVoucherId: number | undefined,
+  ): Promise<void> {
+    if (raising.has(ref.toLowerCase())) {
+      throw new BadRequestException(
+        `This voucher already raises a bill numbered “${ref}” for that party (${at}).`,
+      );
+    }
+    const clash = await this.prisma.billAllocation.findFirst({
+      where: {
+        companyId,
+        partyKind,
+        partyId,
+        refType: 'NEW',
+        billRef: { equals: ref, mode: 'insensitive' },
+        ...(excludeVoucherId
+          ? { NOT: { line: { voucherId: excludeVoucherId } } }
+          : {}),
+      },
+      select: { id: true, status: true, date: true },
+    });
+    if (!clash) return;
+    throw new BadRequestException(
+      clash.status === 'CANCELLED'
+        ? `Bill “${ref}” was already raised for that party and later cancelled — that number cannot be used again (${at}).`
+        : `Bill “${ref}” already exists for that party, dated ${clash.date.toISOString().slice(0, 10)} (${at}).`,
+    );
   }
 
   /**
