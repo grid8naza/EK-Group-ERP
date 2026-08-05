@@ -51,6 +51,20 @@ export class VoucherLineInput {
   narration?: string;
 
   /**
+   * WHOSE balance this line moves. Required when the account is a control
+   * account (Sundry Debtors, Sundry Creditors) — its balance is only a total,
+   * and without this the books cannot say whose.
+   *
+   * The kind is taken from the account's own `controlParty`, so it is not asked
+   * for here: naming a customer against a creditors account would be a second
+   * way to say something the chart already decided.
+   */
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  partyId?: number;
+
+  /**
    * What the transaction WAS, where this line differs from the header — one
    * voucher may carry both a B2B and a B2C line. Left unset, the line inherits
    * the header's classification.

@@ -1755,7 +1755,8 @@ export interface OpeningStockLineRow {
 }
 
 // ---- Accounts: Supplier Master ----
-export interface Supplier {
+/** Credit terms are shared by both party masters — see {@link Customer}. */
+export interface PartyMaster {
   id: number;
   companyId: number;
   code: string;
@@ -1765,9 +1766,18 @@ export interface Supplier {
   email?: string | null;
   gstNumber?: string | null;
   address?: string | null;
+  /** Days until a bill falls due — what the ageing report counts against. */
+  creditDays?: number | null;
+  /** The most that may stand unpaid at once. Decimal, so it may arrive as text. */
+  creditLimit?: string | number | null;
   isActive: boolean;
   isLocked?: boolean;
 }
+
+export type Supplier = PartyMaster;
+
+/** Who the company sells to — the mirror of Supplier. */
+export type Customer = PartyMaster;
 
 // ---- Inventory Transactions (Goods Receipt / Delivery / Return / Issue) ----
 export type StockTxnKind =
@@ -2153,6 +2163,9 @@ export interface VoucherLine {
   /** Inherited from the header unless the line overrides it. */
   transactionTypeId: number | null;
   transactionSubtypeId: number | null;
+  /** Whose balance this line moves — set only on a control account. */
+  partyKind: PartyKind | null;
+  partyId: number | null;
 }
 
 export interface Voucher {

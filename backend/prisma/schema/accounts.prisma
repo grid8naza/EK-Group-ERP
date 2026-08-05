@@ -16,6 +16,11 @@ model Supplier {
   email         String?
   gstNumber     String? // GSTIN
   address       String?
+  /// Days from a bill's date until it falls due — what an ageing report counts
+  /// against. Null = no agreed term, so a bill is due the day it is raised.
+  creditDays    Int?
+  /// The most that may stand unpaid at once. Null = no ceiling agreed.
+  creditLimit   Decimal? @db.Decimal(18, 2)
   isActive      Boolean  @default(true)
   isLocked      Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt     DateTime @default(now())
@@ -24,6 +29,37 @@ model Supplier {
   @@unique([companyId, code])
   @@index([companyId])
   @@map("suppliers")
+}
+
+/// Who the company sells to — the other half of the party masters, and what
+/// details a receivable control account (Sundry Debtors) down to a name.
+///
+/// Deliberately the mirror of Supplier: the two are the same kind of thing seen
+/// from opposite sides, and a party master that differed by side would make the
+/// statement and ageing reports two pieces of work instead of one.
+model Customer {
+  id            Int      @id @default(autoincrement())
+  companyId     Int // -> Cpanel Company (plain id)
+  code          String // CUS-#### per company (system-generated)
+  name          String
+  contactPerson String?
+  phone         String?
+  email         String?
+  gstNumber     String? // GSTIN
+  address       String?
+  /// Days from a bill's date until it falls due — what an ageing report counts
+  /// against. Null = no agreed term, so a bill is due the day it is raised.
+  creditDays    Int?
+  /// The most that may stand unpaid at once. Null = no ceiling agreed.
+  creditLimit   Decimal? @db.Decimal(18, 2)
+  isActive      Boolean  @default(true)
+  isLocked      Boolean  @default(false) // when locked, must be unlocked before edit/delete
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@map("customers")
 }
 
 // -----------------------------------------------------------------------------
@@ -397,6 +433,18 @@ model VoucherLine {
   transactionTypeId    Int?
   transactionSubtypeId Int?
 
+  /// WHOSE balance this line moves, where the account is a control account.
+  /// Sundry Creditors is a total; this is the supplier it is a total OF, and
+  /// without it a party statement cannot be produced at all.
+  ///
+  /// Kind + id rather than one nullable column per master: the party may be a
+  /// supplier, a customer or (once HR builds it) an employee, and a column each
+  /// would leave three nulls on every line to say one thing. Required exactly
+  /// when Account.isControl, and the kind must match Account.controlParty —
+  /// enforced in VoucherService, since no FK can express "one of three tables".
+  partyKind PartyKind?
+  partyId   Int?
+
   /// Denormalized from the header so the ledger reads without a join.
   date   DateTime
   status VoucherStatus @default(DRAFT)
@@ -408,6 +456,9 @@ model VoucherLine {
   @@index([companyId, accountId, date])
   // Statements cut by what the transaction WAS (B2B vs B2C vs intercompany).
   @@index([companyId, transactionTypeId, date])
+  // A party's statement of account, and its ageing: every line for one party,
+  // in date order.
+  @@index([companyId, partyKind, partyId, date])
   @@index([companyId, costCenterId, date])
   @@map("voucher_lines")
 }

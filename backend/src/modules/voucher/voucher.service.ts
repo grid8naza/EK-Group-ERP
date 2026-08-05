@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, VoucherStatus } from '@prisma/client';
+import { PartyKind, Prisma, VoucherStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   NUMBERING,
@@ -54,6 +54,7 @@ const asInput = (l: {
   narration: string | null;
   transactionTypeId: number | null;
   transactionSubtypeId: number | null;
+  partyId: number | null;
 }): VoucherLineInput => ({
   accountId: l.accountId,
   debit: Number(l.debit),
@@ -61,6 +62,7 @@ const asInput = (l: {
   costCenterId: l.costCenterId ?? undefined,
   costObjectId: l.costObjectId ?? undefined,
   narration: l.narration ?? undefined,
+  partyId: l.partyId ?? undefined,
   // Carried back so a re-resolve keeps a line's own classification. Without
   // this an override would quietly collapse to the header's on the next save.
   transactionTypeId: l.transactionTypeId ?? undefined,
@@ -81,6 +83,8 @@ interface ResolvedLine extends ResolvedTransaction {
   costCenterId: number | null;
   costObjectId: number | null;
   narration: string | null;
+  partyKind: PartyKind | null;
+  partyId: number | null;
 }
 
 /** Codes of the two global lookups the classification is drawn from. */
@@ -470,6 +474,8 @@ export class VoucherService {
         allowManualJe: true,
         hasCostCenter: true,
         hasCostObject: true,
+        isControl: true,
+        controlParty: true,
         companies: {
           where: { companyId },
           select: { isActive: true, allowPosting: true },
@@ -538,6 +544,8 @@ export class VoucherService {
           )
         : header;
 
+      const party = await this.resolveParty(companyId, account, line.partyId, at);
+
       resolved.push({
         accountId: account.id,
         debit: fromPaise(debit),
@@ -546,6 +554,7 @@ export class VoucherService {
         costObjectId: dims.costObjectId,
         narration: line.narration?.trim() || null,
         ...txn,
+        ...party,
       });
     }
     return resolved;
@@ -611,6 +620,75 @@ export class VoucherService {
       );
     }
     return { transactionTypeId: typeId, transactionSubtypeId: subtypeId };
+  }
+
+  /**
+   * Whose balance this line moves.
+   *
+   * A control account's balance is a total and nothing else — the detail is the
+   * party. So a line to one WITHOUT a party is refused: it would add to a total
+   * that no statement could ever break down, and the sub-ledger would silently
+   * stop agreeing with the account. A line to an ordinary account carries no
+   * party at all; one offered is dropped rather than stored, the same way an
+   * unwanted cost centre is.
+   *
+   * The KIND comes from the account (`controlParty`), never from the caller —
+   * the chart has already decided that creditors are aged by supplier, and
+   * letting a request say otherwise would be a second answer to a settled
+   * question.
+   */
+  private async resolveParty(
+    companyId: number,
+    account: { isControl: boolean; controlParty: PartyKind | null },
+    partyId: number | undefined,
+    at: string,
+  ): Promise<{ partyKind: PartyKind | null; partyId: number | null }> {
+    if (!account.isControl) return { partyKind: null, partyId: null };
+
+    const kind = account.controlParty;
+    if (!kind) {
+      // Marked as a control account but never told which party ages it. Refuse
+      // rather than post a party-less line to it.
+      throw new BadRequestException(
+        `That account is a control account but has no party kind set (${at}).`,
+      );
+    }
+    if (!partyId) {
+      throw new BadRequestException(
+        `Name the ${kind.toLowerCase()} on ${at} — this account is kept party by party.`,
+      );
+    }
+
+    const exists = await this.partyExists(companyId, kind, partyId);
+    if (!exists) {
+      throw new BadRequestException(
+        `That ${kind.toLowerCase()} is not this company’s (${at}).`,
+      );
+    }
+    return { partyKind: kind, partyId };
+  }
+
+  /** Is this party one of the company's, and still live? */
+  private async partyExists(
+    companyId: number,
+    kind: PartyKind,
+    partyId: number,
+  ): Promise<boolean> {
+    const where = { id: partyId, companyId, isActive: true };
+    switch (kind) {
+      case 'SUPPLIER':
+        return !!(await this.prisma.supplier.count({ where }));
+      case 'CUSTOMER':
+        return !!(await this.prisma.customer.count({ where }));
+      default:
+        // EMPLOYEE / COMPANY / OTHER have no master to check against yet — HR
+        // builds the employee one. Refuse instead of accepting an id that
+        // points at nothing, which would put a name in the books that no
+        // screen can ever resolve.
+        throw new BadRequestException(
+          `Accounts kept by ${kind.toLowerCase()} are not available yet — that master has not been built.`,
+        );
+    }
   }
 
   /** The cost centre and object must be this company's, and belong together. */

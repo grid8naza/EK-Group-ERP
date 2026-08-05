@@ -9,7 +9,12 @@ import {
   Min,
 } from 'class-validator';
 
-export class CreateSupplierDto {
+/**
+ * Credit terms are what an ageing report counts against: `creditDays` decides
+ * when a bill falls due, `creditLimit` how much may stand unpaid at once. Both
+ * optional — a cash customer has neither.
+ */
+export class CreateCustomerDto {
   @IsString()
   @MaxLength(200)
   name!: string;
@@ -39,13 +44,11 @@ export class CreateSupplierDto {
   @MaxLength(500)
   address?: string | null;
 
-  /** Days until a bill falls due — what an ageing report counts against. */
   @IsOptional()
   @IsInt()
   @Min(0)
   creditDays?: number | null;
 
-  /** The most that may stand unpaid at once. */
   @IsOptional()
   @IsNumber()
   @Min(0)
@@ -56,7 +59,7 @@ export class CreateSupplierDto {
   isActive?: boolean;
 }
 
-export class UpdateSupplierDto {
+export class UpdateCustomerDto {
   @IsOptional()
   @IsString()
   @MaxLength(200)
@@ -87,13 +90,11 @@ export class UpdateSupplierDto {
   @MaxLength(500)
   address?: string | null;
 
-  /** Days until a bill falls due — what an ageing report counts against. */
   @IsOptional()
   @IsInt()
   @Min(0)
   creditDays?: number | null;
 
-  /** The most that may stand unpaid at once. */
   @IsOptional()
   @IsNumber()
   @Min(0)

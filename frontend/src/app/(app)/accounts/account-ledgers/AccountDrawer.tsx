@@ -20,6 +20,36 @@ const SIDE_OPTIONS = [
   { value: 'CR', label: 'Credit' },
 ];
 
+/**
+ * What each rule on this account actually means, in the words an accountant
+ * would use — with a real account from the chart, because "offsets its own
+ * group" means little until you see Accumulated Depreciation doing it.
+ *
+ * Kept beside the form rather than in the database: these describe what the
+ * software DOES with the tick, so they change when the code changes, not when
+ * an administrator decides.
+ */
+const HELP = {
+  hasCostCenter:
+    'Tick to have the entry screen ask which division a line to this account belongs to — kitchen, cafe, a vehicle. Untick and it never asks, and the line is saved without one.',
+  hasCostObject:
+    'The department under the division. A department cannot be named without its division, so ticking this ticks the cost centre too.',
+  isContra:
+    'The account sits inside a block but REDUCES it rather than adding to it. Accumulated Depreciation sits under Fixed Assets and nets against them, so the balance sheet shows the asset at cost less depreciation instead of two separate lines.',
+  isControl:
+    'The balance is only a total — the detail is per party. Sundry Creditors is really the sum of what you owe each supplier, so an entry here records WHICH supplier and the account is aged and settled bill by bill.',
+  isGstRelevant:
+    'The account feeds the GST returns — output tax, input credit, reverse charge. Tick it on the tax heads, not on the sales or purchase account itself.',
+  isBankOrCash:
+    'Money physically moves through this account: a till, a petty cash box, a bank account. These are what a Cash or Bank voucher pays into and out of.',
+  isReconcilable:
+    'The balance is agreed against a statement from outside — a bank statement, a supplier statement. Cash in Transit is ticked because money that has left one place and not yet arrived must be tied out.',
+  allowManualJe:
+    'Whether a person may name this account on a hand-written voucher. Untick it and the account moves only when a module posts to it, so a balance the system maintains cannot be nudged by hand.',
+  isActive:
+    'Untick to retire the account. It keeps everything already posted to it and stops being offered on new entries.',
+};
+
 type Form = {
   groupId: string;
   code: string;
@@ -284,6 +314,7 @@ export function AccountDrawer({
           <div className="mt-2 flex flex-wrap gap-x-6 gap-y-2">
             <Checkbox
               label="Cost centre (division)"
+              help={HELP.hasCostCenter}
               checked={form.hasCostCenter}
               disabled={editing}
               onChange={(e) =>
@@ -298,6 +329,7 @@ export function AccountDrawer({
             />
             <Checkbox
               label="Cost object (department)"
+              help={HELP.hasCostObject}
               checked={form.hasCostObject}
               disabled={editing}
               onChange={(e) =>
@@ -335,36 +367,42 @@ export function AccountDrawer({
         <div className="sm:col-span-2 flex flex-wrap gap-x-6 gap-y-2 border-t border-slate-200 pt-3 dark:border-slate-700">
           <Checkbox
             label="Contra — offsets its own group"
+            help={HELP.isContra}
             checked={form.isContra}
             disabled={editing}
             onChange={(e) => setForm({ ...form, isContra: e.target.checked })}
           />
           <Checkbox
             label="Control — aged by a party"
+            help={HELP.isControl}
             checked={form.isControl}
             disabled={editing}
             onChange={(e) => setForm({ ...form, isControl: e.target.checked })}
           />
           <Checkbox
             label="GST relevant"
+            help={HELP.isGstRelevant}
             checked={form.isGstRelevant}
             disabled={editing}
             onChange={(e) => setForm({ ...form, isGstRelevant: e.target.checked })}
           />
           <Checkbox
             label="Bank or cash"
+            help={HELP.isBankOrCash}
             checked={form.isBankOrCash}
             disabled={editing}
             onChange={(e) => setForm({ ...form, isBankOrCash: e.target.checked })}
           />
           <Checkbox
             label="Reconcilable"
+            help={HELP.isReconcilable}
             checked={form.isReconcilable}
             disabled={editing}
             onChange={(e) => setForm({ ...form, isReconcilable: e.target.checked })}
           />
           <Checkbox
             label="Allow manual journal"
+            help={HELP.allowManualJe}
             checked={form.allowManualJe}
             disabled={editing}
             onChange={(e) => setForm({ ...form, allowManualJe: e.target.checked })}
@@ -372,6 +410,7 @@ export function AccountDrawer({
           {editing && (
             <Checkbox
               label="Active"
+              help={HELP.isActive}
               checked={form.isActive}
               onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
             />

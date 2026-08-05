@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Plus, Truck } from 'lucide-react';
+import { Handshake, Plus } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
@@ -15,9 +15,9 @@ import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/u
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Checkbox, Textarea } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import type { Supplier } from '@/lib/types';
+import type { Customer } from '@/lib/types';
 
-const ROUTE = '/accounts/suppliers';
+const ROUTE = '/accounts/customers';
 
 const empty = {
   name: '',
@@ -31,22 +31,22 @@ const empty = {
   isActive: true,
 };
 
-export default function SuppliersPage() {
+export default function CustomersPage() {
   const { can } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
-  const { data, loading, refetch } = useFetch<Supplier[]>('/suppliers');
+  const { data, loading, refetch } = useFetch<Customer[]>('/customers');
   const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
-    useLock<Supplier>({
-      endpoint: '/suppliers',
+    useLock<Customer>({
+      endpoint: '/customers',
       route: ROUTE,
-      noun: 'supplier',
+      noun: 'customer',
       nameOf: (s) => s.name,
       reload: refetch,
     });
 
   const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<Supplier | null>(null);
+  const [editing, setEditing] = useState<Customer | null>(null);
   const [view, setView] = useState(false);
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
@@ -61,7 +61,7 @@ export default function SuppliersPage() {
     setView(false);
   };
 
-  const formFrom = (s: Supplier) => ({
+  const formFrom = (s: Customer) => ({
     name: s.name,
     contactPerson: s.contactPerson ?? '',
     phone: s.phone ?? '',
@@ -79,13 +79,13 @@ export default function SuppliersPage() {
     setForm({ ...empty });
     setOpen(true);
   };
-  const openEdit = (s: Supplier) => {
+  const openEdit = (s: Customer) => {
     setEditing(s);
     setView(false);
     setForm(formFrom(s));
     setOpen(true);
   };
-  const openView = (s: Supplier) => {
+  const openView = (s: Customer) => {
     setEditing(s);
     setView(true);
     setForm(formFrom(s));
@@ -106,7 +106,7 @@ export default function SuppliersPage() {
 
   const save = async (mode: SaveMode = 'saveClose') => {
     if (!form.name.trim()) {
-      toast.error('Supplier name is required.');
+      toast.error('Customer name is required.');
       return;
     }
     const payload = {
@@ -123,13 +123,13 @@ export default function SuppliersPage() {
     };
     setSaving(true);
     try {
-      let saved: Supplier;
+      let saved: Customer;
       if (editing) {
-        saved = await api.patch<Supplier>(`/suppliers/${editing.id}`, payload);
-        toast.success('Supplier updated.');
+        saved = await api.patch<Customer>(`/customers/${editing.id}`, payload);
+        toast.success('Customer updated.');
       } else {
-        saved = await api.post<Supplier>('/suppliers', payload);
-        toast.success('Supplier created.');
+        saved = await api.post<Customer>('/customers', payload);
+        toast.success('Customer created.');
       }
       await refetch();
       if (mode === 'saveNew') {
@@ -148,28 +148,28 @@ export default function SuppliersPage() {
     }
   };
 
-  const remove = async (s: Supplier) => {
+  const remove = async (s: Customer) => {
     const ok = await confirm({
-      title: 'Delete supplier',
+      title: 'Delete customer',
       message: `Delete "${s.name}"?`,
       danger: true,
       confirmText: 'Delete',
     });
     if (!ok) return;
     try {
-      await api.delete(`/suppliers/${s.id}`);
-      toast.success('Supplier deleted.');
+      await api.delete(`/customers/${s.id}`);
+      toast.success('Customer deleted.');
       refetch();
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to delete.');
     }
   };
 
-  const columns: Column<Supplier>[] = [
+  const columns: Column<Customer>[] = [
     { key: 'code', header: 'Code', accessor: (r) => r.code },
     {
       key: 'name',
-      header: 'Supplier',
+      header: 'Customer',
       sortable: true,
       sortAccessor: (r) => r.name,
       render: (r) => (
@@ -182,6 +182,11 @@ export default function SuppliersPage() {
     { key: 'phone', header: 'Phone', accessor: (r) => r.phone ?? '—' },
     { key: 'gstNumber', header: 'GSTIN', accessor: (r) => r.gstNumber ?? '—' },
     {
+      key: 'creditDays',
+      header: 'Credit',
+      accessor: (r) => (r.creditDays == null ? '—' : `${r.creditDays} days`),
+    },
+    {
       key: 'isActive',
       header: 'Status',
       render: (r) => (
@@ -192,14 +197,14 @@ export default function SuppliersPage() {
     },
   ];
 
-  const title = view ? 'View Supplier' : editing ? 'Edit Supplier' : 'New Supplier';
+  const title = view ? 'View Customer' : editing ? 'Edit Customer' : 'New Customer';
 
   return (
     <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
-        title="Supplier Master"
-        description="Vendors goods are purchased from — used by Goods Receipt Notes"
-        icon={<Truck className="h-5 w-5" />}
+        title="Customer Master"
+        description="Who the company sells to — details the Sundry Debtors control account, bill by bill"
+        icon={<Handshake className="h-5 w-5" />}
         actions={
           canAdd && (
             <button className="btn-primary" onClick={openAdd}>
@@ -219,7 +224,7 @@ export default function SuppliersPage() {
         loading={loading}
         fillHeight
         onRefresh={refetch}
-        searchPlaceholder="Search suppliers..."
+        searchPlaceholder="Search customers..."
         onView={openView}
         onEdit={(r) => guardEdit(r, () => openEdit(r))}
         onDelete={(r) => guardDelete(r, () => remove(r))}
@@ -235,15 +240,15 @@ export default function SuppliersPage() {
             onToggle={() => toggleLock(r)}
           />
         )}
-        emptyMessage="No suppliers yet"
+        emptyMessage="No customers yet"
       />
 
       <Drawer
         open={open}
         onClose={closeDrawer}
         title={title}
-        subtitle="Vendor"
-        icon={<Truck className="h-5 w-5" />}
+        subtitle="Customer"
+        icon={<Handshake className="h-5 w-5" />}
         footer={
           view ? (
             <CloseFooter onClose={closeDrawer} />
@@ -263,11 +268,11 @@ export default function SuppliersPage() {
               <Input label="Code" value={editing.code} disabled />
             )}
             <Input
-              label="Supplier name"
+              label="Customer name"
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="e.g. Sunrise Flour Mills"
+              placeholder="e.g. Malabar Supermarkets"
               wrapClassName={editing ? undefined : 'sm:col-span-2'}
             />
             <Input
@@ -297,8 +302,8 @@ export default function SuppliersPage() {
               value={form.address}
               onChange={(e) => setForm({ ...form, address: e.target.value })}
             />
-            {/* The terms THEY give us. Left blank, a bill is due the day it is
-                raised and no ceiling is checked. */}
+            {/* What the ageing report counts against. Left blank, a bill is due
+                the day it is raised and no ceiling is checked. */}
             <Input
               label="Credit period (days)"
               type="number"

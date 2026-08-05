@@ -7,20 +7,24 @@ import { ObjectType } from '@prisma/client';
 // what a voucher names. They are different work done by different people at
 // different times, and a single screen made the 44 headings compete for
 // attention with the 253 accounts.
+// The two party masters lead: a control account (Sundry Debtors, Sundry
+// Creditors) is only a total, and these are what it is a total OF. Without them
+// the ledger cannot say whose balance moved.
 export const ACCOUNTS_SUBS = [
   { name: 'Supplier Master', route: '/accounts/suppliers', icon: 'truck', order: 1 },
+  { name: 'Customer Master', route: '/accounts/customers', icon: 'handshake', order: 2 },
   // The Annexure D master, seeded on boot; see CoaSeedService.
   {
     name: 'Account Groups',
     route: '/accounts/account-groups',
     icon: 'folder-tree',
-    order: 2,
+    order: 3,
   },
   {
     name: 'Account Ledgers',
     route: '/accounts/account-ledgers',
     icon: 'book-open',
-    order: 3,
+    order: 4,
   },
 ];
 

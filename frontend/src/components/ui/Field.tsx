@@ -2,7 +2,7 @@
 
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronDown, Search, X } from 'lucide-react';
+import { Check, ChevronDown, HelpCircle, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /**
@@ -600,15 +600,59 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
   },
 );
 
+/**
+ * A "what does this mean?" note attached to a field.
+ *
+ * Opens on hover for a mouse and on click for a touch screen — a tooltip that
+ * only answers to hover is unreadable on a tablet, which is where a lot of this
+ * is used. Click is also what lets someone keep it open long enough to read it.
+ *
+ * It sits inside the field's <label>, so the click must be stopped from
+ * reaching the control and toggling it.
+ */
+export function HelpTip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        aria-label={open ? 'Hide explanation' : 'What does this mean?'}
+        aria-expanded={open}
+        tabIndex={-1}
+        className="text-slate-400 transition-colors hover:text-brand-600 dark:hover:text-brand-400"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+      >
+        <HelpCircle className="h-3.5 w-3.5" />
+      </button>
+      {open && (
+        <span
+          role="tooltip"
+          className="absolute left-1/2 top-full z-50 mt-1.5 w-60 max-w-[min(15rem,80vw)] -translate-x-1/2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-normal leading-relaxed text-slate-600 shadow-lg dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+        >
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
 type CheckboxProps = Omit<
   React.InputHTMLAttributes<HTMLInputElement>,
   'type'
 > & {
   label?: string;
+  /** Plain-language explanation, shown behind a ? beside the label. */
+  help?: string;
 };
 
 export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
-  function Checkbox({ label, className, ...props }, ref) {
+  function Checkbox({ label, help, className, ...props }, ref) {
     return (
       <label className="inline-flex cursor-pointer select-none items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
         <input
@@ -621,6 +665,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
           {...props}
         />
         {label && <span>{label}</span>}
+        {help && <HelpTip text={help} />}
       </label>
     );
   },

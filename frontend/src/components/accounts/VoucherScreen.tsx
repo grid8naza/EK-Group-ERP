@@ -17,6 +17,8 @@ import type {
   CoaAccount,
   CostCenter,
   CostObject,
+  Customer,
+  Supplier,
   Voucher,
   VoucherStatus,
   VoucherType,
@@ -49,6 +51,8 @@ type DraftLine = {
   /** Empty = take the header's. Only a subtype is overridden per line; the type
       is whatever that subtype belongs to. */
   txnSubtypeId: string;
+  /** Whose balance the line moves. Asked for only on a control account. */
+  partyId: string;
 };
 
 const emptyLine = (): DraftLine => ({
@@ -59,6 +63,7 @@ const emptyLine = (): DraftLine => ({
   costObjectId: '',
   narration: '',
   txnSubtypeId: '',
+  partyId: '',
 });
 
 const num = (v: string | number | null | undefined) => Number(v ?? 0) || 0;
@@ -109,6 +114,10 @@ export function VoucherScreen({
   // global taxonomy, shared with stock movements and documents.
   const txnTypes = useLookupValues('TRANSACTION_TYPE');
   const txnSubtypes = useLookupValues('TRANSACTION_SUBTYPE');
+  // Who a control-account line can name. Only two masters exist; employee
+  // accounts wait on HR.
+  const { data: suppliers } = useFetch<Supplier[]>('/suppliers');
+  const { data: customers } = useFetch<Customer[]>('/customers');
 
   // The kind's id in THIS database — the screen knows its code, the server
   // assigns the id.
@@ -216,6 +225,7 @@ export function VoucherScreen({
           l.transactionSubtypeId !== v.transactionSubtypeId
             ? String(l.transactionSubtypeId)
             : '',
+        partyId: l.partyId ? String(l.partyId) : '',
       })),
     );
     setMode(next);
@@ -246,7 +256,23 @@ export function VoucherScreen({
       object: account?.entryRules
         ? account.entryRules.costObject === 'REQUIRED'
         : false,
+      // A control account's balance is only a total; the line must say whose.
+      party: !!account?.isControl,
+      partyKind: account?.controlParty ?? null,
     };
+  };
+
+  /** Who a line to this account may name, from the kind the account is kept by. */
+  const partyOptions = (kind: string | null) => {
+    const list =
+      kind === 'SUPPLIER'
+        ? suppliers ?? []
+        : kind === 'CUSTOMER'
+          ? customers ?? []
+          : [];
+    return list
+      .filter((p) => p.isActive)
+      .map((p) => ({ value: String(p.id), label: `${p.code} · ${p.name}` }));
   };
 
   const body = () => ({
@@ -268,6 +294,7 @@ export function VoucherScreen({
         transactionSubtypeId: l.txnSubtypeId
           ? Number(l.txnSubtypeId)
           : undefined,
+        partyId: l.partyId ? Number(l.partyId) : undefined,
       })),
   });
 
@@ -610,7 +637,8 @@ export function VoucherScreen({
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs uppercase text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
               <tr>
-                <th className="w-[28%] px-3 py-2 text-left">Account</th>
+                <th className="w-[24%] px-3 py-2 text-left">Account</th>
+                <th className="w-[16%] px-3 py-2 text-left">Party</th>
                 <th className="w-[8%] px-3 py-2 text-left">Dr/Cr</th>
                 <th className="w-[14%] px-3 py-2 text-right">Amount</th>
                 <th className="w-[14%] px-3 py-2 text-left">Cost Centre</th>
@@ -648,11 +676,37 @@ export function VoucherScreen({
                             accountId: e.target.value,
                             costCenterId: '',
                             costObjectId: '',
+                            // A different account may be kept by a different
+                            // party, or by none.
+                            partyId: '',
                           })
                         }
                         options={accountOptions}
                         placeholder="Choose an account"
                       />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      {/* Only where the account is a control account — its
+                          balance is a total, and this is whose. */}
+                      {asks.party ? (
+                        <Select
+                          value={l.partyId}
+                          disabled={readOnly}
+                          onChange={(e) =>
+                            setLine(i, { partyId: e.target.value })
+                          }
+                          options={partyOptions(asks.partyKind)}
+                          placeholder={
+                            asks.partyKind === 'SUPPLIER'
+                              ? 'Which supplier'
+                              : asks.partyKind === 'CUSTOMER'
+                                ? 'Which customer'
+                                : 'Master not built yet'
+                          }
+                        />
+                      ) : (
+                        <span className="px-1 text-xs text-slate-300">—</span>
+                      )}
                     </td>
                     <td className="px-2 py-1.5">
                       <Select
@@ -761,7 +815,7 @@ export function VoucherScreen({
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-slate-200 bg-slate-50 text-sm font-semibold dark:border-slate-700 dark:bg-slate-800/60">
-                <td className="px-3 py-2" colSpan={2}>
+                <td className="px-3 py-2" colSpan={3}>
                   {!readOnly && (
                     <button
                       className="text-xs font-normal text-brand-600 hover:underline"
