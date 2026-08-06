@@ -59,6 +59,13 @@ type DraftLine = {
    * in. Blank until an item is picked, then defaulted from its HSN code.
    */
   gst?: string;
+  /**
+   * Compensation cess (%), where the goods attract one — aerated drinks,
+   * tobacco. Its own field rather than folded into the GST rate: cess is a
+   * separate levy at its own rate, it does NOT split across state lines, and it
+   * is claimed and reported apart from the tax it sits beside.
+   */
+  cess?: string;
 };
 
 const todayInput = () => {
@@ -273,13 +280,16 @@ export function StockTransactionScreen({
    * Empty when the stockable has no HSN code: the master has not said, so the
    * screen does not guess.
    */
-  const hsnRateOf = (key: string): string => {
+  const hsnRateOf = (key: string): { gst: string; cess: string } => {
     const pick = key ? pickById.get(key) : undefined;
     const hsnId = pick && 'hsnCodeId' in pick ? pick.hsnCodeId : null;
     const hsn = hsnId ? (hsnCodes ?? []).find((h) => h.id === hsnId) : undefined;
-    if (!hsn) return '';
+    if (!hsn) return { gst: '', cess: '' };
     const rate = hsn.igst || hsn.cgst + hsn.sgst;
-    return rate ? String(rate) : '';
+    return {
+      gst: rate ? String(rate) : '',
+      cess: hsn.cess ? String(hsn.cess) : '',
+    };
   };
 
   const blankLine = (): DraftLine => ({
@@ -390,6 +400,7 @@ export function StockTransactionScreen({
         return {
           key: l.itemId ? `item:${l.itemId}` : `product:${l.productId}`,
           gst: String((l.igst ?? 0) || (l.cgst ?? 0) + (l.sgst ?? 0) || ''),
+          cess: String(l.cess || ''),
           quantity: String(inPack ? l.enteredQty : stockQty),
           unitPrice: dec2(String(inPack ? packRate : (l.unitPrice ?? 0))),
           unitMode: (inPack ? 'box' : 'stock') as 'box' | 'stock',
@@ -455,8 +466,11 @@ export function StockTransactionScreen({
   const lineBase = (l: DraftLine) => Number(l.quantity || 0) * Number(l.unitPrice || 0);
   const lineTax = (l: DraftLine) =>
     Math.round(lineBase(l) * (Number(l.gst || 0) / 100) * 100) / 100;
+  const lineCess = (l: DraftLine) =>
+    Math.round(lineBase(l) * (Number(l.cess || 0) / 100) * 100) / 100;
   const docTaxable = lines.reduce((n, l) => n + lineBase(l), 0);
   const docTax = lines.reduce((n, l) => n + lineTax(l), 0);
+  const docCess = lines.reduce((n, l) => n + lineCess(l), 0);
 
   // True once any line is counted in packs: the stock column only earns its
   // width on a document that actually has one.
@@ -506,6 +520,9 @@ export function StockTransactionScreen({
                 cgst: interState ? 0 : Number(l.gst || 0) / 2,
                 sgst: interState ? 0 : Number(l.gst || 0) / 2,
                 igst: interState ? Number(l.gst || 0) : 0,
+                // Cess does not split — it is one levy either side of a state
+                // line, so it goes across whole.
+                cess: Number(l.cess || 0),
               }
             : {}),
           batchNo2: inbound ? l.batchNo2.trim() || undefined : undefined,
@@ -960,6 +977,7 @@ export function StockTransactionScreen({
                     {showTax && (
                       <>
                         <th className="w-20 py-2 px-1 text-right">GST %</th>
+                        <th className="w-20 py-2 px-1 text-right">Cess %</th>
                         <th className="w-28 py-2 px-1 text-right">Tax</th>
                       </>
                     )}
@@ -1022,9 +1040,7 @@ export function StockTransactionScreen({
                                     // imposed: what the supplier billed is what
                                     // goes on the line, and the field stays
                                     // editable for the day they differ.
-                                    ...(showTax
-                                      ? { gst: hsnRateOf(e.target.value) }
-                                      : {}),
+                                    ...(showTax ? hsnRateOf(e.target.value) : {}),
                                   });
                                 }}
                                 placeholder="Select item / product"
@@ -1185,15 +1201,37 @@ export function StockTransactionScreen({
                                   />
                                 )}
                               </td>
+                              <td className="px-1">
+                                {viewMode ? (
+                                  <span className="block text-right tabular-nums">
+                                    {l.cess ? `${l.cess}%` : '—'}
+                                  </span>
+                                ) : (
+                                  <Input
+                                    id={`stl-${i}-cess`}
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    step="any"
+                                    value={l.cess ?? ''}
+                                    onChange={(e) => setLine(i, { cess: e.target.value })}
+                                    onKeyDown={enterNextLine(i)}
+                                    className="text-right tabular-nums"
+                                  />
+                                )}
+                              </td>
                               <td className="px-1 text-right tabular-nums text-slate-500">
-                                {money2(String(lineTax(l)))}
+                                {money2(String(lineTax(l) + lineCess(l)))}
                                 {/* The split, spelled out, so nobody has to
                                     remember what the header switch is set to. */}
-                                {lineTax(l) > 0 && (
+                                {(lineTax(l) > 0 || lineCess(l) > 0) && (
                                   <span className="mt-0.5 block text-[11px] text-slate-400">
-                                    {interState
-                                      ? 'IGST'
-                                      : `CGST + SGST ${(Number(l.gst || 0) / 2).toLocaleString()}% each`}
+                                    {lineTax(l) > 0 &&
+                                      (interState
+                                        ? 'IGST'
+                                        : `CGST + SGST ${(Number(l.gst || 0) / 2).toLocaleString()}% each`)}
+                                    {lineCess(l) > 0 &&
+                                      `${lineTax(l) > 0 ? ' + ' : ''}cess ${money2(String(lineCess(l)))}`}
                                   </span>
                                 )}
                               </td>
@@ -1234,10 +1272,18 @@ export function StockTransactionScreen({
                     {money2(String(docTax))}
                   </span>
                 </span>
+                {docCess > 0 && (
+                  <span className="text-slate-500 dark:text-slate-400">
+                    Cess{' '}
+                    <span className="tabular-nums text-slate-700 dark:text-slate-200">
+                      {money2(String(docCess))}
+                    </span>
+                  </span>
+                )}
                 <span className="font-medium text-slate-700 dark:text-slate-200">
                   Total{' '}
                   <span className="tabular-nums">
-                    {money2(String(docTaxable + docTax))}
+                    {money2(String(docTaxable + docTax + docCess))}
                   </span>
                 </span>
               </div>
