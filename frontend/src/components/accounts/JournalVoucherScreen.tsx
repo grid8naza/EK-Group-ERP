@@ -305,14 +305,26 @@ export function JournalVoucherScreen({
       }),
     );
 
-  const setBill = (key: number, bi: number, patch: Partial<DraftBill>) =>
-    setLines((ls) =>
-      ls.map((l) =>
-        l.key === key
-          ? { ...l, bills: l.bills.map((b, y) => (y === bi ? { ...b, ...patch } : b)) }
-          : l,
-      ),
-    );
+  /**
+   * Change one bill row — and, where that changes a figure, re-balance the
+   * stack behind it.
+   *
+   * The LAST row of a stack is not a number someone typed: it is what the line
+   * has left over, opened automatically and carrying the remainder. So it
+   * follows the rows above it. Cut an earlier bill from 5,000 to 2,000 and the
+   * last row absorbs the 3,000, instead of sitting there over-allocating the
+   * line until somebody notices the amber warning.
+   *
+   * Changes to the last row itself are left alone — that one IS being typed.
+   */
+  const setBill = (l: JvLine, bi: number, patch: Partial<DraftBill>) => {
+    const next = l.bills.map((b, y) => (y === bi ? { ...b, ...patch } : b));
+    const isLast = bi === l.bills.length - 1;
+    setLine(l.key, {
+      bills:
+        patch.amount !== undefined && !isLast ? rebalance(next, l.amount) : next,
+    });
+  };
 
   const totals = useMemo(() => {
     let dr = 0;
@@ -912,7 +924,7 @@ export function JournalVoucherScreen({
                                   disabled={readOnly}
                                   wrapClassName="w-40 flex-none"
                                   onChange={(e) =>
-                                    setBill(l.key, bi, {
+                                    setBill(l, bi, {
                                       refType: e.target.value as BillRefType,
                                       billRef: '',
                                       refNote: '',
@@ -930,7 +942,7 @@ export function JournalVoucherScreen({
                                     className="h-8 text-sm"
                                     placeholder="Bill number, e.g. INV-001"
                                     onChange={(e) =>
-                                      setBill(l.key, bi, {
+                                      setBill(l, bi, {
                                         billRef: e.target.value,
                                       })
                                     }
@@ -945,7 +957,7 @@ export function JournalVoucherScreen({
                                       const picked = bills.find(
                                         (o) => String(o.id) === e.target.value,
                                       );
-                                      setBill(l.key, bi, {
+                                      setBill(l, bi, {
                                         againstId: e.target.value,
                                         // Default to clearing it in full — the
                                         // common case, and still editable.
@@ -987,7 +999,7 @@ export function JournalVoucherScreen({
                                         : 'What this is against (optional)'
                                     }
                                     onChange={(e) =>
-                                      setBill(l.key, bi, {
+                                      setBill(l, bi, {
                                         refNote: e.target.value,
                                       })
                                     }
@@ -1004,7 +1016,7 @@ export function JournalVoucherScreen({
                                 className="no-spinner h-8 text-sm"
                                 onKeyDown={(e) => onBillEnd(i, l, bi, e)}
                                 onChange={(e) =>
-                                  setBill(l.key, bi, { amount: e.target.value })
+                                  setBill(l, bi, { amount: e.target.value })
                                 }
                               />
                               <span />
@@ -1135,25 +1147,52 @@ export function JournalVoucherScreen({
 }
 
 /**
- * Keep the sole bill allocation in step with the line it belongs to.
+ * Point the last bill row at whatever the line has left over.
+ *
+ * A bill stack has to add up to its line exactly — that is what bill-wise
+ * tracking IS, and the server refuses the line otherwise. The last row is the
+ * balancing figure: it was opened by the form carrying the remainder, so it
+ * keeps carrying the remainder as the rows above it change.
+ *
+ * When there is nothing left over it goes away rather than sitting at nil: the
+ * rows above already name the whole line, and an empty one would be one more
+ * thing to tab past. The sole row of a stack is never removed, only blanked —
+ * a control line always needs somewhere to say which bill it belongs to.
+ *
+ * A remainder that has gone NEGATIVE means the rows above already exceed the
+ * line. The balancing row cannot fix that by going negative too, so it steps
+ * out of the way and the over-allocation is left visible, which is the only
+ * honest thing to do with a figure only the user can resolve.
+ */
+function rebalance(bills: DraftBill[], lineAmount: string): DraftBill[] {
+  if (bills.length === 0) return bills;
+  const others = bills
+    .slice(0, -1)
+    .reduce((total, b) => total + paise(b.amount), 0);
+  const left = paise(lineAmount) - others;
+  if (left <= 0 && bills.length > 1) return bills.slice(0, -1);
+  return [
+    ...bills.slice(0, -1),
+    {
+      ...bills[bills.length - 1],
+      amount: left > 0 ? (left / 100).toFixed(2) : '',
+    },
+  ];
+}
+
+/**
+ * Change the line's amount, and let its bills follow.
  *
  * One line against one bill is the ordinary case, and there the allocation is
- * not a second fact to enter — it is the line's own amount. The moment a second
- * bill is added the line is being split deliberately, and nothing is touched
- * again.
+ * not a second fact to enter — it is the line's own amount, which falls out of
+ * the same rule.
  */
 function onAmountChange(
   line: JvLine,
   amount: string,
   setLine: (key: number, patch: Partial<JvLine>) => void,
 ) {
-  setLine(line.key, {
-    amount,
-    bills:
-      line.bills.length === 1
-        ? [{ ...line.bills[0], amount }]
-        : line.bills,
-  });
+  setLine(line.key, { amount, bills: rebalance(line.bills, amount) });
 }
 
 /**
