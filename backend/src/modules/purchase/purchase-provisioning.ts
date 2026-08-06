@@ -1,3 +1,5 @@
+import { ObjectType } from '@prisma/client';
+
 // Purchase module screens — everything the company BUYS, split by counterparty:
 //  - ICPO (Inter-Company Purchase Order): raised on another GROUP company. Its
 //    counterparty is a Company, its lines are that company's sellable Products,
@@ -18,4 +20,28 @@
 export const PURCHASE_SUBS = [
   { name: 'ICPO', route: '/purchase/icpo', icon: 'shopping-cart', order: 1 },
   { name: 'LPO', route: '/purchase/lpo', icon: 'truck', order: 2 },
+];
+
+// A second main menu for what was actually BOUGHT, as opposed to what was
+// ordered above.
+//
+// The register is read off the goods receipts, not off a purchase expense
+// account: a receipt debits inventory and the cost reaches the profit and loss
+// when the material is consumed, so no ledger balance can answer "what did we
+// buy from whom, at what rate" — only the document can, and it answers with the
+// supplier, item, batch and store as well.
+export const PURCHASE_REPORT_MENUS = [
+  {
+    name: 'Purchase Report',
+    icon: 'bar-chart-3',
+    subs: [
+      {
+        name: 'Purchase Register',
+        route: '/purchase/reports/purchase-register',
+        icon: 'receipt',
+        order: 1,
+        objectType: ObjectType.REPORT,
+      },
+    ],
+  },
 ];

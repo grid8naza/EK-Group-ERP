@@ -417,6 +417,35 @@ export const COA_RECODED_ACCOUNTS: {
 ];
 
 /**
+ * Blocks the group's accounting method does not post to — closed for use rather
+ * than withdrawn from the master.
+ *
+ * The purchase block is the case this exists for. A goods receipt debits
+ * INVENTORY and the cost reaches the profit and loss when the material is
+ * consumed (42001 Raw Material Consumed and its neighbours), so charging a
+ * purchase to an expense account as well would count the same cost twice —
+ * gross profit collapsing by the value of everything bought, with a trial
+ * balance that still balances and gives no hint of it.
+ *
+ * Closed, not deleted, for three reasons: the codes stay whole so 4xxxx still
+ * reads consecutively, the block can be reopened by one edit if the method ever
+ * changes, and an account that has been posted to must never vanish.
+ *
+ * Both halves: the accounts go inactive, and every company's ADOPTION of them
+ * goes. Adoption is what puts an account in a picker, so removing it is what
+ * actually takes the block out of everybody's way.
+ */
+export const COA_CLOSED_BLOCKS: { group: string; accounts: string[] }[] = [
+  {
+    group: '40000', // Purchases
+    accounts: [
+      '40001', '40002', '40003', '40004', '40005',
+      '40006', '40007', '40008', '40009',
+    ],
+  },
+];
+
+/**
  * Group headings given a different code. Read exactly as the account recodes
  * above: same row, same id, so every account hanging off it comes along —
  * an account names its group by id, not by code.

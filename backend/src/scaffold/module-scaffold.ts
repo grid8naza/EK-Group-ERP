@@ -23,7 +23,10 @@ import {
 import { HR_SUBS } from '../modules/hr-category/hr-provisioning';
 import { WORKFLOW_SUBS } from '../modules/workflow/workflow-provisioning';
 import { CRM_SUBS } from '../modules/crm/crm-provisioning';
-import { PURCHASE_SUBS } from '../modules/purchase/purchase-provisioning';
+import {
+  PURCHASE_SUBS,
+  PURCHASE_REPORT_MENUS,
+} from '../modules/purchase/purchase-provisioning';
 import {
   ACCOUNTS_SUBS,
   ACCOUNTS_REPORT_MENUS,
@@ -204,6 +207,7 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     autoEnable: true,
     menu: { name: 'Purchase', icon: 'shopping-cart' },
     subs: PURCHASE_SUBS,
+    extraMenus: PURCHASE_REPORT_MENUS,
   },
   {
     code: 'STAFF_MESS',

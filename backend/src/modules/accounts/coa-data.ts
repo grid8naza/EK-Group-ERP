@@ -47,6 +47,8 @@ export interface CoaGroup {
   statement: StatementType;
   tallyGroup: string | null;
   sortOrder: number;
+  /** Omitted = in use. Set false for a block the group does not post to. */
+  isActive?: boolean;
 }
 
 export interface CoaAccount {
@@ -70,6 +72,14 @@ export interface CoaAccount {
   isSystem: boolean;
   notes: string | null;
   sortOrder: number;
+  /**
+   * Omitted = in use. Set false for an account the group's method never posts
+   * to: the purchase block, where a receipt debits inventory and the cost
+   * reaches the profit and loss on consumption instead. Kept in the master
+   * rather than withdrawn, so the numbering stays whole and the decision can be
+   * read — and reversed — where it was made.
+   */
+  isActive?: boolean;
 }
 
 export interface CoaCostCentreCategory {
@@ -113,7 +123,7 @@ export const COA_GROUPS: CoaGroup[] = [
   { code: "33000", name: "Sales Adjustments", parentCode: null, nature: "INCOME", normalSide: "DR", statement: "PL", tallyGroup: "Sales Accounts", sortOrder: 172 },
   { code: "34000", name: "Other Operating Income", parentCode: null, nature: "INCOME", normalSide: "CR", statement: "PL", tallyGroup: "Direct Incomes", sortOrder: 177 },
   { code: "35000", name: "Other Income", parentCode: null, nature: "INCOME", normalSide: "CR", statement: "PL", tallyGroup: "Indirect Incomes", sortOrder: 181 },
-  { code: "40000", name: "Purchases", parentCode: null, nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Purchase Accounts", sortOrder: 189 },
+  { code: "40000", name: "Purchases", parentCode: null, nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Purchase Accounts", sortOrder: 189, isActive: false },
   { code: "41000", name: "Direct Expenses - Production", parentCode: null, nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Direct Expenses", sortOrder: 199 },
   { code: "42000", name: "Cost of Goods Sold and Consumption", parentCode: null, nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Direct Expenses", sortOrder: 212 },
   { code: "50000", name: "Employee Benefit Expenses", parentCode: null, nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Indirect Expenses", sortOrder: 219 },
@@ -285,15 +295,15 @@ export const COA_ACCOUNTS: CoaAccount[] = [
   { code: "35005", name: "Insurance Claim Received", groupCode: "35000", nature: "INCOME", normalSide: "CR", statement: "PL", tallyGroup: "Indirect Incomes", isContra: false, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: false, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: null, sortOrder: 186 },
   { code: "35006", name: "Miscellaneous Income", groupCode: "35000", nature: "INCOME", normalSide: "CR", statement: "PL", tallyGroup: "Indirect Incomes", isContra: false, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: false, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: null, sortOrder: 187 },
   { code: "35007", name: "Rounding Off - Income", groupCode: "35000", nature: "INCOME", normalSide: "CR", statement: "PL", tallyGroup: "Indirect Incomes", isContra: false, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: false, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: null, sortOrder: 188 },
-  { code: "40001", name: "Purchase - Flour, Sugar and Bulk Raw Material", groupCode: "40000", nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Purchase Accounts", isContra: false, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: null, sortOrder: 190 },
-  { code: "40002", name: "Purchase - Dairy, Fats and Perishables", groupCode: "40000", nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Purchase Accounts", isContra: false, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: null, sortOrder: 191 },
-  { code: "40003", name: "Purchase - Flavours, Additives and Ingredients", groupCode: "40000", nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Purchase Accounts", isContra: false, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: null, sortOrder: 192 },
-  { code: "40004", name: "Purchase - Packing Material", groupCode: "40000", nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Purchase Accounts", isContra: false, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: null, sortOrder: 193 },
-  { code: "40005", name: "Purchase - Traded Goods", groupCode: "40000", nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Purchase Accounts", isContra: false, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: null, sortOrder: 194 },
-  { code: "40006", name: "Purchase - Mess and Canteen Provisions", groupCode: "40000", nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Purchase Accounts", isContra: false, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "Mess cost centre", sortOrder: 195 },
-  { code: "40007", name: "Intercompany Purchases", groupCode: "40000", nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Purchase Accounts", isContra: false, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: true, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "Eliminated on consolidation", sortOrder: 196 },
-  { code: "40008", name: "Purchase Returns", groupCode: "40000", nature: "EXPENSE", normalSide: "CR", statement: "PL", tallyGroup: "Purchase Accounts", isContra: true, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "Contra; debit note", sortOrder: 197 },
-  { code: "40009", name: "Purchase Discount Received", groupCode: "40000", nature: "EXPENSE", normalSide: "CR", statement: "PL", tallyGroup: "Purchase Accounts", isContra: true, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "Contra", sortOrder: 198 },
+  { code: "40001", name: "Purchase - Flour, Sugar and Bulk Raw Material", groupCode: "40000", nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Purchase Accounts", isContra: false, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: null, sortOrder: 190, isActive: false },
+  { code: "40002", name: "Purchase - Dairy, Fats and Perishables", groupCode: "40000", nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Purchase Accounts", isContra: false, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: null, sortOrder: 191, isActive: false },
+  { code: "40003", name: "Purchase - Flavours, Additives and Ingredients", groupCode: "40000", nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Purchase Accounts", isContra: false, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: null, sortOrder: 192, isActive: false },
+  { code: "40004", name: "Purchase - Packing Material", groupCode: "40000", nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Purchase Accounts", isContra: false, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: null, sortOrder: 193, isActive: false },
+  { code: "40005", name: "Purchase - Traded Goods", groupCode: "40000", nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Purchase Accounts", isContra: false, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: null, sortOrder: 194, isActive: false },
+  { code: "40006", name: "Purchase - Mess and Canteen Provisions", groupCode: "40000", nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Purchase Accounts", isContra: false, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "Mess cost centre", sortOrder: 195, isActive: false },
+  { code: "40007", name: "Intercompany Purchases", groupCode: "40000", nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Purchase Accounts", isContra: false, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: true, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "Eliminated on consolidation", sortOrder: 196, isActive: false },
+  { code: "40008", name: "Purchase Returns", groupCode: "40000", nature: "EXPENSE", normalSide: "CR", statement: "PL", tallyGroup: "Purchase Accounts", isContra: true, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "Contra; debit note", sortOrder: 197, isActive: false },
+  { code: "40009", name: "Purchase Discount Received", groupCode: "40000", nature: "EXPENSE", normalSide: "CR", statement: "PL", tallyGroup: "Purchase Accounts", isContra: true, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "Contra", sortOrder: 198, isActive: false },
   { code: "41001", name: "Factory and Production Wages", groupCode: "41000", nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Direct Expenses", isContra: false, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: false, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "Includes piece-rate", sortOrder: 200 },
   { code: "41002", name: "Contract Labour - Production", groupCode: "41000", nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Direct Expenses", isContra: false, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "TDS 194C", sortOrder: 201 },
   { code: "41003", name: "Power and Fuel - Factory and Kitchen", groupCode: "41000", nature: "EXPENSE", normalSide: "DR", statement: "PL", tallyGroup: "Direct Expenses", isContra: false, isControl: false, controlParty: null, ccRequirement: "OPTIONAL", isGstRelevant: false, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: null, sortOrder: 202 },
@@ -519,15 +529,6 @@ export const COA_ADOPTIONS: Record<string, string[]> = {
   "34001": ["MFG", "TRD", "RTL"],
   "34002": ["MFG"],
   "34003": ["MFG", "RTL"],
-  "40001": ["MFG", "RTL"],
-  "40002": ["MFG", "RTL"],
-  "40003": ["MFG", "RTL"],
-  "40004": ["MFG", "RTL"],
-  "40005": ["TRD", "RTL"],
-  "40006": ["MFG", "RTL"],
-  "40007": ["MFG", "TRD", "RTL"],
-  "40008": ["MFG", "TRD", "RTL"],
-  "40009": ["MFG", "TRD", "RTL"],
   "41001": ["MFG", "RTL"],
   "41002": ["MFG"],
   "41003": ["MFG", "RTL"],

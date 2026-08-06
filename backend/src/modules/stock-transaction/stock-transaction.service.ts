@@ -681,6 +681,164 @@ export class StockTransactionService {
     }));
   }
 
+  /**
+   * The PURCHASE REGISTER — what was bought, from whom, at what rate.
+   *
+   * Read from the goods receipts and their stock ledger rather than from a
+   * purchase expense account, because a purchase is a DOCUMENT, not a balance:
+   * the ledger could only ever tell you a total, while the receipt knows the
+   * supplier, the item, the batch, the store and the rate on the day. Under the
+   * costing method this ERP posts (a receipt debits inventory, and the cost
+   * reaches the profit and loss when the material is consumed), the purchase
+   * block of the chart is not posted to at all — so this is the only place the
+   * question is answerable, and it answers it better.
+   *
+   * Every filter is optional and narrows the same query; the caller groups the
+   * rows however it wants to read them.
+   */
+  async purchaseRegister(
+    companyId: number | undefined,
+    branchId: number | undefined,
+    filters: {
+      from?: Date;
+      to?: Date;
+      supplierId?: number;
+      categoryId?: number;
+      storeId?: number;
+    },
+  ) {
+    // The supplier lives on the DOCUMENT, so a supplier filter selects receipts
+    // first and the ledger rows follow from them.
+    const headers = await this.prisma.stockTransaction.findMany({
+      where: {
+        type: 'PURCHASE',
+        ...(companyId ? { companyId } : {}),
+        ...(branchId ? { branchId } : {}),
+        ...(filters.supplierId ? { supplierId: filters.supplierId } : {}),
+        ...(filters.storeId ? { storeId: filters.storeId } : {}),
+        ...(filters.from || filters.to
+          ? {
+              docDate: {
+                ...(filters.from ? { gte: filters.from } : {}),
+                ...(filters.to ? { lte: filters.to } : {}),
+              },
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        docNo: true,
+        docDate: true,
+        supplierId: true,
+        purchaseOrderRef: true,
+        reference: true,
+        storeId: true,
+        branchId: true,
+      },
+      orderBy: [{ docDate: 'desc' }, { id: 'desc' }],
+    });
+    if (!headers.length) return [];
+
+    const byDoc = new Map(headers.map((h) => [h.id, h]));
+    const rows = await this.prisma.stockLedger.findMany({
+      where: {
+        transactionType: 'PURCHASE',
+        documentId: { in: headers.map((h) => h.id) },
+        ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
+      },
+      orderBy: [{ date: 'desc' }, { id: 'asc' }],
+    });
+
+    const uniq = <T>(xs: (T | null | undefined)[]) =>
+      [...new Set(xs.filter((x): x is T => x != null))];
+    const [items, products, cats, groups, units, stores, suppliers] =
+      await Promise.all([
+        this.byId(this.prisma.item, uniq(rows.map((r) => r.itemId))),
+        this.byId(this.prisma.product, uniq(rows.map((r) => r.productId))),
+        this.byId(this.prisma.category, uniq(rows.map((r) => r.categoryId))),
+        this.byId(
+          this.prisma.group,
+          uniq([
+            ...rows.map((r) => r.primaryGroupId),
+            ...rows.map((r) => r.parentGroupId),
+          ]),
+        ),
+        this.prisma.unit.findMany({
+          where: {
+            id: { in: uniq([...rows.map((r) => r.unitId), ...rows.map((r) => r.enteredUnitId)]) },
+          },
+          select: { id: true, symbol: true, code: true },
+        }),
+        this.byId(this.prisma.store, uniq(headers.map((h) => h.storeId))),
+        // Cross-domain by id, as everywhere: the supplier master is the
+        // Accounts module's, and this only ever reads a name off it.
+        this.byId(this.prisma.supplier, uniq(headers.map((h) => h.supplierId))),
+      ]);
+    const unitOf = new Map(units.map((u) => [u.id, u.symbol ?? u.code] as const));
+
+    return rows.map((r) => {
+      const doc = byDoc.get(r.documentId);
+      const qty = r.qtyIn;
+      return {
+        id: r.id,
+        documentId: r.documentId,
+        docNo: r.documentNo,
+        date: r.date,
+        supplierId: doc?.supplierId ?? null,
+        supplierName: doc?.supplierId
+          ? suppliers.get(doc.supplierId) ?? null
+          : null,
+        poRef: doc?.purchaseOrderRef ?? null,
+        reference: doc?.reference ?? null,
+        storeName: doc ? stores.get(doc.storeId) ?? null : null,
+        branchId: doc?.branchId ?? null,
+        itemId: r.itemId,
+        productId: r.productId,
+        name: r.itemId
+          ? items.get(r.itemId) ?? ''
+          : r.productId
+            ? products.get(r.productId) ?? ''
+            : '',
+        categoryId: r.categoryId,
+        categoryName: r.categoryId ? cats.get(r.categoryId) ?? null : null,
+        primaryGroupName: r.primaryGroupId
+          ? groups.get(r.primaryGroupId) ?? null
+          : null,
+        parentGroupName: r.parentGroupId
+          ? groups.get(r.parentGroupId) ?? null
+          : null,
+        batchNo1: r.batchNo1,
+        batchNo2: r.batchNo2,
+        expiryDate: r.expiryDate,
+        qty,
+        unitSymbol: unitOf.get(r.unitId) ?? '',
+        rate: r.unitPrice,
+        value: qty * r.unitPrice,
+        // The rate AS INVOICED, per pack — 50 a bottle beside unitPrice's 0.25
+        // a gram. Both are stored on the row precisely so a purchase report can
+        // show what the supplier billed next to what stock is valued at.
+        enteredQty: r.enteredQty,
+        enteredUnitSymbol: r.enteredUnitId
+          ? unitOf.get(r.enteredUnitId) ?? ''
+          : '',
+        enteredRate: r.enteredUnitPrice,
+      };
+    });
+  }
+
+  /** id -> name for any master, skipping the query when nothing needs it. */
+  private async byId(
+    model: { findMany: (args: unknown) => Promise<{ id: number; name: string }[]> },
+    ids: number[],
+  ): Promise<Map<number, string>> {
+    if (!ids.length) return new Map();
+    const rows = await model.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true },
+    });
+    return new Map(rows.map((r) => [r.id, r.name] as const));
+  }
+
   /** One row per DOCUMENT (header listing): date, doc no, company, branch,
    *  store, reference, total amount (sum qty × rate), lock. */
   async documents(

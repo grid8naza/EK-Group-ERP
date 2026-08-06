@@ -6,6 +6,7 @@ import {
 } from './main-groups';
 import {
   COA_ACCOUNT_RENAMES,
+  COA_CLOSED_BLOCKS,
   COA_SHIPPED_CC_RULES,
   COA_GROUP_RENAMES,
   COA_RECODED_ACCOUNTS,
@@ -363,13 +364,47 @@ export class CoaSeedService implements OnApplicationBootstrap {
       reruled += res.count;
     }
 
+    // Blocks the method does not post to. Guarded on the account still being
+    // ACTIVE, so it applies once and then stops matching — and so a deliberate
+    // re-opening on the Ledgers screen survives, up to the next boot. If the
+    // method itself changes, the entry comes out of coa-revisions.ts; that is
+    // where the decision lives, not in a checkbox.
+    let closed = 0;
+    for (const block of COA_CLOSED_BLOCKS) {
+      const accounts = await this.prisma.account.findMany({
+        where: { code: { in: block.accounts }, isActive: true },
+        select: { id: true },
+      });
+      if (accounts.length) {
+        const ids = accounts.map((a) => a.id);
+        await this.prisma.account.updateMany({
+          where: { id: { in: ids } },
+          data: { isActive: false },
+        });
+        // Adoption is what puts an account in a picker; without this the block
+        // would still be offered on every entry screen, merely inactive.
+        const dropped = await this.prisma.accountCompany.deleteMany({
+          where: { accountId: { in: ids } },
+        });
+        closed += accounts.length;
+        this.logger.log(
+          `Block ${block.group} closed for use: ${accounts.length} accounts ` +
+            `deactivated, ${dropped.count} company adoptions withdrawn.`,
+        );
+      }
+      await this.prisma.accountGroup.updateMany({
+        where: { code: block.group, isActive: true },
+        data: { isActive: false },
+      });
+    }
+
     const resorted = await this.restampFromMaster();
 
-    if (renamed || removed || deactivated || recoded || reruled || resorted) {
+    if (renamed || removed || deactivated || recoded || reruled || resorted || closed) {
       this.logger.log(
         `Chart of Accounts revised: ${renamed} renamed, ${removed} withdrawn, ` +
           `${deactivated} deactivated, ${recoded} recoded, ${reruled} re-ruled, ` +
-          `${resorted} resorted.`,
+          `${resorted} resorted, ${closed} closed for use.`,
       );
     }
   }
@@ -465,6 +500,7 @@ export class CoaSeedService implements OnApplicationBootstrap {
           // under its parent's.
           mainGroup: g.parentCode ? null : (COA_MAIN_GROUPS[g.code] ?? null),
           sortOrder: g.sortOrder,
+          isActive: g.isActive ?? true,
         },
         select: { id: true },
       });
@@ -518,6 +554,7 @@ export class CoaSeedService implements OnApplicationBootstrap {
           isSystem: true,
           notes: a.notes,
           sortOrder: a.sortOrder,
+          isActive: a.isActive ?? true,
         },
       });
       created++;

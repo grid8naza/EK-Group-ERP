@@ -80,6 +80,35 @@ export class StockTransactionController {
     return this.service.incomingDispatches(companyId, branchId);
   }
 
+  /**
+   * The purchase register: goods receipt lines with supplier, item, batch and
+   * rate. Declared ABOVE :id, or "purchase-register" is read as an id.
+   */
+  @Get('purchase-register')
+  purchaseRegister(
+    @CompanyId() companyId: number | undefined,
+    @BranchId() branchId: number | undefined,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('supplierId') supplierId?: string,
+    @Query('categoryId') categoryId?: string,
+    @Query('storeId') storeId?: string,
+  ) {
+    // Number(), not ParseIntPipe({ optional: true }) — that 400s on a filter
+    // simply not being used.
+    const num = (v?: string) => (v ? Number(v) || undefined : undefined);
+    const day = (v?: string) => (v ? new Date(v) : undefined);
+    return this.service.purchaseRegister(companyId, branchId, {
+      from: day(from),
+      // Inclusive of the closing day: a receipt at 14:00 on the 31st is inside
+      // "to 31st", which is what anyone means by it.
+      to: to ? new Date(`${to}T23:59:59.999`) : undefined,
+      supplierId: num(supplierId),
+      categoryId: num(categoryId),
+      storeId: num(storeId),
+    });
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id);
