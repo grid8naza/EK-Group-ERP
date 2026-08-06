@@ -12,6 +12,12 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Select } from '@/components/ui/Field';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { AccountDrawer } from './AccountDrawer';
+import {
+  AttributeChips,
+  AttributeFilter,
+  matchesAttributes,
+  type AttributeFilters,
+} from './AttributeFilter';
 import type {
   AccountGroup,
   AccountNature,
@@ -69,7 +75,11 @@ const flagsOf = (a: CoaAccount) => {
   if (a.isIntercompany) out.push('Intercompany');
   if (a.isBankOrCash) out.push('Bank / cash');
   if (a.isGstRelevant) out.push('GST');
+  if (a.isReconcilable) out.push('Reconcilable');
   if (!a.allowManualJe) out.push('No manual JE');
+  // Last, and stated in the negative: a retired account still listed among live
+  // ones has to say so, or the filter shows it and the row does not explain why.
+  if (!a.isActive) out.push('Inactive');
   return out;
 };
 
@@ -84,6 +94,9 @@ export default function AccountLedgersPage() {
   const [block, setBlock] = useState('');
   const [groupFilter, setGroupFilter] = useState('');
   const [adoption, setAdoption] = useState(''); // '' | 'yes' | 'no'
+  // Contra / control / GST / bank / reconcilable / manual journal / active,
+  // each unset, yes or no.
+  const [attrs, setAttrs] = useState<AttributeFilters>({});
   const [busy, setBusy] = useState<number | null>(null);
   const [editing, setEditing] = useState<CoaAccount | null>(null);
   const [addingAccount, setAddingAccount] = useState(false);
@@ -108,8 +121,9 @@ export default function AccountLedgersPage() {
     if (groupFilter) out = out.filter((a) => String(a.groupId) === groupFilter);
     if (adoption === 'yes') out = out.filter((a) => a.adopted);
     else if (adoption === 'no') out = out.filter((a) => !a.adopted);
+    out = out.filter((a) => matchesAttributes(a, attrs));
     return out;
-  }, [all, block, groupFilter, adoption]);
+  }, [all, block, groupFilter, adoption, attrs]);
 
   const adoptedCount = all.filter((a) => a.adopted).length;
 
@@ -375,6 +389,8 @@ export default function AccountLedgersPage() {
                 placeholder="Any adoption"
                 className="w-44"
               />
+              <AttributeFilter value={attrs} onChange={setAttrs} />
+              <AttributeChips value={attrs} onChange={setAttrs} />
             </div>
           }
         />

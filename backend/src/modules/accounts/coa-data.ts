@@ -7,9 +7,10 @@
  * off; do not edit an account here to fix a symptom elsewhere. If the annexure
  * is revised, re-convert rather than hand-patch, so the two cannot drift.
  *
- * Counts match the annexure's own verification (D.16): 44 groups,
- * 253 ledger accounts, 635 company adoptions,
- * 8 cost-centre categories.
+ * Counts as shipped by the annexure's own verification (D.16): 44 groups,
+ * 253 ledger accounts, 635 company adoptions, 8 cost-centre categories.
+ * Now 251 accounts and 633 adoptions — see COA_REVISIONS for what the finance
+ * team has changed since, and why the two no longer agree.
  */
 
 import {
@@ -96,7 +97,7 @@ export const COA_GROUPS: CoaGroup[] = [
   { code: "15000", name: "Loans, Advances and Deposits", parentCode: null, nature: "ASSET", normalSide: "DR", statement: "BS", tallyGroup: "Loans & Advances (Asset)", sortOrder: 64 },
   { code: "16000", name: "GST Input Tax Credit", parentCode: null, nature: "ASSET", normalSide: "DR", statement: "BS", tallyGroup: "Duties & Taxes", sortOrder: 71 },
   { code: "17000", name: "Intercompany and Inter-branch Receivable", parentCode: null, nature: "ASSET", normalSide: "DR", statement: "BS", tallyGroup: "Branch / Divisions", sortOrder: 80 },
-  { code: "20000", name: "Trade Payables", parentCode: null, nature: "LIABILITY", normalSide: "CR", statement: "BS", tallyGroup: "Sundry Creditors", sortOrder: 85 },
+  { code: "20000", name: "Accounts Payable", parentCode: null, nature: "LIABILITY", normalSide: "CR", statement: "BS", tallyGroup: "Sundry Creditors", sortOrder: 85 },
   { code: "21000", name: "Duties and Taxes Payable", parentCode: null, nature: "LIABILITY", normalSide: "CR", statement: "BS", tallyGroup: "Duties & Taxes", sortOrder: 92 },
   { code: "22000", name: "Employee Related Liabilities", parentCode: null, nature: "LIABILITY", normalSide: "CR", statement: "BS", tallyGroup: "Provisions", sortOrder: 104 },
   { code: "23000", name: "Other Current Liabilities", parentCode: null, nature: "LIABILITY", normalSide: "CR", statement: "BS", tallyGroup: "Current Liabilities", sortOrder: 116 },
@@ -197,12 +198,10 @@ export const COA_ACCOUNTS: CoaAccount[] = [
   { code: "17002", name: "Due from Regency Bakers and Confectionaries", groupCode: "17000", nature: "ASSET", normalSide: "DR", statement: "BS", tallyGroup: "Branch / Divisions", isContra: false, isControl: false, controlParty: null, ccRequirement: "NOT_APPLICABLE", isGstRelevant: false, isBankOrCash: false, isReconcilable: false, isIntercompany: true, eliminationPair: "27002", allowManualJe: true, isSystem: false, notes: "Elimination pair with 27002", sortOrder: 82 },
   { code: "17003", name: "Due from Regency Bake House", groupCode: "17000", nature: "ASSET", normalSide: "DR", statement: "BS", tallyGroup: "Branch / Divisions", isContra: false, isControl: false, controlParty: null, ccRequirement: "NOT_APPLICABLE", isGstRelevant: false, isBankOrCash: false, isReconcilable: false, isIntercompany: true, eliminationPair: "27003", allowManualJe: true, isSystem: false, notes: "Elimination pair with 27003", sortOrder: 83 },
   { code: "17004", name: "Inter-branch Current Account", groupCode: "17000", nature: "ASSET", normalSide: "DR", statement: "BS", tallyGroup: "Branch / Divisions", isContra: false, isControl: false, controlParty: null, ccRequirement: "MANDATORY", isGstRelevant: false, isBankOrCash: false, isReconcilable: false, isIntercompany: true, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "Within one company; nets to nil", sortOrder: 84 },
-  { code: "20001", name: "Sundry Creditors - Raw Material", groupCode: "20000", nature: "LIABILITY", normalSide: "CR", statement: "BS", tallyGroup: "Sundry Creditors", isContra: false, isControl: true, controlParty: "SUPPLIER", ccRequirement: "OPTIONAL", isGstRelevant: false, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "Control account", sortOrder: 86 },
-  { code: "20002", name: "Sundry Creditors - Packing Material", groupCode: "20000", nature: "LIABILITY", normalSide: "CR", statement: "BS", tallyGroup: "Sundry Creditors", isContra: false, isControl: true, controlParty: "SUPPLIER", ccRequirement: "OPTIONAL", isGstRelevant: false, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "Control account", sortOrder: 87 },
-  { code: "20003", name: "Sundry Creditors - Traded Goods", groupCode: "20000", nature: "LIABILITY", normalSide: "CR", statement: "BS", tallyGroup: "Sundry Creditors", isContra: false, isControl: true, controlParty: "SUPPLIER", ccRequirement: "OPTIONAL", isGstRelevant: false, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "Control account", sortOrder: 88 },
-  { code: "20004", name: "Sundry Creditors - Services and Utilities", groupCode: "20000", nature: "LIABILITY", normalSide: "CR", statement: "BS", tallyGroup: "Sundry Creditors", isContra: false, isControl: true, controlParty: "SUPPLIER", ccRequirement: "OPTIONAL", isGstRelevant: false, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "Control account", sortOrder: 89 },
-  { code: "20005", name: "Sundry Creditors - Capital Goods", groupCode: "20000", nature: "LIABILITY", normalSide: "CR", statement: "BS", tallyGroup: "Sundry Creditors", isContra: false, isControl: true, controlParty: "SUPPLIER", ccRequirement: "OPTIONAL", isGstRelevant: false, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "Control account", sortOrder: 90 },
-  { code: "20006", name: "Goods Received not Billed", groupCode: "20000", nature: "LIABILITY", normalSide: "CR", statement: "BS", tallyGroup: "Sundry Creditors", isContra: false, isControl: false, controlParty: null, ccRequirement: "MANDATORY", isGstRelevant: false, isBankOrCash: false, isReconcilable: true, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "GRN clearing; cleared on supplier bill", sortOrder: 91 },
+  { code: "20001", name: "Trade Creditors", groupCode: "20000", nature: "LIABILITY", normalSide: "CR", statement: "BS", tallyGroup: "Sundry Creditors", isContra: false, isControl: true, controlParty: "SUPPLIER", ccRequirement: "OPTIONAL", isGstRelevant: false, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "Control account", sortOrder: 86 },
+  { code: "20002", name: "Other Creditors", groupCode: "20000", nature: "LIABILITY", normalSide: "CR", statement: "BS", tallyGroup: "Sundry Creditors", isContra: false, isControl: true, controlParty: "SUPPLIER", ccRequirement: "OPTIONAL", isGstRelevant: false, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "Control account", sortOrder: 87 },
+  { code: "20003", name: "Accrued Expenses", groupCode: "20000", nature: "LIABILITY", normalSide: "CR", statement: "BS", tallyGroup: "Sundry Creditors", isContra: false, isControl: true, controlParty: "SUPPLIER", ccRequirement: "OPTIONAL", isGstRelevant: false, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "Control account", sortOrder: 88 },
+  { code: "20004", name: "Goods Received not Billed", groupCode: "20000", nature: "LIABILITY", normalSide: "CR", statement: "BS", tallyGroup: "Sundry Creditors", isContra: false, isControl: false, controlParty: null, ccRequirement: "MANDATORY", isGstRelevant: false, isBankOrCash: false, isReconcilable: true, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "GRN clearing; cleared on supplier bill", sortOrder: 89 },
   { code: "21001", name: "Output CGST", groupCode: "21000", nature: "LIABILITY", normalSide: "CR", statement: "BS", tallyGroup: "Duties & Taxes", isContra: false, isControl: false, controlParty: null, ccRequirement: "NOT_APPLICABLE", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "Intra-state outward", sortOrder: 93 },
   { code: "21002", name: "Output SGST / UTGST", groupCode: "21000", nature: "LIABILITY", normalSide: "CR", statement: "BS", tallyGroup: "Duties & Taxes", isContra: false, isControl: false, controlParty: null, ccRequirement: "NOT_APPLICABLE", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "Intra-state outward", sortOrder: 94 },
   { code: "21003", name: "Output IGST", groupCode: "21000", nature: "LIABILITY", normalSide: "CR", statement: "BS", tallyGroup: "Duties & Taxes", isContra: false, isControl: false, controlParty: null, ccRequirement: "NOT_APPLICABLE", isGstRelevant: true, isBankOrCash: false, isReconcilable: false, isIntercompany: false, eliminationPair: null, allowManualJe: true, isSystem: false, notes: "Inter-state outward", sortOrder: 95 },
@@ -454,12 +453,10 @@ export const COA_ADOPTIONS: Record<string, string[]> = {
   "17002": ["MFG", "RTL"],
   "17003": ["MFG", "TRD"],
   "17004": ["MFG", "TRD", "RTL"],
-  "20001": ["MFG", "RTL"],
-  "20002": ["MFG"],
-  "20003": ["TRD", "RTL"],
+  "20001": ["MFG", "TRD", "RTL"],
+  "20002": ["MFG", "TRD", "RTL"],
+  "20003": ["MFG", "TRD", "RTL"],
   "20004": ["MFG", "TRD", "RTL"],
-  "20005": ["MFG", "TRD", "RTL"],
-  "20006": ["MFG", "TRD", "RTL"],
   "21001": ["MFG", "TRD", "RTL"],
   "21002": ["MFG", "TRD", "RTL"],
   "21003": ["MFG", "TRD", "RTL"],

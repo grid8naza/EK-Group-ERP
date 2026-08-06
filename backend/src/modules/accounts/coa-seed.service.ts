@@ -5,6 +5,12 @@ import {
   COA_MAIN_GROUP_CORRECTIONS,
 } from './main-groups';
 import {
+  COA_ACCOUNT_RENAMES,
+  COA_GROUP_RENAMES,
+  COA_RECODED_ACCOUNTS,
+  COA_RETIRED_ACCOUNTS,
+} from './coa-revisions';
+import {
   CcRequirement,
   COA_ACCOUNTS,
   COA_ADOPTIONS,
@@ -56,6 +62,12 @@ export class CoaSeedService implements OnApplicationBootstrap {
 
   async onApplicationBootstrap(): Promise<void> {
     try {
+      // FIRST, before anything is created: the revisions move the chart that is
+      // already here on to the revised master — renaming, withdrawing and
+      // renumbering. Seeding afterwards then adds only what is genuinely
+      // missing. The other way round, seeding would create a second account at
+      // a code a revision was about to move an existing one into.
+      await this.applyRevisions();
       const groups = await this.seedGroups();
       const accounts = await this.seedAccounts();
       const adoptions = await this.seedAdoptions();
@@ -169,6 +181,113 @@ export class CoaSeedService implements OnApplicationBootstrap {
     if (updated || corrected) {
       this.logger.log(
         `Main group set on ${updated} account groups, ${corrected} reclassified.`,
+      );
+    }
+  }
+
+  /**
+   * Carry a database that already holds the chart to the revised master — the
+   * renames and withdrawals in coa-revisions.ts.
+   *
+   * Everything here is keyed on the value the row was SHIPPED with, so it moves
+   * the shipped chart on and leaves anything the finance team has since edited
+   * exactly as they left it. Once applied, the guard stops matching and every
+   * later boot is a no-op.
+   */
+  private async applyRevisions(): Promise<void> {
+    let renamed = 0;
+    for (const r of COA_GROUP_RENAMES) {
+      const res = await this.prisma.accountGroup.updateMany({
+        where: { code: r.code, name: r.from },
+        data: { name: r.to },
+      });
+      renamed += res.count;
+    }
+    for (const r of COA_ACCOUNT_RENAMES) {
+      const res = await this.prisma.account.updateMany({
+        where: { code: r.code, name: r.from },
+        data: { name: r.to },
+      });
+      renamed += res.count;
+    }
+
+    let removed = 0;
+    let deactivated = 0;
+    for (const r of COA_RETIRED_ACCOUNTS) {
+      const account = await this.prisma.account.findUnique({
+        where: { code: r.code },
+        select: { id: true, name: true, isActive: true },
+      });
+      // Gone already, or repurposed here under another name — either way, not
+      // ours to withdraw.
+      if (!account || account.name !== r.was) continue;
+
+      // An account with entries behind it is part of the books. Deleting it
+      // would take the ledger with it, so it is closed to new postings instead
+      // and the history stays readable.
+      const posted = await this.prisma.voucherLine.count({
+        where: { accountId: account.id },
+      });
+      if (posted) {
+        if (account.isActive) {
+          await this.prisma.account.update({
+            where: { id: account.id },
+            data: { isActive: false },
+          });
+          deactivated++;
+          this.logger.warn(
+            `Account ${r.code} (${r.was}) withdrawn from the master but has ` +
+              `${posted} ledger lines — deactivated rather than deleted; ` +
+              `re-point those entries and delete it by hand.`,
+          );
+        }
+        continue;
+      }
+      // Untouched: it and its company adoptions go (AccountCompany cascades).
+      await this.prisma.account.delete({ where: { id: account.id } });
+      removed++;
+    }
+
+    // AFTER the withdrawals above, which is what frees the codes being moved
+    // into. Same row throughout — adoptions, ledger and bills travel with it.
+    let recoded = 0;
+    for (const r of COA_RECODED_ACCOUNTS) {
+      const account = await this.prisma.account.findUnique({
+        where: { code: r.from },
+        select: { id: true, name: true },
+      });
+      if (!account || account.name !== r.name) continue;
+      const occupied = await this.prisma.account.findUnique({
+        where: { code: r.to },
+        select: { code: true },
+      });
+      if (occupied) {
+        this.logger.warn(
+          `Account ${r.from} not moved to ${r.to}: that code is taken.`,
+        );
+        continue;
+      }
+      const posted = await this.prisma.voucherLine.count({
+        where: { accountId: account.id },
+      });
+      if (posted) {
+        this.logger.warn(
+          `Account ${r.from} (${r.name}) not moved to ${r.to}: it carries ` +
+            `${posted} ledger lines, and a posted code is renumbered by hand.`,
+        );
+        continue;
+      }
+      await this.prisma.account.update({
+        where: { id: account.id },
+        data: { code: r.to, sortOrder: r.sortOrder },
+      });
+      recoded++;
+    }
+
+    if (renamed || removed || deactivated || recoded) {
+      this.logger.log(
+        `Chart of Accounts revised: ${renamed} renamed, ${removed} withdrawn, ` +
+          `${deactivated} deactivated, ${recoded} recoded.`,
       );
     }
   }

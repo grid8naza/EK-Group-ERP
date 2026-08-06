@@ -345,14 +345,19 @@ export function printReport(
       .date{color:#64748b;font-size:12px;margin:2px 0 16px;text-align:center}
       .section{font-size:16px;font-weight:bold;margin:20px 0 2px;text-align:center;letter-spacing:.04em;text-transform:uppercase;color:#0f172a;page-break-after:avoid}
       h2{font-size:14px;margin:18px 0 4px;border-bottom:2px solid #cbd5e1;padding-bottom:2px;text-align:center}
-      h3{font-size:12px;margin:10px 0 4px;color:#475569}
+      /* The group heading sits a tier above the sub-group rows, so it carries
+         full weight and the darker text — grey read as lighter than the rows
+         beneath it, which is the wrong way round. */
+      h3{font-size:12px;margin:10px 0 4px;font-weight:bold;color:#0f172a}
       .muted{color:#94a3b8;font-weight:normal}
       table{width:100%;table-layout:fixed;border-collapse:collapse;margin-bottom:8px;font-size:11px}
       th,td{border:1px solid #e2e8f0;padding:4px 6px;text-align:left;overflow-wrap:anywhere;word-break:break-word}
       th{background:#f1f5f9;text-align:center}
       /* Repeat the column headings on every printed page. */
       thead{display:table-header-group}
-      tr.lvl1 td{background:#eef4f1}
+      /* A level-1 row (e.g. a sub-group heading among its accounts) carries the
+         weight as well as the tint, matching the screen view. */
+      tr.lvl1 td{background:#eef4f1;font-weight:bold}
       td.num{text-align:right;font-variant-numeric:tabular-nums}
       ${spec.serial ? 'td:first-child{text-align:center}' : ''}
       .summary{margin-top:14px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc;display:flex;flex-wrap:wrap;gap:6px 20px;font-size:12px;page-break-inside:avoid}
@@ -506,10 +511,18 @@ export function pdfReport(spec: ReportSpec): void {
           section: string;
           row: { index: number };
           column: { index: number };
-          cell: { styles: { fillColor?: string | number | number[] | false; halign?: string } };
+          cell: {
+            styles: {
+              fillColor?: string | number | number[] | false;
+              halign?: string;
+              fontStyle?: string;
+            };
+          };
         }) => {
-          if (d.section === 'body' && t.shade?.[d.row.index])
+          if (d.section === 'body' && t.shade?.[d.row.index]) {
             d.cell.styles.fillColor = [247, 235, 215];
+            d.cell.styles.fontStyle = 'bold';
+          }
           if (d.section === 'body' && rightCols.has(d.column.index))
             d.cell.styles.halign = 'right';
         },
