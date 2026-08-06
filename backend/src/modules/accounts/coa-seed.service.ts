@@ -9,6 +9,7 @@ import {
   COA_SHIPPED_CC_RULES,
   COA_GROUP_RENAMES,
   COA_RECODED_ACCOUNTS,
+  COA_RECODED_GROUPS,
   COA_RETIRED_ACCOUNTS,
 } from './coa-revisions';
 import {
@@ -38,6 +39,24 @@ export const ccDefaultsOf = (rule: CcRequirement) => ({
   hasCostCenter: rule !== 'NOT_APPLICABLE',
   hasCostObject: rule === 'MANDATORY',
 });
+
+/**
+ * Is this code EMPTY because a revision is about to move an existing row into
+ * it? Then it is not a missing row, and seeding one here would duplicate the
+ * row that is on its way — the same account under two codes, each holding half
+ * of what should be one balance.
+ *
+ * The recode runs before the seed, so in a complete deployment this never
+ * fires. It fires when the two halves of a revision arrive apart — a data file
+ * edited before its revision entry is written, which is exactly how a chart
+ * change gets made — and it is the difference between a boot that waits and a
+ * boot that quietly doubles the block.
+ */
+const awaitingRecode = (
+  recodes: readonly { from: string; to: string }[],
+  code: string,
+  existing: { has(code: string): boolean },
+) => recodes.some((r) => r.to === code && existing.has(r.from));
 
 /**
  * Loads the Annexure D Chart of Accounts on boot, so every database carries the
@@ -212,40 +231,6 @@ export class CoaSeedService implements OnApplicationBootstrap {
       renamed += res.count;
     }
 
-    // What a line to the account is asked for: from the rule it SHIPPED with to
-    // the one the master now states. Guarded on BOTH flags together, so an
-    // account someone has already adjusted by hand is left as they set it.
-    //
-    // Batched by the move being made rather than one write per account — a
-    // hundred and fifty accounts take four updates, because a rule change of
-    // this kind is only ever a handful of distinct moves.
-    const wanted = new Map(COA_ACCOUNTS.map((a) => [a.code, a.ccRequirement]));
-    const moves = new Map<
-      string,
-      { from: ReturnType<typeof ccDefaultsOf>; to: ReturnType<typeof ccDefaultsOf>; codes: string[] }
-    >();
-    for (const [code, shipped] of Object.entries(COA_SHIPPED_CC_RULES)) {
-      const now = wanted.get(code);
-      if (!now || now === shipped) continue;
-      const key = `${shipped}->${now}`;
-      const move = moves.get(key);
-      if (move) move.codes.push(code);
-      else
-        moves.set(key, {
-          from: ccDefaultsOf(shipped),
-          to: ccDefaultsOf(now),
-          codes: [code],
-        });
-    }
-    let reruled = 0;
-    for (const move of moves.values()) {
-      const res = await this.prisma.account.updateMany({
-        where: { code: { in: move.codes }, ...move.from },
-        data: move.to,
-      });
-      reruled += res.count;
-    }
-
     let removed = 0;
     let deactivated = 0;
     for (const r of COA_RETIRED_ACCOUNTS) {
@@ -314,17 +299,135 @@ export class CoaSeedService implements OnApplicationBootstrap {
       }
       await this.prisma.account.update({
         where: { id: account.id },
-        data: { code: r.to, sortOrder: r.sortOrder },
+        data: { code: r.to },
       });
       recoded++;
     }
 
-    if (renamed || removed || deactivated || recoded || reruled) {
+    // A group's code is only its own label — an account names its group by id,
+    // so every account under it comes along untouched.
+    for (const r of COA_RECODED_GROUPS) {
+      const group = await this.prisma.accountGroup.findUnique({
+        where: { code: r.from },
+        select: { id: true, name: true },
+      });
+      if (!group || group.name !== r.name) continue;
+      const occupied = await this.prisma.accountGroup.findUnique({
+        where: { code: r.to },
+        select: { code: true },
+      });
+      if (occupied) {
+        this.logger.warn(`Group ${r.from} not moved to ${r.to}: that code is taken.`);
+        continue;
+      }
+      await this.prisma.accountGroup.update({
+        where: { id: group.id },
+        data: { code: r.to },
+      });
+      recoded++;
+    }
+
+    // AFTER the recodes: this map is keyed by the code an account ENDS with, so
+    // reading it before they have moved would look up numbers nothing holds yet.
+    //
+    // What a line to the account is asked for: from the rule it SHIPPED with to
+    // the one the master now states. Guarded on BOTH flags together, so an
+    // account someone has already adjusted by hand is left as they set it.
+    // Batched by the move being made rather than one write per account — a
+    // hundred and fifty accounts take four updates, because a rule change of
+    // this kind is only ever a handful of distinct moves.
+    const wanted = new Map(COA_ACCOUNTS.map((a) => [a.code, a.ccRequirement]));
+    const moves = new Map<
+      string,
+      { from: ReturnType<typeof ccDefaultsOf>; to: ReturnType<typeof ccDefaultsOf>; codes: string[] }
+    >();
+    for (const [code, shipped] of Object.entries(COA_SHIPPED_CC_RULES)) {
+      const now = wanted.get(code);
+      if (!now || now === shipped) continue;
+      const key = `${shipped}->${now}`;
+      const move = moves.get(key);
+      if (move) move.codes.push(code);
+      else
+        moves.set(key, {
+          from: ccDefaultsOf(shipped),
+          to: ccDefaultsOf(now),
+          codes: [code],
+        });
+    }
+    let reruled = 0;
+    for (const move of moves.values()) {
+      const res = await this.prisma.account.updateMany({
+        where: { code: { in: move.codes }, ...move.from },
+        data: move.to,
+      });
+      reruled += res.count;
+    }
+
+    const resorted = await this.restampFromMaster();
+
+    if (renamed || removed || deactivated || recoded || reruled || resorted) {
       this.logger.log(
         `Chart of Accounts revised: ${renamed} renamed, ${removed} withdrawn, ` +
-          `${deactivated} deactivated, ${recoded} recoded, ${reruled} re-ruled.`,
+          `${deactivated} deactivated, ${recoded} recoded, ${reruled} re-ruled, ` +
+          `${resorted} resorted.`,
       );
     }
+  }
+
+  /**
+   * The two things the master states that no screen can set: the order the
+   * chart READS in, and which account each intercompany account is eliminated
+   * against.
+   *
+   * Unlike everything else here these are not guarded on a shipped value,
+   * because neither is an opinion anyone holds — they are facts about the
+   * annexure that only the data file can answer. Both also break silently on a
+   * renumbering: a withdrawn account leaves a hole in the sequence, and a moved
+   * account leaves its mirror pointing at whatever now holds the old code,
+   * which is how 17001 came to name a provision as its own reflection.
+   *
+   * Sort order is one sequence over groups AND accounts, since a block heading
+   * and the ledgers beneath it interleave.
+   */
+  private async restampFromMaster(): Promise<number> {
+    let changed = 0;
+
+    const groupWant = new Map(COA_GROUPS.map((g) => [g.code, g.sortOrder]));
+    for (const g of await this.prisma.accountGroup.findMany({
+      select: { id: true, code: true, sortOrder: true },
+    })) {
+      const want = groupWant.get(g.code);
+      // Anything added here rather than shipped keeps the position it was given.
+      if (want == null || want === g.sortOrder) continue;
+      await this.prisma.accountGroup.update({
+        where: { id: g.id },
+        data: { sortOrder: want },
+      });
+      changed++;
+    }
+
+    const accountWant = new Map(
+      COA_ACCOUNTS.map((a) => [
+        a.code,
+        { sortOrder: a.sortOrder, eliminationPair: a.eliminationPair },
+      ]),
+    );
+    for (const a of await this.prisma.account.findMany({
+      select: { id: true, code: true, sortOrder: true, eliminationPair: true },
+    })) {
+      const want = accountWant.get(a.code);
+      if (!want) continue;
+      const data: { sortOrder?: number; eliminationPair?: string | null } = {};
+      if (want.sortOrder !== a.sortOrder) data.sortOrder = want.sortOrder;
+      if ((want.eliminationPair ?? null) !== a.eliminationPair) {
+        data.eliminationPair = want.eliminationPair ?? null;
+      }
+      if (!Object.keys(data).length) continue;
+      await this.prisma.account.update({ where: { id: a.id }, data });
+      changed++;
+    }
+
+    return changed;
   }
 
   /**
@@ -341,6 +444,7 @@ export class CoaSeedService implements OnApplicationBootstrap {
     let created = 0;
     for (const g of [...COA_GROUPS].sort((a, b) => a.code.localeCompare(b.code))) {
       if (existing.has(g.code)) continue;
+      if (awaitingRecode(COA_RECODED_GROUPS, g.code, existing)) continue;
       const parentId = g.parentCode ? (existing.get(g.parentCode) ?? null) : null;
       if (g.parentCode && parentId == null) {
         // Cannot happen with the shipped data (the converter checks it), but a
@@ -384,6 +488,7 @@ export class CoaSeedService implements OnApplicationBootstrap {
     let created = 0;
     for (const a of COA_ACCOUNTS) {
       if (existing.has(a.code)) continue;
+      if (awaitingRecode(COA_RECODED_ACCOUNTS, a.code, existing)) continue;
       const groupId = groupIds.get(a.groupCode);
       if (groupId == null) {
         this.logger.warn(`Account ${a.code} skipped: group ${a.groupCode} missing.`);

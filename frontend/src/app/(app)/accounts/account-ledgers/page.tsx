@@ -27,19 +27,21 @@ import type {
 const ROUTE = '/accounts/account-ledgers';
 
 /**
- * The five blocks the five-digit code sorts into (Annexure D.3). Derived from
- * the leading digit rather than stored, exactly as the numbering intends.
+ * The sides the five-digit code sorts into. Derived from the leading digit
+ * rather than stored, exactly as the numbering intends.
+ *
+ * Five, not nine: the chart is numbered so that a code ASCENDS with the
+ * statement it prints on. Equity moved to the head of the liabilities side, and
+ * the profit and loss came down a decade behind it, so the five sides of the
+ * chart are the first five decades and what is spare (6-9) sits above them
+ * rather than as a hole in the middle.
  */
 const BLOCKS: { digit: string; label: string }[] = [
   { digit: '1', label: '1 · Assets' },
-  { digit: '2', label: '2 · Liabilities' },
-  { digit: '3', label: '3 · Equity and Reserves' },
-  { digit: '4', label: '4 · Income' },
-  { digit: '5', label: '5 · Purchases and Direct Expenses' },
-  { digit: '6', label: '6 · Indirect and Operating Expenses' },
-  { digit: '7', label: '7 · Other Income' },
-  { digit: '8', label: '8 · Finance Cost, Tax and Non-operating' },
-  { digit: '9', label: '9 · Control, Clearing and Suspense' },
+  { digit: '2', label: '2 · Liabilities and Equity' },
+  { digit: '3', label: '3 · Income' },
+  { digit: '4', label: '4 · Purchases and Direct Expenses' },
+  { digit: '5', label: '5 · Indirect and Operating Expenses' },
 ];
 
 const NATURE_TONE: Record<AccountNature, string> = {

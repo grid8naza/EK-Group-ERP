@@ -29,39 +29,40 @@ export const COA_MAIN_GROUPS: Record<string, MainGroup> = {
   '17000': 'CURRENT_ASSET', // Intercompany and Inter-branch Receivable
 
   // ---- Liabilities, with owners' funds first: capital and reserves are what
-  //      the business owes its owners, so they lead the side they sit on ----
-  '20000': 'CURRENT_LIABILITY', // Trade Payables
-  '21000': 'CURRENT_LIABILITY', // Duties and Taxes Payable
-  '22000': 'CURRENT_LIABILITY', // Employee Related Liabilities
-  '23000': 'CURRENT_LIABILITY', // Other Current Liabilities
-  '24000': 'NON_CURRENT_LIABILITY', // Borrowings
-  '25000': 'CURRENT_LIABILITY', // Provisions
-  '27000': 'CURRENT_LIABILITY', // Intercompany Payable
-  '30000': 'EQUITY_AND_RESERVES', // Capital Account
-  '31000': 'EQUITY_AND_RESERVES', // Reserves and Surplus
-  '90000': 'CURRENT_LIABILITY', // Control, Clearing and Suspense
+  //      the business owes its owners, so they lead the side they sit on, and
+  //      the numbering follows — 2xxxx reads down the side in statement order.
+  '20000': 'EQUITY_AND_RESERVES', // Capital Account
+  '21000': 'EQUITY_AND_RESERVES', // Reserves and Surplus
+  '22000': 'NON_CURRENT_LIABILITY', // Borrowings
+  '23000': 'CURRENT_LIABILITY', // Accounts Payable
+  '24000': 'CURRENT_LIABILITY', // Duties and Taxes Payable
+  '25000': 'CURRENT_LIABILITY', // Employee Related Liabilities
+  '26000': 'CURRENT_LIABILITY', // Other Current Liabilities
+  '27000': 'CURRENT_LIABILITY', // Provisions
+  '28000': 'CURRENT_LIABILITY', // Intercompany Payable
+  '29000': 'CURRENT_LIABILITY', // Control, Clearing and Suspense
 
   // ---- Income ----
-  '40000': 'DIRECT_INCOME', // Sales - Retail and Cafe
-  '41000': 'DIRECT_INCOME', // Sales - Wholesale and B2B
-  '42000': 'DIRECT_INCOME', // Sales - Intercompany
-  '43000': 'DIRECT_INCOME', // Sales Adjustments
-  '44000': 'DIRECT_INCOME', // Other Operating Income
-  '70000': 'INDIRECT_INCOME', // Other Income
+  '30000': 'DIRECT_INCOME', // Sales - Retail and Cafe
+  '31000': 'DIRECT_INCOME', // Sales - Wholesale and B2B
+  '32000': 'DIRECT_INCOME', // Sales - Intercompany
+  '33000': 'DIRECT_INCOME', // Sales Adjustments
+  '34000': 'DIRECT_INCOME', // Other Operating Income
+  '35000': 'INDIRECT_INCOME', // Other Income
 
   // ---- Expenses ----
-  '50000': 'PURCHASE', // Purchases
-  '51000': 'DIRECT_EXPENSE', // Direct Expenses - Production
-  '52000': 'DIRECT_EXPENSE', // Cost of Goods Sold and Consumption
-  '60000': 'INDIRECT_EXPENSE', // Employee Benefit Expenses
-  '61000': 'INDIRECT_EXPENSE', // Selling and Distribution Expenses
-  '62000': 'INDIRECT_EXPENSE', // Establishment and Occupancy Expenses
-  '63000': 'INDIRECT_EXPENSE', // Administrative Expenses
-  '64000': 'INDIRECT_EXPENSE', // Staff Mess and Canteen Expenses
-  '65000': 'INDIRECT_EXPENSE', // Depreciation and Amortisation
-  '80000': 'INDIRECT_EXPENSE', // Finance Costs
-  '81000': 'INDIRECT_EXPENSE', // Non-operating Expenses
-  '82000': 'INDIRECT_EXPENSE', // Taxation
+  '40000': 'PURCHASE', // Purchases
+  '41000': 'DIRECT_EXPENSE', // Direct Expenses - Production
+  '42000': 'DIRECT_EXPENSE', // Cost of Goods Sold and Consumption
+  '50000': 'INDIRECT_EXPENSE', // Employee Benefit Expenses
+  '51000': 'INDIRECT_EXPENSE', // Selling and Distribution Expenses
+  '52000': 'INDIRECT_EXPENSE', // Establishment and Occupancy Expenses
+  '53000': 'INDIRECT_EXPENSE', // Administrative Expenses
+  '54000': 'INDIRECT_EXPENSE', // Staff Mess and Canteen Expenses
+  '55000': 'INDIRECT_EXPENSE', // Depreciation and Amortisation
+  '56000': 'INDIRECT_EXPENSE', // Finance Costs
+  '57000': 'INDIRECT_EXPENSE', // Non-operating Expenses
+  '58000': 'INDIRECT_EXPENSE', // Taxation
 };
 
 /**
@@ -95,6 +96,6 @@ export const COA_MAIN_GROUP_CORRECTIONS: {
 }[] = [
   // Owners' funds were first shipped among the non-current liabilities; they
   // are their own schedule now, at the head of that side.
-  { code: '30000', from: 'NON_CURRENT_LIABILITY', to: 'EQUITY_AND_RESERVES' },
-  { code: '31000', from: 'NON_CURRENT_LIABILITY', to: 'EQUITY_AND_RESERVES' },
+  { code: '20000', from: 'NON_CURRENT_LIABILITY', to: 'EQUITY_AND_RESERVES' },
+  { code: '21000', from: 'NON_CURRENT_LIABILITY', to: 'EQUITY_AND_RESERVES' },
 ];
