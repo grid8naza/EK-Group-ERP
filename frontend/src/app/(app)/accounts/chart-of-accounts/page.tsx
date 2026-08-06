@@ -37,14 +37,34 @@ type ChartRow =
   | { kind: 'group'; code: string; name: string }
   | ({ kind: 'account' } & CoaAccount);
 
-/** What an entry to this account is asked for, in one short phrase. */
-const costAnalysis = (a: CoaAccount) => {
+/**
+ * What an entry to this account is asked for.
+ *
+ * Read off the RESOLVED rules where they were sent, not the account's own boxes:
+ * an account that asks for a centre in a company not set up for cost centres
+ * asks for nothing, and the chart would be lying to print otherwise.
+ */
+const costKey = (a: CoaAccount): 'OBJECT' | 'CENTRE' | 'NONE' => {
   const centre = a.entryRules ? a.entryRules.costCenter === 'REQUIRED' : a.hasCostCenter;
   const object = a.entryRules ? a.entryRules.costObject === 'REQUIRED' : a.hasCostObject;
-  if (object) return 'Centre + Object';
-  if (centre) return 'Centre';
-  return '—';
+  return object ? 'OBJECT' : centre ? 'CENTRE' : 'NONE';
 };
+
+/** The same three answers as one short phrase, for the column. */
+const COST_LABEL = {
+  OBJECT: 'Centre + Object',
+  CENTRE: 'Centre',
+  NONE: '—',
+} as const;
+
+/** …and as a filter, where the dash needs saying in words. */
+const COST_OPTIONS = [
+  { value: 'OBJECT', label: 'Centre + Object' },
+  { value: 'CENTRE', label: 'Centre only' },
+  { value: 'NONE', label: 'Neither' },
+];
+
+const costAnalysis = (a: CoaAccount) => COST_LABEL[costKey(a)];
 
 /** Blank on a group row — a heading has no nature of its own to state twice. */
 const ALL_COLUMNS: ReportColumn<ChartRow>[] = [
@@ -121,6 +141,8 @@ export default function ChartOfAccountsReportPage() {
   const [primary, setPrimary] = useState(''); // '' = all four
   const [main, setMain] = useState<MainGroup | ''>(''); // '' = every schedule
   const [groupId, setGroupId] = useState(''); // '' = every group in scope
+  // What a line to the account is asked for — '' = don't ask.
+  const [cost, setCost] = useState(''); // '' | 'OBJECT' | 'CENTRE' | 'NONE'
 
   const { hidden, toggle, selected } = useReportColumns(ROUTE, ALL_COLUMNS);
   const companyName = resolveCompanyName(
@@ -130,8 +152,12 @@ export default function ChartOfAccountsReportPage() {
   );
 
   const rows = useMemo(
-    () => (accounts ?? []).filter((a) => scope === 'all' || a.adopted),
-    [accounts, scope],
+    () =>
+      (accounts ?? []).filter(
+        (a) =>
+          (scope === 'all' || a.adopted) && (!cost || costKey(a) === cost),
+      ),
+    [accounts, scope, cost],
   );
 
   // The schedules a filter can pick from — those of the chosen primary group,
@@ -270,6 +296,9 @@ export default function ChartOfAccountsReportPage() {
     primary ? PRIMARY_GROUPS.find((p) => p.key === primary)?.label : null,
     main ? mainGroupLabel(main) : null,
     groupId ? groupOptions.find((o) => o.value === groupId)?.label : null,
+    // Worth naming on the printed page: "44 accounts" with the cost filter on
+    // is a different statement from "44 accounts".
+    cost ? `Asks for: ${COST_OPTIONS.find((o) => o.value === cost)?.label}` : null,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -370,6 +399,16 @@ export default function ChartOfAccountsReportPage() {
             options={groupOptions}
             placeholder="All groups"
             className="w-60"
+          />
+          {/* The Cost Analysis column, asked as a question: which accounts make
+              an entry name a division, which go down to the department, and
+              which ask for neither. */}
+          <Select
+            value={cost}
+            onChange={(e) => setCost(e.target.value)}
+            options={COST_OPTIONS}
+            placeholder="Any cost analysis"
+            className="w-48"
           />
           <div className="ml-auto flex items-center gap-2">
             <ColumnToggle

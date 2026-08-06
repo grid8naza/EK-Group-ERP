@@ -6,6 +6,7 @@ import {
 } from './main-groups';
 import {
   COA_ACCOUNT_RENAMES,
+  COA_SHIPPED_CC_RULES,
   COA_GROUP_RENAMES,
   COA_RECODED_ACCOUNTS,
   COA_RETIRED_ACCOUNTS,
@@ -211,6 +212,40 @@ export class CoaSeedService implements OnApplicationBootstrap {
       renamed += res.count;
     }
 
+    // What a line to the account is asked for: from the rule it SHIPPED with to
+    // the one the master now states. Guarded on BOTH flags together, so an
+    // account someone has already adjusted by hand is left as they set it.
+    //
+    // Batched by the move being made rather than one write per account — a
+    // hundred and fifty accounts take four updates, because a rule change of
+    // this kind is only ever a handful of distinct moves.
+    const wanted = new Map(COA_ACCOUNTS.map((a) => [a.code, a.ccRequirement]));
+    const moves = new Map<
+      string,
+      { from: ReturnType<typeof ccDefaultsOf>; to: ReturnType<typeof ccDefaultsOf>; codes: string[] }
+    >();
+    for (const [code, shipped] of Object.entries(COA_SHIPPED_CC_RULES)) {
+      const now = wanted.get(code);
+      if (!now || now === shipped) continue;
+      const key = `${shipped}->${now}`;
+      const move = moves.get(key);
+      if (move) move.codes.push(code);
+      else
+        moves.set(key, {
+          from: ccDefaultsOf(shipped),
+          to: ccDefaultsOf(now),
+          codes: [code],
+        });
+    }
+    let reruled = 0;
+    for (const move of moves.values()) {
+      const res = await this.prisma.account.updateMany({
+        where: { code: { in: move.codes }, ...move.from },
+        data: move.to,
+      });
+      reruled += res.count;
+    }
+
     let removed = 0;
     let deactivated = 0;
     for (const r of COA_RETIRED_ACCOUNTS) {
@@ -284,10 +319,10 @@ export class CoaSeedService implements OnApplicationBootstrap {
       recoded++;
     }
 
-    if (renamed || removed || deactivated || recoded) {
+    if (renamed || removed || deactivated || recoded || reruled) {
       this.logger.log(
         `Chart of Accounts revised: ${renamed} renamed, ${removed} withdrawn, ` +
-          `${deactivated} deactivated, ${recoded} recoded.`,
+          `${deactivated} deactivated, ${recoded} recoded, ${reruled} re-ruled.`,
       );
     }
   }

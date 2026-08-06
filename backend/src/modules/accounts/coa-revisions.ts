@@ -16,6 +16,8 @@
  * ending position.
  */
 
+import type { CcRequirement } from './coa-data';
+
 export interface CoaRename {
   code: string;
   /** The name this row was shipped with; the rename is skipped if it differs. */
@@ -55,6 +57,59 @@ export const COA_RETIRED_ACCOUNTS: { code: string; was: string }[] = [
   { code: '20004', was: 'Sundry Creditors - Services and Utilities' },
   { code: '20005', was: 'Sundry Creditors - Capital Goods' },
 ];
+
+/**
+ * What a line to an account is ASKED FOR — the cost-centre / cost-object rule,
+ * for every account whose rule has been revised since the annexure, with the
+ * rule it was SHIPPED with.
+ *
+ * These two boxes are settled when an account is created and read-only on the
+ * drawer afterwards, because they change what a posting to it means; a revision
+ * to the shipped rule therefore has nowhere else to be made.
+ *
+ * Only the OLD value lives here. The NEW one is coa-data.ts, which is the
+ * master a fresh database seeds from — stating the target twice would be two
+ * answers to one question. The seed moves an account only where it still
+ * carries exactly what it was shipped with, so anything since adjusted by hand
+ * is left as it was set.
+ *
+ * The sweep behind this list: a balance-sheet account asks for NEITHER
+ * dimension — the balance belongs to the company, and the entry that created it
+ * already carried the division on its profit-and-loss side, so asking again on
+ * the asset or liability line only offers a second, quieter answer that no
+ * report reconciles. A profit-and-loss account keeps its division and loses the
+ * department; departments are added back one at a time, where they are actually
+ * wanted.
+ */
+const WAS_MANDATORY = [
+  '10103', '10201', '10202', '10203', '10204', '10205', '10301', '10302',
+  '10401', '10402', '10501', '12001', '12002', '12003', '12004', '12005',
+  '12006', '12007', '12008', '12009', '12010', '12011', '12012', '13003',
+  '13004', '13005', '14102', '14103', '14104', '17004', '20004', '22001',
+  '23003', '23004', '23005', '23006', '40001', '40002', '40003', '40004',
+  '40005', '40006', '40007', '40008', '41001', '41002', '41003', '41004',
+  '42001', '42002', '42003', '43001', '43002', '43003', '44001', '44003',
+  '50001', '50002', '50003', '50004', '50005', '50006', '50007', '50008',
+  '50009', '51001', '51002', '51003', '51004', '51005', '51006', '51007',
+  '51008', '51010', '51011', '51012', '52001', '52002', '52003', '52004',
+  '52005', '52006', '60001', '60002', '60003', '60004', '60005', '60006',
+  '60009', '61001', '61002', '61004', '61005', '61006', '62001', '62002',
+  '62003', '62004', '62005', '62006', '62008', '63002', '63011', '64001',
+  '64002', '64003', '64004', '64005', '64006', '64007', '64010', '65002',
+  '65003', '65004', '65005', '90003', '90007', '90008', '90009',
+];
+
+const WAS_OPTIONAL = [
+  '10102', '10303', '10502', '10901', '10902', '10903', '10904', '10905',
+  '12013', '13001', '13002', '13009', '14101', '14201', '14202', '15001',
+  '15002', '15003', '15005', '15006', '20001', '20002', '20003', '22009',
+  '23001', '23002', '23007', '24002', '25002', '90001',
+];
+
+export const COA_SHIPPED_CC_RULES: Record<string, CcRequirement> = {
+  ...Object.fromEntries(WAS_MANDATORY.map((c) => [c, 'MANDATORY' as const])),
+  ...Object.fromEntries(WAS_OPTIONAL.map((c) => [c, 'OPTIONAL' as const])),
+};
 
 /**
  * Accounts given a different code, to close the gaps the withdrawals above left
