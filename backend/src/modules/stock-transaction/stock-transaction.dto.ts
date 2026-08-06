@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
   ValidateNested,
@@ -52,6 +53,39 @@ export class StockTransactionLineInput {
   @IsNumber()
   @Min(0)
   enteredUnitPrice?: number | null;
+
+  /**
+   * Tax RATES on this line (%), per head — cgst + sgst within the state, igst
+   * across it. Defaulted on the screen from the stockable's HSN code and
+   * editable there, because what the supplier charged is a fact about the bill.
+   *
+   * Rates only: the AMOUNTS are computed from qty × unitPrice on the way in and
+   * never taken from the caller, so what the register foots to cannot be a
+   * figure the client made up.
+   */
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  cgst?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  sgst?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  igst?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  cess?: number;
 
   /** Supplier/external batch number on the goods (IN types only). */
   @IsOptional()

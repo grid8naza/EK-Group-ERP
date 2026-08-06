@@ -72,6 +72,39 @@ const TXN_CONFIG: Record<TxnType, { documentCode: string; prefix: string }> = {
 const isInbound = (type: TxnType): boolean =>
   type === 'PURCHASE' || type === 'SALES_RETURN';
 
+/**
+ * The tax stamped on a movement line: the rates as entered, and what each came
+ * to on this line's taxable value.
+ *
+ * The amounts are computed HERE rather than accepted from the caller, and
+ * stored rather than derived at read time. Both for the same reason: a rate on
+ * the master can be corrected next month, and the tax already charged on a
+ * posted bill must not silently move with it. Rounded to the paisa, so a
+ * register foots to the invoice it came from.
+ */
+const taxOf = (line: {
+  quantity: number;
+  unitPrice?: number;
+  cgst?: number;
+  sgst?: number;
+  igst?: number;
+  cess?: number;
+}) => {
+  const taxable = line.quantity * (line.unitPrice ?? 0);
+  const paisa = (rate?: number) =>
+    Math.round(taxable * ((rate ?? 0) / 100) * 100) / 100;
+  return {
+    cgst: line.cgst ?? 0,
+    sgst: line.sgst ?? 0,
+    igst: line.igst ?? 0,
+    cess: line.cess ?? 0,
+    cgstAmount: paisa(line.cgst),
+    sgstAmount: paisa(line.sgst),
+    igstAmount: paisa(line.igst),
+    cessAmount: paisa(line.cess),
+  };
+};
+
 /** Item/product classification denormalized onto each ledger line. */
 interface LineClass {
   categoryId: number | null;
@@ -779,6 +812,9 @@ export class StockTransactionService {
     return rows.map((r) => {
       const doc = byDoc.get(r.documentId);
       const qty = r.qtyIn;
+      const taxable = qty * r.unitPrice;
+      const tax =
+        r.cgstAmount + r.sgstAmount + r.igstAmount + r.cessAmount;
       return {
         id: r.id,
         documentId: r.documentId,
@@ -813,7 +849,17 @@ export class StockTransactionService {
         qty,
         unitSymbol: unitOf.get(r.unitId) ?? '',
         rate: r.unitPrice,
-        value: qty * r.unitPrice,
+        // `value` stays the TAXABLE value, as it always was; tax and the gross
+        // sit beside it rather than inside it, so a register read for costing
+        // and one read for a return are the same report.
+        value: taxable,
+        gstRate: r.cgst + r.sgst + r.igst,
+        cgst: r.cgstAmount,
+        sgst: r.sgstAmount,
+        igst: r.igstAmount,
+        cess: r.cessAmount,
+        tax,
+        total: Math.round((taxable + tax) * 100) / 100,
         // The rate AS INVOICED, per pack — 50 a bottle beside unitPrice's 0.25
         // a gram. Both are stored on the row precisely so a purchase report can
         // show what the supplier billed next to what stock is valued at.
@@ -1432,6 +1478,10 @@ export class StockTransactionService {
           qtyOut: inbound ? 0 : line.quantity,
           unitId: cls.unitId,
           unitPrice: line.unitPrice ?? 0,
+          // Rates as given; amounts computed here from qty × rate, never taken
+          // from the caller — the register foots to these, so they cannot be a
+          // figure a client sent.
+          ...taxOf(line),
           // The document's own words, kept beside the converted quantity: pack
           // qty, pack unit and the rate per pack, against the stock-unit
           // quantity and rate above.

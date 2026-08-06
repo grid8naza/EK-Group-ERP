@@ -788,11 +788,26 @@ model StockLedger {
   // rates are read together on every purchase report, and re-deriving one from
   // the other reintroduces the rounding that storing both avoids.
   enteredUnitPrice   Float?
-  // Tax captured on the movement line.
+  // Tax captured on the movement line, as the RATE per head (%). Defaulted
+  // from the HSN code of the item or product and editable on the document,
+  // because what a supplier actually charged is a fact about the bill, not
+  // about the master.
+  //
+  // Which heads carry the rate says where the supply came from: cgst + sgst
+  // within the state, igst across it. Storing the split rather than a single
+  // rate plus a flag is what lets a return be filed from this table alone.
   cgst               Float        @default(0)
   sgst               Float        @default(0)
   igst               Float        @default(0)
   cess               Float        @default(0)
+  // What those rates CAME TO on this line. Derived from qty × unitPrice at the
+  // moment of entry rather than at read time: a rate can be corrected later,
+  // and the tax already charged on a posted bill must not silently move with
+  // it. Rounded to the paisa, so the register foots to the invoice.
+  cgstAmount         Float        @default(0)
+  sgstAmount         Float        @default(0)
+  igstAmount         Float        @default(0)
+  cessAmount         Float        @default(0)
   // Pricing snapshots captured on the movement line.
   costPrice          Float        @default(0)
   intercompanyPrice  Float        @default(0)

@@ -1706,6 +1706,19 @@ export interface OpeningStockLine {
   enteredUnitId?: number | null;
   /** The rate as invoiced, per pack (50 a bottle beside unitPrice's 0.25 a gram). */
   enteredUnitPrice?: number | null;
+  /**
+   * Tax as charged on the line: the RATE per head (%), and what each came to on
+   * the line's taxable value. cgst + sgst within the state, igst across it —
+   * which heads carry the rate is what says where the supply came from.
+   */
+  cgst?: number;
+  sgst?: number;
+  igst?: number;
+  cess?: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
+  igstAmount?: number;
+  cessAmount?: number;
   intercompanyPrice?: number;
   wholesalePrice?: number;
   retailPrice?: number;

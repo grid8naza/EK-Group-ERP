@@ -34,6 +34,7 @@ import type {
   Company,
   CostCenter,
   CostObject,
+  HsnCode,
   IncomingDispatch,
 } from '@/lib/types';
 
@@ -51,6 +52,13 @@ type DraftLine = {
    * the way out, so pickers can count boxes instead of doing the sum.
    */
   unitMode?: 'stock' | 'box';
+  /**
+   * GST rate on the line (%), as ONE figure. How it splits — cgst + sgst within
+   * the state, igst across it — is the document's business, not the line's, so
+   * the split is applied on the way out and read back off the heads on the way
+   * in. Blank until an item is picked, then defaulted from its HSN code.
+   */
+  gst?: string;
 };
 
 const todayInput = () => {
@@ -71,6 +79,7 @@ export function StockTransactionScreen({
   showSupplier = false,
   showClassification = false,
   showRate = true,
+  showTax = false,
   showIncomingDispatch = false,
   showCosting = false,
 }: {
@@ -86,6 +95,11 @@ export function StockTransactionScreen({
   showClassification?: boolean;
   /** Show the per-line rate/price input + column. */
   showRate?: boolean;
+  /**
+   * Capture GST on each line, defaulted from the stockable's HSN code (GRN).
+   * Needs the rate column, which is what the tax is charged on.
+   */
+  showTax?: boolean;
   /**
    * Offer the intercompany shipments waiting to be received (GRN). Picking one
    * fills the lines with what was dispatched; quantities stay editable so short
@@ -116,6 +130,9 @@ export function StockTransactionScreen({
   );
   const { data: items } = useFetch<Item[]>('/items');
   const { data: products } = useFetch<Product[]>('/products');
+  // The default rate per stockable. Fetched only where the document captures
+  // tax, so the other four vouchers carry no extra request.
+  const { data: hsnCodes } = useFetch<HsnCode[]>(showTax ? '/hsn-codes' : null);
   const { data: suppliers } = useFetch<Supplier[]>(
     showSupplier ? '/suppliers' : null,
   );
@@ -151,6 +168,8 @@ export function StockTransactionScreen({
       unit: i.unit?.symbol ?? i.unit?.code ?? '',
       category: i.category?.name ?? '—',
       group: i.group?.name ?? '—',
+      // Carried so a line can offer the tax rate its HSN code states.
+      hsnCodeId: i.hsnCodeId ?? null,
       ...boxOf(i),
     }));
     const prs = (products ?? []).map((p) => ({
@@ -159,6 +178,7 @@ export function StockTransactionScreen({
       unit: p.unit?.symbol ?? p.unit?.code ?? '',
       category: p.category?.name ?? '—',
       group: p.group?.name ?? '—',
+      hsnCodeId: p.hsnCodeId ?? null,
       ...boxOf(p),
     }));
     return [...its, ...prs];
@@ -215,6 +235,10 @@ export function StockTransactionScreen({
   const [poRef, setPoRef] = useState('');
   const [costCenterId, setCostCenterId] = useState('');
   const [costObjectId, setCostObjectId] = useState('');
+  // Within the state the tax splits CGST + SGST; across it, the whole rate is
+  // IGST. One switch for the document rather than a choice on every line — a
+  // receipt comes from one supplier, so it is one answer.
+  const [interState, setInterState] = useState(false);
   const [reference, setReference] = useState('');
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<DraftLine[]>([]);
@@ -242,6 +266,21 @@ export function StockTransactionScreen({
         .map((o) => ({ value: String(o.id), label: o.name })),
     [costObjects, costCenterId],
   );
+
+  /**
+   * The GST rate a stockable carries by default — the sum of its HSN heads,
+   * since what the user types is the one rate and the split is the document's.
+   * Empty when the stockable has no HSN code: the master has not said, so the
+   * screen does not guess.
+   */
+  const hsnRateOf = (key: string): string => {
+    const pick = key ? pickById.get(key) : undefined;
+    const hsnId = pick && 'hsnCodeId' in pick ? pick.hsnCodeId : null;
+    const hsn = hsnId ? (hsnCodes ?? []).find((h) => h.id === hsnId) : undefined;
+    if (!hsn) return '';
+    const rate = hsn.igst || hsn.cgst + hsn.sgst;
+    return rate ? String(rate) : '';
+  };
 
   const blankLine = (): DraftLine => ({
     key: '',
@@ -350,6 +389,7 @@ export function StockTransactionScreen({
           l.enteredUnitPrice ?? round6((l.unitPrice ?? 0) * packQty);
         return {
           key: l.itemId ? `item:${l.itemId}` : `product:${l.productId}`,
+          gst: String((l.igst ?? 0) || (l.cgst ?? 0) + (l.sgst ?? 0) || ''),
           quantity: String(inPack ? l.enteredQty : stockQty),
           unitPrice: dec2(String(inPack ? packRate : (l.unitPrice ?? 0))),
           unitMode: (inPack ? 'box' : 'stock') as 'box' | 'stock',
@@ -405,6 +445,19 @@ export function StockTransactionScreen({
     return pick && 'boxQty' in pick && pick.boxQty ? pick.boxQty : 1;
   };
 
+  /**
+   * The taxable value of a line and the tax on it, in the units the line is
+   * TYPED in — 2 cases at 600 is taxable 1,200 whether or not a case is 24
+   * bottles, because the pack rate and the stock rate describe the same money.
+   * The server recomputes both from the stock figures it stores; this is the
+   * same arithmetic shown while typing.
+   */
+  const lineBase = (l: DraftLine) => Number(l.quantity || 0) * Number(l.unitPrice || 0);
+  const lineTax = (l: DraftLine) =>
+    Math.round(lineBase(l) * (Number(l.gst || 0) / 100) * 100) / 100;
+  const docTaxable = lines.reduce((n, l) => n + lineBase(l), 0);
+  const docTax = lines.reduce((n, l) => n + lineTax(l), 0);
+
   // True once any line is counted in packs: the stock column only earns its
   // width on a document that actually has one.
   const anyInPacks = lines.some((l) => {
@@ -446,6 +499,15 @@ export function StockTransactionScreen({
                 enteredUnitId: null,
                 enteredUnitPrice: null,
               }),
+          // One typed rate, split where the supply came from decides: half
+          // and half within the state, the whole of it as IGST across it.
+          ...(showTax
+            ? {
+                cgst: interState ? 0 : Number(l.gst || 0) / 2,
+                sgst: interState ? 0 : Number(l.gst || 0) / 2,
+                igst: interState ? Number(l.gst || 0) : 0,
+              }
+            : {}),
           batchNo2: inbound ? l.batchNo2.trim() || undefined : undefined,
           expiryDate:
             inbound && l.expiry ? new Date(l.expiry).toISOString() : undefined,
@@ -790,6 +852,21 @@ export function StockTransactionScreen({
                   onChange={(e) => setPoRef(e.target.value)}
                   placeholder="PO reference"
                 />
+                {/* Asked once for the document, not on every line: a receipt
+                    comes from one supplier, so where the supply came from is
+                    one answer. It decides only how the rate splits. */}
+                {showTax && (
+                  <Select
+                    label="GST"
+                    disabled={viewMode}
+                    value={interState ? 'inter' : 'intra'}
+                    onChange={(e) => setInterState(e.target.value === 'inter')}
+                    options={[
+                      { value: 'intra', label: 'Within the state — CGST + SGST' },
+                      { value: 'inter', label: 'Interstate — IGST' },
+                    ]}
+                  />
+                )}
               </div>
             )}
             {/* Costing — what this issue is FOR. Raw-material items carry none
@@ -880,6 +957,12 @@ export function StockTransactionScreen({
                     {showRateCol && (
                       <th className="w-28 py-2 px-1 text-right">Rate</th>
                     )}
+                    {showTax && (
+                      <>
+                        <th className="w-20 py-2 px-1 text-right">GST %</th>
+                        <th className="w-28 py-2 px-1 text-right">Tax</th>
+                      </>
+                    )}
                     {!viewMode && <th className="w-10 py-2" />}
                   </tr>
                 </thead>
@@ -935,6 +1018,13 @@ export function StockTransactionScreen({
                                   setLine(i, {
                                     key: e.target.value,
                                     unitMode: inbound && isBoxed ? 'box' : 'stock',
+                                    // The master's rate, offered rather than
+                                    // imposed: what the supplier billed is what
+                                    // goes on the line, and the field stays
+                                    // editable for the day they differ.
+                                    ...(showTax
+                                      ? { gst: hsnRateOf(e.target.value) }
+                                      : {}),
                                   });
                                 }}
                                 placeholder="Select item / product"
@@ -1074,6 +1164,41 @@ export function StockTransactionScreen({
                               )}
                             </td>
                           )}
+                          {showTax && (
+                            <>
+                              <td className="px-1">
+                                {viewMode ? (
+                                  <span className="block text-right tabular-nums">
+                                    {l.gst ? `${l.gst}%` : '—'}
+                                  </span>
+                                ) : (
+                                  <Input
+                                    id={`stl-${i}-gst`}
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    step="any"
+                                    value={l.gst ?? ''}
+                                    onChange={(e) => setLine(i, { gst: e.target.value })}
+                                    onKeyDown={enterNextLine(i)}
+                                    className="text-right tabular-nums"
+                                  />
+                                )}
+                              </td>
+                              <td className="px-1 text-right tabular-nums text-slate-500">
+                                {money2(String(lineTax(l)))}
+                                {/* The split, spelled out, so nobody has to
+                                    remember what the header switch is set to. */}
+                                {lineTax(l) > 0 && (
+                                  <span className="mt-0.5 block text-[11px] text-slate-400">
+                                    {interState
+                                      ? 'IGST'
+                                      : `CGST + SGST ${(Number(l.gst || 0) / 2).toLocaleString()}% each`}
+                                  </span>
+                                )}
+                              </td>
+                            </>
+                          )}
                           {!viewMode && (
                             <td className="text-center">
                               <button
@@ -1092,6 +1217,31 @@ export function StockTransactionScreen({
                 </tbody>
               </table>
             </div>
+            {/* What the bill should come to, while it is being typed — the one
+                figure the person entering it can check against the paper in
+                their hand. */}
+            {showTax && docTaxable > 0 && (
+              <div className="mt-2 flex flex-wrap justify-end gap-x-6 gap-y-1 text-sm">
+                <span className="text-slate-500 dark:text-slate-400">
+                  Taxable{' '}
+                  <span className="tabular-nums text-slate-700 dark:text-slate-200">
+                    {money2(String(docTaxable))}
+                  </span>
+                </span>
+                <span className="text-slate-500 dark:text-slate-400">
+                  {interState ? 'IGST' : 'CGST + SGST'}{' '}
+                  <span className="tabular-nums text-slate-700 dark:text-slate-200">
+                    {money2(String(docTax))}
+                  </span>
+                </span>
+                <span className="font-medium text-slate-700 dark:text-slate-200">
+                  Total{' '}
+                  <span className="tabular-nums">
+                    {money2(String(docTaxable + docTax))}
+                  </span>
+                </span>
+              </div>
+            )}
             {showDispatched && shortLines.length > 0 && (
               <p className="mt-2 text-xs text-amber-600 dark:text-amber-500">
                 {shortLines.length} line{shortLines.length > 1 ? 's' : ''} short

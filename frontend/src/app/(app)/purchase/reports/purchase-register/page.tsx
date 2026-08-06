@@ -54,6 +54,14 @@ interface PurchaseRow {
   enteredQty: number | null;
   enteredUnitSymbol: string;
   enteredRate: number | null;
+  /** The rate charged (%), and what it came to per head. */
+  gstRate: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
+  cess: number;
+  tax: number;
+  total: number;
 }
 
 const asDate = (v: string | null) => (v ? v.slice(0, 10) : '');
@@ -145,11 +153,55 @@ const ALL_COLUMNS: ReportColumn<PurchaseRow>[] = [
     cell: (r) => money(r.rate),
   },
   {
+    // Taxable, i.e. before tax — named Value because that is what it has always
+    // been on this report, and what the costing side of the business means by it.
     key: 'value',
     header: 'Value',
     weight: 13,
     numeric: true,
     cell: (r) => money(r.value),
+  },
+  {
+    key: 'gstRate',
+    header: 'GST %',
+    weight: 8,
+    numeric: true,
+    cell: (r) => (r.gstRate ? String(r.gstRate) : ''),
+  },
+  {
+    key: 'cgst',
+    header: 'CGST',
+    weight: 10,
+    numeric: true,
+    cell: (r) => (r.cgst ? money(r.cgst) : ''),
+  },
+  {
+    key: 'sgst',
+    header: 'SGST',
+    weight: 10,
+    numeric: true,
+    cell: (r) => (r.sgst ? money(r.sgst) : ''),
+  },
+  {
+    key: 'igst',
+    header: 'IGST',
+    weight: 10,
+    numeric: true,
+    cell: (r) => (r.igst ? money(r.igst) : ''),
+  },
+  {
+    key: 'cess',
+    header: 'Cess',
+    weight: 9,
+    numeric: true,
+    cell: (r) => (r.cess ? money(r.cess) : ''),
+  },
+  {
+    key: 'total',
+    header: 'Total',
+    weight: 13,
+    numeric: true,
+    cell: (r) => money(r.total),
   },
 ];
 
@@ -204,6 +256,7 @@ export default function PurchaseRegisterPage() {
 
   const rows = useMemo(() => data ?? [], [data]);
   const total = useMemo(() => rows.reduce((n, r) => n + r.value, 0), [rows]);
+  const tax = useMemo(() => rows.reduce((n, r) => n + r.tax, 0), [rows]);
 
   /** What this row is gathered under, given the chosen grouping. */
   const keyOf = (r: PurchaseRow) => {
@@ -244,7 +297,19 @@ export default function PurchaseRegisterPage() {
     }
     // Largest spend first — a purchase report is read to see where the money
     // went, and alphabetical order buries that.
-    const valueCol = selected.columns.indexOf('Value');
+    // Every money column that can be added up gets its own subtotal, so a
+    // register read for a return foots the same way one read for costing does.
+    const columnTotals: { header: string; of: (r: PurchaseRow) => number }[] = [
+      { header: 'Value', of: (r: PurchaseRow) => r.value },
+      { header: 'CGST', of: (r: PurchaseRow) => r.cgst },
+      { header: 'SGST', of: (r: PurchaseRow) => r.sgst },
+      { header: 'IGST', of: (r: PurchaseRow) => r.igst },
+      { header: 'Cess', of: (r: PurchaseRow) => r.cess },
+      { header: 'Total', of: (r: PurchaseRow) => r.total },
+    ];
+    const totalled = columnTotals.filter((t) =>
+      selected.columns.includes(t.header),
+    );
     return [...buckets.entries()]
       .map(([label, list]) => ({
         label,
@@ -257,11 +322,17 @@ export default function PurchaseRegisterPage() {
         // A subtotal row inside the table rather than only in the heading, so
         // the PRINTED page carries it too — a heading is a caption, and the
         // reader adding up a column wants the answer at the foot of it.
-        if (valueCol >= 0) {
-          const totalRow = selected.columns.map((_, i) =>
-            i === valueCol ? money(spend) : i === 0 ? 'Total' : '',
+        if (totalled.length) {
+          const sums = new Map(
+            totalled.map((t) => [t.header, list.reduce((n, r) => n + t.of(r), 0)]),
           );
-          body.push(totalRow);
+          body.push(
+            selected.columns.map((header, i) => {
+              const sum = sums.get(header);
+              if (sum != null) return money(sum);
+              return i === 0 ? 'Total' : '';
+            }),
+          );
         }
         return {
           tables: [
@@ -269,7 +340,7 @@ export default function PurchaseRegisterPage() {
               subheading: `${label} — ${money(spend)}`,
               subcount: list.length,
               rows: body,
-              shade: [...list.map(() => false), ...(valueCol >= 0 ? [true] : [])],
+              shade: [...list.map(() => false), ...(totalled.length ? [true] : [])],
             },
           ],
         };
@@ -287,9 +358,11 @@ export default function PurchaseRegisterPage() {
         label: 'Suppliers',
         value: new Set(rows.map((r) => r.supplierId ?? 0)).size,
       },
-      { label: 'Value', value: Math.round(total * 100) / 100 },
+      { label: 'Taxable', value: Math.round(total * 100) / 100 },
+      { label: 'Tax', value: Math.round(tax * 100) / 100 },
+      { label: 'Total', value: Math.round((total + tax) * 100) / 100 },
     ],
-    [rows, total],
+    [rows, total, tax],
   );
 
   const filterNote = [
@@ -309,6 +382,7 @@ export default function PurchaseRegisterPage() {
     subtitle:
       `Purchase Register - ${from || '…'} to ${to || '…'}` +
       ` - ${rows.length} line${rows.length === 1 ? '' : 's'}, ${money(total)}` +
+      (tax > 0 ? ` + ${money(tax)} tax = ${money(total + tax)}` : '') +
       (filterNote ? ` - ${filterNote}` : ''),
     columns: selected.columns,
     weights: selected.weights,
@@ -411,6 +485,7 @@ export default function PurchaseRegisterPage() {
             />
             <span className="text-sm text-slate-500 dark:text-slate-400">
               {rows.length} line{rows.length === 1 ? '' : 's'} · {money(total)}
+              {tax > 0 ? ` + ${money(tax)} tax` : ''}
             </span>
           </div>
         </div>
