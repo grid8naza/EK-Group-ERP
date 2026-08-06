@@ -60,6 +60,7 @@ const asInput = (l: {
   billRefs?: {
     refType: BillRefType;
     billRef: string | null;
+    refNote: string | null;
     againstId: number | null;
     amount: Prisma.Decimal;
     dueDate: Date | null;
@@ -77,6 +78,7 @@ const asInput = (l: {
   bills: l.billRefs?.map((b) => ({
     refType: b.refType,
     billRef: b.billRef ?? undefined,
+    refNote: b.refNote ?? undefined,
     againstId: b.againstId ?? undefined,
     amount: Number(b.amount),
     dueDate: b.dueDate?.toISOString(),
@@ -97,6 +99,7 @@ interface ResolvedTransaction {
 interface ResolvedBill {
   refType: BillRefType;
   billRef: string | null;
+  refNote: string | null;
   againstId: number | null;
   amount: number;
   dueDate: Date | null;
@@ -343,6 +346,7 @@ export class VoucherService {
                         partyId: l.partyId!,
                         refType: b.refType,
                         billRef: b.billRef,
+                        refNote: b.refNote,
                         againstId: b.againstId,
                         amount: b.amount,
                         dueDate: b.dueDate,
@@ -448,6 +452,7 @@ export class VoucherService {
                         partyId: l.partyId!,
                         refType: b.refType,
                         billRef: b.billRef,
+                        refNote: b.refNote,
                         againstId: b.againstId,
                         amount: b.amount,
                         dueDate: b.dueDate,
@@ -965,6 +970,9 @@ export class VoucherService {
         resolved.push({
           refType: 'NEW',
           billRef: ref,
+          // A bill already names itself; a note beside its number would be a
+          // second name for the same thing.
+          refNote: null,
           againstId: null,
           amount: b.amount,
           dueDate: due,
@@ -1009,6 +1017,7 @@ export class VoucherService {
           // own". A settlement identifies its bill by `againstId`; copying the
           // ref here would make two receipts against one invoice collide.
           billRef: null,
+          refNote: null,
           againstId: target.id,
           amount: b.amount,
           dueDate: null,
@@ -1016,10 +1025,13 @@ export class VoucherService {
         continue;
       }
 
-      // ADVANCE / ON_ACCOUNT — attached to no bill by definition.
+      // ADVANCE / ON_ACCOUNT — attached to no bill by definition, so the only
+      // thing that can identify one later is what the person entering it called
+      // it. Kept out of `billRef` deliberately: see BillAllocation.refNote.
       resolved.push({
         refType: b.refType as BillRefType,
         billRef: null,
+        refNote: b.refNote?.trim() || null,
         againstId: null,
         amount: b.amount,
         dueDate: null,

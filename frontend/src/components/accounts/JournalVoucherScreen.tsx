@@ -54,6 +54,8 @@ import {
 type JvLine = {
   key: number;
   side: 'DR' | 'CR';
+  /** The user has said which side this is, so nothing may quietly change it. */
+  sideTouched: boolean;
   accountId: string;
   /** Whose balance the line moves. Asked for only on a control account. */
   partyId: string;
@@ -67,6 +69,7 @@ type JvLine = {
 const emptyLine = (key: number, side: 'DR' | 'CR' = 'DR', amount = ''): JvLine => ({
   key,
   side,
+  sideTouched: false,
   accountId: '',
   partyId: '',
   costCenterId: '',
@@ -80,6 +83,21 @@ const emptyLine = (key: number, side: 'DR' | 'CR' = 'DR', amount = ''): JvLine =
 const fid = (key: number, part: string) => `jv-${key}-${part}`;
 const DATE_FIELD = 'jv-date';
 const COMMON_NARRATION = 'jv-common-narration';
+
+/**
+ * The one column definition the whole voucher is laid out on: side,
+ * particulars, the two money columns, the row's own button.
+ *
+ * Every row of a line group — the line, its narration, its bill details — is
+ * placed in this same grid, so a narration box ends exactly where the ledger
+ * box above it ends and a bill amount sits exactly under Debit. Alignment by
+ * shared structure rather than by matching spacer widths, which drift the
+ * moment a column changes.
+ */
+const GRID = '3.5rem minmax(0,1fr) 8rem 8rem 1.75rem';
+
+/** The same columns from Particulars rightward, for rows that start there. */
+const BILL_GRID = 'minmax(0,1fr) 8rem 8rem 1.75rem';
 
 const focusById = (id: string) =>
   requestAnimationFrame(() => document.getElementById(id)?.focus());
@@ -164,9 +182,11 @@ export function JournalVoucherScreen({
   const [narration, setNarration] = useState('');
   const keySeq = useRef(0);
   const nextKey = () => ++keySeq.current;
+  // Dr then Cr: a journal's second line answers its first, and starting both on
+  // the same side would mean correcting one of them on every single entry.
   const [lines, setLines] = useState<JvLine[]>(() => [
-    emptyLine(++keySeq.current),
-    emptyLine(++keySeq.current),
+    emptyLine(++keySeq.current, 'DR'),
+    emptyLine(++keySeq.current, 'CR'),
   ]);
 
   // Where focus should land once the lines have re-rendered — set by whatever
@@ -213,7 +233,7 @@ export function JournalVoucherScreen({
     setDate(today());
     setReference('');
     setNarration('');
-    setLines([emptyLine(nextKey()), emptyLine(nextKey())]);
+    setLines([emptyLine(nextKey(), 'DR'), emptyLine(nextKey(), 'CR')]);
     setMode('edit');
     pendingFocus.current = DATE_FIELD;
   };
@@ -226,7 +246,9 @@ export function JournalVoucherScreen({
     setLines(
       v.lines.map((l) => ({
         key: nextKey(),
-        side: num(l.debit) > 0 ? 'DR' : 'CR',
+        side: (num(l.debit) > 0 ? 'DR' : 'CR') as 'DR' | 'CR',
+        // A saved line's side is a fact, not a default waiting to be improved.
+        sideTouched: true,
         accountId: String(l.accountId),
         partyId: l.partyId ? String(l.partyId) : '',
         costCenterId: l.costCenterId ? String(l.costCenterId) : '',
@@ -236,6 +258,7 @@ export function JournalVoucherScreen({
         bills: (l.billRefs ?? []).map((b) => ({
           refType: b.refType,
           billRef: b.billRef ?? '',
+          refNote: b.refNote ?? '',
           againstId: b.againstId ? String(b.againstId) : '',
           amount: String(b.amount),
         })),
@@ -258,6 +281,29 @@ export function JournalVoucherScreen({
 
   const setLine = (key: number, patch: Partial<JvLine>) =>
     setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+
+  /**
+   * Say which side a line is — and answer it on the line below.
+   *
+   * A journal is written in pairs, so naming one side has all but named the
+   * other. The line below only takes it while it is still blank and its own
+   * side has never been set: a default may be improved on, a decision may not.
+   */
+  const setSide = (index: number, side: 'DR' | 'CR') =>
+    setLines((ls) =>
+      ls.map((l, x) => {
+        if (x === index) return { ...l, side, sideTouched: true };
+        if (
+          x === index + 1 &&
+          !l.sideTouched &&
+          !l.accountId &&
+          !num(l.amount)
+        ) {
+          return { ...l, side: side === 'DR' ? 'CR' : 'DR' };
+        }
+        return l;
+      }),
+    );
 
   const setBill = (key: number, bi: number, patch: Partial<DraftBill>) =>
     setLines((ls) =>
@@ -296,6 +342,23 @@ export function JournalVoucherScreen({
     );
     pendingFocus.current = fid(key, 'side');
     setLines((ls) => [...ls, line]);
+  };
+
+  /**
+   * Open another bill row on a line, carrying whatever of it is still
+   * unallocated — the same rule as adding a line, one level down.
+   */
+  const addBill = (l: JvLine, remainderPaise: number) => {
+    pendingFocus.current = fid(l.key, `bill-${l.bills.length}-type`);
+    setLine(l.key, {
+      bills: [
+        ...l.bills,
+        {
+          ...emptyBill(),
+          amount: remainderPaise > 0 ? (remainderPaise / 100).toFixed(2) : '',
+        },
+      ],
+    });
   };
 
   const removeLine = (key: number) => {
@@ -341,6 +404,31 @@ export function JournalVoucherScreen({
     addLine();
   };
 
+  /**
+   * Leaving a bill amount.
+   *
+   * The line's amount has to be spread across bills to the penny, so the same
+   * rule that governs the voucher governs the line: while the parts do not add
+   * up to the whole, another row opens for the rest. Only once they agree does
+   * the line itself close.
+   */
+  const onBillEnd = (i: number, l: JvLine, bi: number, e: React.KeyboardEvent) => {
+    const enter = e.key === 'Enter';
+    const tab = e.key === 'Tab' && !e.shiftKey;
+    if (!enter && !tab) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (bi !== l.bills.length - 1) return; // an earlier row: ordinary advance
+
+    const allocated = l.bills.reduce((t, b) => t + paise(b.amount), 0);
+    const wanted = paise(l.amount);
+    if (wanted > 0 && allocated !== wanted) {
+      e.preventDefault();
+      addBill(l, wanted - allocated);
+      return;
+    }
+    onLineEnd(i, e);
+  };
+
   // ---- saving ------------------------------------------------------------------
 
   const body = () => ({
@@ -366,6 +454,12 @@ export function JournalVoucherScreen({
               .map((b) => ({
                 refType: b.refType,
                 billRef: b.refType === 'NEW' ? b.billRef.trim() : undefined,
+                // Only an advance or an on-account amount carries a note — a
+                // bill is identified by its own number.
+                refNote:
+                  b.refType === 'ADVANCE' || b.refType === 'ON_ACCOUNT'
+                    ? b.refNote.trim()
+                    : undefined,
                 againstId:
                   b.refType === 'AGAINST' && b.againstId
                     ? Number(b.againstId)
@@ -542,11 +636,19 @@ export function JournalVoucherScreen({
       <div
         className="min-h-0 flex-1 space-y-3 overflow-y-auto pb-6"
         onKeyDown={(e) => {
+          if (e.key !== 'Enter' || readOnly) return;
+          // Alt+Enter opens a line wherever the caret is — the lines normally
+          // grow on their own, but a voucher of three or more legs needs a way
+          // to say so up front.
+          if (e.altKey) {
+            e.preventDefault();
+            addLine();
+            return;
+          }
           // Ctrl+Enter accepts the voucher from anywhere on the form — the one
           // shortcut worth knowing, and the only way to finish without the
           // mouse once the narration has the caret.
-          if (e.key !== 'Enter' || !(e.ctrlKey || e.metaKey)) return;
-          if (readOnly || saving || !balanced) return;
+          if (!(e.ctrlKey || e.metaKey) || saving || !balanced) return;
           e.preventDefault();
           void save(true);
         }}
@@ -595,12 +697,15 @@ export function JournalVoucherScreen({
               everything that varies by ledger sits in Particulars so those two
               columns stay put whatever a line asks for. */}
           <div className="card mt-3 overflow-hidden">
-            <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400">
-              <span className="w-14 flex-none">Dr/Cr</span>
-              <span className="min-w-0 flex-1">Particulars</span>
-              <span className="w-32 flex-none text-right">Debit</span>
-              <span className="w-32 flex-none text-right">Credit</span>
-              <span className="w-7 flex-none" />
+            <div
+              className="grid items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400"
+              style={{ gridTemplateColumns: GRID }}
+            >
+              <span>Dr/Cr</span>
+              <span>Particulars</span>
+              <span className="text-right">Debit</span>
+              <span className="text-right">Credit</span>
+              <span />
             </div>
 
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -628,15 +733,18 @@ export function JournalVoucherScreen({
                       removeLine(l.key);
                     }}
                   >
-                    <div className="flex items-start gap-2">
+                    <div
+                      className="grid items-start gap-x-2 gap-y-1.5"
+                      style={{ gridTemplateColumns: GRID }}
+                    >
                       <SideToggle
                         id={fid(l.key, 'side')}
                         value={l.side}
                         disabled={readOnly}
-                        onChange={(side) => setLine(l.key, { side })}
+                        onChange={(side) => setSide(i, side)}
                       />
 
-                      <div className="flex min-w-0 flex-1 flex-wrap items-start gap-2">
+                      <div className="flex min-w-0 flex-wrap items-start gap-2">
                         <Select
                           id={fid(l.key, 'ledger')}
                           value={l.accountId}
@@ -741,7 +849,7 @@ export function JournalVoucherScreen({
                         onChange={(v) => onAmountChange(l, v, setLine)}
                       />
 
-                      <div className="w-7 flex-none pt-1.5 text-center">
+                      <div className="pt-1.5 text-center">
                         {!readOnly && lines.length > 2 && (
                           <button
                             type="button"
@@ -754,183 +862,201 @@ export function JournalVoucherScreen({
                           </button>
                         )}
                       </div>
-                    </div>
 
-                    {/* The line's own narration, on its own line under it. */}
-                    <div className="mt-1.5 flex items-center gap-2 pl-16">
-                      <label className="w-20 flex-none text-xs italic text-slate-400">
-                        Narration
-                      </label>
-                      <Input
-                        id={fid(l.key, 'narration')}
-                        value={l.narration}
-                        disabled={readOnly}
-                        wrapClassName="min-w-0 flex-1"
-                        className="h-8 text-sm"
-                        onKeyDown={(e) => {
-                          if (lastBill) return; // the bills below close the line
-                          onLineEnd(i, e);
-                        }}
-                        onChange={(e) => setLine(l.key, { narration: e.target.value })}
-                      />
-                      {/* Holds the two money columns and the row's own button
-                          clear of the narration, so Debit and Credit stay one
-                          straight edge down the page. */}
-                      <span className="w-[18.75rem] flex-none" />
-                    </div>
+                      {/* The line's own narration, under it. Placed in the
+                          Particulars column, so its box ends exactly where the
+                          ledger box above it ends. */}
+                      <div className="col-start-2 flex items-center gap-2">
+                        <label className="flex-none text-xs italic text-slate-400">
+                          Narration
+                        </label>
+                        <Input
+                          id={fid(l.key, 'narration')}
+                          value={l.narration}
+                          disabled={readOnly}
+                          wrapClassName="min-w-0 flex-1"
+                          className="h-8 text-sm"
+                          onKeyDown={(e) => {
+                            if (lastBill) return; // the bills below close the line
+                            onLineEnd(i, e);
+                          }}
+                          onChange={(e) =>
+                            setLine(l.key, { narration: e.target.value })
+                          }
+                        />
+                      </div>
 
-                    {/* Bill-wise details, under the narration, on the ledgers
-                        that are kept bill by bill. Every part of the line has
-                        to say which bill it belongs to — that is what bill-wise
-                        tracking IS, and the server refuses the line without it. */}
-                    {showBills && (
-                      <div className="mt-1.5 space-y-1 pl-16">
-                        {l.bills.map((b, bi) => (
-                          <div key={bi} className="flex items-center gap-2">
-                            <span className="w-20 flex-none text-xs italic text-slate-400">
-                              {bi === 0 ? 'Bill details' : ''}
-                            </span>
-                            <Select
-                              id={fid(l.key, `bill-${bi}-type`)}
-                              value={b.refType}
-                              disabled={readOnly}
-                              wrapClassName="w-40 flex-none"
-                              searchThreshold={4}
-                              onChange={(e) =>
-                                setBill(l.key, bi, {
-                                  refType: e.target.value as BillRefType,
-                                  billRef: '',
-                                  againstId: '',
-                                })
-                              }
-                              options={BILL_TYPES}
-                            />
-                            {b.refType === 'NEW' ? (
-                              <Input
-                                id={fid(l.key, `bill-${bi}-ref`)}
-                                value={b.billRef}
-                                disabled={readOnly}
-                                wrapClassName="min-w-0 flex-1"
-                                className="h-8 text-sm"
-                                placeholder="Bill number, e.g. INV-001"
-                                onChange={(e) =>
-                                  setBill(l.key, bi, { billRef: e.target.value })
-                                }
-                              />
-                            ) : b.refType === 'AGAINST' ? (
-                              <Select
-                                id={fid(l.key, `bill-${bi}-ref`)}
-                                value={b.againstId}
-                                disabled={readOnly}
-                                wrapClassName="min-w-0 flex-1"
-                                onChange={(e) => {
-                                  const picked = bills.find(
-                                    (o) => String(o.id) === e.target.value,
-                                  );
-                                  setBill(l.key, bi, {
-                                    againstId: e.target.value,
-                                    // Default to clearing it in full — the
-                                    // common case, and still editable.
-                                    amount: picked
-                                      ? String(picked.pending)
-                                      : b.amount,
-                                  });
-                                }}
-                                options={bills.map((o) => ({
-                                  value: String(o.id),
-                                  label: `${o.billRef} · ${money(o.pending)} pending${
-                                    o.overdueDays > 0
-                                      ? ` · ${o.overdueDays}d overdue`
-                                      : ''
-                                  }`,
-                                }))}
-                                placeholder={
-                                  bills.length ? 'Which bill' : 'Nothing outstanding'
-                                }
-                              />
-                            ) : (
-                              <span className="min-w-0 flex-1 text-xs text-slate-400">
-                                Attached to no bill
-                              </span>
-                            )}
-                            <Input
-                              id={fid(l.key, `bill-${bi}-amount`)}
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={b.amount}
-                              disabled={readOnly}
-                              wrapClassName="w-32 flex-none"
-                              className="h-8 text-sm"
-                              onKeyDown={(e) => {
-                                if (bi !== l.bills.length - 1) return;
-                                onLineEnd(i, e);
-                              }}
-                              onChange={(e) =>
-                                setBill(l.key, bi, { amount: e.target.value })
-                              }
-                            />
-                            <div className="w-7 flex-none text-center">
-                              {!readOnly && l.bills.length > 1 && (
-                                <button
-                                  type="button"
-                                  tabIndex={-1}
-                                  className="rounded p-1 text-slate-300 hover:text-rose-600"
-                                  title="Remove this bill"
-                                  onClick={() =>
-                                    setLine(l.key, {
-                                      bills: l.bills.filter((_, y) => y !== bi),
+                      {/* Bill-wise details, under the narration, on the ledgers
+                          that are kept bill by bill. Every part of the line has
+                          to say which bill it belongs to — that is what bill-wise
+                          tracking IS, and the server refuses the line without it.
+                          Laid out on the same columns, so a bill's amount sits
+                          under Debit. */}
+                      {showBills && (
+                        <div className="col-start-2 col-end-6 space-y-1">
+                          {l.bills.map((b, bi) => (
+                            <div
+                              key={bi}
+                              className="grid items-center gap-2"
+                              style={{ gridTemplateColumns: BILL_GRID }}
+                            >
+                              <div className="flex min-w-0 items-center gap-2">
+                                {/* Fixed width, or the second bill row would
+                                    start further left than the first. */}
+                                <span className="w-9 flex-none text-xs italic text-slate-400">
+                                  {bi === 0 ? 'Bills' : ''}
+                                </span>
+                                <Select
+                                  id={fid(l.key, `bill-${bi}-type`)}
+                                  value={b.refType}
+                                  disabled={readOnly}
+                                  wrapClassName="w-40 flex-none"
+                                  onChange={(e) =>
+                                    setBill(l.key, bi, {
+                                      refType: e.target.value as BillRefType,
+                                      billRef: '',
+                                      refNote: '',
+                                      againstId: '',
                                     })
                                   }
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              )}
+                                  options={BILL_TYPES}
+                                />
+                                {b.refType === 'NEW' ? (
+                                  <Input
+                                    id={fid(l.key, `bill-${bi}-ref`)}
+                                    value={b.billRef}
+                                    disabled={readOnly}
+                                    wrapClassName="min-w-0 flex-1"
+                                    className="h-8 text-sm"
+                                    placeholder="Bill number, e.g. INV-001"
+                                    onChange={(e) =>
+                                      setBill(l.key, bi, {
+                                        billRef: e.target.value,
+                                      })
+                                    }
+                                  />
+                                ) : b.refType === 'AGAINST' ? (
+                                  <Select
+                                    id={fid(l.key, `bill-${bi}-ref`)}
+                                    value={b.againstId}
+                                    disabled={readOnly}
+                                    wrapClassName="min-w-0 flex-1"
+                                    onChange={(e) => {
+                                      const picked = bills.find(
+                                        (o) => String(o.id) === e.target.value,
+                                      );
+                                      setBill(l.key, bi, {
+                                        againstId: e.target.value,
+                                        // Default to clearing it in full — the
+                                        // common case, and still editable.
+                                        amount: picked
+                                          ? String(picked.pending)
+                                          : b.amount,
+                                      });
+                                    }}
+                                    options={bills.map((o) => ({
+                                      value: String(o.id),
+                                      label: `${o.billRef} · ${money(
+                                        o.pending,
+                                      )} pending${
+                                        o.overdueDays > 0
+                                          ? ` · ${o.overdueDays}d overdue`
+                                          : ''
+                                      }`,
+                                    }))}
+                                    placeholder={
+                                      bills.length
+                                        ? 'Which bill'
+                                        : 'Nothing outstanding'
+                                    }
+                                  />
+                                ) : (
+                                  /* An advance or an on-account amount names no
+                                     bill — but it still has to be recognisable
+                                     when someone comes back to it, so it takes
+                                     whatever the entry wants to call it. */
+                                  <Input
+                                    id={fid(l.key, `bill-${bi}-ref`)}
+                                    value={b.refNote}
+                                    disabled={readOnly}
+                                    wrapClassName="min-w-0 flex-1"
+                                    className="h-8 text-sm"
+                                    placeholder={
+                                      b.refType === 'ADVANCE'
+                                        ? 'What this advance is for (optional)'
+                                        : 'What this is against (optional)'
+                                    }
+                                    onChange={(e) =>
+                                      setBill(l.key, bi, {
+                                        refNote: e.target.value,
+                                      })
+                                    }
+                                  />
+                                )}
+                              </div>
+                              <Input
+                                id={fid(l.key, `bill-${bi}-amount`)}
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={b.amount}
+                                disabled={readOnly}
+                                className="no-spinner h-8 text-sm"
+                                onKeyDown={(e) => onBillEnd(i, l, bi, e)}
+                                onChange={(e) =>
+                                  setBill(l.key, bi, { amount: e.target.value })
+                                }
+                              />
+                              <span />
+                              <div className="text-center">
+                                {!readOnly && l.bills.length > 1 && (
+                                  <button
+                                    type="button"
+                                    tabIndex={-1}
+                                    className="rounded p-1 text-slate-300 hover:text-rose-600"
+                                    title="Remove this bill"
+                                    onClick={() =>
+                                      setLine(l.key, {
+                                        bills: l.bills.filter((_, y) => y !== bi),
+                                      })
+                                    }
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </div>
                             </div>
-                            <span className="w-32 flex-none" />
-                          </div>
-                        ))}
-                        <div className="flex items-center gap-3 pl-[5.5rem] text-xs">
-                          {!readOnly && (
-                            <button
-                              type="button"
-                              tabIndex={-1}
-                              className="text-brand-600 hover:underline"
-                              onClick={() =>
-                                setLine(l.key, {
-                                  bills: [
-                                    ...l.bills,
-                                    // Seeded with whatever is still unspread,
-                                    // which is the answer most of the time.
-                                    {
-                                      ...emptyBill(),
-                                      amount: left > 0 ? String(left) : '',
-                                    },
-                                  ],
-                                })
-                              }
-                            >
-                              + Add a bill
-                            </button>
-                          )}
-                          <span
-                            className={cn(
-                              left === 0 && wanted > 0
-                                ? 'text-emerald-600 dark:text-emerald-400'
-                                : 'text-amber-600 dark:text-amber-400',
+                          ))}
+                          <div className="flex items-center gap-3 pl-11 text-xs">
+                            {!readOnly && (
+                              <button
+                                type="button"
+                                tabIndex={-1}
+                                className="text-brand-600 hover:underline"
+                                onClick={() => addBill(l, wanted - allocated)}
+                              >
+                                + Add a bill
+                              </button>
                             )}
-                          >
-                            {wanted === 0
-                              ? 'Enter the line amount first'
-                              : left === 0
-                                ? 'Fully allocated'
-                                : `${money(Math.abs(left))} ${
-                                    left > 0 ? 'unallocated' : 'over-allocated'
-                                  }`}
-                          </span>
+                            <span
+                              className={cn(
+                                left === 0 && wanted > 0
+                                  ? 'text-emerald-600 dark:text-emerald-400'
+                                  : 'text-amber-600 dark:text-amber-400',
+                              )}
+                            >
+                              {wanted === 0
+                                ? 'Enter the line amount first'
+                                : left === 0
+                                  ? 'Fully allocated'
+                                  : `${money(Math.abs(left))} ${
+                                      left > 0 ? 'unallocated' : 'over-allocated'
+                                    }`}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 );
               })}
@@ -938,14 +1064,18 @@ export function JournalVoucherScreen({
 
             {/* The foot of the page: the two columns totalled, as they are
                 printed, and what is still between them. */}
-            <div className="flex items-center gap-2 border-t-2 border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold dark:border-slate-700 dark:bg-slate-800/60">
-              <span className="w-14 flex-none" />
-              <span className="min-w-0 flex-1">
+            <div
+              className="grid items-center gap-2 border-t-2 border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold dark:border-slate-700 dark:bg-slate-800/60"
+              style={{ gridTemplateColumns: GRID }}
+            >
+              <span />
+              <span className="min-w-0">
                 {!readOnly && (
                   <button
                     type="button"
                     tabIndex={-1}
                     className="text-xs font-normal text-brand-600 hover:underline"
+                    title="Alt+Enter"
                     onClick={addLine}
                   >
                     + Add line
@@ -966,13 +1096,13 @@ export function JournalVoucherScreen({
                       : `Out by ${money(Math.abs(totals.diff))}`}
                 </span>
               </span>
-              <span className="w-32 flex-none border-t border-slate-400 pt-0.5 text-right tabular-nums">
+              <span className="border-t border-slate-400 pt-0.5 text-right tabular-nums">
                 {money(totals.dr)}
               </span>
-              <span className="w-32 flex-none border-t border-slate-400 pt-0.5 text-right tabular-nums">
+              <span className="border-t border-slate-400 pt-0.5 text-right tabular-nums">
                 {money(totals.cr)}
               </span>
-              <span className="w-7 flex-none" />
+              <span />
             </div>
           </div>
 
@@ -1053,8 +1183,9 @@ function AmountCell({
       min="0"
       value={active ? value : ''}
       disabled={disabled || !active}
-      wrapClassName="w-32 flex-none"
-      className={cn(!active && 'bg-slate-50 dark:bg-slate-800/40')}
+      // No spinner: nobody nudges money a penny at a time with a mouse, and the
+      // arrows only steal width from the figure.
+      className={cn('no-spinner', !active && 'bg-slate-50 dark:bg-slate-800/40')}
       onChange={(e) => onChange(e.target.value)}
     />
   );

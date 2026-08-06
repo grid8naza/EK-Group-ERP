@@ -109,6 +109,14 @@ function isoToDisplay(iso?: string | null): string {
   return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
 }
 
+/** Eight digits (or fewer, mid-typing) punctuated as DD-MM-YYYY. */
+function format(digits: string): string {
+  let out = digits.slice(0, 2);
+  if (digits.length >= 3) out += '-' + digits.slice(2, 4);
+  if (digits.length >= 5) out += '-' + digits.slice(4, 8);
+  return out;
+}
+
 /** A DD-MM-YYYY display string → ISO YYYY-MM-DD, or '' when incomplete/invalid. */
 function displayToIso(display: string): string {
   const digits = display.replace(/\D/g, '');
@@ -161,11 +169,41 @@ export function DateInput({
 
   const handle = (e: React.ChangeEvent<HTMLInputElement>) => {
     const digits = e.target.value.replace(/\D/g, '').slice(0, 8);
-    let out = digits.slice(0, 2);
-    if (digits.length >= 3) out += '-' + digits.slice(2, 4);
-    if (digits.length >= 5) out += '-' + digits.slice(4, 8);
-    setText(out);
-    onChange(displayToIso(out));
+    setText(format(digits));
+    onChange(displayToIso(format(digits)));
+  };
+
+  /**
+   * Step the part of the date the caret is sitting in.
+   *
+   * Changing a date should not mean clearing one. Between this and the
+   * select-on-focus below, a date is either retyped outright or nudged — never
+   * backspaced away a character at a time, which is what it used to take.
+   */
+  const step = (e: React.KeyboardEvent<HTMLInputElement>, by: number) => {
+    e.preventDefault();
+    // Held onto: React clears `currentTarget` once the handler returns, and the
+    // caret is restored a frame later.
+    const el = e.currentTarget;
+    const caret = el.selectionStart ?? 0;
+    // 0-2 day, 3-5 month, else year — the segment the caret is inside.
+    const part = caret <= 2 ? 0 : caret <= 5 ? 1 : 2;
+    const base = displayToIso(text) || new Date().toISOString().slice(0, 10);
+    const [y, m, d] = base.split('-').map(Number);
+    // Built through Date so a rolled-over day or month lands on a real date —
+    // 31 Jan stepped a month forward is 3 March, not 31 February.
+    const next = new Date(
+      part === 2 ? y + by : y,
+      (part === 1 ? m + by : m) - 1,
+      part === 0 ? d + by : d,
+    );
+    const iso = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
+    setText(isoToDisplay(iso));
+    onChange(iso);
+    // Keep the caret in the segment being stepped, so a run of presses keeps
+    // moving the same part.
+    const at = part === 0 ? 1 : part === 1 ? 4 : 7;
+    requestAnimationFrame(() => el.setSelectionRange(at, at));
   };
 
   const input = (
@@ -177,7 +215,14 @@ export function DateInput({
       disabled={disabled}
       value={text}
       onChange={handle}
-      onKeyDown={onKeyDown}
+      // Selected on arrival, so the first digit typed replaces the date that is
+      // there rather than being appended to it.
+      onFocus={(e) => e.currentTarget.select()}
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowUp') return step(e, 1);
+        if (e.key === 'ArrowDown') return step(e, -1);
+        onKeyDown?.(e);
+      }}
       placeholder={placeholder}
       className={cn('input-base', className)}
     />

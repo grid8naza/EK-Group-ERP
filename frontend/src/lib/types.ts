@@ -2178,6 +2178,8 @@ export interface BillAllocation {
   refType: BillRefType;
   /** The bill's own number. Only a NEW row has one; a settlement points by id. */
   billRef: string | null;
+  /** What an advance or on-account amount was called. Those two only. */
+  refNote: string | null;
   againstId: number | null;
   amount: string | number;
   dueDate: string | null;

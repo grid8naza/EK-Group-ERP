@@ -34,6 +34,15 @@ export class BillAllocationInput {
   @MaxLength(60)
   billRef?: string;
 
+  /**
+   * What an advance or on-account amount is called. ADVANCE / ON_ACCOUNT only —
+   * a bill already names itself, so this is ignored on NEW and AGAINST.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  refNote?: string;
+
   /** The bill being settled. Required on AGAINST. */
   @IsOptional()
   @IsInt()

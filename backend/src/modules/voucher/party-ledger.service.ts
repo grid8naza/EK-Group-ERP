@@ -109,6 +109,7 @@ export class PartyLedgerService {
           select: {
             refType: true,
             billRef: true,
+            refNote: true,
             amount: true,
             against: { select: { billRef: true } },
           },
@@ -137,7 +138,9 @@ export class PartyLedgerService {
         bills: l.billRefs.map((b) => ({
           refType: b.refType,
           // A settlement holds no ref of its own; it names the bill it settles.
-          billRef: b.billRef ?? b.against?.billRef ?? null,
+          // An advance names no bill at all, so it falls back to whatever the
+          // entry called it — better than a blank against a real amount.
+          billRef: b.billRef ?? b.against?.billRef ?? b.refNote ?? null,
           amount: Number(b.amount),
         })),
       };

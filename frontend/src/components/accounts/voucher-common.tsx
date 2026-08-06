@@ -56,6 +56,8 @@ export const statusColor = (s: VoucherStatus) =>
 export type DraftBill = {
   refType: BillRefType;
   billRef: string;
+  /** What an advance or on-account amount is called. Those two only. */
+  refNote: string;
   againstId: string;
   amount: string;
 };
@@ -63,6 +65,7 @@ export type DraftBill = {
 export const emptyBill = (): DraftBill => ({
   refType: 'NEW',
   billRef: '',
+  refNote: '',
   againstId: '',
   amount: '',
 });

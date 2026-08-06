@@ -516,6 +516,13 @@ model BillAllocation {
   /// statement lists and what a payment is matched against. Null on ADVANCE and
   /// ON_ACCOUNT, which are by definition attached to no bill.
   billRef String?
+  /// What an ADVANCE or ON_ACCOUNT amount was called — "against Feb supply",
+  /// the counterfoil number, whatever the entry needs to be recognisable by
+  /// later. NOT `billRef`: that column is the bill's IDENTITY and is unique per
+  /// party, whereas this is a note. Two advances may carry the same one, and a
+  /// note that could collide with a real bill number would be refusing entries
+  /// for no reason.
+  refNote String?
   /// The NEW allocation this one settles. Set only on AGAINST.
   againstId Int?
   amount    Decimal @db.Decimal(18, 2)

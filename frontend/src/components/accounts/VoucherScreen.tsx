@@ -196,6 +196,7 @@ export function VoucherScreen({
         bills: (l.billRefs ?? []).map((b) => ({
           refType: b.refType,
           billRef: b.billRef ?? '',
+          refNote: b.refNote ?? '',
           againstId: b.againstId ? String(b.againstId) : '',
           amount: String(b.amount),
         })),
@@ -278,6 +279,12 @@ export function VoucherScreen({
               .map((b) => ({
                 refType: b.refType,
                 billRef: b.refType === 'NEW' ? b.billRef.trim() : undefined,
+                // Not offered on this form, but carried through so re-saving a
+                // draft written elsewhere does not drop what it was called.
+                refNote:
+                  b.refType === 'ADVANCE' || b.refType === 'ON_ACCOUNT'
+                    ? b.refNote.trim()
+                    : undefined,
                 againstId:
                   b.refType === 'AGAINST' && b.againstId
                     ? Number(b.againstId)
