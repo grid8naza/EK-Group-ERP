@@ -116,6 +116,16 @@ export class CreateStockTransactionDto {
   @MaxLength(120)
   purchaseOrderRef?: string | null;
 
+  /** Delivery Note only: the customer the goods went to, and their order. */
+  @IsOptional()
+  @IsInt()
+  customerId?: number | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  salesOrderRef?: string | null;
+
   /**
    * Goods Receipt Note only: receive an intercompany Dispatch. Every line must
    * be a product the dispatch shipped, and no line may accept more than was
@@ -172,6 +182,15 @@ export class UpdateStockTransactionDto {
   @IsString()
   @MaxLength(120)
   purchaseOrderRef?: string | null;
+
+  @IsOptional()
+  @IsInt()
+  customerId?: number | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  salesOrderRef?: string | null;
 
   @IsOptional()
   @IsInt()

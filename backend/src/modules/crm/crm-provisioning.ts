@@ -1,3 +1,5 @@
+import { ObjectType } from '@prisma/client';
+
 // CRM module screens — the supplier/seller's side of the intercompany flow.
 //
 // An ICPO is ONE row seen from two sides. The buyer raises it in the PURCHASE
@@ -21,4 +23,27 @@ export const CRM_SUBS = [
   { name: 'ICSO', route: '/crm/icso', icon: 'clipboard-list', order: 2 },
   // Dispatch — ship an approved sales order; invoice + delivery note + e-way bill.
   { name: 'Dispatch', route: '/crm/dispatch', icon: 'truck', order: 3 },
+];
+
+// A second main menu for what was actually SOLD, as opposed to what was ordered
+// above.
+//
+// The register is read off the documents that moved the goods — a Delivery Note
+// to a customer, an intercompany Dispatch to another group company — for the
+// same reason the purchase one is: a sale is a document, and a ledger balance
+// could only ever give a total.
+export const CRM_REPORT_MENUS = [
+  {
+    name: 'Sales Report',
+    icon: 'bar-chart-3',
+    subs: [
+      {
+        name: 'Sales Register',
+        route: '/crm/reports/sales-register',
+        icon: 'receipt-text',
+        order: 1,
+        objectType: ObjectType.REPORT,
+      },
+    ],
+  },
 ];

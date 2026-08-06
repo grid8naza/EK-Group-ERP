@@ -872,6 +872,194 @@ export class StockTransactionService {
     });
   }
 
+  /**
+   * The SALES REGISTER — what went out, to whom, at what rate. The mirror of
+   * the purchase register, and read the same way: from the documents, because a
+   * sale is a document and a ledger balance could only ever give a total.
+   *
+   * Goods leave on TWO documents, and a register that showed one of them would
+   * be quietly wrong:
+   *
+   *   · a Delivery Note, raised here against a CUSTOMER;
+   *   · an intercompany Dispatch, raised in CRM against a BUYER COMPANY.
+   *
+   * Both write SALE rows to the same stock ledger, and both are stamped with
+   * their own document's id — which is why a row is matched on the document
+   * NUMBER as well: two tables number their rows independently, so id 7 exists
+   * in each, and only the number says which 7 a row means.
+   */
+  async salesRegister(
+    companyId: number | undefined,
+    branchId: number | undefined,
+    filters: {
+      from?: Date;
+      to?: Date;
+      customerId?: number;
+      categoryId?: number;
+      storeId?: number;
+    },
+  ) {
+    const rows = await this.prisma.stockLedger.findMany({
+      where: {
+        transactionType: 'SALE',
+        ...(companyId ? { companyId } : {}),
+        ...(branchId ? { branchId } : {}),
+        ...(filters.storeId ? { storeId: filters.storeId } : {}),
+        ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
+        ...(filters.from || filters.to
+          ? {
+              date: {
+                ...(filters.from ? { gte: filters.from } : {}),
+                ...(filters.to ? { lte: filters.to } : {}),
+              },
+            }
+          : {}),
+      },
+      orderBy: [{ date: 'desc' }, { id: 'asc' }],
+    });
+    if (!rows.length) return [];
+
+    const docIds = [...new Set(rows.map((r) => r.documentId))];
+    const [notes, dispatches] = await Promise.all([
+      this.prisma.stockTransaction.findMany({
+        where: { id: { in: docIds }, type: 'SALE' },
+        select: {
+          id: true,
+          docNo: true,
+          customerId: true,
+          salesOrderRef: true,
+          reference: true,
+          storeId: true,
+          branchId: true,
+        },
+      }),
+      // CRM's row, read by id like any cross-domain reference.
+      this.prisma.dispatch.findMany({
+        where: { id: { in: docIds } },
+        select: {
+          id: true,
+          dispatchNo: true,
+          buyerCompanyId: true,
+          soNumber: true,
+          invoiceNo: true,
+          storeId: true,
+          branchId: true,
+        },
+      }),
+    ]);
+    // Keyed by number, not id: that is what tells one document 7 from the other.
+    const noteBy = new Map(notes.map((n) => [n.docNo, n]));
+    const dispatchBy = new Map(dispatches.map((d) => [d.dispatchNo, d]));
+
+    const uniq = <T>(xs: (T | null | undefined)[]) =>
+      [...new Set(xs.filter((x): x is T => x != null))];
+    const [items, products, cats, groups, units, stores, customers, companies] =
+      await Promise.all([
+        this.byId(this.prisma.item, uniq(rows.map((r) => r.itemId))),
+        this.byId(this.prisma.product, uniq(rows.map((r) => r.productId))),
+        this.byId(this.prisma.category, uniq(rows.map((r) => r.categoryId))),
+        this.byId(
+          this.prisma.group,
+          uniq([
+            ...rows.map((r) => r.primaryGroupId),
+            ...rows.map((r) => r.parentGroupId),
+          ]),
+        ),
+        this.prisma.unit.findMany({
+          where: {
+            id: {
+              in: uniq([
+                ...rows.map((r) => r.unitId),
+                ...rows.map((r) => r.enteredUnitId),
+              ]),
+            },
+          },
+          select: { id: true, symbol: true, code: true },
+        }),
+        this.byId(this.prisma.store, uniq(rows.map((r) => r.storeId))),
+        this.byId(this.prisma.customer, uniq(notes.map((n) => n.customerId))),
+        this.byId(
+          this.prisma.company,
+          uniq(dispatches.map((d) => d.buyerCompanyId)),
+        ),
+      ]);
+    const unitOf = new Map(units.map((u) => [u.id, u.symbol ?? u.code] as const));
+
+    const mapped = rows.map((r) => {
+      const note = noteBy.get(r.documentNo);
+      const dispatch = note ? undefined : dispatchBy.get(r.documentNo);
+      // Who the goods went to, whichever document carried them. An intercompany
+      // dispatch names the buying COMPANY; that is still the customer of the
+      // sale, so it reads in the same column rather than a second one nobody
+      // would think to look in.
+      const customerId = note?.customerId ?? null;
+      const buyerCompanyId = dispatch?.buyerCompanyId ?? null;
+      const qty = r.qtyOut;
+      const taxable = qty * r.unitPrice;
+      const tax = r.cgstAmount + r.sgstAmount + r.igstAmount + r.cessAmount;
+      return {
+        id: r.id,
+        documentId: r.documentId,
+        docNo: r.documentNo,
+        // Which document it left on, since the two read differently: a delivery
+        // note is this company's sale, a dispatch is a shipment to another of
+        // the group's companies.
+        source: dispatch ? ('DISPATCH' as const) : ('DELIVERY_NOTE' as const),
+        date: r.date,
+        customerId,
+        customerName: customerId
+          ? customers.get(customerId) ?? null
+          : buyerCompanyId
+            ? companies.get(buyerCompanyId) ?? null
+            : null,
+        isIntercompany: !!buyerCompanyId,
+        orderRef: note?.salesOrderRef ?? dispatch?.soNumber ?? null,
+        reference: note?.reference ?? dispatch?.invoiceNo ?? null,
+        storeName: stores.get(r.storeId) ?? null,
+        branchId: r.branchId,
+        itemId: r.itemId,
+        productId: r.productId,
+        name: r.itemId
+          ? items.get(r.itemId) ?? ''
+          : r.productId
+            ? products.get(r.productId) ?? ''
+            : '',
+        categoryId: r.categoryId,
+        categoryName: r.categoryId ? cats.get(r.categoryId) ?? null : null,
+        primaryGroupName: r.primaryGroupId
+          ? groups.get(r.primaryGroupId) ?? null
+          : null,
+        parentGroupName: r.parentGroupId
+          ? groups.get(r.parentGroupId) ?? null
+          : null,
+        batchNo1: r.batchNo1,
+        expiryDate: r.expiryDate,
+        qty,
+        unitSymbol: unitOf.get(r.unitId) ?? '',
+        rate: r.unitPrice,
+        value: taxable,
+        gstRate: r.cgst + r.sgst + r.igst,
+        cgst: r.cgstAmount,
+        sgst: r.sgstAmount,
+        igst: r.igstAmount,
+        cess: r.cessAmount,
+        tax,
+        total: Math.round((taxable + tax) * 100) / 100,
+        enteredQty: r.enteredQty,
+        enteredUnitSymbol: r.enteredUnitId
+          ? unitOf.get(r.enteredUnitId) ?? ''
+          : '',
+        enteredRate: r.enteredUnitPrice,
+      };
+    });
+
+    // Applied last, because who a row was sold to is only known once the two
+    // document kinds have been resolved.
+    return filters.customerId
+      ? mapped.filter((r) => r.customerId === filters.customerId)
+      : mapped;
+  }
+
   /** id -> name for any master, skipping the query when nothing needs it. */
   private async byId(
     model: { findMany: (args: unknown) => Promise<{ id: number; name: string }[]> },
@@ -1025,12 +1213,18 @@ export class StockTransactionService {
               docNo,
               docDate,
               storeId: dto.storeId,
-              // Supplier + PO apply to Goods Receipt only.
+              // Supplier + PO apply to the Goods Receipt, customer + SO to the
+              // Delivery Note. Cleared on every other type rather than carried:
+              // a counterparty on a stock journal would be a fact nobody put
+              // there, and the registers read these columns.
               supplierId: type === 'PURCHASE' ? dto.supplierId ?? null : null,
               purchaseOrderRef:
                 type === 'PURCHASE'
                   ? dto.purchaseOrderRef?.trim() || null
                   : null,
+              customerId: type === 'SALE' ? dto.customerId ?? null : null,
+              salesOrderRef:
+                type === 'SALE' ? dto.salesOrderRef?.trim() || null : null,
               dispatchId: incoming?.id ?? null,
               dispatchNo: incoming?.dispatchNo ?? null,
               costCenterId: headerCosting.costCenterId,
@@ -1140,6 +1334,7 @@ export class StockTransactionService {
 
     const saved = await this.prisma.$transaction(async (tx) => {
       const isGrn = existing.type === 'PURCHASE';
+      const isSale = existing.type === 'SALE';
       await tx.stockTransaction.update({
         where: { id },
         data: {
@@ -1151,6 +1346,12 @@ export class StockTransactionService {
           purchaseOrderRef:
             isGrn && dto.purchaseOrderRef !== undefined
               ? dto.purchaseOrderRef?.trim() || null
+              : undefined,
+          customerId:
+            isSale && dto.customerId !== undefined ? dto.customerId : undefined,
+          salesOrderRef:
+            isSale && dto.salesOrderRef !== undefined
+              ? dto.salesOrderRef?.trim() || null
               : undefined,
           costCenterId: wantsCostingChange
             ? headerCosting.costCenterId

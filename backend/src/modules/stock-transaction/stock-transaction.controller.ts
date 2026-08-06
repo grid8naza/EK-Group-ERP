@@ -109,6 +109,27 @@ export class StockTransactionController {
     });
   }
 
+  /** The sales register: delivery-note and dispatch lines, with the customer. */
+  @Get('sales-register')
+  salesRegister(
+    @CompanyId() companyId: number | undefined,
+    @BranchId() branchId: number | undefined,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('customerId') customerId?: string,
+    @Query('categoryId') categoryId?: string,
+    @Query('storeId') storeId?: string,
+  ) {
+    const num = (v?: string) => (v ? Number(v) || undefined : undefined);
+    return this.service.salesRegister(companyId, branchId, {
+      from: from ? new Date(from) : undefined,
+      to: to ? new Date(`${to}T23:59:59.999`) : undefined,
+      customerId: num(customerId),
+      categoryId: num(categoryId),
+      storeId: num(storeId),
+    });
+  }
+
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.service.findOne(id);

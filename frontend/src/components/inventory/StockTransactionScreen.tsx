@@ -31,6 +31,7 @@ import type {
   Item,
   Product,
   Supplier,
+  Customer,
   Company,
   CostCenter,
   CostObject,
@@ -84,6 +85,7 @@ export function StockTransactionScreen({
   title,
   noun,
   showSupplier = false,
+  showCustomer = false,
   showClassification = false,
   showRate = true,
   showTax = false,
@@ -98,6 +100,8 @@ export function StockTransactionScreen({
   noun: string; // "goods receipt", "delivery", ...
   /** Show the supplier dropdown + purchase-order reference in the header (GRN). */
   showSupplier?: boolean;
+  /** Show the customer dropdown + sales-order reference in the header (Delivery Note). */
+  showCustomer?: boolean;
   /** Show each line's category + parent group (derived from the item/product). */
   showClassification?: boolean;
   /** Show the per-line rate/price input + column. */
@@ -142,6 +146,9 @@ export function StockTransactionScreen({
   const { data: hsnCodes } = useFetch<HsnCode[]>(showTax ? '/hsn-codes' : null);
   const { data: suppliers } = useFetch<Supplier[]>(
     showSupplier ? '/suppliers' : null,
+  );
+  const { data: customers } = useFetch<Customer[]>(
+    showCustomer ? '/customers' : null,
   );
   const { data: incoming, refetch: refetchIncoming } = useFetch<IncomingDispatch[]>(
     showIncomingDispatch ? '/stock-transactions/incoming-dispatches' : null,
@@ -190,6 +197,13 @@ export function StockTransactionScreen({
     }));
     return [...its, ...prs];
   }, [items, products]);
+  const customerOptions = useMemo(
+    () =>
+      (customers ?? [])
+        .filter((c) => c.isActive)
+        .map((c) => ({ value: String(c.id), label: c.name })),
+    [customers],
+  );
   const supplierOptions = useMemo(
     () =>
       (suppliers ?? [])
@@ -240,6 +254,8 @@ export function StockTransactionScreen({
   const [supplierId, setSupplierId] = useState('');
   const [dispatchId, setDispatchId] = useState('');
   const [poRef, setPoRef] = useState('');
+  const [customerId, setCustomerId] = useState('');
+  const [soRef, setSoRef] = useState('');
   const [costCenterId, setCostCenterId] = useState('');
   const [costObjectId, setCostObjectId] = useState('');
   // Within the state the tax splits CGST + SGST; across it, the whole rate is
@@ -365,6 +381,8 @@ export function StockTransactionScreen({
     setSupplierId('');
     setDispatchId('');
     setPoRef('');
+    setCustomerId('');
+    setSoRef('');
     setCostCenterId('');
     setCostObjectId('');
     setReference('');
@@ -382,6 +400,8 @@ export function StockTransactionScreen({
     setSupplierId(full.supplierId ? String(full.supplierId) : '');
     setDispatchId(full.dispatchId ? String(full.dispatchId) : '');
     setPoRef(full.purchaseOrderRef ?? '');
+    setCustomerId(full.customerId ? String(full.customerId) : '');
+    setSoRef(full.salesOrderRef ?? '');
     setCostCenterId(full.costCenterId ? String(full.costCenterId) : '');
     setCostObjectId(full.costObjectId ? String(full.costObjectId) : '');
     setReference(full.reference ?? '');
@@ -538,6 +558,8 @@ export function StockTransactionScreen({
     setSupplierId('');
     setDispatchId('');
     setPoRef('');
+    setCustomerId('');
+    setSoRef('');
     setCostCenterId('');
     setCostObjectId('');
     setReference('');
@@ -560,6 +582,8 @@ export function StockTransactionScreen({
           ? {
               supplierId: supplierId ? Number(supplierId) : null,
               purchaseOrderRef: poRef.trim() || null,
+              customerId: customerId ? Number(customerId) : null,
+              salesOrderRef: soRef.trim() || null,
             }
           : {}),
         ...(showCosting
@@ -872,6 +896,40 @@ export function StockTransactionScreen({
                 {/* Asked once for the document, not on every line: a receipt
                     comes from one supplier, so where the supply came from is
                     one answer. It decides only how the rate splits. */}
+                {showTax && (
+                  <Select
+                    label="GST"
+                    disabled={viewMode}
+                    value={interState ? 'inter' : 'intra'}
+                    onChange={(e) => setInterState(e.target.value === 'inter')}
+                    options={[
+                      { value: 'intra', label: 'Within the state — CGST + SGST' },
+                      { value: 'inter', label: 'Interstate — IGST' },
+                    ]}
+                  />
+                )}
+              </div>
+            )}
+            {/* Who the goods went TO — the mirror of the supplier block above,
+                and what turns a delivery note into a sale the register can
+                report. */}
+            {showCustomer && (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Select
+                  label="Customer"
+                  disabled={viewMode}
+                  value={customerId}
+                  onChange={(e) => setCustomerId(e.target.value)}
+                  placeholder="Select a customer"
+                  options={customerOptions}
+                />
+                <Input
+                  label="Sales Order"
+                  disabled={viewMode}
+                  value={soRef}
+                  onChange={(e) => setSoRef(e.target.value)}
+                  placeholder="SO reference"
+                />
                 {showTax && (
                   <Select
                     label="GST"

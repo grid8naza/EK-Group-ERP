@@ -867,6 +867,12 @@ model StockTransaction {
   // purchaseOrderRef is free text for now (later a real PO link).
   supplierId       Int?
   purchaseOrderRef String?
+  // Delivery Note only, and the mirror of the two above: who the goods went TO
+  // and the order they fulfil. customerId -> Accounts Customer (plain
+  // cross-domain id). Null on an intercompany shipment, which is dispatched
+  // from CRM against a buyer COMPANY rather than a customer.
+  customerId       Int?
+  salesOrderRef    String?
   // Goods Receipt Note only: the intercompany Dispatch these goods arrived on
   // (-> CRM Dispatch, plain cross-domain id). Unique — a shipment is received
   // once; deleting the receipt reopens the dispatch. Null on an ordinary

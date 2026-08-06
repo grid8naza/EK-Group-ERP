@@ -1818,6 +1818,9 @@ export interface StockTransaction {
   /** Goods Receipt Note only. */
   supplierId?: number | null;
   purchaseOrderRef?: string | null;
+  /** Delivery Note: who the goods went to, and their order reference. */
+  customerId?: number | null;
+  salesOrderRef?: string | null;
   /** Goods Receipt Note only: the intercompany dispatch these goods arrived on. */
   dispatchId?: number | null;
   dispatchNo?: string | null;

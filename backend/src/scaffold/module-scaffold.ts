@@ -22,7 +22,10 @@ import {
 } from '../modules/asset-category/asset-provisioning';
 import { HR_SUBS } from '../modules/hr-category/hr-provisioning';
 import { WORKFLOW_SUBS } from '../modules/workflow/workflow-provisioning';
-import { CRM_SUBS } from '../modules/crm/crm-provisioning';
+import {
+  CRM_SUBS,
+  CRM_REPORT_MENUS,
+} from '../modules/crm/crm-provisioning';
 import {
   PURCHASE_SUBS,
   PURCHASE_REPORT_MENUS,
@@ -121,6 +124,7 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     autoEnable: true, // on for every company (requesters place, suppliers receive)
     menu: { name: 'CRM', icon: 'users' },
     subs: CRM_SUBS,
+    extraMenus: CRM_REPORT_MENUS,
   },
   {
     code: 'ACCOUNTS',
