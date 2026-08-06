@@ -3,7 +3,7 @@
 import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown, HelpCircle, Search, X } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, isoDate } from '@/lib/utils';
 
 /**
  * Move focus to the field after `from`, in DOM order, within the nearest
@@ -77,6 +77,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   { label, labelTitle, required, error, wrapClassName, className, ...props },
   ref,
 ) {
+  const isNumber = props.type === 'number';
   return (
     <FieldWrap
       label={label}
@@ -89,12 +90,22 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
           line up down a column instead of drifting with their length. */}
       <input
         ref={ref}
-        className={cn(
-          'input-base',
-          props.type === 'number' && 'text-right',
-          className,
-        )}
+        className={cn('input-base', isNumber && 'text-right', className)}
         {...props}
+        // Spread first, then this: a figure arrived at by the keyboard is
+        // selected on arrival, so the next digit typed REPLACES it. Correcting
+        // an amount is retyping it, not backspacing over it a character at a
+        // time — the same rule the date field follows. Numbers only, because
+        // prose is usually appended to; and in practice keyboard only, since a
+        // click still ends up placing the caret where it was clicked.
+        onFocus={
+          isNumber
+            ? (e) => {
+                e.currentTarget.select();
+                props.onFocus?.(e);
+              }
+            : props.onFocus
+        }
       />
     </FieldWrap>
   );
@@ -188,7 +199,8 @@ export function DateInput({
     const caret = el.selectionStart ?? 0;
     // 0-2 day, 3-5 month, else year — the segment the caret is inside.
     const part = caret <= 2 ? 0 : caret <= 5 ? 1 : 2;
-    const base = displayToIso(text) || new Date().toISOString().slice(0, 10);
+    // Stepping an empty field starts from today HERE, not today in UTC.
+    const base = displayToIso(text) || isoDate();
     const [y, m, d] = base.split('-').map(Number);
     // Built through Date so a rolled-over day or month lands on a real date —
     // 31 Jan stepped a month forward is 3 March, not 31 February.
@@ -197,7 +209,7 @@ export function DateInput({
       (part === 1 ? m + by : m) - 1,
       part === 0 ? d + by : d,
     );
-    const iso = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
+    const iso = isoDate(next);
     setText(isoToDisplay(iso));
     onChange(iso);
     // Keep the caret in the segment being stepped, so a run of presses keeps

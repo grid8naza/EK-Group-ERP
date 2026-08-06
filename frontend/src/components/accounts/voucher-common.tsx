@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { Ban, Plus, Trash2 } from 'lucide-react';
 import { useFetch } from '@/lib/hooks';
+import { isoDate } from '@/lib/utils';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Select } from '@/components/ui/Field';
@@ -44,7 +45,8 @@ export const money = (v: string | number) =>
 export const paise = (v: string | number | null | undefined) =>
   Math.round(num(v) * 100);
 
-export const today = () => new Date().toISOString().slice(0, 10);
+/** The date HERE, not in UTC — see isoDate. */
+export const today = () => isoDate();
 export const asDate = (iso: string) => new Date(iso).toLocaleDateString();
 
 export const statusColor = (s: VoucherStatus) =>

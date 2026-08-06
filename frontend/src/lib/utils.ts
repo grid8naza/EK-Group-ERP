@@ -39,6 +39,18 @@ export function dec2(s: string): string {
   return Number.isFinite(n) ? n.toFixed(2) : s;
 }
 
+/**
+ * A Date as YYYY-MM-DD in the user's OWN timezone.
+ *
+ * Not `toISOString().slice(0, 10)`, which is the UTC date: in a UTC+4 office
+ * anything entered before 4am would be stamped with yesterday, and a voucher
+ * dated a day early is a voucher in the wrong period.
+ */
+export function isoDate(d: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 export function initials(name?: string): string {
   if (!name) return '?';
   const parts = name.trim().split(/\s+/);
