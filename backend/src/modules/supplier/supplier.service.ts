@@ -6,6 +6,10 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
+import {
+  CONTROL_ACCOUNT_SELECT,
+  resolveControlAccount,
+} from '../../common/control-account';
 import { CreateSupplierDto, UpdateSupplierDto } from './supplier.dto';
 
 @Injectable()
@@ -25,12 +29,18 @@ export class SupplierService {
             }
           : {}),
       },
+      // The main ledger comes with the list: a voucher screen filters its party
+      // picker on it, and the master listing names it in a column.
+      include: { controlAccount: CONTROL_ACCOUNT_SELECT },
       orderBy: { name: 'asc' },
     });
   }
 
   async findOne(id: number) {
-    const supplier = await this.prisma.supplier.findUnique({ where: { id } });
+    const supplier = await this.prisma.supplier.findUnique({
+      where: { id },
+      include: { controlAccount: CONTROL_ACCOUNT_SELECT },
+    });
     if (!supplier) throw new NotFoundException('Supplier not found');
     return supplier;
   }
@@ -39,6 +49,12 @@ export class SupplierService {
     if (!companyId) {
       throw new BadRequestException('Select a company before adding a supplier.');
     }
+    const controlAccountId = await resolveControlAccount(
+      this.prisma,
+      companyId,
+      dto.controlAccountId,
+      'SUPPLIER',
+    );
     // SUP-#### per company, retrying on a unique clash.
     for (let i = 0; ; i++) {
       const n = await this.prisma.supplier.count({ where: { companyId } });
@@ -56,8 +72,10 @@ export class SupplierService {
             address: dto.address?.trim() || null,
             creditDays: dto.creditDays ?? null,
             creditLimit: dto.creditLimit ?? null,
+            controlAccountId,
             isActive: dto.isActive ?? true,
           },
+          include: { controlAccount: CONTROL_ACCOUNT_SELECT },
         });
       } catch (e) {
         if (
@@ -77,6 +95,17 @@ export class SupplierService {
     assertUnlocked(existing, 'supplier', 'editing');
     const norm = (v?: string | null) =>
       v !== undefined ? v?.trim() || null : undefined;
+    // Checked against the company that OWNS the supplier, not the active one:
+    // the main ledger belongs to the party's own books.
+    const controlAccountId =
+      dto.controlAccountId !== undefined
+        ? await resolveControlAccount(
+            this.prisma,
+            existing.companyId,
+            dto.controlAccountId,
+            'SUPPLIER',
+          )
+        : undefined;
     return this.prisma.supplier.update({
       where: { id },
       data: {
@@ -88,8 +117,10 @@ export class SupplierService {
         address: norm(dto.address),
         creditDays: dto.creditDays !== undefined ? dto.creditDays : undefined,
         creditLimit: dto.creditLimit !== undefined ? dto.creditLimit : undefined,
+        controlAccountId,
         isActive: dto.isActive,
       },
+      include: { controlAccount: CONTROL_ACCOUNT_SELECT },
     });
   }
 

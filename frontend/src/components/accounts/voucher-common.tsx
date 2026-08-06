@@ -180,16 +180,34 @@ export function useVoucherMasters() {
       .filter((o) => o.isActive && String(o.costCenterId) === costCenterId)
       .map((o) => ({ value: String(o.id), label: o.name }));
 
-  /** Who a line to this account may name, from the kind the account is kept by. */
-  const partyOptions = (kind: PartyKind | null) => {
+  /**
+   * Who a line to this account may name.
+   *
+   * The KIND comes from the account (creditors are aged by supplier), and the
+   * account itself narrows it further: a control account is a total, and only
+   * the parties kept under THAT account are part of THAT total. Name Trade
+   * Creditors and the trade suppliers are offered, not every supplier in the
+   * company.
+   *
+   * A party with no main ledger set is offered under every control account of
+   * its kind — that is what a master recorded before the mapping existed looks
+   * like, and dropping it from every picker would make it unpostable. The server
+   * applies the same rule, so the list and the save agree.
+   */
+  const partyOptions = (kind: PartyKind | null, accountId?: string | number) => {
     const list =
       kind === 'SUPPLIER'
         ? suppliers ?? []
         : kind === 'CUSTOMER'
           ? customers ?? []
           : [];
+    const account = accountId != null ? Number(accountId) : null;
     return list
-      .filter((p) => p.isActive)
+      .filter(
+        (p) =>
+          p.isActive &&
+          (!account || !p.controlAccountId || p.controlAccountId === account),
+      )
       .map((p) => ({ value: String(p.id), label: `${p.code} · ${p.name}` }));
   };
 

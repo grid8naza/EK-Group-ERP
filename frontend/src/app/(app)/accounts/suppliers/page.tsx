@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, Truck } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
@@ -13,9 +13,9 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
-import { Input, Checkbox, Textarea } from '@/components/ui/Field';
+import { Input, Checkbox, Select, Textarea } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import type { Supplier } from '@/lib/types';
+import type { CoaAccount, Supplier } from '@/lib/types';
 
 const ROUTE = '/accounts/suppliers';
 
@@ -28,6 +28,7 @@ const empty = {
   address: '',
   creditDays: '',
   creditLimit: '',
+  controlAccountId: '',
   isActive: true,
 };
 
@@ -36,6 +37,27 @@ export default function SuppliersPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<Supplier[]>('/suppliers');
+  // The main ledgers a supplier may be kept under: the payable control accounts
+  // this company posts to. A control account is a total and these parties are
+  // what it is a total OF, so every supplier belongs to exactly one.
+  const { data: accounts } = useFetch<CoaAccount[]>('/coa/accounts');
+  const mainLedgers = useMemo(
+    () =>
+      (accounts ?? [])
+        .filter(
+          (a) =>
+            a.isControl &&
+            a.controlParty === 'SUPPLIER' &&
+            a.isActive &&
+            a.adopted &&
+            a.allowPosting !== false,
+        )
+        .map((a) => ({
+          value: String(a.id),
+          label: `${a.code} · ${a.localName ?? a.name}`,
+        })),
+    [accounts],
+  );
   const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
     useLock<Supplier>({
       endpoint: '/suppliers',
@@ -70,6 +92,7 @@ export default function SuppliersPage() {
     address: s.address ?? '',
     creditDays: s.creditDays == null ? '' : String(s.creditDays),
     creditLimit: s.creditLimit == null ? '' : String(s.creditLimit),
+    controlAccountId: s.controlAccountId == null ? '' : String(s.controlAccountId),
     isActive: s.isActive,
   });
 
@@ -119,6 +142,8 @@ export default function SuppliersPage() {
       // Blank means "no term agreed", which is not the same as zero days.
       creditDays: form.creditDays === '' ? null : Number(form.creditDays),
       creditLimit: form.creditLimit === '' ? null : Number(form.creditLimit),
+      controlAccountId:
+        form.controlAccountId === '' ? null : Number(form.controlAccountId),
       isActive: form.isActive,
     };
     setSaving(true);
@@ -181,6 +206,20 @@ export default function SuppliersPage() {
     { key: 'contactPerson', header: 'Contact', accessor: (r) => r.contactPerson ?? '—' },
     { key: 'phone', header: 'Phone', accessor: (r) => r.phone ?? '—' },
     { key: 'gstNumber', header: 'GSTIN', accessor: (r) => r.gstNumber ?? '—' },
+    {
+      key: 'controlAccount',
+      header: 'Main ledger',
+      accessor: (r) =>
+        r.controlAccount ? `${r.controlAccount.code} ${r.controlAccount.name}` : '',
+      render: (r) =>
+        r.controlAccount ? (
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            {r.controlAccount.code} · {r.controlAccount.name}
+          </span>
+        ) : (
+          <span className="text-xs text-slate-300 dark:text-slate-600">Any</span>
+        ),
+    },
     {
       key: 'isActive',
       header: 'Status',
@@ -297,6 +336,31 @@ export default function SuppliersPage() {
               value={form.address}
               onChange={(e) => setForm({ ...form, address: e.target.value })}
             />
+            {/* Which total this supplier's balance is part of. Only the payable
+                control accounts are offered — an ordinary account has no
+                sub-ledger to join. */}
+            <div className="sm:col-span-2">
+              <Select
+                label="Main ledger"
+                value={form.controlAccountId}
+                onChange={(e) =>
+                  setForm({ ...form, controlAccountId: e.target.value })
+                }
+                options={mainLedgers}
+                placeholder={
+                  mainLedgers.length
+                    ? 'Any payable ledger'
+                    : 'No payable control account in use here'
+                }
+                disabled={!mainLedgers.length}
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                The control account this supplier is kept under — Trade Creditors,
+                Other Creditors. A voucher line naming that account offers only the
+                suppliers kept under it. Left blank, this supplier is offered under
+                every payable ledger.
+              </p>
+            </div>
             {/* The terms THEY give us. Left blank, a bill is due the day it is
                 raised and no ceiling is checked. */}
             <Input

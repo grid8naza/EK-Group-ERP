@@ -54,6 +54,11 @@ export class CreateCustomerDto {
   @Min(0)
   creditLimit?: number | null;
 
+  /** Which control account this party's balance is part of — its main ledger. */
+  @IsOptional()
+  @IsInt()
+  controlAccountId?: number | null;
+
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
@@ -99,6 +104,11 @@ export class UpdateCustomerDto {
   @IsNumber()
   @Min(0)
   creditLimit?: number | null;
+
+  /** Which control account this party's balance is part of — its main ledger. */
+  @IsOptional()
+  @IsInt()
+  controlAccountId?: number | null;
 
   @IsOptional()
   @IsBoolean()

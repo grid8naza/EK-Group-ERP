@@ -1770,6 +1770,13 @@ export interface PartyMaster {
   creditDays?: number | null;
   /** The most that may stand unpaid at once. Decimal, so it may arrive as text. */
   creditLimit?: string | number | null;
+  /**
+   * The MAIN LEDGER this party is kept under — the control account whose total
+   * its balance is part of. Null on parties recorded before it was asked for;
+   * those are offered under every control account of their kind.
+   */
+  controlAccountId?: number | null;
+  controlAccount?: { id: number; code: string; name: string } | null;
   isActive: boolean;
   isLocked?: boolean;
 }

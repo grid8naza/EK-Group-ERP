@@ -869,7 +869,13 @@ export class VoucherService {
    */
   private async resolveParty(
     companyId: number,
-    account: { isControl: boolean; controlParty: PartyKind | null },
+    account: {
+      id: number;
+      code: string;
+      name: string;
+      isControl: boolean;
+      controlParty: PartyKind | null;
+    },
     partyId: number | undefined,
     at: string,
   ): Promise<{ partyKind: PartyKind | null; partyId: number | null }> {
@@ -889,10 +895,23 @@ export class VoucherService {
       );
     }
 
-    const exists = await this.partyExists(companyId, kind, partyId);
-    if (!exists) {
+    const party = await this.findParty(companyId, kind, partyId);
+    if (!party) {
       throw new BadRequestException(
         `That ${kind.toLowerCase()} is not this company’s (${at}).`,
+      );
+    }
+    // A party kept under ANOTHER control account cannot be posted here: its
+    // balance is part of that account's total, and putting it under this one
+    // would leave two accounts each holding half of one party's history.
+    //
+    // A party with no main ledger set is allowed under any control account of
+    // its kind — that is what a master recorded before the mapping existed looks
+    // like, and refusing it would make old suppliers unpostable overnight.
+    if (party.controlAccountId && party.controlAccountId !== account.id) {
+      throw new BadRequestException(
+        `That ${kind.toLowerCase()} is kept under a different main ledger, so it ` +
+          `cannot be named on a line to ${account.code} ${account.name} (${at}).`,
       );
     }
     return { partyKind: kind, partyId };
@@ -1202,18 +1221,25 @@ export class VoucherService {
     return null;
   }
 
-  /** Is this party one of the company's, and still live? */
-  private async partyExists(
+  /**
+   * Is this party one of the company's, and still live? And if so, which main
+   * ledger is it kept under?
+   *
+   * Null main ledger = the party pre-dates the mapping and is accepted under any
+   * control account of its kind; the caller decides what to do with that.
+   */
+  private async findParty(
     companyId: number,
     kind: PartyKind,
     partyId: number,
-  ): Promise<boolean> {
+  ): Promise<{ controlAccountId: number | null } | null> {
     const where = { id: partyId, companyId, isActive: true };
+    const select = { controlAccountId: true };
     switch (kind) {
       case 'SUPPLIER':
-        return !!(await this.prisma.supplier.count({ where }));
+        return this.prisma.supplier.findFirst({ where, select });
       case 'CUSTOMER':
-        return !!(await this.prisma.customer.count({ where }));
+        return this.prisma.customer.findFirst({ where, select });
       default:
         // EMPLOYEE / COMPANY / OTHER have no master to check against yet — HR
         // builds the employee one. Refuse instead of accepting an id that

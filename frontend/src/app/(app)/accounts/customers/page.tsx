@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Handshake, Plus } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
@@ -13,9 +13,9 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
-import { Input, Checkbox, Textarea } from '@/components/ui/Field';
+import { Input, Checkbox, Select, Textarea } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import type { Customer } from '@/lib/types';
+import type { CoaAccount, Customer } from '@/lib/types';
 
 const ROUTE = '/accounts/customers';
 
@@ -28,6 +28,7 @@ const empty = {
   address: '',
   creditDays: '',
   creditLimit: '',
+  controlAccountId: '',
   isActive: true,
 };
 
@@ -36,6 +37,26 @@ export default function CustomersPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<Customer[]>('/customers');
+  // The receivable control accounts this company posts to — the mirror of the
+  // supplier master's main ledger, read the same way.
+  const { data: accounts } = useFetch<CoaAccount[]>('/coa/accounts');
+  const mainLedgers = useMemo(
+    () =>
+      (accounts ?? [])
+        .filter(
+          (a) =>
+            a.isControl &&
+            a.controlParty === 'CUSTOMER' &&
+            a.isActive &&
+            a.adopted &&
+            a.allowPosting !== false,
+        )
+        .map((a) => ({
+          value: String(a.id),
+          label: `${a.code} · ${a.localName ?? a.name}`,
+        })),
+    [accounts],
+  );
   const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
     useLock<Customer>({
       endpoint: '/customers',
@@ -70,6 +91,7 @@ export default function CustomersPage() {
     address: s.address ?? '',
     creditDays: s.creditDays == null ? '' : String(s.creditDays),
     creditLimit: s.creditLimit == null ? '' : String(s.creditLimit),
+    controlAccountId: s.controlAccountId == null ? '' : String(s.controlAccountId),
     isActive: s.isActive,
   });
 
@@ -119,6 +141,8 @@ export default function CustomersPage() {
       // Blank means "no term agreed", which is not the same as zero days.
       creditDays: form.creditDays === '' ? null : Number(form.creditDays),
       creditLimit: form.creditLimit === '' ? null : Number(form.creditLimit),
+      controlAccountId:
+        form.controlAccountId === '' ? null : Number(form.controlAccountId),
       isActive: form.isActive,
     };
     setSaving(true);
@@ -181,6 +205,20 @@ export default function CustomersPage() {
     { key: 'contactPerson', header: 'Contact', accessor: (r) => r.contactPerson ?? '—' },
     { key: 'phone', header: 'Phone', accessor: (r) => r.phone ?? '—' },
     { key: 'gstNumber', header: 'GSTIN', accessor: (r) => r.gstNumber ?? '—' },
+    {
+      key: 'controlAccount',
+      header: 'Main ledger',
+      accessor: (r) =>
+        r.controlAccount ? `${r.controlAccount.code} ${r.controlAccount.name}` : '',
+      render: (r) =>
+        r.controlAccount ? (
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            {r.controlAccount.code} · {r.controlAccount.name}
+          </span>
+        ) : (
+          <span className="text-xs text-slate-300 dark:text-slate-600">Any</span>
+        ),
+    },
     {
       key: 'creditDays',
       header: 'Credit',
@@ -296,6 +334,30 @@ export default function CustomersPage() {
               value={form.gstNumber}
               onChange={(e) => setForm({ ...form, gstNumber: e.target.value })}
             />
+            {/* Which total this customer's balance is part of. Only the
+                receivable control accounts are offered — an ordinary account has
+                no sub-ledger to join. */}
+            <div className="sm:col-span-2">
+              <Select
+                label="Main ledger"
+                value={form.controlAccountId}
+                onChange={(e) =>
+                  setForm({ ...form, controlAccountId: e.target.value })
+                }
+                options={mainLedgers}
+                placeholder={
+                  mainLedgers.length
+                    ? 'Any receivable ledger'
+                    : 'No receivable control account in use here'
+                }
+                disabled={!mainLedgers.length}
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                The control account this customer is kept under. A voucher line
+                naming that account offers only the customers kept under it. Left
+                blank, this customer is offered under every receivable ledger.
+              </p>
+            </div>
             <Textarea
               label="Address"
               wrapClassName="sm:col-span-2"

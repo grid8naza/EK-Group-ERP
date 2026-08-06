@@ -581,7 +581,7 @@ export function VoucherScreen({
                             // The bills belonged to the old party.
                             setLine(i, { partyId: e.target.value, bills: [] })
                           }
-                          options={masters.partyOptions(asks.partyKind)}
+                          options={masters.partyOptions(asks.partyKind, l.accountId)}
                           placeholder={
                             asks.partyKind === 'SUPPLIER'
                               ? 'Which supplier'

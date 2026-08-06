@@ -899,7 +899,7 @@ export function JournalVoucherScreen({
                                   : [],
                               });
                             }}
-                            options={masters.partyOptions(asks.partyKind)}
+                            options={masters.partyOptions(asks.partyKind, l.accountId)}
                             placeholder={
                               asks.partyKind === 'SUPPLIER'
                                 ? 'Supplier'
@@ -1290,7 +1290,10 @@ export function JournalVoucherScreen({
           }
           partyLabel={
             masters
-              .partyOptions(masters.asksFor(pickingLine.accountId).partyKind)
+              .partyOptions(
+                masters.asksFor(pickingLine.accountId).partyKind,
+                pickingLine.accountId,
+              )
               .find((p) => p.value === pickingLine.partyId)?.label ?? 'This party'
           }
           lineAmount={pickingLine.amount}

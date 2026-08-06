@@ -21,13 +21,29 @@ model Supplier {
   creditDays    Int?
   /// The most that may stand unpaid at once. Null = no ceiling agreed.
   creditLimit   Decimal? @db.Decimal(18, 2)
+  /// WHICH control account this supplier's balance is part of — its main
+  /// ledger. A control account is only a total, and this says which total: a
+  /// raw-material vendor sits under Trade Creditors, the electricity board under
+  /// Other Creditors. The sub-ledger under one control account is then exactly
+  /// the parties pointing at it, which is what a voucher line offers to name.
+  ///
+  /// Null on parties recorded before the main ledger was asked for. Those are
+  /// offered under every control account of their kind rather than none, so a
+  /// supplier that pre-dates this cannot become unpostable — set it and the
+  /// supplier narrows to that one ledger.
+  controlAccountId Int?
   isActive      Boolean  @default(true)
   isLocked      Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  /// Same domain file, so this is a real FK — Restrict, because a control
+  /// account with a sub-ledger behind it cannot simply vanish.
+  controlAccount Account? @relation("SupplierControlAccount", fields: [controlAccountId], references: [id], onDelete: Restrict)
+
   @@unique([companyId, code])
   @@index([companyId])
+  @@index([controlAccountId])
   @@map("suppliers")
 }
 
@@ -52,13 +68,19 @@ model Customer {
   creditDays    Int?
   /// The most that may stand unpaid at once. Null = no ceiling agreed.
   creditLimit   Decimal? @db.Decimal(18, 2)
+  /// The receivable control account this customer's balance is part of — the
+  /// mirror of Supplier.controlAccountId, and read the same way.
+  controlAccountId Int?
   isActive      Boolean  @default(true)
   isLocked      Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  controlAccount Account? @relation("CustomerControlAccount", fields: [controlAccountId], references: [id], onDelete: Restrict)
+
   @@unique([companyId, code])
   @@index([companyId])
+  @@index([controlAccountId])
   @@map("customers")
 }
 
@@ -282,6 +304,10 @@ model Account {
   group        AccountGroup     @relation(fields: [groupId], references: [id], onDelete: Restrict)
   companies    AccountCompany[]
   voucherLines VoucherLine[]
+  /// The sub-ledger behind this account, where it is a control account: the
+  /// parties whose balances add up to its total.
+  suppliers    Supplier[]       @relation("SupplierControlAccount")
+  customers    Customer[]       @relation("CustomerControlAccount")
 
   @@index([groupId])
   @@index([isActive])

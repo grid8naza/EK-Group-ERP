@@ -6,6 +6,10 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
+import {
+  CONTROL_ACCOUNT_SELECT,
+  resolveControlAccount,
+} from '../../common/control-account';
 import { CreateCustomerDto, UpdateCustomerDto } from './customer.dto';
 
 /**
@@ -33,12 +37,18 @@ export class CustomerService {
             }
           : {}),
       },
+      // The main ledger comes with the list: a voucher screen filters its party
+      // picker on it, and the master listing names it in a column.
+      include: { controlAccount: CONTROL_ACCOUNT_SELECT },
       orderBy: { name: 'asc' },
     });
   }
 
   async findOne(id: number) {
-    const customer = await this.prisma.customer.findUnique({ where: { id } });
+    const customer = await this.prisma.customer.findUnique({
+      where: { id },
+      include: { controlAccount: CONTROL_ACCOUNT_SELECT },
+    });
     if (!customer) throw new NotFoundException('Customer not found');
     return customer;
   }
@@ -47,6 +57,12 @@ export class CustomerService {
     if (!companyId) {
       throw new BadRequestException('Select a company before adding a customer.');
     }
+    const controlAccountId = await resolveControlAccount(
+      this.prisma,
+      companyId,
+      dto.controlAccountId,
+      'CUSTOMER',
+    );
     // CUS-#### per company, derived MAX + 1 rather than a row count: deleting a
     // customer from the middle must not hand the next one a code already taken.
     for (let i = 0; ; i++) {
@@ -64,8 +80,10 @@ export class CustomerService {
             address: dto.address?.trim() || null,
             creditDays: dto.creditDays ?? null,
             creditLimit: dto.creditLimit ?? null,
+            controlAccountId,
             isActive: dto.isActive ?? true,
           },
+          include: { controlAccount: CONTROL_ACCOUNT_SELECT },
         });
       } catch (e) {
         if (
@@ -97,6 +115,17 @@ export class CustomerService {
     assertUnlocked(existing, 'customer', 'editing');
     const norm = (v?: string | null) =>
       v !== undefined ? v?.trim() || null : undefined;
+    // Checked against the company that OWNS the customer, not the active one:
+    // the main ledger belongs to the party's own books.
+    const controlAccountId =
+      dto.controlAccountId !== undefined
+        ? await resolveControlAccount(
+            this.prisma,
+            existing.companyId,
+            dto.controlAccountId,
+            'CUSTOMER',
+          )
+        : undefined;
     return this.prisma.customer.update({
       where: { id },
       data: {
@@ -108,8 +137,10 @@ export class CustomerService {
         address: norm(dto.address),
         creditDays: dto.creditDays !== undefined ? dto.creditDays : undefined,
         creditLimit: dto.creditLimit !== undefined ? dto.creditLimit : undefined,
+        controlAccountId,
         isActive: dto.isActive,
       },
+      include: { controlAccount: CONTROL_ACCOUNT_SELECT },
     });
   }
 
