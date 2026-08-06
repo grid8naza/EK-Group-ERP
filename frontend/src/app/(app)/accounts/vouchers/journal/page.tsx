@@ -1,18 +1,19 @@
 'use client';
 
-import { VoucherScreen } from '@/components/accounts/VoucherScreen';
+import { JournalVoucherScreen } from '@/components/accounts/JournalVoucherScreen';
 
 /**
  * Journal Voucher — The entry for everything that changes the books without money changing
  * hands: depreciation booked by hand, an accrual, a misposting moved from one
  * head to another.
  *
- * One kind per screen: the shared form is told which voucher it is writing and
- * never offers to change it.
+ * The first of the ten kinds to be given its own form rather than the shared
+ * one: a journal is entered as a journal is written — Dr and Cr lines down the
+ * page, each with its own narration, the two columns totalled at the foot.
  */
 export default function JournalVoucherPage() {
   return (
-    <VoucherScreen
+    <JournalVoucherScreen
       typeCode="JOURNAL"
       route="/accounts/vouchers/journal"
       title="Journal Voucher"

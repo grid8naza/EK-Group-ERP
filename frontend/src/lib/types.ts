@@ -2276,6 +2276,8 @@ export interface Voucher {
   voucherNo: string;
   date: string;
   narration: string | null;
+  /** The document behind the entry — an advice number, a bill, a resolution. */
+  reference: string | null;
   status: VoucherStatus;
   /** What the transaction WAS — TRANSACTION_TYPE / TRANSACTION_SUBTYPE values. */
   transactionTypeId: number | null;

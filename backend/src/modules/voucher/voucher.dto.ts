@@ -140,6 +140,12 @@ export class CreateVoucherDto {
   @MaxLength(500)
   narration?: string;
 
+  /** The document behind the entry — an advice number, a bill, a resolution. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  reference?: string;
+
   /**
    * What the transaction was, over and above which kind of voucher recorded it:
    * a sale, and a B2C one. The subtype must belong to the type — see
@@ -177,6 +183,12 @@ export class UpdateVoucherDto {
   @IsString()
   @MaxLength(500)
   narration?: string;
+
+  /** The document behind the entry — an advice number, a bill, a resolution. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  reference?: string;
 
   /**
    * What the transaction was, over and above which kind of voucher recorded it:

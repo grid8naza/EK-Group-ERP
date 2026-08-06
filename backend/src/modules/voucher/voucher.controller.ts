@@ -72,6 +72,21 @@ export class VoucherController {
     );
   }
 
+  /**
+   * The number the next voucher of this kind would take. A preview for the
+   * entry screen — the number is only settled when the voucher is saved.
+   *
+   * Declared before `:id` so the path is not read as a voucher id.
+   */
+  @Get('next-no')
+  nextNumber(
+    @CompanyId() companyId: number | undefined,
+    @BranchId() branchId: number | undefined,
+    @Query('typeCode') typeCode: string,
+  ) {
+    return this.service.nextNumber(companyId, branchId, typeCode);
+  }
+
   @Get(':id')
   findOne(
     @CompanyId() companyId: number | undefined,

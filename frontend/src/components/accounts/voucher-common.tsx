@@ -1,0 +1,399 @@
+'use client';
+
+import { useMemo } from 'react';
+import { Ban, Plus, Trash2 } from 'lucide-react';
+import { useFetch } from '@/lib/hooks';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { DataTable, type Column } from '@/components/ui/DataTable';
+import { Select } from '@/components/ui/Field';
+import { Badge } from '@/components/ui/Badge';
+import type {
+  BillRefType,
+  CoaAccount,
+  CostCenter,
+  CostObject,
+  Customer,
+  PartyKind,
+  Supplier,
+  Voucher,
+  VoucherStatus,
+} from '@/lib/types';
+
+/**
+ * The parts every voucher screen needs whatever its layout — the masters it
+ * reads, the rules it reads off them, and the listing it opens on.
+ *
+ * The ENTRY FORM deliberately lives outside this file. Each kind of voucher is
+ * entered differently — a journal is two columns of Dr and Cr, a receipt is one
+ * bank line against many bills — and forcing one form to serve all ten is what
+ * makes each of them slightly wrong. What they genuinely share is here; what
+ * they don't, each screen writes for itself.
+ */
+
+// ---- money and dates --------------------------------------------------------
+
+export const num = (v: string | number | null | undefined) => Number(v ?? 0) || 0;
+
+export const money = (v: string | number) =>
+  num(v).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+/** Money is compared in paise: two decimals held as an integer never drift. */
+export const paise = (v: string | number | null | undefined) =>
+  Math.round(num(v) * 100);
+
+export const today = () => new Date().toISOString().slice(0, 10);
+export const asDate = (iso: string) => new Date(iso).toLocaleDateString();
+
+export const statusColor = (s: VoucherStatus) =>
+  s === 'POSTED' ? 'green' : s === 'CANCELLED' ? 'slate' : 'blue';
+
+// ---- the draft a form holds -------------------------------------------------
+
+/** One bill-wise allocation as a form holds it — amounts as text until saved. */
+export type DraftBill = {
+  refType: BillRefType;
+  billRef: string;
+  againstId: string;
+  amount: string;
+};
+
+export const emptyBill = (): DraftBill => ({
+  refType: 'NEW',
+  billRef: '',
+  againstId: '',
+  amount: '',
+});
+
+export const BILL_TYPES: { value: BillRefType; label: string }[] = [
+  { value: 'NEW', label: 'New bill' },
+  { value: 'AGAINST', label: 'Against a bill' },
+  { value: 'ADVANCE', label: 'Advance' },
+  { value: 'ON_ACCOUNT', label: 'On account' },
+];
+
+export type Mode = 'list' | 'edit' | 'view';
+
+/** What a line is asked for, decided by the account it names. */
+export interface LineAsks {
+  /** The account's balance is a total; the line must say whose. */
+  party: boolean;
+  partyKind: PartyKind | null;
+  centre: boolean;
+  object: boolean;
+}
+
+const ASKS_NOTHING: LineAsks = {
+  party: false,
+  partyKind: null,
+  centre: false,
+  object: false,
+};
+
+// ---- the masters every voucher screen reads --------------------------------
+
+/**
+ * The chart, the cost dimensions and the party masters, with the derived lists
+ * an entry form picks from.
+ *
+ * `asksFor` is the one place a screen asks what a line must carry. It answers
+ * from the account alone, exactly as the server does — the entry rules were
+ * already resolved by both checkpoints (company setup, then the account) before
+ * they were sent, so a screen that reads them cannot disagree with the posting
+ * engine about what is required.
+ */
+export function useVoucherMasters() {
+  const { data: accounts } = useFetch<CoaAccount[]>('/coa/accounts');
+  const { data: centres } = useFetch<CostCenter[]>('/cost-centers');
+  const { data: objects } = useFetch<CostObject[]>('/cost-objects');
+  // Who a control-account line can name. Only two masters exist; employee
+  // accounts wait on HR.
+  const { data: suppliers } = useFetch<Supplier[]>('/suppliers');
+  const { data: customers } = useFetch<Customer[]>('/customers');
+
+  // Only accounts this company posts to, and only those that take a
+  // hand-written entry — the rest would be refused on save anyway.
+  const postable = useMemo(
+    () =>
+      (accounts ?? []).filter(
+        (a) => a.adopted && a.isActive && a.allowManualJe && a.allowPosting !== false,
+      ),
+    [accounts],
+  );
+
+  const accountById = useMemo(
+    () => new Map(postable.map((a) => [a.id, a])),
+    [postable],
+  );
+
+  const accountOptions = useMemo(
+    () =>
+      postable.map((a) => ({
+        value: String(a.id),
+        label: `${a.code} · ${a.localName ?? a.name}`,
+      })),
+    [postable],
+  );
+
+  const centreOptions = useMemo(
+    () =>
+      (centres ?? [])
+        .filter((c) => c.isActive)
+        .map((c) => ({ value: String(c.id), label: c.name })),
+    [centres],
+  );
+
+  /** The departments under one division — an object is never named alone. */
+  const objectOptions = (costCenterId: string) =>
+    (objects ?? [])
+      .filter((o) => o.isActive && String(o.costCenterId) === costCenterId)
+      .map((o) => ({ value: String(o.id), label: o.name }));
+
+  /** Who a line to this account may name, from the kind the account is kept by. */
+  const partyOptions = (kind: PartyKind | null) => {
+    const list =
+      kind === 'SUPPLIER'
+        ? suppliers ?? []
+        : kind === 'CUSTOMER'
+          ? customers ?? []
+          : [];
+    return list
+      .filter((p) => p.isActive)
+      .map((p) => ({ value: String(p.id), label: `${p.code} · ${p.name}` }));
+  };
+
+  const asksFor = (accountId: string | number): LineAsks => {
+    const account = accountById.get(Number(accountId));
+    if (!account) return ASKS_NOTHING;
+    return {
+      party: !!account.isControl,
+      partyKind: account.controlParty ?? null,
+      centre: account.entryRules?.costCenter === 'REQUIRED',
+      object: account.entryRules?.costObject === 'REQUIRED',
+    };
+  };
+
+  return {
+    accounts: postable,
+    accountById,
+    accountOptions,
+    centreOptions,
+    objectOptions,
+    partyOptions,
+    asksFor,
+  };
+}
+
+// ---- the listing every voucher screen opens on ------------------------------
+
+export interface VoucherListProps {
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  noun: string;
+  rows: Voucher[];
+  loading: boolean;
+  search: string;
+  onSearchChange: (v: string) => void;
+  statusFilter: string;
+  onStatusFilterChange: (v: string) => void;
+  onRefresh: () => void;
+  onNew: () => void;
+  onOpen: (v: Voucher) => void;
+  onPost: (v: Voucher) => void;
+  onCancel: (v: Voucher) => void;
+  onDelete: (v: Voucher) => void;
+  canAdd: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  /** The grey second line under the narration. Defaults to the line count. */
+  subLabel?: (v: Voucher) => string;
+  /** Columns a kind adds for itself, placed after the date. */
+  extraColumns?: Column<Voucher>[];
+}
+
+/**
+ * The register — every voucher of one kind, and what may still be done to each.
+ *
+ * A draft may be posted, rewritten or thrown away. A posted voucher may only be
+ * cancelled, and cancelling keeps it: the books have to be able to say what
+ * they said, so nothing that reached them is ever removed.
+ */
+export function VoucherList({
+  title,
+  description,
+  icon,
+  noun,
+  rows,
+  loading,
+  search,
+  onSearchChange,
+  statusFilter,
+  onStatusFilterChange,
+  onRefresh,
+  onNew,
+  onOpen,
+  onPost,
+  onCancel,
+  onDelete,
+  canAdd,
+  canEdit,
+  canDelete,
+  subLabel,
+  extraColumns = [],
+}: VoucherListProps) {
+  // No Type column: every row on this screen is the same kind.
+  const columns: Column<Voucher>[] = [
+    {
+      key: 'voucherNo',
+      header: 'Voucher No',
+      className: 'font-medium',
+      accessor: (v) => v.voucherNo,
+    },
+    {
+      key: 'date',
+      header: 'Date',
+      accessor: (v) => v.date,
+      render: (v) => asDate(v.date),
+    },
+    ...extraColumns,
+    {
+      key: 'narration',
+      header: 'Narration',
+      accessor: (v) => v.narration ?? '',
+      render: (v) => (
+        <div>
+          <div className="text-sm text-slate-600 dark:text-slate-300">
+            {v.narration || '—'}
+          </div>
+          <div className="text-xs text-slate-400">
+            {subLabel
+              ? subLabel(v)
+              : `${v.lines.length} line${v.lines.length === 1 ? '' : 's'}${
+                  v.lines[0]?.account
+                    ? ` · ${v.lines[0].account.code} ${v.lines[0].account.name}`
+                    : ''
+                }`}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'amount',
+      header: 'Amount',
+      headerClassName: 'text-right',
+      className: 'text-right tabular-nums',
+      sortAccessor: (v) => num(v.totalDebit),
+      render: (v) => money(v.totalDebit),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      headerClassName: 'text-center',
+      className: 'text-center',
+      accessor: (v) => v.status,
+      render: (v) => (
+        <Badge color={statusColor(v.status)}>
+          {v.status === 'DRAFT'
+            ? 'Draft'
+            : v.status === 'POSTED'
+              ? 'Posted'
+              : 'Cancelled'}
+        </Badge>
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      sortable: false,
+      className: 'w-32',
+      render: (v) => (
+        <div className="flex items-center justify-end gap-1">
+          {v.status === 'DRAFT' && canEdit && (
+            <button
+              className="rounded px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
+              title="Write it to the books"
+              onClick={(e) => {
+                e.stopPropagation();
+                onPost(v);
+              }}
+            >
+              Post
+            </button>
+          )}
+          {v.status === 'POSTED' && canEdit && (
+            <button
+              className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600 dark:hover:bg-slate-800"
+              title={`Cancel this ${noun}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onCancel(v);
+              }}
+            >
+              <Ban className="h-4 w-4" />
+            </button>
+          )}
+          {v.status === 'DRAFT' && canDelete && (
+            <button
+              className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600 dark:hover:bg-slate-800"
+              title="Delete this draft"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(v);
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      ),
+    },
+  ];
+
+  return (
+    <div className="flex h-full flex-col">
+      <PageHeader
+        title={title}
+        description={description}
+        icon={icon}
+        actions={
+          canAdd ? (
+            <button className="btn-primary" onClick={onNew}>
+              <Plus className="mr-1 inline h-4 w-4" />
+              New {title}
+            </button>
+          ) : null
+        }
+      />
+      <div className="min-h-0 flex-1">
+        <DataTable
+          columns={columns}
+          rows={rows}
+          rowKey={(v) => v.id}
+          loading={loading}
+          search={search}
+          onSearchChange={onSearchChange}
+          searchPlaceholder="Search voucher no or narration…"
+          onRefresh={onRefresh}
+          onRowClick={(v) => onOpen(v)}
+          emptyMessage={`No ${noun}s yet.`}
+          toolbar={
+            <Select
+              value={statusFilter}
+              onChange={(e) => onStatusFilterChange(e.target.value)}
+              options={[
+                { value: 'DRAFT', label: 'Draft' },
+                { value: 'POSTED', label: 'Posted' },
+                { value: 'CANCELLED', label: 'Cancelled' },
+              ]}
+              placeholder="Any status"
+              className="w-40"
+            />
+          }
+        />
+      </div>
+    </div>
+  );
+}

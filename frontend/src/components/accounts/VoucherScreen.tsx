@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ArrowLeft, Ban, Check, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Check, Trash2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useFetch, useLookupValues } from '@/lib/hooks';
@@ -10,46 +10,25 @@ import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Input, Select, Textarea } from '@/components/ui/Field';
 import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
-import { Badge } from '@/components/ui/Badge';
 import type {
   BillRefType,
-  CoaAccount,
-  CostCenter,
-  CostObject,
-  Customer,
   OutstandingBill,
-  Supplier,
   Voucher,
-  VoucherStatus,
   VoucherType,
 } from '@/lib/types';
-
-/** One bill-wise allocation as the form holds it — amounts as text until saved. */
-type DraftBill = {
-  refType: BillRefType;
-  billRef: string;
-  againstId: string;
-  amount: string;
-};
-
-const emptyBill = (): DraftBill => ({
-  refType: 'NEW',
-  billRef: '',
-  againstId: '',
-  amount: '',
-});
-
-const BILL_TYPES: { value: BillRefType; label: string }[] = [
-  { value: 'NEW', label: 'New bill' },
-  { value: 'AGAINST', label: 'Against a bill' },
-  { value: 'ADVANCE', label: 'Advance' },
-  { value: 'ON_ACCOUNT', label: 'On account' },
-];
-
-type Mode = 'list' | 'edit' | 'view';
+import {
+  BILL_TYPES,
+  type DraftBill,
+  type Mode,
+  VoucherList,
+  emptyBill,
+  money,
+  num,
+  today,
+  useVoucherMasters,
+} from './voucher-common';
 
 export interface VoucherScreenProps {
   /** The one kind this screen writes — a `VoucherType.code` (e.g. CASH_RECEIPT). */
@@ -94,18 +73,6 @@ const emptyLine = (): DraftLine => ({
   bills: [],
 });
 
-const num = (v: string | number | null | undefined) => Number(v ?? 0) || 0;
-const money = (v: string | number) =>
-  num(v).toLocaleString(undefined, {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-const today = () => new Date().toISOString().slice(0, 10);
-const asDate = (iso: string) => new Date(iso).toLocaleDateString();
-
-const statusColor = (s: VoucherStatus) =>
-  s === 'POSTED' ? 'green' : s === 'CANCELLED' ? 'slate' : 'blue';
-
 /**
  * One kind of voucher, on its own screen.
  *
@@ -135,17 +102,11 @@ export function VoucherScreen({
   const Icon = resolveIcon(icon);
 
   const { data: types } = useFetch<VoucherType[]>('/vouchers/types');
-  const { data: accounts } = useFetch<CoaAccount[]>('/coa/accounts');
-  const { data: centres } = useFetch<CostCenter[]>('/cost-centers');
-  const { data: objects } = useFetch<CostObject[]>('/cost-objects');
+  const masters = useVoucherMasters();
   // What the transaction WAS, over and above which voucher recorded it. One
   // global taxonomy, shared with stock movements and documents.
   const txnTypes = useLookupValues('TRANSACTION_TYPE');
   const txnSubtypes = useLookupValues('TRANSACTION_SUBTYPE');
-  // Who a control-account line can name. Only two masters exist; employee
-  // accounts wait on HR.
-  const { data: suppliers } = useFetch<Supplier[]>('/suppliers');
-  const { data: customers } = useFetch<Customer[]>('/customers');
 
   // The kind's id in THIS database — the screen knows its code, the server
   // assigns the id.
@@ -197,28 +158,6 @@ export function VoucherScreen({
   const canAdd = can(route, 'add');
   const canEdit = can(route, 'edit');
   const canDelete = can(route, 'delete');
-
-  // Only accounts this company posts to, and only those that take a
-  // hand-written entry — the rest would be refused on save anyway.
-  const postable = useMemo(
-    () =>
-      (accounts ?? []).filter(
-        (a) => a.adopted && a.isActive && a.allowManualJe && a.allowPosting !== false,
-      ),
-    [accounts],
-  );
-  const accountById = useMemo(
-    () => new Map(postable.map((a) => [a.id, a])),
-    [postable],
-  );
-  const accountOptions = useMemo(
-    () =>
-      postable.map((a) => ({
-        value: String(a.id),
-        label: `${a.code} · ${a.localName ?? a.name}`,
-      })),
-    [postable],
-  );
 
   const startNew = () => {
     setEditing(null);
@@ -274,7 +213,7 @@ export function VoucherScreen({
 
   const openBillEditor = async (i: number) => {
     const l = lines[i];
-    const account = accountById.get(Number(l.accountId));
+    const account = masters.accountById.get(Number(l.accountId));
     setBillsFor(i);
     setOpenBills([]);
     if (!account?.controlParty || !l.partyId) return;
@@ -312,35 +251,6 @@ export function VoucherScreen({
     return { dr: dr / 100, cr: cr / 100, diff: (dr - cr) / 100 };
   }, [lines]);
   const balanced = totals.diff === 0 && totals.dr > 0;
-
-  /** What each line is asked for, from the account it names. */
-  const asksFor = (l: DraftLine) => {
-    const account = accountById.get(Number(l.accountId));
-    return {
-      centre: account?.entryRules
-        ? account.entryRules.costCenter === 'REQUIRED'
-        : false,
-      object: account?.entryRules
-        ? account.entryRules.costObject === 'REQUIRED'
-        : false,
-      // A control account's balance is only a total; the line must say whose.
-      party: !!account?.isControl,
-      partyKind: account?.controlParty ?? null,
-    };
-  };
-
-  /** Who a line to this account may name, from the kind the account is kept by. */
-  const partyOptions = (kind: string | null) => {
-    const list =
-      kind === 'SUPPLIER'
-        ? suppliers ?? []
-        : kind === 'CUSTOMER'
-          ? customers ?? []
-          : [];
-    return list
-      .filter((p) => p.isActive)
-      .map((p) => ({ value: String(p.id), label: `${p.code} · ${p.name}` }));
-  };
 
   const body = () => ({
     voucherTypeId: voucherType?.id ?? 0,
@@ -460,157 +370,44 @@ export function VoucherScreen({
 
   // ---- listing ----------------------------------------------------------------
 
-  // No Type column: every row on this screen is the same kind.
-  const columns: Column<Voucher>[] = [
-    {
-      key: 'voucherNo',
-      header: 'Voucher No',
-      className: 'font-medium',
-      accessor: (v) => v.voucherNo,
-    },
-    {
-      key: 'date',
-      header: 'Date',
-      accessor: (v) => v.date,
-      render: (v) => asDate(v.date),
-    },
-    {
-      key: 'narration',
-      header: 'Narration',
-      accessor: (v) => v.narration ?? '',
-      render: (v) => (
-        <div>
-          <div className="text-sm text-slate-600 dark:text-slate-300">
-            {v.narration || '—'}
-          </div>
-          <div className="text-xs text-slate-400">
-            {v.transactionSubtypeId
-              ? `${txnLabel.get(v.transactionSubtypeId) ?? '—'} · `
-              : ''}
-            {v.lines.length} line{v.lines.length === 1 ? '' : 's'}
-            {v.lines[0]?.account
-              ? ` · ${v.lines[0].account.code} ${v.lines[0].account.name}`
-              : ''}
-          </div>
-        </div>
-      ),
-    },
-    {
-      key: 'amount',
-      header: 'Amount',
-      headerClassName: 'text-right',
-      className: 'text-right tabular-nums',
-      sortAccessor: (v) => num(v.totalDebit),
-      render: (v) => money(v.totalDebit),
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      headerClassName: 'text-center',
-      className: 'text-center',
-      accessor: (v) => v.status,
-      render: (v) => (
-        <Badge color={statusColor(v.status)}>
-          {v.status === 'DRAFT'
-            ? 'Draft'
-            : v.status === 'POSTED'
-              ? 'Posted'
-              : 'Cancelled'}
-        </Badge>
-      ),
-    },
-    {
-      key: 'actions',
-      header: '',
-      sortable: false,
-      className: 'w-32',
-      render: (v) => (
-        <div className="flex items-center justify-end gap-1">
-          {v.status === 'DRAFT' && canEdit && (
-            <button
-              className="rounded px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
-              title="Write it to the books"
-              onClick={(e) => {
-                e.stopPropagation();
-                void postExisting(v);
-              }}
-            >
-              Post
-            </button>
-          )}
-          {v.status === 'POSTED' && canEdit && (
-            <button
-              className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600 dark:hover:bg-slate-800"
-              title={`Cancel this ${noun}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                void cancel(v);
-              }}
-            >
-              <Ban className="h-4 w-4" />
-            </button>
-          )}
-          {v.status === 'DRAFT' && canDelete && (
-            <button
-              className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600 dark:hover:bg-slate-800"
-              title="Delete this draft"
-              onClick={(e) => {
-                e.stopPropagation();
-                void remove(v);
-              }}
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          )}
-        </div>
-      ),
-    },
-  ];
-
   if (mode === 'list') {
     return (
-      <div className="flex h-full flex-col">
-        <PageHeader
-          title={title}
-          description={description}
-          icon={<Icon className="h-5 w-5" />}
-          actions={
-            canAdd ? (
-              <button className="btn-primary" onClick={startNew}>
-                <Plus className="mr-1 inline h-4 w-4" />
-                New {title}
-              </button>
-            ) : null
-          }
-        />
-        <div className="min-h-0 flex-1">
-          <DataTable
-            columns={columns}
-            rows={rows ?? []}
-            rowKey={(v) => v.id}
-            loading={loading}
-            search={search}
-            onSearchChange={setSearch}
-            searchPlaceholder="Search voucher no or narration…"
-            onRefresh={refetch}
-            onRowClick={(v) => open(v, v.status === 'DRAFT' ? 'edit' : 'view')}
-            emptyMessage={`No ${noun}s yet.`}
-            toolbar={
-              <Select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                options={[
-                  { value: 'DRAFT', label: 'Draft' },
-                  { value: 'POSTED', label: 'Posted' },
-                  { value: 'CANCELLED', label: 'Cancelled' },
-                ]}
-                placeholder="Any status"
-                className="w-40"
-              />
-            }
-          />
-        </div>
-      </div>
+      <VoucherList
+        title={title}
+        description={description}
+        icon={<Icon className="h-5 w-5" />}
+        noun={noun}
+        rows={rows ?? []}
+        loading={loading}
+        search={search}
+        onSearchChange={setSearch}
+        statusFilter={statusFilter}
+        onStatusFilterChange={setStatusFilter}
+        onRefresh={refetch}
+        onNew={startNew}
+        onOpen={(v) => open(v, v.status === 'DRAFT' ? 'edit' : 'view')}
+        onPost={(v) => void postExisting(v)}
+        onCancel={(v) => void cancel(v)}
+        onDelete={(v) => void remove(v)}
+        canAdd={canAdd}
+        canEdit={canEdit}
+        canDelete={canDelete}
+        // What the transaction WAS, ahead of the line count — on these kinds it
+        // is the thing that tells two otherwise identical vouchers apart.
+        subLabel={(v) =>
+          [
+            v.transactionSubtypeId
+              ? txnLabel.get(v.transactionSubtypeId) ?? '—'
+              : '',
+            `${v.lines.length} line${v.lines.length === 1 ? '' : 's'}`,
+            v.lines[0]?.account
+              ? `${v.lines[0].account.code} ${v.lines[0].account.name}`
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' · ')
+        }
+      />
     );
   }
 
@@ -733,16 +530,9 @@ export function VoucherScreen({
             </thead>
             <tbody>
               {lines.map((l, i) => {
-                const asks = asksFor(l);
-                const centreOptions = (centres ?? [])
-                  .filter((c) => c.isActive)
-                  .map((c) => ({ value: String(c.id), label: c.name }));
-                const objectOptions = (objects ?? [])
-                  .filter(
-                    (o) =>
-                      o.isActive && String(o.costCenterId) === l.costCenterId,
-                  )
-                  .map((o) => ({ value: String(o.id), label: o.name }));
+                const asks = masters.asksFor(l.accountId);
+                const centreOptions = masters.centreOptions;
+                const objectOptions = masters.objectOptions(l.costCenterId);
                 return (
                   <tr
                     key={i}
@@ -763,7 +553,7 @@ export function VoucherScreen({
                             bills: [],
                           })
                         }
-                        options={accountOptions}
+                        options={masters.accountOptions}
                         placeholder="Choose an account"
                       />
                     </td>
@@ -778,7 +568,7 @@ export function VoucherScreen({
                             // The bills belonged to the old party.
                             setLine(i, { partyId: e.target.value, bills: [] })
                           }
-                          options={partyOptions(asks.partyKind)}
+                          options={masters.partyOptions(asks.partyKind)}
                           placeholder={
                             asks.partyKind === 'SUPPLIER'
                               ? 'Which supplier'

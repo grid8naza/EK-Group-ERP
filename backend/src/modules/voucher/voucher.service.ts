@@ -235,6 +235,37 @@ export class VoucherService {
       .filter((b) => paise(b.pending) > 0);
   }
 
+  /**
+   * The number the next voucher of this kind would take, so an entry screen can
+   * show it before anything is saved.
+   *
+   * A PREVIEW, not a reservation. Numbers are derived (MAX + 1), so nothing is
+   * held back and two people who open the form together are shown the same one;
+   * whoever saves first takes it and the other is renumbered on save. That is
+   * the honest behaviour for a derived series — the alternative would be a
+   * counter, and a counter that hands out numbers to forms nobody submits
+   * leaves gaps the books cannot explain.
+   */
+  async nextNumber(
+    companyId: number | undefined,
+    branchId: number | undefined,
+    typeCode: string,
+  ) {
+    if (!companyId) throw new BadRequestException('Select a company first.');
+    const type = await this.prisma.voucherType.findUnique({
+      where: { code: typeCode },
+    });
+    if (!type) throw new NotFoundException('Voucher type not found');
+    // No branch assertion: this only shows a number. A missing branch is caught
+    // on save, where it can still be acted on.
+    const voucherNo = await this.numbering.nextOrDefault(
+      { companyId, branchId: branchId ?? null },
+      type.documentCode,
+      { prefix: VOUCHER_NUMBER_PREFIX[type.code] ?? 'VCH-', padding: 5 },
+    );
+    return { voucherNo };
+  }
+
   async findOne(companyId: number | undefined, id: number) {
     const voucher = await this.prisma.voucher.findUnique({
       where: { id },
@@ -283,6 +314,7 @@ export class VoucherService {
           voucherNo,
           date,
           narration: dto.narration?.trim() || null,
+          reference: dto.reference?.trim() || null,
           ...txn,
           status,
           totalDebit: totals.debit,
@@ -387,6 +419,8 @@ export class VoucherService {
           branchId: branch,
           narration:
             dto.narration !== undefined ? dto.narration?.trim() || null : undefined,
+          reference:
+            dto.reference !== undefined ? dto.reference?.trim() || null : undefined,
           ...txn,
           status,
           totalDebit: totals.debit,

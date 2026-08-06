@@ -384,6 +384,11 @@ model Voucher {
   date          DateTime
   narration     String?
 
+  /// The paper behind the entry — a bank advice number, the supplier's own bill
+  /// number, a board resolution. Free text on purpose: what it points at lives
+  /// outside the books, and a lookup would be a promise this cannot keep.
+  reference     String?
+
   /// WHAT the transaction was, over and above which kind of voucher recorded it.
   /// The voucher type says a sale was made; these say it was a B2C sale rather
   /// than an intercompany one — the distinction the statements are cut by and
