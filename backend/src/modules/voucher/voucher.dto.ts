@@ -35,6 +35,16 @@ export class BillAllocationInput {
   billRef?: string;
 
   /**
+   * Which way this allocation moves the balance. Defaults to the side of the
+   * line it sits on, which is the ordinary case. Set it to the other side to
+   * adjust a credit or debit note against what is being settled — the line's
+   * amount is then the NET of them all.
+   */
+  @IsOptional()
+  @IsIn(['DR', 'CR'])
+  side?: 'DR' | 'CR';
+
+  /**
    * What an advance or on-account amount is called. ADVANCE / ON_ACCOUNT only —
    * a bill already names itself, so this is ignored on NEW and AGAINST.
    */

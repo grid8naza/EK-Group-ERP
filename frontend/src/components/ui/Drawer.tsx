@@ -230,6 +230,12 @@ interface DrawerFooterProps {
   /** Called with the chosen mode. Action dialogs may ignore the argument. */
   onSave: (mode: SaveMode) => void;
   saving?: boolean;
+  /**
+   * Refuse the action while it cannot be right — a selection that does not add
+   * up, a form the drawer itself can tell is incomplete. Distinct from `saving`,
+   * which means "in flight" and says so on the button.
+   */
+  saveDisabled?: boolean;
   saveLabel?: string;
   /**
    * Data-entry record forms set this to show the standard four-button set:
@@ -252,6 +258,7 @@ export function DrawerFooter({
   onCancel,
   onSave,
   saving,
+  saveDisabled = false,
   saveLabel = 'Save',
   dataEntry = false,
   leading,
@@ -263,7 +270,7 @@ export function DrawerFooter({
   //   Esc             → Cancel (handled by the Drawer's own Escape listener)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || saving) return;
+      if (!(e.ctrlKey || e.metaKey) || saving || saveDisabled) return;
       if (e.key.toLowerCase() === 's') {
         e.preventDefault();
         onSave(e.shiftKey && dataEntry ? 'saveClose' : 'save');
@@ -274,7 +281,7 @@ export function DrawerFooter({
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [onSave, saving, dataEntry]);
+  }, [onSave, saving, saveDisabled, dataEntry]);
 
   return (
     <div className="flex flex-nowrap items-center justify-end gap-2">
@@ -284,7 +291,7 @@ export function DrawerFooter({
         className="btn-success whitespace-nowrap"
         title="Ctrl+S"
         onClick={() => onSave('save')}
-        disabled={saving}
+        disabled={saving || saveDisabled}
       >
         {saving ? 'Saving...' : saveLabel}
       </button>

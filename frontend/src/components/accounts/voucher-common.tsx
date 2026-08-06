@@ -9,6 +9,7 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import type {
+  BalanceSide,
   BillRefType,
   CoaAccount,
   CostCenter,
@@ -57,6 +58,12 @@ export const statusColor = (s: VoucherStatus) =>
 /** One bill-wise allocation as a form holds it — amounts as text until saved. */
 export type DraftBill = {
   refType: BillRefType;
+  /**
+   * Which way this allocation pulls. Normally its line's side; the other when a
+   * credit or debit note is being adjusted against what is being settled, in
+   * which case the line's amount is the NET of them all.
+   */
+  side: BalanceSide;
   billRef: string;
   /** What an advance or on-account amount is called. Those two only. */
   refNote: string;
@@ -64,13 +71,27 @@ export type DraftBill = {
   amount: string;
 };
 
-export const emptyBill = (): DraftBill => ({
+export const emptyBill = (side: BalanceSide = 'DR'): DraftBill => ({
   refType: 'NEW',
+  side,
   billRef: '',
   refNote: '',
   againstId: '',
   amount: '',
 });
+
+/**
+ * What a stack of allocations comes to, read against the side of its line.
+ *
+ * A NET, not a sum: an allocation pulling the other way subtracts. That is what
+ * makes "two invoices less a credit note" one line whose amount is what
+ * actually moved, with each bill still carrying its own true figure.
+ */
+export const netOf = (bills: DraftBill[], lineSide: BalanceSide) =>
+  bills.reduce(
+    (t, b) => t + (b.side === lineSide ? paise(b.amount) : -paise(b.amount)),
+    0,
+  );
 
 export const BILL_TYPES: { value: BillRefType; label: string }[] = [
   { value: 'NEW', label: 'New bill' },
@@ -78,6 +99,9 @@ export const BILL_TYPES: { value: BillRefType; label: string }[] = [
   { value: 'ADVANCE', label: 'Advance' },
   { value: 'ON_ACCOUNT', label: 'On account' },
 ];
+
+export const otherSide = (side: BalanceSide): BalanceSide =>
+  side === 'DR' ? 'CR' : 'DR';
 
 export type Mode = 'list' | 'edit' | 'view';
 

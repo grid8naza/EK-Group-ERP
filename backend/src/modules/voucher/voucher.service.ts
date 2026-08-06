@@ -5,7 +5,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { BillRefType, PartyKind, Prisma, VoucherStatus } from '@prisma/client';
+import {
+  BalanceSide,
+  BillRefType,
+  PartyKind,
+  Prisma,
+  VoucherStatus,
+} from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   NUMBERING,
@@ -25,6 +31,7 @@ import {
   BillAllocationInput,
 } from './voucher.dto';
 import { VOUCHER_NUMBER_PREFIX } from './voucher-types';
+import { sideOf } from './bill-side';
 
 /** Money is compared in paise: two decimals held as an integer never drift. */
 const paise = (n: number) => Math.round(n * 100);
@@ -59,6 +66,7 @@ const asInput = (l: {
   partyId: number | null;
   billRefs?: {
     refType: BillRefType;
+    side: BalanceSide | null;
     billRef: string | null;
     refNote: string | null;
     againstId: number | null;
@@ -77,6 +85,7 @@ const asInput = (l: {
   // same facts rather than finding no bills and refusing the line.
   bills: l.billRefs?.map((b) => ({
     refType: b.refType,
+    side: b.side ?? undefined,
     billRef: b.billRef ?? undefined,
     refNote: b.refNote ?? undefined,
     againstId: b.againstId ?? undefined,
@@ -98,6 +107,7 @@ interface ResolvedTransaction {
 /** One bill-wise allocation, checked and ready to be written. */
 interface ResolvedBill {
   refType: BillRefType;
+  side: BalanceSide;
   billRef: string | null;
   refNote: string | null;
   againstId: number | null;
@@ -204,12 +214,14 @@ export class VoucherService {
         id: true,
         billRef: true,
         amount: true,
+        side: true,
+        line: { select: { debit: true } },
         date: true,
         dueDate: true,
         accountId: true,
         payments: {
           where: { status: 'POSTED' },
-          select: { amount: true },
+          select: { amount: true, side: true, line: { select: { debit: true } } },
         },
       },
       orderBy: [{ date: 'asc' }, { id: 'asc' }],
@@ -218,12 +230,21 @@ export class VoucherService {
     const today = new Date();
     return raised
       .map((b) => {
-        const settled = b.payments.reduce((s, p) => s + paise(Number(p.amount)), 0);
+        // A bill stands one way — an invoice one way, a credit note the other —
+        // and what has been posted against it counts for or against that.
+        const billSide = sideOf(b);
+        const settled = b.payments.reduce(
+          (s, p) =>
+            s + (sideOf(p) === billSide ? -paise(Number(p.amount)) : paise(Number(p.amount))),
+          0,
+        );
         const pending = paise(Number(b.amount)) - settled;
         return {
           id: b.id,
           billRef: b.billRef,
           accountId: b.accountId,
+          /** Which way it stands, so a settlement knows which way to go. */
+          side: billSide,
           date: b.date,
           dueDate: b.dueDate,
           amount: Number(b.amount),
@@ -345,6 +366,7 @@ export class VoucherService {
                         partyKind: l.partyKind!,
                         partyId: l.partyId!,
                         refType: b.refType,
+                        side: b.side,
                         billRef: b.billRef,
                         refNote: b.refNote,
                         againstId: b.againstId,
@@ -451,6 +473,7 @@ export class VoucherService {
                         partyKind: l.partyKind!,
                         partyId: l.partyId!,
                         refType: b.refType,
+                        side: b.side,
                         billRef: b.billRef,
                         refNote: b.refNote,
                         againstId: b.againstId,
@@ -745,6 +768,7 @@ export class VoucherService {
         companyId,
         party,
         fromPaise(debit || credit),
+        debit ? 'DR' : 'CR',
         line.bills,
         date,
         at,
@@ -877,11 +901,18 @@ export class VoucherService {
   /**
    * Which of the party's bills this line's amount belongs to.
    *
-   * The one rule everything else follows from: the allocations must add up to
-   * the line. A line that moves 1,000 of a party's balance has moved it against
-   * some combination of that party's bills, and if the parts do not sum to the
-   * whole then the account and the sub-ledger have begun to disagree — quietly,
-   * and in a way no later report can repair.
+   * The one rule everything else follows from: the allocations must come to the
+   * line. A line that moves 1,000 of a party's balance has moved it against some
+   * combination of that party's bills, and if the parts do not make up the whole
+   * then the account and the sub-ledger have begun to disagree — quietly, and in
+   * a way no later report can repair.
+   *
+   * They come to it as a NET, not a sum, because an allocation carries its own
+   * side. Paying two invoices less a credit note is three allocations on one
+   * line: two the line's way and one the other, netting to what actually left
+   * the bank. Each bill is still moved by its own true figure, which is the
+   * point — the note is adjusted against the invoice in the sub-ledger rather
+   * than being buried inside a smaller payment.
    *
    * A control-account line must therefore carry allocations. ON_ACCOUNT is the
    * escape hatch, not an omission: it records that the bill is not yet known,
@@ -892,6 +923,8 @@ export class VoucherService {
     companyId: number,
     party: { partyKind: PartyKind | null; partyId: number | null },
     amount: number,
+    /** The side of the line. Each allocation takes it unless it says otherwise. */
+    lineSide: BalanceSide,
     inputs: BillAllocationInput[] | undefined,
     date: Date,
     at: string,
@@ -906,14 +939,23 @@ export class VoucherService {
       );
     }
 
-    const total = inputs.reduce((s, b) => s + paise(b.amount), 0);
-    if (total !== paise(amount)) {
+    const net = inputs.reduce(
+      (s, b) =>
+        s + ((b.side ?? lineSide) === lineSide ? paise(b.amount) : -paise(b.amount)),
+      0,
+    );
+    if (net !== paise(amount)) {
+      const mixed = inputs.some((b) => (b.side ?? lineSide) !== lineSide);
       throw new BadRequestException(
-        `The bills on ${at} come to ${fromPaise(total).toFixed(2)}, but the line is ${amount.toFixed(2)}.`,
+        mixed
+          ? `The bills on ${at} come to a net ${fromPaise(net).toFixed(2)} ${lineSide}, but the line is ${amount.toFixed(2)} ${lineSide}.`
+          : `The bills on ${at} come to ${fromPaise(net).toFixed(2)}, but the line is ${amount.toFixed(2)}.`,
       );
     }
 
-    // Everything an AGAINST row points at, read once.
+    // Everything an AGAINST row points at, read once. The target's own side
+    // decides whether a settlement reduces it or adds to it, and a row written
+    // before allocations carried a side takes its line's.
     const targetIds = inputs
       .filter((b) => b.refType === 'AGAINST')
       .map((b) => b.againstId)
@@ -925,6 +967,8 @@ export class VoucherService {
             id: true,
             billRef: true,
             amount: true,
+            side: true,
+            line: { select: { debit: true } },
             companyId: true,
             partyKind: true,
             partyId: true,
@@ -943,6 +987,10 @@ export class VoucherService {
     const raising = new Set<string>();
 
     for (const b of inputs) {
+      // The line's side unless this allocation says otherwise — an adjustment
+      // pulling the other way is the only reason it ever differs.
+      const side: BalanceSide = b.side ?? lineSide;
+
       if (b.refType === 'NEW') {
         const ref = b.billRef?.trim();
         if (!ref) {
@@ -969,6 +1017,7 @@ export class VoucherService {
             : date;
         resolved.push({
           refType: 'NEW',
+          side,
           billRef: ref,
           // A bill already names itself; a note beside its number would be a
           // second name for the same thing.
@@ -1003,14 +1052,24 @@ export class VoucherService {
             `Bill ${target.billRef} is not in the books yet — post it before settling it (${at}).`,
           );
         }
-        const left = await this.outstanding(target.id, Number(target.amount));
-        if (paise(b.amount) > paise(left)) {
-          throw new BadRequestException(
-            `Only ${left.toFixed(2)} is outstanding on bill ${target.billRef} — ${b.amount.toFixed(2)} would over-settle it (${at}).`,
-          );
+        // Which way the bill itself stands, so we know whether this allocation
+        // is settling it or adding to it.
+        const billSide = sideOf(target);
+        if (side !== billSide) {
+          // Settling. It cannot clear more than the bill still owes.
+          const left = await this.outstanding(target.id, billSide, Number(target.amount));
+          if (paise(b.amount) > paise(left)) {
+            throw new BadRequestException(
+              `Only ${left.toFixed(2)} is outstanding on bill ${target.billRef} — ${b.amount.toFixed(2)} would over-settle it (${at}).`,
+            );
+          }
         }
+        // Same side as the bill: this ADDS to it — a supplementary charge, or a
+        // note raised against an invoice already in the books. There is no
+        // ceiling on what a party can come to owe, so nothing to check.
         resolved.push({
           refType: 'AGAINST',
+          side,
           // NOT the target's ref. `billRef` is the bill's NAME, and only the
           // NEW row that raised it holds one — which is exactly what makes
           // [company, party, billRef] unique mean "a bill number is a party's
@@ -1030,6 +1089,7 @@ export class VoucherService {
       // it. Kept out of `billRef` deliberately: see BillAllocation.refNote.
       resolved.push({
         refType: b.refType as BillRefType,
+        side,
         billRef: null,
         refNote: b.refNote?.trim() || null,
         againstId: null,
@@ -1094,17 +1154,30 @@ export class VoucherService {
    * posted against it. Derived rather than stored, so a cancelled settlement
    * puts the bill back where it was without anything having to remember to.
    */
-  private async outstanding(billId: number, raised: number): Promise<number> {
-    // Only POSTED settlements reduce a bill. A draft has not happened yet, so
-    // it holds nothing back — and re-checking a draft therefore never counts
-    // its own allocation against it. Two drafts may each claim the whole
-    // amount; whichever posts second is refused, which is the right moment to
-    // find out.
-    const settled = await this.prisma.billAllocation.aggregate({
+  private async outstanding(
+    billId: number,
+    /** Which way the bill itself stands. */
+    billSide: BalanceSide,
+    raised: number,
+  ): Promise<number> {
+    // Only POSTED settlements move a bill. A draft has not happened yet, so it
+    // holds nothing back — and re-checking a draft therefore never counts its
+    // own allocation against it. Two drafts may each claim the whole amount;
+    // whichever posts second is refused, which is the right moment to find out.
+    const against = await this.prisma.billAllocation.findMany({
       where: { againstId: billId, status: 'POSTED' },
-      _sum: { amount: true },
+      select: { amount: true, side: true, line: { select: { debit: true } } },
     });
-    return fromPaise(paise(raised) - paise(Number(settled._sum.amount ?? 0)));
+    return fromPaise(
+      against.reduce(
+        // Against the bill's own direction it settles; with it, it adds — a
+        // supplementary charge is as real as a payment.
+        (left, a) =>
+          left +
+          (sideOf(a) === billSide ? paise(Number(a.amount)) : -paise(Number(a.amount))),
+        paise(raised),
+      ),
+    );
   }
 
   /** The party's agreed credit period, for dating a new bill. */

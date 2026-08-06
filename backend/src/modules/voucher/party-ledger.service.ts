@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PartyKind } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { sideOf } from './bill-side';
 
 /** Money is compared in paise: two decimals held as an integer never drift. */
 const paise = (n: number) => Math.round(n * 100);
@@ -189,13 +190,15 @@ export class PartyLedgerService {
         partyId: true,
         billRef: true,
         amount: true,
+        side: true,
+        line: { select: { debit: true } },
         date: true,
         dueDate: true,
         // Only settlements up to the as-on date count — the report is a view of
         // that day, not of today.
         payments: {
           where: { status: 'POSTED', date: { lte: on } },
-          select: { amount: true },
+          select: { amount: true, side: true, line: { select: { debit: true } } },
         },
       },
       orderBy: [{ partyId: 'asc' }, { date: 'asc' }],
@@ -230,7 +233,18 @@ export class PartyLedgerService {
     >();
 
     for (const b of bills) {
-      const settled = b.payments.reduce((s, p) => s + paise(Number(p.amount)), 0);
+      // A bill stands one way and what is posted against it counts for or
+      // against that direction — a credit note adjusted onto an invoice reduces
+      // it exactly as a payment does. Same rule as VoucherService.outstanding.
+      const billSide = sideOf(b);
+      const settled = b.payments.reduce(
+        (s, p) =>
+          s +
+          (sideOf(p) === billSide
+            ? -paise(Number(p.amount))
+            : paise(Number(p.amount))),
+        0,
+      );
       const pending = paise(Number(b.amount)) - settled;
       if (pending <= 0) continue; // settled by the as-on date
 

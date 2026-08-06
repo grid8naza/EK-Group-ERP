@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
 import { Input } from '@/components/ui/Field';
-import type { OutstandingBill } from '@/lib/types';
+import type { BalanceSide, OutstandingBill } from '@/lib/types';
 import { money, num, paise } from './voucher-common';
 
 /** One bill being settled, as the picker hands it back. */
@@ -12,6 +12,13 @@ export interface BillPick {
   id: number;
   /** How much of the line goes against it. Text, like every draft figure. */
   amount: string;
+  /**
+   * Which way the allocation pulls — the opposite of the way the bill stands,
+   * because settling a bill moves it back towards nil. So an invoice is settled
+   * one way and a credit note the other, and adjusting a note against an
+   * invoice in the same breath comes out right without anyone doing the signs.
+   */
+  side: BalanceSide;
 }
 
 export interface BillPickerProps {
@@ -20,9 +27,11 @@ export interface BillPickerProps {
   /** Everything the party still owes — the whole list, not a search result. */
   bills: OutstandingBill[];
   partyLabel: string;
-  /** What the line moves; the settlements have to fit inside it. */
+  /** What the line moves; the settlements have to come to exactly this. */
   lineAmount: string;
-  /** What the line's OTHER rows already account for. */
+  /** The side of the line, which the selection has to net out on. */
+  lineSide: BalanceSide;
+  /** The NET of the line's OTHER rows, read against the line's side. */
   otherAllocated: number;
   /** Bills already being settled by this row, so reopening shows them ticked. */
   initial: BillPick[];
@@ -53,6 +62,7 @@ export function BillPicker({
   bills,
   partyLabel,
   lineAmount,
+  lineSide,
   otherAllocated,
   initial,
   onApply,
@@ -87,13 +97,34 @@ export function BillPicker({
     [bills, q],
   );
 
-  const selected = useMemo(
-    () => [...picked.values()].reduce((t, a) => t + paise(a), 0),
-    [picked],
-  );
+  /** Settling a bill pulls the opposite way to the way it stands. */
+  const settleSide = (b: OutstandingBill): BalanceSide =>
+    b.side === 'DR' ? 'CR' : 'DR';
+
+  const byId = useMemo(() => new Map(bills.map((b) => [b.id, b])), [bills]);
+
+  /**
+   * What the ticked bills come to, read against the LINE's side.
+   *
+   * An invoice and a credit note are settled in opposite directions, so this is
+   * a net: tick both and the selection is what the payment actually comes to,
+   * which is the figure that has to match the line.
+   */
+  const selected = useMemo(() => {
+    let net = 0;
+    for (const [id, amount] of picked) {
+      const bill = byId.get(id);
+      if (!bill) continue;
+      net += settleSide(bill) === lineSide ? paise(amount) : -paise(amount);
+    }
+    return net;
+  }, [picked, byId, lineSide]);
+
   const want = paise(lineAmount);
   /** What the line still has to account for once these settlements are counted. */
   const left = want - otherAllocated - selected;
+  /** The whole point of the check: the line has to be exactly accounted for. */
+  const matches = want > 0 && left === 0;
 
   const toggle = (b: OutstandingBill) => {
     setPicked((m) => {
@@ -102,9 +133,19 @@ export function BillPicker({
         next.delete(b.id);
         return next;
       }
-      // Take what the line still needs, but never more than the bill owes.
-      const room = want - otherAllocated - [...next.values()].reduce((t, a) => t + paise(a), 0);
-      const take = room > 0 ? Math.min(paise(b.pending), room) : paise(b.pending);
+      // Take what the line still needs, but never more than the bill owes. A
+      // bill settled the other way (a credit note) only ever adds to what is
+      // left, so it goes in at its full value.
+      let net = 0;
+      for (const [id, a] of next) {
+        const bill = byId.get(id);
+        if (bill) net += settleSide(bill) === lineSide ? paise(a) : -paise(a);
+      }
+      const room = want - otherAllocated - net;
+      const take =
+        settleSide(b) === lineSide && room > 0
+          ? Math.min(paise(b.pending), room)
+          : paise(b.pending);
       next.set(b.id, (take / 100).toFixed(2));
       return next;
     });
@@ -112,6 +153,11 @@ export function BillPicker({
 
   /** Arrow keys walk the list; Space ticks; the row is one stop for Tab. */
   const onRowKeyDown = (e: React.KeyboardEvent, b: OutstandingBill) => {
+    // Keys pressed INSIDE the settle amount belong to that field. Without this
+    // the row swallows them — Space unticks the bill being typed against and
+    // the arrows jump away mid-figure, which made a part payment impossible to
+    // enter from the keyboard at all.
+    if (e.target !== e.currentTarget) return;
     if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
       toggle(b);
@@ -126,14 +172,20 @@ export function BillPicker({
     rows[e.key === 'ArrowDown' ? i + 1 : i - 1]?.focus();
   };
 
-  const apply = () =>
+  const apply = () => {
+    if (!matches) return;
     onApply(
       // In the order they are listed — oldest bill first, which is the order a
       // party's account is settled in and read in.
       bills
         .filter((b) => picked.has(b.id) && num(picked.get(b.id)) > 0)
-        .map((b) => ({ id: b.id, amount: picked.get(b.id)! })),
+        .map((b) => ({
+          id: b.id,
+          amount: picked.get(b.id)!,
+          side: settleSide(b),
+        })),
     );
+  };
 
   return (
     <Drawer
@@ -146,30 +198,40 @@ export function BillPicker({
         <DrawerFooter
           onCancel={onClose}
           onSave={apply}
+          saveDisabled={!matches}
           saveLabel={
-            picked.size
+            matches
               ? `Settle ${picked.size} bill${picked.size === 1 ? '' : 's'}`
-              : 'Nothing ticked'
+              : want === 0
+                ? 'Enter the line amount first'
+                : left > 0
+                  ? `${money(left / 100)} still to allocate`
+                  : `${money(-left / 100)} over the line`
           }
         />
       }
     >
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
+          {/* The selection has to come to the line exactly — that is what
+              bill-wise tracking IS, and the server refuses anything else. Said
+              here, while it can still be acted on, rather than on save. */}
           <span
             className={cn(
               'text-sm',
-              left === 0
+              matches
                 ? 'text-emerald-600 dark:text-emerald-400'
                 : 'text-amber-600 dark:text-amber-400',
             )}
           >
-            {money(selected / 100)} selected
-            {left === 0
-              ? ' · the line is covered'
-              : left > 0
-                ? ` · ${money(left / 100)} of the line still to allocate`
-                : ` · ${money(-left / 100)} more than the line`}
+            {money(selected / 100)} {lineSide} selected
+            {want === 0
+              ? ' · the line has no amount yet'
+              : left === 0
+                ? ' · matches the line'
+                : left > 0
+                  ? ` · ${money(left / 100)} short of the line`
+                  : ` · ${money(-left / 100)} over the line`}
           </span>
           {bills.length > 0 && (
             <div className="flex items-center gap-3 text-xs">
@@ -212,12 +274,15 @@ export function BillPicker({
           </p>
         ) : (
           <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
-            <div className="grid grid-cols-[2rem_1fr_6rem_6rem_7rem_7rem] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400">
+            <div className="grid grid-cols-[2rem_1fr_6rem_6rem_7rem_2.5rem_7rem] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase text-slate-500 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400">
               <span />
               <span>Bill</span>
               <span>Dated</span>
               <span>Due</span>
               <span className="text-right">Pending</span>
+              {/* Which way the bill stands, so an invoice and a credit note are
+                  told apart at a glance rather than by their sign. */}
+              <span className="text-center">Dr/Cr</span>
               <span className="text-right">Settle</span>
             </div>
             <div ref={listRef} className="max-h-[26rem] overflow-y-auto">
@@ -235,7 +300,7 @@ export function BillPicker({
                     onKeyDown={(e) => onRowKeyDown(e, b)}
                     onClick={() => toggle(b)}
                     className={cn(
-                      'grid cursor-pointer grid-cols-[2rem_1fr_6rem_6rem_7rem_7rem] items-center gap-2 border-b border-slate-100 px-3 py-1.5 text-sm outline-none last:border-0 focus:bg-brand-50 dark:border-slate-800 dark:focus:bg-brand-950/30',
+                      'grid cursor-pointer grid-cols-[2rem_1fr_6rem_6rem_7rem_2.5rem_7rem] items-center gap-2 border-b border-slate-100 px-3 py-1.5 text-sm outline-none last:border-0 focus:bg-brand-50 dark:border-slate-800 dark:focus:bg-brand-950/30',
                       on && 'bg-emerald-50/60 dark:bg-emerald-950/20',
                     )}
                   >
@@ -269,6 +334,16 @@ export function BillPicker({
                     </span>
                     <span className="text-right tabular-nums">
                       {money(b.pending)}
+                    </span>
+                    <span
+                      className="text-center text-xs font-semibold text-slate-500"
+                      title={
+                        settleSide(b) === lineSide
+                          ? 'Settling this moves the line its own way'
+                          : 'Settling this pulls against the line — an adjustment'
+                      }
+                    >
+                      {b.side === 'DR' ? 'Dr' : 'Cr'}
                     </span>
                     {/* Stops the click bubbling to the row, or typing in the
                         amount would untick the bill it belongs to. */}
@@ -309,7 +384,9 @@ export function BillPicker({
 
         <p className="text-xs text-slate-400">
           ↑ ↓ to move, Space to tick. A tick takes what the line still needs,
-          capped by what the bill owes — change it for a part payment.
+          capped by what the bill owes — type over it for a part payment. A bill
+          standing the other way (a credit note) is adjusted against the rest
+          rather than added to them.
         </p>
       </div>
     </Drawer>

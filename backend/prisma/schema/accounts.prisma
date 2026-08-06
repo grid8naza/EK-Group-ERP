@@ -512,6 +512,22 @@ model BillAllocation {
   partyId       Int
 
   refType BillRefType
+
+  /// Which way THIS allocation moves the party's balance.
+  ///
+  /// Usually the side of the voucher line it sits on: the line's amount is
+  /// simply spread across bills, all pulling the same way. It differs when a
+  /// settlement carries an ADJUSTMENT — paying two invoices less a credit note
+  /// is three allocations on one line, and the note moves the other way. The
+  /// line's amount is then the NET, which is what actually left the bank, while
+  /// each bill is still credited or debited by its own true figure.
+  ///
+  /// This is also what makes a bill's balance readable: anything posted against
+  /// it on the OPPOSITE side reduces it, anything on the SAME side adds to it.
+  ///
+  /// Null on rows written before adjustments existed. Those were all settlements
+  /// in the ordinary direction, which is how they are read.
+  side BalanceSide?
   /// The bill's own number. Required on NEW — it is the bill's NAME, what a
   /// statement lists and what a payment is matched against. Null on ADVANCE and
   /// ON_ACCOUNT, which are by definition attached to no bill.

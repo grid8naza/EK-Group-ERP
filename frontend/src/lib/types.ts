@@ -2176,6 +2176,12 @@ export type BillRefType = 'NEW' | 'AGAINST' | 'ADVANCE' | 'ON_ACCOUNT';
 export interface BillAllocation {
   id: number;
   refType: BillRefType;
+  /**
+   * Which way this allocation moves the balance. Usually its line's side; the
+   * other when a note is being adjusted against what is being settled. Null on
+   * rows written before adjustments existed — read those as the line's side.
+   */
+  side: BalanceSide | null;
   /** The bill's own number. Only a NEW row has one; a settlement points by id. */
   billRef: string | null;
   /** What an advance or on-account amount was called. Those two only. */
@@ -2260,6 +2266,11 @@ export interface OutstandingBill {
   id: number;
   billRef: string | null;
   accountId: number;
+  /**
+   * Which way it stands. An invoice from a supplier is CR; a credit note from
+   * one is DR. Settling it means posting the other way.
+   */
+  side: BalanceSide;
   date: string;
   dueDate: string | null;
   amount: number;

@@ -20,6 +20,7 @@ import {
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { BillPicker, type BillPick } from './BillPicker';
 import type {
+  BalanceSide,
   BillRefType,
   OutstandingBill,
   PartyKind,
@@ -33,7 +34,9 @@ import {
   VoucherList,
   emptyBill,
   money,
+  netOf,
   num,
+  otherSide,
   paise,
   today,
   useVoucherMasters,
@@ -268,6 +271,9 @@ export function JournalVoucherScreen({
         narration: l.narration ?? '',
         bills: (l.billRefs ?? []).map((b) => ({
           refType: b.refType,
+          // Written before allocations carried a side: those all went the way
+          // of their line, which is what null means.
+          side: b.side ?? ((num(l.debit) > 0 ? 'DR' : 'CR') as BalanceSide),
           billRef: b.billRef ?? '',
           refNote: b.refNote ?? '',
           againstId: b.againstId ? String(b.againstId) : '',
@@ -303,7 +309,20 @@ export function JournalVoucherScreen({
   const setSide = (index: number, side: 'DR' | 'CR') =>
     setLines((ls) =>
       ls.map((l, x) => {
-        if (x === index) return { ...l, side, sideTouched: true };
+        if (x === index) {
+          return {
+            ...l,
+            side,
+            sideTouched: true,
+            // The bills turn with the line. What each one said was "the same
+            // way as this line" or "the other way", and turning the line over
+            // does not change which of those it was.
+            bills:
+              l.side === side
+                ? l.bills
+                : l.bills.map((b) => ({ ...b, side: otherSide(b.side) })),
+          };
+        }
         if (
           x === index + 1 &&
           !l.sideTouched &&
@@ -331,9 +350,11 @@ export function JournalVoucherScreen({
   const setBill = (l: JvLine, bi: number, patch: Partial<DraftBill>) => {
     const next = l.bills.map((b, y) => (y === bi ? { ...b, ...patch } : b));
     const isLast = bi === l.bills.length - 1;
+    // A side is a figure too — flipping a row to Dr changes what the stack
+    // comes to just as surely as retyping its amount.
+    const moved = patch.amount !== undefined || patch.side !== undefined;
     setLine(l.key, {
-      bills:
-        patch.amount !== undefined && !isLast ? rebalance(next, l.amount) : next,
+      bills: moved && !isLast ? rebalance(next, l.amount, l.side) : next,
     });
   };
 
@@ -396,7 +417,7 @@ export function JournalVoucherScreen({
 
     const bi = picking.billIndex;
     const rows: DraftBill[] = picks.map((p) => ({
-      ...emptyBill(),
+      ...emptyBill(p.side),
       refType: 'AGAINST',
       againstId: String(p.id),
       amount: p.amount,
@@ -409,13 +430,18 @@ export function JournalVoucherScreen({
     const last = next[next.length - 1];
     if (last?.refType === 'AGAINST') {
       // No balancing row left to absorb the rest, so open one.
-      const left =
-        paise(l.amount) - next.reduce((t, b) => t + paise(b.amount), 0);
-      if (left > 0) {
-        next = [...next, { ...emptyBill(), amount: (left / 100).toFixed(2) }];
+      const left = paise(l.amount) - netOf(next, l.side);
+      if (left !== 0) {
+        next = [
+          ...next,
+          {
+            ...emptyBill(left < 0 ? otherSide(l.side) : l.side),
+            amount: (Math.abs(left) / 100).toFixed(2),
+          },
+        ];
       }
     } else {
-      next = rebalance(next, l.amount);
+      next = rebalance(next, l.amount, l.side);
     }
 
     setLine(l.key, { bills: next });
@@ -440,8 +466,13 @@ export function JournalVoucherScreen({
       bills: [
         ...l.bills,
         {
-          ...emptyBill(),
-          amount: remainderPaise > 0 ? (remainderPaise / 100).toFixed(2) : '',
+          // A remainder that pulls the other way opens the row already marked
+          // as the adjustment it must be.
+          ...emptyBill(remainderPaise < 0 ? otherSide(l.side) : l.side),
+          amount:
+            remainderPaise === 0
+              ? ''
+              : (Math.abs(remainderPaise) / 100).toFixed(2),
         },
       ],
     });
@@ -499,7 +530,7 @@ export function JournalVoucherScreen({
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (bi !== l.bills.length - 1) return; // an earlier row: ordinary advance
 
-    const allocated = l.bills.reduce((t, b) => t + paise(b.amount), 0);
+    const allocated = netOf(l.bills, l.side);
     const wanted = paise(l.amount);
     if (wanted > 0 && allocated !== wanted) {
       e.preventDefault();
@@ -533,6 +564,7 @@ export function JournalVoucherScreen({
               .filter((b) => num(b.amount) > 0)
               .map((b) => ({
                 refType: b.refType,
+                side: b.side,
                 billRef: b.refType === 'NEW' ? b.billRef.trim() : undefined,
                 // Only an advance or an on-account amount carries a note — a
                 // bill is identified by its own number.
@@ -793,7 +825,7 @@ export function JournalVoucherScreen({
                 const asks = masters.asksFor(l.accountId);
                 const bills = openBills[billsKey(asks.partyKind, l.partyId)] ?? [];
                 const showBills = asks.party && !!l.partyId;
-                const allocated = l.bills.reduce((t, b) => t + paise(b.amount), 0);
+                const allocated = netOf(l.bills, l.side);
                 const wanted = paise(l.amount);
                 const left = (wanted - allocated) / 100;
                 // The line's LAST field — where leaving it decides whether a
@@ -863,7 +895,7 @@ export function JournalVoucherScreen({
                               setLine(l.key, {
                                 partyId,
                                 bills: partyId
-                                  ? [{ ...emptyBill(), amount: l.amount }]
+                                  ? [{ ...emptyBill(l.side), amount: l.amount }]
                                   : [],
                               });
                             }}
@@ -1100,7 +1132,23 @@ export function JournalVoucherScreen({
                                   setBill(l, bi, { amount: e.target.value })
                                 }
                               />
-                              <span />
+                              {/* Which way this one pulls. Nearly always the
+                                  line's own side — the exception is the credit
+                                  or debit note being adjusted against what is
+                                  being settled, which is why it is here at all. */}
+                              <div>
+                                <SideToggle
+                                  id={fid(l.key, `bill-${bi}-side`)}
+                                  value={b.side}
+                                  disabled={readOnly}
+                                  onChange={(side) => setBill(l, bi, { side })}
+                                  className={cn(
+                                    'h-8 text-xs',
+                                    b.side !== l.side &&
+                                      'border-amber-400 text-amber-700 dark:border-amber-600 dark:text-amber-400',
+                                  )}
+                                />
+                              </div>
                               <div className="text-center">
                                 {!readOnly && l.bills.length > 1 && (
                                   <button
@@ -1246,9 +1294,10 @@ export function JournalVoucherScreen({
               .find((p) => p.value === pickingLine.partyId)?.label ?? 'This party'
           }
           lineAmount={pickingLine.amount}
-          otherAllocated={pickingLine.bills.reduce(
-            (t, b, y) => (y === picking?.billIndex ? t : t + paise(b.amount)),
-            0,
+          lineSide={pickingLine.side}
+          otherAllocated={netOf(
+            pickingLine.bills.filter((_, y) => y !== picking!.billIndex),
+            pickingLine.side,
           )}
           initial={
             pickingLine.bills[picking!.billIndex]?.againstId
@@ -1256,6 +1305,7 @@ export function JournalVoucherScreen({
                   {
                     id: Number(pickingLine.bills[picking!.billIndex].againstId),
                     amount: pickingLine.bills[picking!.billIndex].amount,
+                    side: pickingLine.bills[picking!.billIndex].side,
                   },
                 ]
               : []
@@ -1285,22 +1335,28 @@ export function JournalVoucherScreen({
  * out of the way and the over-allocation is left visible, which is the only
  * honest thing to do with a figure only the user can resolve.
  */
-function rebalance(bills: DraftBill[], lineAmount: string): DraftBill[] {
+function rebalance(
+  bills: DraftBill[],
+  lineAmount: string,
+  lineSide: BalanceSide,
+): DraftBill[] {
   if (bills.length === 0) return bills;
   // A settlement is capped by what its bill still owes, so it cannot absorb
   // whatever the line has left. When the stack ends in one, the remainder is
   // the user's to place — into another bill, an advance, or on account.
   if (bills[bills.length - 1].refType === 'AGAINST') return bills;
-  const others = bills
-    .slice(0, -1)
-    .reduce((total, b) => total + paise(b.amount), 0);
+  const others = netOf(bills.slice(0, -1), lineSide);
   const left = paise(lineAmount) - others;
-  if (left <= 0 && bills.length > 1) return bills.slice(0, -1);
+  // The sign says which way the remainder has to pull. Overshoot the line with
+  // the rows above and the balancing row turns into the adjustment that brings
+  // it back — which is exactly what it is.
+  if (left === 0 && bills.length > 1) return bills.slice(0, -1);
   return [
     ...bills.slice(0, -1),
     {
       ...bills[bills.length - 1],
-      amount: left > 0 ? (left / 100).toFixed(2) : '',
+      side: left < 0 ? otherSide(lineSide) : lineSide,
+      amount: left === 0 ? '' : (Math.abs(left) / 100).toFixed(2),
     },
   ];
 }
@@ -1317,7 +1373,10 @@ function onAmountChange(
   amount: string,
   setLine: (key: number, patch: Partial<JvLine>) => void,
 ) {
-  setLine(line.key, { amount, bills: rebalance(line.bills, amount) });
+  setLine(line.key, {
+    amount,
+    bills: rebalance(line.bills, amount, line.side),
+  });
 }
 
 /**
@@ -1368,11 +1427,13 @@ function SideToggle({
   value,
   disabled,
   onChange,
+  className,
 }: {
   id: string;
   value: 'DR' | 'CR';
   disabled?: boolean;
   onChange: (v: 'DR' | 'CR') => void;
+  className?: string;
 }) {
   return (
     <button
@@ -1398,7 +1459,10 @@ function SideToggle({
           focusNextField(e.currentTarget);
         }
       }}
-      className="input-base w-14 flex-none text-center font-semibold text-slate-700 dark:text-slate-200"
+      className={cn(
+        'input-base w-14 flex-none text-center font-semibold text-slate-700 dark:text-slate-200',
+        className,
+      )}
     >
       {value === 'DR' ? 'Dr' : 'Cr'}
     </button>

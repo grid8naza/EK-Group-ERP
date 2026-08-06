@@ -13,6 +13,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Input, Select, Textarea } from '@/components/ui/Field';
 import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
 import type {
+  BalanceSide,
   BillRefType,
   OutstandingBill,
   Voucher,
@@ -195,6 +196,10 @@ export function VoucherScreen({
         partyId: l.partyId ? String(l.partyId) : '',
         bills: (l.billRefs ?? []).map((b) => ({
           refType: b.refType,
+          // This form does not offer adjustments, but it must not lose one
+          // written elsewhere. Null means the row predates the column, and
+          // those all went the way of their line.
+          side: b.side ?? ((num(l.debit) > 0 ? 'DR' : 'CR') as BalanceSide),
           billRef: b.billRef ?? '',
           refNote: b.refNote ?? '',
           againstId: b.againstId ? String(b.againstId) : '',
@@ -278,6 +283,7 @@ export function VoucherScreen({
               .filter((b) => num(b.amount) > 0)
               .map((b) => ({
                 refType: b.refType,
+                side: b.side,
                 billRef: b.refType === 'NEW' ? b.billRef.trim() : undefined,
                 // Not offered on this form, but carried through so re-saving a
                 // draft written elsewhere does not drop what it was called.
@@ -948,8 +954,13 @@ export function VoucherScreen({
                           bills: [
                             ...l.bills,
                             // Seed the amount with whatever is still unspread,
-                            // which is the answer most of the time.
-                            { ...emptyBill(), amount: left > 0 ? String(left) : '' },
+                            // which is the answer most of the time. This form
+                            // does not offer adjustments, so a row it opens
+                            // always goes the way of its line.
+                            {
+                              ...emptyBill(l.side),
+                              amount: left > 0 ? String(left) : '',
+                            },
                           ],
                         })
                       }
