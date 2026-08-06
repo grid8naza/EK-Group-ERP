@@ -42,6 +42,35 @@ export const COA_ACCOUNT_RENAMES: CoaRename[] = [
   { code: '20001', from: 'Sundry Creditors - Raw Material', to: 'Trade Creditors' },
   { code: '20002', from: 'Sundry Creditors - Packing Material', to: 'Other Creditors' },
   { code: '20003', from: 'Sundry Creditors - Traded Goods', to: 'Accrued Expenses' },
+  // "Sundry" is Tally's word, not the ledger's: these are the trade debtors,
+  // split by channel. The Tally group they map to keeps its own name — that is
+  // the migration key for the books being kept today, not a label anyone reads.
+  {
+    code: '13001',
+    from: 'Sundry Debtors - Wholesale / B2B',
+    to: 'Trade Debtors - Wholesale / B2B',
+  },
+  {
+    code: '13002',
+    from: 'Sundry Debtors - Institutional and Contract',
+    to: 'Trade Debtors - Institutional and Contract',
+  },
+  {
+    code: '13003',
+    from: 'Sundry Debtors - Retail Credit',
+    to: 'Trade Debtors - Retail Credit',
+  },
+  // Accruals moved to the payables block (20003), leaving this code free for the
+  // one liability in the block worth keeping on its own: money HELD, not owed —
+  // a deposit taken from a distributor or a tenant, repayable when the
+  // arrangement ends. It takes the name from 23007, which is withdrawn below;
+  // the rename runs first, so the code that keeps the balance is the one that
+  // keeps the name.
+  {
+    code: '23002',
+    from: 'Outstanding and Accrued Expenses',
+    to: 'Security Deposits Received',
+  },
 ];
 
 /**
@@ -56,6 +85,15 @@ export const COA_RETIRED_ACCOUNTS: { code: string; was: string }[] = [
   // Both fold into Trade Creditors / Other Creditors above.
   { code: '20004', was: 'Sundry Creditors - Services and Utilities' },
   { code: '20005', was: 'Sundry Creditors - Capital Goods' },
+  // Other Current Liabilities kept a heading for each KIND of unpaid bill.
+  // What is owed for a service consumed is a creditor, and the payables block
+  // now says which kind, so these were the same liability recorded twice.
+  { code: '23004', was: 'Electricity and Utilities Payable' },
+  { code: '23005', was: 'Staff Meal Wallet and Coupon Liability' },
+  { code: '23006', was: 'Gift Voucher and Prepaid Card Liability' },
+  // Withdrawn as a code, not as a heading: 23002 above now carries it.
+  { code: '23007', was: 'Security Deposits Received' },
+  { code: '23008', was: 'Other Statutory Dues Payable' },
 ];
 
 /**
