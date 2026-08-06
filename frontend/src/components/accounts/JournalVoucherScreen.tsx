@@ -18,6 +18,7 @@ import {
   focusNextField,
 } from '@/components/ui/Field';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
+import { BillPicker, type BillPick } from './BillPicker';
 import type {
   BillRefType,
   OutstandingBill,
@@ -101,6 +102,16 @@ const BILL_GRID = 'minmax(0,1fr) 8rem 8rem 1.75rem';
 
 const focusById = (id: string) =>
   requestAnimationFrame(() => document.getElementById(id)?.focus());
+
+/** How a chosen bill reads back on the line. Null when none is chosen yet. */
+function billLabel(bills: OutstandingBill[], againstId: string): string | null {
+  if (!againstId) return null;
+  const bill = bills.find((b) => String(b.id) === againstId);
+  if (!bill) return 'That bill is no longer outstanding';
+  return bill.overdueDays > 0
+    ? `${bill.billRef ?? '—'} · ${bill.overdueDays}d overdue`
+    : (bill.billRef ?? '—');
+}
 
 export interface JournalVoucherScreenProps {
   /** The one kind this screen writes — a `VoucherType.code`. */
@@ -356,6 +367,69 @@ export function JournalVoucherScreen({
     setLines((ls) => [...ls, line]);
   };
 
+  // ---- settling against bills --------------------------------------------------
+  // Which bill row is choosing its bills, and on which line. Opening the picker
+  // is what an AGAINST row does — a settlement is decided by reading the list
+  // of what is owed, not by typing a bill number somebody already knows.
+  const [picking, setPicking] = useState<{
+    lineKey: number;
+    lineIndex: number;
+    billIndex: number;
+  } | null>(null);
+  const pickingLine = lines.find((l) => l.key === picking?.lineKey) ?? null;
+
+  /**
+   * Take what was ticked and turn it into allocations.
+   *
+   * One row per bill, in place of the row the picker was opened from: "5,000
+   * against INV-002 and INV-007" is two facts, and the sub-ledger needs both or
+   * neither bill knows where it stands. Whatever the settlements leave over
+   * opens a row of its own, exactly as it does anywhere else on this form.
+   */
+  const applyPicks = (picks: BillPick[]) => {
+    const l = pickingLine;
+    if (!picking || !l) return;
+    // Nothing ticked changes nothing — the row stays where it was, waiting to
+    // be answered. Closing with an empty selection is a change of mind, not an
+    // instruction to rearrange the stack around it.
+    if (!picks.length) return setPicking(null);
+
+    const bi = picking.billIndex;
+    const rows: DraftBill[] = picks.map((p) => ({
+      ...emptyBill(),
+      refType: 'AGAINST',
+      againstId: String(p.id),
+      amount: p.amount,
+    }));
+    let next = [
+      ...l.bills.slice(0, bi),
+      ...rows,
+      ...l.bills.slice(bi + 1),
+    ];
+    const last = next[next.length - 1];
+    if (last?.refType === 'AGAINST') {
+      // No balancing row left to absorb the rest, so open one.
+      const left =
+        paise(l.amount) - next.reduce((t, b) => t + paise(b.amount), 0);
+      if (left > 0) {
+        next = [...next, { ...emptyBill(), amount: (left / 100).toFixed(2) }];
+      }
+    } else {
+      next = rebalance(next, l.amount);
+    }
+
+    setLine(l.key, { bills: next });
+    setPicking(null);
+    // Carry on where the entry was: into the row that still needs answering,
+    // or out of the line altogether if the settlements finished it.
+    const spliced = l.bills.length - 1 + rows.length;
+    if (next.length > spliced) {
+      pendingFocus.current = fid(l.key, `bill-${next.length - 1}-type`);
+    } else {
+      advanceFromLine(picking.lineIndex);
+    }
+  };
+
   /**
    * Open another bill row on a line, carrying whatever of it is still
    * unallocated — the same rule as adding a line, one level down.
@@ -383,37 +457,31 @@ export function JournalVoucherScreen({
   };
 
   /**
-   * Leaving the last field of a line.
+   * The line is finished with — move on.
    *
-   * Within the voucher it simply moves to the next line. On the LAST line it is
-   * the decision point: if the two columns still disagree the entry is not
+   * Within the voucher that is simply the next line. On the LAST line it is the
+   * decision point: if the two columns still disagree the entry is not
    * finished, so a line opens for the rest of it; if they agree, the lines are
    * done and focus drops to the narration that closes the voucher.
    */
+  const advanceFromLine = (i: number) => {
+    if (i < lines.length - 1) return focusById(fid(lines[i + 1].key, 'side'));
+    if (!balanced) return addLine();
+    focusById(COMMON_NARRATION);
+  };
+
+  /** Leaving the last field of a line, by key. */
   const onLineEnd = (i: number, e: React.KeyboardEvent) => {
     const enter = e.key === 'Enter';
     const tab = e.key === 'Tab' && !e.shiftKey;
-    if (!enter && !tab) return;
     if (e.ctrlKey || e.metaKey || e.altKey) return;
-
-    if (i < lines.length - 1) {
-      // Enter is the fast path — it jumps straight to the next line's Dr/Cr.
-      // Tab is left alone so it keeps its ordinary meaning.
-      if (enter) {
-        e.preventDefault();
-        focusById(fid(lines[i + 1].key, 'side'));
-      }
-      return;
-    }
-    if (balanced) {
-      if (enter) {
-        e.preventDefault();
-        focusById(COMMON_NARRATION);
-      }
-      return;
-    }
+    // Enter is the fast path and always moves on. Tab keeps its ordinary
+    // meaning except at the one place it would walk out of an unfinished
+    // voucher — the end of the last line while the columns disagree.
+    const decisionPoint = i === lines.length - 1 && !balanced;
+    if (!enter && !(tab && decisionPoint)) return;
     e.preventDefault();
-    addLine();
+    advanceFromLine(i);
   };
 
   /**
@@ -923,14 +991,25 @@ export function JournalVoucherScreen({
                                   value={b.refType}
                                   disabled={readOnly}
                                   wrapClassName="w-40 flex-none"
-                                  onChange={(e) =>
+                                  onChange={(e) => {
+                                    const refType = e.target.value as BillRefType;
                                     setBill(l, bi, {
-                                      refType: e.target.value as BillRefType,
+                                      refType,
                                       billRef: '',
                                       refNote: '',
                                       againstId: '',
-                                    })
-                                  }
+                                    });
+                                    // Settling means picking from the list, so
+                                    // choosing the method IS the request to see
+                                    // it — no second click to get there.
+                                    if (refType === 'AGAINST') {
+                                      setPicking({
+                                        lineKey: l.key,
+                                        lineIndex: i,
+                                        billIndex: bi,
+                                      });
+                                    }
+                                  }}
                                   options={BILL_TYPES}
                                 />
                                 {b.refType === 'NEW' ? (
@@ -948,40 +1027,42 @@ export function JournalVoucherScreen({
                                     }
                                   />
                                 ) : b.refType === 'AGAINST' ? (
-                                  <Select
+                                  /* Not a dropdown: which invoices a payment
+                                     clears is decided by READING what is owed
+                                     — how old, how overdue, how much left — so
+                                     the button opens the list rather than
+                                     asking for a bill number up front. */
+                                  <button
                                     id={fid(l.key, `bill-${bi}-ref`)}
-                                    value={b.againstId}
+                                    type="button"
+                                    data-field=""
                                     disabled={readOnly}
-                                    wrapClassName="min-w-0 flex-1"
-                                    onChange={(e) => {
-                                      const picked = bills.find(
-                                        (o) => String(o.id) === e.target.value,
-                                      );
-                                      setBill(l, bi, {
-                                        againstId: e.target.value,
-                                        // Default to clearing it in full — the
-                                        // common case, and still editable.
-                                        amount: picked
-                                          ? String(picked.pending)
-                                          : b.amount,
+                                    onClick={() =>
+                                      setPicking({
+                                        lineKey: l.key,
+                                        lineIndex: i,
+                                        billIndex: bi,
+                                      })
+                                    }
+                                    onKeyDown={(e) => {
+                                      if (e.key !== 'Enter' && e.key !== ' ') return;
+                                      e.preventDefault();
+                                      setPicking({
+                                        lineKey: l.key,
+                                        lineIndex: i,
+                                        billIndex: bi,
                                       });
                                     }}
-                                    options={bills.map((o) => ({
-                                      value: String(o.id),
-                                      label: `${o.billRef} · ${money(
-                                        o.pending,
-                                      )} pending${
-                                        o.overdueDays > 0
-                                          ? ` · ${o.overdueDays}d overdue`
-                                          : ''
-                                      }`,
-                                    }))}
-                                    placeholder={
-                                      bills.length
-                                        ? 'Which bill'
-                                        : 'Nothing outstanding'
-                                    }
-                                  />
+                                    className={cn(
+                                      'input-base h-8 min-w-0 flex-1 truncate text-left text-sm',
+                                      !b.againstId && 'text-slate-400',
+                                    )}
+                                  >
+                                    {billLabel(bills, b.againstId) ??
+                                      (bills.length
+                                        ? 'Choose bills…'
+                                        : 'Nothing outstanding')}
+                                  </button>
                                 ) : (
                                   /* An advance or an on-account amount names no
                                      bill — but it still has to be recognisable
@@ -1139,9 +1220,49 @@ export function JournalVoucherScreen({
         )}
         <p className="text-xs text-slate-400">
           {activeCompany?.name ?? 'This company'} · Enter moves on · D and C set
-          the side · Ctrl+Delete drops a line · Ctrl+Enter posts.
+          the side · Alt+Enter adds a line · Ctrl+Delete drops one · Ctrl+Enter
+          posts.
         </p>
       </div>
+
+      {/* Which bills a settlement clears, chosen from the list of what is
+          owed. Several at once — one payment routinely clears several
+          invoices, and each has to be recorded against its own bill. */}
+      {pickingLine && (
+        <BillPicker
+          open
+          onClose={() => setPicking(null)}
+          bills={
+            openBills[
+              billsKey(
+                masters.asksFor(pickingLine.accountId).partyKind,
+                pickingLine.partyId,
+              )
+            ] ?? []
+          }
+          partyLabel={
+            masters
+              .partyOptions(masters.asksFor(pickingLine.accountId).partyKind)
+              .find((p) => p.value === pickingLine.partyId)?.label ?? 'This party'
+          }
+          lineAmount={pickingLine.amount}
+          otherAllocated={pickingLine.bills.reduce(
+            (t, b, y) => (y === picking?.billIndex ? t : t + paise(b.amount)),
+            0,
+          )}
+          initial={
+            pickingLine.bills[picking!.billIndex]?.againstId
+              ? [
+                  {
+                    id: Number(pickingLine.bills[picking!.billIndex].againstId),
+                    amount: pickingLine.bills[picking!.billIndex].amount,
+                  },
+                ]
+              : []
+          }
+          onApply={applyPicks}
+        />
+      )}
     </div>
   );
 }
@@ -1166,6 +1287,10 @@ export function JournalVoucherScreen({
  */
 function rebalance(bills: DraftBill[], lineAmount: string): DraftBill[] {
   if (bills.length === 0) return bills;
+  // A settlement is capped by what its bill still owes, so it cannot absorb
+  // whatever the line has left. When the stack ends in one, the remainder is
+  // the user's to place — into another bill, an advance, or on account.
+  if (bills[bills.length - 1].refType === 'AGAINST') return bills;
   const others = bills
     .slice(0, -1)
     .reduce((total, b) => total + paise(b.amount), 0);
