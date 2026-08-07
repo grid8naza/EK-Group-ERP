@@ -527,6 +527,13 @@ model VoucherInstrument {
   instrumentNo   String?
   instrumentDate DateTime?
 
+  /// WHOSE bank a cheque taken in was drawn on — an ISSUER_BANK lookup value.
+  /// Only on a receipt: on a payment the issuer is this company, and the bank
+  /// is `bankAccountId` above. It is what a cheque return is traced through,
+  /// and what tells two cheques of the same number apart.
+  /// -> Cpanel LookupValue (plain cross-domain id).
+  issuerBankValueId Int?
+
   /// Where a post-dated cheque was parked on issue — the ledger the clearing
   /// entry takes it back out of. Stored rather than looked up again, because
   /// the flags may be moved to a different account after this one was written

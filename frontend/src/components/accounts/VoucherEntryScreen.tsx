@@ -160,6 +160,8 @@ type DraftInstrument = {
   bankAccountId: string;
   instrumentNo: string;
   instrumentDate: string;
+  /** Whose bank a cheque taken in was drawn on. Receipts only. */
+  issuerBankValueId: string;
   chequeKind: '' | 'CDC' | 'PDC';
 };
 
@@ -178,6 +180,7 @@ const EMPTY_INSTRUMENT: DraftInstrument = {
   bankAccountId: '',
   instrumentNo: '',
   instrumentDate: '',
+  issuerBankValueId: '',
   chequeKind: '',
 };
 
@@ -307,6 +310,18 @@ export function VoucherEntryScreen({
   // How the money may have moved — the company's own list, fetched only by the
   // kinds that ask.
   const paymentModes = useLookupValues(askInstrument ? 'PAYMENT_MODE' : '');
+  /**
+   * Money coming IN was sent by somebody, on somebody's bank — the thread a
+   * returned cheque is followed back along. Money going out was sent by this
+   * company on the bank already named, so there is no second issuer to ask
+   * about. The side says which this is.
+   */
+  const takesIssuer = askInstrument && firstLine?.side === 'DR';
+  const issuerBanks = useLookupValues(takesIssuer ? 'ISSUER_BANK' : '');
+  const issuerOptions = useMemo(
+    () => issuerBanks.map((b) => ({ value: String(b.id), label: b.label })),
+    [issuerBanks],
+  );
   const modeOptions = useMemo(
     () => paymentModes.map((m) => ({ value: String(m.id), label: m.label })),
     [paymentModes],
@@ -612,6 +627,9 @@ export function VoucherEntryScreen({
           bankAccountId: String(v.instrument.bankAccountId),
           instrumentNo: v.instrument.instrumentNo ?? '',
           instrumentDate: v.instrument.instrumentDate?.slice(0, 10) ?? '',
+          issuerBankValueId: v.instrument.issuerBankValueId
+            ? String(v.instrument.issuerBankValueId)
+            : '',
           chequeKind: v.instrument.chequeKind ?? '',
         }
       : { ...EMPTY_INSTRUMENT };
@@ -956,6 +974,10 @@ export function VoucherEntryScreen({
             bankAccountId: Number(instrument.bankAccountId),
             instrumentNo: instrument.instrumentNo.trim() || null,
             instrumentDate: instrument.instrumentDate || null,
+            // Refused on a payment, where the issuer is this company.
+            issuerBankValueId: takesIssuer
+              ? Number(instrument.issuerBankValueId) || null
+              : null,
             // Only a cheque is post-dated or current-dated; the server refuses
             // the field on anything else.
             chequeKind: isCheque ? instrument.chequeKind || null : null,
@@ -1034,6 +1056,9 @@ export function VoucherEntryScreen({
           return toast.error(
             'Say whether the cheque is current-dated or post-dated.',
           );
+        }
+        if (takesIssuer && !instrument.issuerBankValueId) {
+          return toast.error('Say which bank the cheque is drawn on.');
         }
       }
     }
@@ -1360,6 +1385,27 @@ export function VoucherEntryScreen({
                   setInstrument({ ...instrument, instrumentDate: v })
                 }
               />
+              {/* Whose cheque it is. Only where money is coming in: on a
+                  payment the issuer is this company and the bank is named
+                  above. */}
+              {takesIssuer && isCheque && (
+                <Select
+                  label="Issuer bank"
+                  required
+                  value={instrument.issuerBankValueId}
+                  disabled={readOnly}
+                  options={issuerOptions}
+                  placeholder={
+                    issuerOptions.length ? 'Drawn on' : 'None set up'
+                  }
+                  onChange={(e) =>
+                    setInstrument({
+                      ...instrument,
+                      issuerBankValueId: e.target.value,
+                    })
+                  }
+                />
+              )}
               {isCheque && (
                 <div>
                   <Select

@@ -182,6 +182,15 @@ export class InstrumentInput {
   @IsOptional()
   @IsIn(['CDC', 'PDC'])
   chequeKind?: 'CDC' | 'PDC' | null;
+
+  /**
+   * Whose bank a cheque taken in was drawn on — an ISSUER_BANK lookup value.
+   * A receipt only: on a payment the issuer is this company.
+   */
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  issuerBankValueId?: number | null;
 }
 
 export class CreateVoucherDto {

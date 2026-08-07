@@ -1,6 +1,11 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { PAYMENT_MODES, PAYMENT_MODE_LOOKUP } from '../../common/instruments';
+import {
+  ISSUER_BANKS,
+  ISSUER_BANK_LOOKUP,
+  PAYMENT_MODES,
+  PAYMENT_MODE_LOOKUP,
+} from '../../common/instruments';
 import {
   COA_MAIN_GROUPS,
   COA_MAIN_GROUP_CORRECTIONS,
@@ -95,6 +100,7 @@ export class CoaSeedService implements OnApplicationBootstrap {
       const adoptions = await this.seedAdoptions();
       const categories = await this.seedCategories();
       await this.seedPaymentModes();
+      await this.seedIssuerBanks();
       await this.backfillPdcLedgers();
       await this.markShipped();
       await this.backfillCostFlags();
@@ -151,6 +157,43 @@ export class CoaSeedService implements OnApplicationBootstrap {
         update: { sortOrder: i },
       });
     }
+  }
+
+  /**
+   * The banks other people's cheques are drawn on — see ISSUER_BANK_LOOKUP.
+   *
+   * Seeded once and then left alone: the list is the company's, and a bank
+   * renamed or retired there stays that way through every redeploy.
+   */
+  private async seedIssuerBanks(): Promise<void> {
+    const module = await this.prisma.module.findUnique({
+      where: { code: 'ACCOUNTS' },
+      select: { id: true },
+    });
+    const lookup = await this.prisma.lookup.upsert({
+      where: { code: ISSUER_BANK_LOOKUP },
+      create: {
+        code: ISSUER_BANK_LOOKUP,
+        name: 'Issuer Bank',
+        moduleId: module?.id ?? null,
+        isSystem: true,
+        description: 'The banks cheques taken in are drawn on.',
+      },
+      update: { isSystem: true },
+    });
+    // Only when the list is empty. Once anyone has touched it, it is theirs.
+    const has = await this.prisma.lookupValue.count({
+      where: { lookupId: lookup.id },
+    });
+    if (has) return;
+    await this.prisma.lookupValue.createMany({
+      data: ISSUER_BANKS.map((value, i) => ({
+        lookupId: lookup.id,
+        value,
+        label: value,
+        sortOrder: i,
+      })),
+    });
   }
 
   /**

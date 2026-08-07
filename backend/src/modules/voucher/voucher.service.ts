@@ -34,7 +34,11 @@ import {
   VoucherLineInput,
   BillAllocationInput,
 } from './voucher.dto';
-import { CHEQUE_MODE, PAYMENT_MODE_LOOKUP } from '../../common/instruments';
+import {
+  CHEQUE_MODE,
+  ISSUER_BANK_LOOKUP,
+  PAYMENT_MODE_LOOKUP,
+} from '../../common/instruments';
 import { VOUCHER_NUMBER_PREFIX } from './voucher-types';
 import { sideOf } from './bill-side';
 
@@ -150,6 +154,7 @@ const instrumentAsInput = (
     bankAccountId: number;
     instrumentNo: string | null;
     instrumentDate: Date | null;
+    issuerBankValueId: number | null;
     chequeKind: 'CDC' | 'PDC' | null;
   } | null,
 ): InstrumentInput | undefined =>
@@ -159,6 +164,7 @@ const instrumentAsInput = (
         bankAccountId: i.bankAccountId,
         instrumentNo: i.instrumentNo,
         instrumentDate: i.instrumentDate?.toISOString() ?? null,
+        issuerBankValueId: i.issuerBankValueId,
         chequeKind: i.chequeKind,
       }
     : undefined;
@@ -701,6 +707,8 @@ export class VoucherService {
     }
     const holdingAccountId = pdc.holdingAccountId;
     const amount = pdc.voucher.totalCredit;
+    /** A cheque taken IN, rather than one written out. */
+    const taken = pdc.voucher.type.code === 'BANK_RECEIPT';
 
     const type = await this.prisma.voucherType.findFirst({
       where: { code: 'JOURNAL' },
@@ -736,13 +744,18 @@ export class VoucherService {
             sourceDocId: pdc.id,
             lines: {
               create: [
+                // Which way round follows from whose cheque it was. Ours going
+                // out: the promise is discharged and the bank parts with the
+                // money — Dr holding, Cr bank. Theirs coming in: the bank has
+                // it now and the asset we were holding is gone — Dr bank, Cr
+                // holding.
                 {
                   sequence: 0,
                   companyId: pdc.companyId,
                   branchId: pdc.voucher.branchId,
                   date,
                   status: 'POSTED',
-                  accountId: holdingAccountId,
+                  accountId: taken ? pdc.bankAccountId : holdingAccountId,
                   debit: amount,
                   credit: 0,
                 },
@@ -752,7 +765,7 @@ export class VoucherService {
                   branchId: pdc.voucher.branchId,
                   date,
                   status: 'POSTED',
-                  accountId: pdc.bankAccountId,
+                  accountId: taken ? holdingAccountId : pdc.bankAccountId,
                   debit: 0,
                   credit: amount,
                 },
@@ -820,6 +833,7 @@ export class VoucherService {
             branchId: true,
             totalCredit: true,
             status: true,
+            type: { select: { code: true } },
           },
         },
       },
@@ -838,6 +852,37 @@ export class VoucherService {
       );
     }
     return pdc;
+  }
+
+  /**
+   * Whose bank a cheque taken in was drawn on.
+   *
+   * Refused on a payment: the issuer there is this company, and the bank is the
+   * one already named. A list rather than free text, so the same bank is spelt
+   * the same way on every receipt and a report can group by it.
+   */
+  private async resolveIssuerBank(
+    valueId: number | null | undefined,
+    received: boolean,
+  ): Promise<number | null> {
+    if (valueId == null) return null;
+    if (!received) {
+      throw new BadRequestException(
+        'A cheque written by this company is drawn on its own bank — there is ' +
+          'no other issuer to name.',
+      );
+    }
+    const value = await this.prisma.lookupValue.findUnique({
+      where: { id: valueId },
+      select: {
+        isActive: true,
+        lookup: { select: { code: true } },
+      },
+    });
+    if (!value || value.lookup.code !== ISSUER_BANK_LOOKUP || !value.isActive) {
+      throw new BadRequestException('Choose the bank the cheque is drawn on.');
+    }
+    return valueId;
   }
 
   /**
@@ -967,6 +1012,12 @@ export class VoucherService {
       );
     }
 
+    const received = typeCode === 'BANK_RECEIPT';
+    const issuerBankValueId = await this.resolveIssuerBank(
+      input.issuerBankValueId,
+      received,
+    );
+
     const isCheque = mode.value === CHEQUE_MODE || mode.label === CHEQUE_MODE;
     if (!isCheque) {
       if (input.chequeKind) {
@@ -981,9 +1032,17 @@ export class VoucherService {
         instrumentDate: input.instrumentDate
           ? this.assertDate(input.instrumentDate)
           : null,
+        issuerBankValueId,
         chequeKind: null,
+        holdingAccountId: null,
         status: null,
       };
+    }
+
+    // A cheque taken in was written by somebody, on somebody's bank, and that
+    // is the thread a returned cheque is followed back along.
+    if (received && !issuerBankValueId) {
+      throw new BadRequestException('Say which bank the cheque is drawn on.');
     }
 
     if (!input.instrumentNo?.trim()) {
@@ -1009,11 +1068,7 @@ export class VoucherService {
       }
       // Which side of the promise this is, and so which ledger holds it: a
       // payment writes a cheque out, a receipt takes one in.
-      const holding = await this.pdcLedgerOnLines(
-        companyId,
-        lines,
-        typeCode === 'BANK_RECEIPT',
-      );
+      const holding = await this.pdcLedgerOnLines(companyId, lines, received);
       holdingAccountId = holding.id;
     }
 
@@ -1022,6 +1077,7 @@ export class VoucherService {
       bankAccountId: bank.id,
       instrumentNo: input.instrumentNo.trim(),
       instrumentDate,
+      issuerBankValueId,
       chequeKind: input.chequeKind,
       holdingAccountId,
       // A current-dated cheque is finished the moment it is written; only a

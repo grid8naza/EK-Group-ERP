@@ -2336,6 +2336,10 @@ export interface VoucherInstrument {
   instrumentNo: string | null;
   /** On a PDC, the day it may be presented. */
   instrumentDate: string | null;
+  /** Whose bank a cheque taken in was drawn on — an ISSUER_BANK value. */
+  issuerBankValueId: number | null;
+  /** Which ledger a post-dated cheque was parked in on issue. */
+  holdingAccountId: number | null;
   chequeKind: 'CDC' | 'PDC' | null;
   status: PdcStatus | null;
   /** The day it left ISSUED, and the voucher that took it there. */
