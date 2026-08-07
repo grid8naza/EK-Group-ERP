@@ -25,11 +25,10 @@ import {
   type CompanyEntrySetup,
 } from '../../common/entry-rules';
 import {
-  CancelPdcDto,
   CancelVoucherDto,
-  ClearPdcDto,
   CreateVoucherDto,
   InstrumentInput,
+  PdcMoveDto,
   UpdateVoucherDto,
   VoucherLineInput,
   BillAllocationInput,
@@ -168,6 +167,40 @@ const instrumentAsInput = (
         chequeKind: i.chequeKind,
       }
     : undefined;
+
+/**
+ * Where a post-dated cheque may go from where it is.
+ *
+ * The two sides read differently because they are different lives. One we
+ * WROTE has left our hands, so the next thing that happens to it is the last.
+ * One we were GIVEN sits in a drawer and is ours to do things to — banked,
+ * returned unpaid, banked again — and it may go round that loop as often as the
+ * drawer's patience allows.
+ *
+ * An empty list is the end of the road.
+ */
+const PDC_TRANSITIONS: Record<PdcStatus, PdcStatus[]> = {
+  ISSUED: ['CLEARED', 'REPLACED', 'CANCELLED'],
+  IN_HAND: ['SUBMITTED', 'REPLACED', 'CANCELLED'],
+  SUBMITTED: ['CLEARED', 'BOUNCED'],
+  BOUNCED: ['RESUBMITTED', 'REPLACED', 'CANCELLED'],
+  RESUBMITTED: ['CLEARED', 'BOUNCED'],
+  CLEARED: [],
+  REPLACED: [],
+  CANCELLED: [],
+};
+
+/**
+ * The moves nobody should record without saying why.
+ *
+ * A cheque that cleared needs no explanation; one that came back, or was torn
+ * up, or was swapped for another, is the beginning of a conversation somebody
+ * will have to have weeks later with only this record to go on.
+ */
+const PDC_NEEDS_REMARK: PdcStatus[] = ['BOUNCED', 'REPLACED', 'CANCELLED'];
+
+/** A status as it reads in a sentence. */
+const said = (s: PdcStatus) => s.toLowerCase().replace('_', ' ');
 
 /** Codes of the two global lookups the classification is drawn from. */
 const TXN_TYPE_LOOKUP_CODE = 'TRANSACTION_TYPE';
@@ -428,7 +461,28 @@ export class VoucherService {
             })),
           },
           ...(instrument
-            ? { instrument: { create: { companyId, ...instrument } } }
+            ? {
+                instrument: {
+                  create: {
+                    companyId,
+                    ...instrument,
+                    // A post-dated cheque's history starts where the voucher
+                    // does, so the register can say how long it has been sitting
+                    // there without inferring it from somewhere else.
+                    ...(instrument.status
+                      ? {
+                          events: {
+                            create: {
+                              status: instrument.status,
+                              date,
+                              createdByUserId: userId,
+                            },
+                          },
+                        }
+                      : {}),
+                  },
+                },
+              }
             : {}),
         },
         include: withLines,
@@ -652,6 +706,7 @@ export class VoucherService {
         ...(status ? { status } : {}),
       },
       include: {
+        events: { orderBy: { date: 'asc' } },
         voucher: {
           select: {
             id: true,
@@ -677,28 +732,111 @@ export class VoucherService {
   }
 
   /**
-   * The cheque was presented and the money went.
+   * Move a cheque on: banked, cleared, bounced, presented again, replaced,
+   * torn up.
    *
-   * This is the entry the register exists to raise: on the day it actually
-   * cleared — which is rarely the day written on the leaf — the liability that
-   * has been standing since it was issued is discharged against the bank it was
-   * always drawn on. Its own voucher, on its own date, because that is when it
-   * happened; back-dating it into the issuing voucher would put money out of
-   * the bank on a day the bank says it was still there.
+   * One way in for all of them, because they are one fact — it became something
+   * else, on a day, for a reason worth writing down — and because the rule that
+   * matters is which moves are open from where. Split across six methods, that
+   * rule would live in six places and be right in five.
+   *
+   * Only CLEARED posts anything. A cheque banked is still not money; a cheque
+   * returned is not a movement of money either, and the entry that took it in
+   * stands until somebody says the debt is off. REPLACED and CANCELLED say
+   * exactly that, and cancel the voucher that took it — which puts the bill it
+   * was settling back where it was, because outstanding is derived.
    */
-  async clearPdc(
+  async movePdc(
     userId: number,
     companyId: number | undefined,
     id: number,
-    dto: ClearPdcDto,
+    dto: PdcMoveDto,
   ) {
     const pdc = await this.livePdc(companyId, id);
+    const from = pdc.status ?? 'IN_HAND';
+    const to = dto.status as PdcStatus;
+    if (!PDC_TRANSITIONS[from].includes(to)) {
+      throw new BadRequestException(
+        `A cheque that is ${said(from)} cannot then be ${said(to)}.`,
+      );
+    }
+    const remark = dto.remark?.trim() || null;
+    if (PDC_NEEDS_REMARK.includes(to) && !remark) {
+      throw new BadRequestException('Say why, in a word or two.');
+    }
     const date = this.assertDate(dto.date);
     if (date < pdc.voucher.date) {
       throw new BadRequestException(
-        'A cheque cannot clear before the day it was written.',
+        'A cheque cannot move before the day it was written.',
       );
     }
+    const last = pdc.events.at(-1);
+    if (last && date < last.date) {
+      throw new BadRequestException(
+        `It was ${said(last.status)} on ${last.date.toISOString().slice(0, 10)} — ` +
+          `this cannot have happened before that.`,
+      );
+    }
+
+    const settlement =
+      to === 'CLEARED' ? await this.postPdcClearance(userId, pdc, date) : null;
+    if (to === 'REPLACED' || to === 'CANCELLED') {
+      await this.cancel(companyId, pdc.voucherId, { reason: remark! });
+    }
+
+    await this.prisma.pdcEvent.create({
+      data: {
+        instrumentId: pdc.id,
+        status: to,
+        date,
+        remark,
+        voucherId: settlement?.id ?? null,
+        createdByUserId: userId,
+      },
+    });
+    return this.prisma.voucherInstrument.update({
+      where: { id: pdc.id },
+      data: {
+        status: to,
+        // Only where it is over. A cheque banked or bounced is still in play,
+        // and a settled-on date on one would be a lie the register repeats.
+        ...(PDC_TRANSITIONS[to].length === 0
+          ? { settledOn: date, settlementVoucherId: settlement?.id ?? null }
+          : {}),
+      },
+      include: { events: { orderBy: { date: 'asc' } } },
+    });
+  }
+
+  /**
+   * The cheque was presented and the money moved.
+   *
+   * Its own voucher, on the day it actually cleared — which is rarely the day
+   * written on the leaf. Back-dating it into the voucher that took or wrote the
+   * cheque would move the bank on a day the bank says nothing happened.
+   *
+   * Which way round follows from whose cheque it was. Ours going out: the
+   * promise is discharged and the bank parts with the money — Dr holding, Cr
+   * bank. Theirs coming in: the bank has it now and the asset we were holding
+   * is gone — Dr bank, Cr holding.
+   */
+  private async postPdcClearance(
+    userId: number,
+    pdc: {
+      id: number;
+      companyId: number;
+      bankAccountId: number;
+      holdingAccountId: number | null;
+      instrumentNo: string | null;
+      voucher: {
+        voucherNo: string;
+        branchId: number | null;
+        totalCredit: Prisma.Decimal;
+        type: { code: string };
+      };
+    },
+    date: Date,
+  ) {
     if (!pdc.holdingAccountId) {
       throw new BadRequestException(
         'That cheque was not parked in a post-dated cheque ledger, so there is ' +
@@ -707,7 +845,6 @@ export class VoucherService {
     }
     const holdingAccountId = pdc.holdingAccountId;
     const amount = pdc.voucher.totalCredit;
-    /** A cheque taken IN, rather than one written out. */
     const taken = pdc.voucher.type.code === 'BANK_RECEIPT';
 
     const type = await this.prisma.voucherType.findFirst({
@@ -717,7 +854,18 @@ export class VoucherService {
       throw new BadRequestException('The journal voucher type is not set up.');
     }
 
-    const settlement = await this.withNumberRetry(
+    const line = (sequence: number, accountId: number, debit: boolean) => ({
+      sequence,
+      companyId: pdc.companyId,
+      branchId: pdc.voucher.branchId,
+      date,
+      status: 'POSTED' as const,
+      accountId,
+      debit: debit ? amount : 0,
+      credit: debit ? 0 : amount,
+    });
+
+    return this.withNumberRetry(
       { companyId: pdc.companyId, branchId: pdc.voucher.branchId ?? undefined },
       type.documentCode,
       type.code,
@@ -744,79 +892,14 @@ export class VoucherService {
             sourceDocId: pdc.id,
             lines: {
               create: [
-                // Which way round follows from whose cheque it was. Ours going
-                // out: the promise is discharged and the bank parts with the
-                // money — Dr holding, Cr bank. Theirs coming in: the bank has
-                // it now and the asset we were holding is gone — Dr bank, Cr
-                // holding.
-                {
-                  sequence: 0,
-                  companyId: pdc.companyId,
-                  branchId: pdc.voucher.branchId,
-                  date,
-                  status: 'POSTED',
-                  accountId: taken ? pdc.bankAccountId : holdingAccountId,
-                  debit: amount,
-                  credit: 0,
-                },
-                {
-                  sequence: 1,
-                  companyId: pdc.companyId,
-                  branchId: pdc.voucher.branchId,
-                  date,
-                  status: 'POSTED',
-                  accountId: taken ? holdingAccountId : pdc.bankAccountId,
-                  debit: 0,
-                  credit: amount,
-                },
+                line(0, taken ? pdc.bankAccountId : holdingAccountId, true),
+                line(1, taken ? holdingAccountId : pdc.bankAccountId, false),
               ],
             },
           },
           include: withLines,
         }),
     );
-
-    await this.prisma.voucherInstrument.update({
-      where: { id: pdc.id },
-      data: {
-        status: 'CLEARED',
-        settledOn: date,
-        settlementVoucherId: settlement.id,
-      },
-    });
-    return settlement;
-  }
-
-  /**
-   * The cheque was torn up, or another was written in its place.
-   *
-   * Nothing is posted: cancelling the voucher that issued it is the whole of
-   * it. Its lines and its bill allocations go CANCELLED, and because what a
-   * party still owes is DERIVED from the live allocations rather than stored,
-   * the bill it was paying stands open again by itself — see cancel().
-   *
-   * REPLACED rather than CANCELLED where a fresh cheque follows, so the
-   * register can say which of the two happened; the replacement names this one
-   * when it is written.
-   */
-  async cancelPdc(
-    companyId: number | undefined,
-    id: number,
-    dto: CancelPdcDto,
-    replaced = false,
-  ) {
-    const pdc = await this.livePdc(companyId, id);
-    const date = this.assertDate(dto.date);
-    await this.cancel(companyId, pdc.voucherId, {
-      reason: dto.reason.trim(),
-    });
-    return this.prisma.voucherInstrument.update({
-      where: { id: pdc.id },
-      data: {
-        status: replaced ? 'REPLACED' : 'CANCELLED',
-        settledOn: date,
-      },
-    });
   }
 
   /** The cheque this company issued, still live, or a reason it is not. */
@@ -825,6 +908,7 @@ export class VoucherService {
     const pdc = await this.prisma.voucherInstrument.findUnique({
       where: { id },
       include: {
+        events: { orderBy: { date: 'asc' } },
         voucher: {
           select: {
             id: true,
@@ -846,9 +930,10 @@ export class VoucherService {
         'Only a post-dated cheque has anything left to do.',
       );
     }
-    if (pdc.status !== 'ISSUED') {
+    if (!pdc.status || !PDC_TRANSITIONS[pdc.status].length) {
       throw new BadRequestException(
-        `That cheque is already ${pdc.status?.toLowerCase()}.`,
+        `That cheque is ${said(pdc.status ?? 'CANCELLED')} — there is nothing ` +
+          `left to do to it.`,
       );
     }
     return pdc;
@@ -1082,7 +1167,12 @@ export class VoucherService {
       holdingAccountId,
       // A current-dated cheque is finished the moment it is written; only a
       // post-dated one has anywhere left to go.
-      status: input.chequeKind === 'PDC' ? ('ISSUED' as const) : null,
+      status:
+        input.chequeKind === 'PDC'
+          ? received
+            ? ('IN_HAND' as const)
+            : ('ISSUED' as const)
+          : null,
     };
   }
 

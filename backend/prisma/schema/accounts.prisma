@@ -184,17 +184,28 @@ enum ChequeKind {
 
 /// Where a post-dated cheque has got to.
 ///
-/// ISSUED is a liability standing in the books — the party has been paid, the
-/// bank has not yet. It leaves that state exactly once: CLEARED when the money
-/// actually goes, CANCELLED when the cheque is torn up, REPLACED when a fresh
-/// cheque is written for the same debt. Every one of those posts its own entry
-/// on its own date, so the register and the ledger can never say different
-/// things.
+/// The two sides have different lives, and the difference is who holds the
+/// paper. A cheque WE wrote leaves our hands the day we write it: it is ISSUED,
+/// and the next thing that happens to it is the last — it clears, or it is torn
+/// up, or another is written in its place.
+///
+/// A cheque somebody GIVES us sits in a drawer, and everything that follows is
+/// something we do to it. IN_HAND while it waits, SUBMITTED when it goes to the
+/// bank, CLEARED when the money arrives — or BOUNCED, after which it may be
+/// RESUBMITTED and take the same road again, as many times as the drawer's
+/// patience allows. REPLACED and CANCELLED end it either way.
+///
+/// Every move is dated and remarked, and kept: see PdcEvent. The status here is
+/// only the latest of them, held for filtering.
 enum PdcStatus {
   ISSUED
+  IN_HAND
+  SUBMITTED
   CLEARED
-  CANCELLED
+  BOUNCED
+  RESUBMITTED
   REPLACED
+  CANCELLED
 }
 
 /// How an amount posted to a party is attached to that party's bills — Tally's
@@ -555,6 +566,9 @@ model VoucherInstrument {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// Everything that has happened to it, oldest first.
+  events PdcEvent[]
+
   voucher Voucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
   /// Restrict: a bank account a cheque was drawn on cannot simply vanish.
   bankAccount Account @relation("InstrumentBank", fields: [bankAccountId], references: [id], onDelete: Restrict)
@@ -565,6 +579,36 @@ model VoucherInstrument {
   @@index([companyId, instrumentDate])
   @@index([bankAccountId])
   @@map("voucher_instruments")
+}
+
+/// One thing that happened to a post-dated cheque, on the day it happened.
+///
+/// A row per move rather than a column per status. A cheque that bounces and is
+/// presented again passes through the same states twice, and "when was it
+/// submitted" then has two answers — both of them true, and both worth having
+/// when somebody asks why a customer's money is three weeks late.
+///
+/// The remark is the short human answer to "why": returned unpaid — funds
+/// insufficient; banked at the Kadavanthra branch; held back at the customer's
+/// request. Nothing derives from it, and everything is easier to explain with
+/// it there.
+model PdcEvent {
+  id           Int      @id @default(autoincrement())
+  instrumentId Int
+  /// What it became. The instrument's own status is the latest of these.
+  status PdcStatus
+  /// The day it happened — which is rarely the day it was entered.
+  date   DateTime
+  remark String?
+  /// The entry this move posted, where it posted one. Only clearing does.
+  voucherId       Int?
+  createdByUserId Int?
+  createdAt       DateTime @default(now())
+
+  instrument VoucherInstrument @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
+
+  @@index([instrumentId, date])
+  @@map("pdc_events")
 }
 
 /// The general ledger itself: one row per debit or credit.

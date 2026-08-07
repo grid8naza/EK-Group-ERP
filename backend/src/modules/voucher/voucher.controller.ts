@@ -16,10 +16,9 @@ import { BranchId } from '../../auth/branch.decorator';
 import { AuthUser, CurrentUser } from '../../auth/current-user.decorator';
 import { VoucherService } from './voucher.service';
 import {
-  CancelPdcDto,
   CancelVoucherDto,
-  ClearPdcDto,
   CreateVoucherDto,
+  PdcMoveDto,
   UpdateVoucherDto,
 } from './voucher.dto';
 
@@ -53,35 +52,19 @@ export class VoucherController {
     return this.service.listPdc(companyId, status);
   }
 
-  /** It was presented and the money went — on the day it actually went. */
-  @Patch('pdc/:id/clear')
-  clearPdc(
+  /**
+   * Move one on — banked, cleared, bounced, presented again, replaced, torn
+   * up. One route, because which of those are open depends on where it is and
+   * that rule belongs in one place.
+   */
+  @Patch('pdc/:id')
+  movePdc(
     @CurrentUser() user: AuthUser,
     @CompanyId() companyId: number | undefined,
     @Param('id', ParseIntPipe) id: number,
-    @Body() dto: ClearPdcDto,
+    @Body() dto: PdcMoveDto,
   ) {
-    return this.service.clearPdc(user.id, companyId, id, dto);
-  }
-
-  /** It was torn up. */
-  @Patch('pdc/:id/cancel')
-  cancelPdc(
-    @CompanyId() companyId: number | undefined,
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: CancelPdcDto,
-  ) {
-    return this.service.cancelPdc(companyId, id, dto);
-  }
-
-  /** It was torn up and another written for the same debt. */
-  @Patch('pdc/:id/replace')
-  replacePdc(
-    @CompanyId() companyId: number | undefined,
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: CancelPdcDto,
-  ) {
-    return this.service.cancelPdc(companyId, id, dto, true);
+    return this.service.movePdc(user.id, companyId, id, dto);
   }
 
   @Get()

@@ -2317,7 +2317,27 @@ export interface OutstandingBill {
 }
 
 /** How a post-dated cheque ends: presented, torn up, or written again. */
-export type PdcStatus = 'ISSUED' | 'CLEARED' | 'CANCELLED' | 'REPLACED';
+export type PdcStatus =
+  | 'ISSUED'
+  | 'IN_HAND'
+  | 'SUBMITTED'
+  | 'CLEARED'
+  | 'BOUNCED'
+  | 'RESUBMITTED'
+  | 'REPLACED'
+  | 'CANCELLED';
+
+/** One thing that happened to a post-dated cheque, on the day it happened. */
+export interface PdcEvent {
+  id: number;
+  instrumentId: number;
+  status: PdcStatus;
+  date: string;
+  remark: string | null;
+  /** The entry it posted, where it posted one. Only clearing does. */
+  voucherId: number | null;
+  createdAt: string;
+}
 
 /**
  * How a bank voucher's money moved — and, on a cheque, what was written on it.
@@ -2345,6 +2365,8 @@ export interface VoucherInstrument {
   /** The day it left ISSUED, and the voucher that took it there. */
   settledOn: string | null;
   settlementVoucherId: number | null;
+  /** Everything that has happened to it, oldest first. */
+  events?: PdcEvent[];
   voucher?: Voucher;
 }
 

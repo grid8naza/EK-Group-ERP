@@ -1,14 +1,14 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { CalendarClock } from 'lucide-react';
+import { CalendarClock, History } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
-import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
+import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { DateInput, Input } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -18,61 +18,92 @@ import type { PdcStatus, VoucherInstrument } from '@/lib/types';
 
 const ROUTE = '/accounts/pdc-register';
 
-/** What each state looks like at a glance. */
-const STATUS: Record<PdcStatus, { label: string; color: 'amber' | 'green' | 'slate' | 'violet' }> = {
-  ISSUED: { label: 'Issued', color: 'amber' },
-  CLEARED: { label: 'Cleared', color: 'green' },
-  CANCELLED: { label: 'Cancelled', color: 'slate' },
-  REPLACED: { label: 'Replaced', color: 'violet' },
+type Tone = 'amber' | 'green' | 'slate' | 'violet' | 'blue' | 'red';
+
+/**
+ * The eight states, as they read and as they look.
+ *
+ * `moves` is the same table the server holds — which moves are open from where.
+ * Kept in step by both being short and both being about one idea; the server is
+ * the one that decides, and a button this screen offers wrongly is refused
+ * there with the same words.
+ */
+const STATUS: Record<
+  PdcStatus,
+  { label: string; tone: Tone; moves: PdcStatus[] }
+> = {
+  ISSUED: { label: 'Issued', tone: 'amber', moves: ['CLEARED', 'REPLACED', 'CANCELLED'] },
+  IN_HAND: { label: 'In hand', tone: 'amber', moves: ['SUBMITTED', 'REPLACED', 'CANCELLED'] },
+  SUBMITTED: { label: 'Submitted', tone: 'blue', moves: ['CLEARED', 'BOUNCED'] },
+  BOUNCED: { label: 'Bounced', tone: 'red', moves: ['RESUBMITTED', 'REPLACED', 'CANCELLED'] },
+  RESUBMITTED: { label: 'Resubmitted', tone: 'blue', moves: ['CLEARED', 'BOUNCED'] },
+  CLEARED: { label: 'Cleared', tone: 'green', moves: [] },
+  REPLACED: { label: 'Replaced', tone: 'violet', moves: [] },
+  CANCELLED: { label: 'Cancelled', tone: 'slate', moves: [] },
 };
 
-type Action = 'clear' | 'cancel' | 'replace';
-
-/** What each action is called, and what it wants said about it. */
-const ACTIONS: Record<
-  Action,
-  { title: string; verb: string; dateLabel: string; needsReason: boolean; hint: string }
+/** What each move asks for, and what it will do to the books. */
+const MOVES: Record<
+  PdcStatus,
+  { verb: string; dateLabel: string; needsRemark: boolean; hint: string }
 > = {
-  clear: {
-    title: 'Cheque cleared',
+  SUBMITTED: {
+    verb: 'Submit',
+    dateLabel: 'Banked on',
+    needsRemark: false,
+    hint: 'The cheque has gone to the bank. Nothing is posted — a cheque banked is still not money, and the entry that took it in already said what it was worth.',
+  },
+  CLEARED: {
     verb: 'Mark cleared',
     dateLabel: 'Cleared on',
-    needsReason: false,
-    hint: 'The day the money actually left the bank — usually not the day written on the leaf. The entry taking it out of Post-dated Cheques Issued and into the bank is posted on that date.',
+    needsRemark: false,
+    hint: 'The day the money actually moved — usually not the day written on the leaf. The entry between the post-dated cheque ledger and the bank is posted on that date.',
   },
-  cancel: {
-    title: 'Cheque cancelled',
-    verb: 'Cancel it',
-    dateLabel: 'Cancelled on',
-    needsReason: true,
-    hint: 'The voucher that issued it is cancelled, which puts the bill it was paying back where it was. Nothing else is posted — a cheque that never left is not a movement of money.',
+  BOUNCED: {
+    verb: 'Mark bounced',
+    dateLabel: 'Returned on',
+    needsRemark: true,
+    hint: 'It came back unpaid. Nothing is posted: the cheque can still be presented again, and the entry that took it in stands until somebody says the debt is off.',
   },
-  replace: {
-    title: 'Cheque replaced',
+  RESUBMITTED: {
+    verb: 'Resubmit',
+    dateLabel: 'Banked again on',
+    needsRemark: false,
+    hint: 'Round it goes again. It may clear or bounce as many times as the patience lasts, and every pass is kept.',
+  },
+  REPLACED: {
     verb: 'Mark replaced',
     dateLabel: 'Replaced on',
-    needsReason: true,
-    hint: 'The same as cancelling, recorded as a replacement so the register says which of the two happened. Write the new cheque as a fresh bank payment.',
+    needsRemark: true,
+    hint: 'Another cheque was written for the same debt. The voucher that took this one is cancelled, which puts the bill it was settling back where it was. Enter the new cheque as a fresh voucher.',
   },
+  CANCELLED: {
+    verb: 'Cancel it',
+    dateLabel: 'Cancelled on',
+    needsRemark: true,
+    hint: 'The end of it. The voucher that took or wrote it is cancelled, and the bill stands open again.',
+  },
+  // Never offered as a move — a cheque arrives in one of these.
+  ISSUED: { verb: '', dateLabel: '', needsRemark: false, hint: '' },
+  IN_HAND: { verb: '', dateLabel: '', needsRemark: false, hint: '' },
 };
 
 /**
- * The post-dated cheque register — every cheque written and not yet gone.
+ * The post-dated cheque register — every cheque written or taken in, and where
+ * it has got to.
  *
  * A PDC is the one thing a voucher leaves behind: the entry is finished the day
- * it is posted, but the cheque goes on being a live promise for weeks, and
- * somebody has to be able to ask "what is due this week, and what has come
- * back". That question has no home on a voucher screen, so it has one here.
- *
- * The three things that can happen to it all happen from this screen, and each
- * writes its own date into the books — a cheque cleared on the second of
- * October is a payment on the second of October, whatever the leaf says.
+ * it is posted, but the cheque goes on being a live promise for weeks. A cheque
+ * we were GIVEN especially — it waits in a drawer, goes to the bank, comes back
+ * unpaid, goes again — and "why is that customer's money three weeks late" is
+ * answered by the whole of that history, not by its last line. So every move is
+ * kept, with the day it happened and a word about why.
  */
 export default function PdcRegisterPage() {
   const { can } = useAuth();
   const toast = useToast();
-  const [status, setStatus] = useState<PdcStatus | ''>('ISSUED');
-  const query = status ? `?status=${status}` : '';
+  const [status, setStatus] = useState<PdcStatus | 'LIVE' | ''>('LIVE');
+  const query = status && status !== 'LIVE' ? `?status=${status}` : '';
   const { data, loading, refetch } = useFetch<VoucherInstrument[]>(
     `/vouchers/pdc${query}`,
     [query],
@@ -80,29 +111,40 @@ export default function PdcRegisterPage() {
 
   const canEdit = can(ROUTE, 'edit');
 
-  const [acting, setActing] = useState<{ row: VoucherInstrument; action: Action } | null>(null);
+  const [acting, setActing] = useState<{ row: VoucherInstrument; to: PdcStatus } | null>(null);
+  const [history, setHistory] = useState<VoucherInstrument | null>(null);
   const [date, setDate] = useState('');
-  const [reason, setReason] = useState('');
+  const [remark, setRemark] = useState('');
   const [saving, setSaving] = useState(false);
 
-  const openAction = (row: VoucherInstrument, action: Action) => {
-    setActing({ row, action });
+  const rows = useMemo(() => {
+    const all = data ?? [];
+    // "Live" is the question the register is actually opened to ask: what is
+    // still out there. It is every state that has somewhere left to go.
+    return status === 'LIVE'
+      ? all.filter((r) => r.status && STATUS[r.status].moves.length > 0)
+      : all;
+  }, [data, status]);
+
+  const openMove = (row: VoucherInstrument, to: PdcStatus) => {
+    setActing({ row, to });
     setDate(isoDate(new Date()));
-    setReason('');
+    setRemark('');
   };
 
   const run = async () => {
     if (!acting) return;
-    const spec = ACTIONS[acting.action];
+    const spec = MOVES[acting.to];
     if (!date) return toast.error(`Give the date it was ${spec.dateLabel.toLowerCase()}.`);
-    if (spec.needsReason && !reason.trim()) return toast.error('Say why.');
+    if (spec.needsRemark && !remark.trim()) return toast.error('Say why, in a word or two.');
     setSaving(true);
     try {
-      await api.patch(`/vouchers/pdc/${acting.row.id}/${acting.action}`, {
+      await api.patch(`/vouchers/pdc/${acting.row.id}`, {
+        status: acting.to,
         date,
-        ...(spec.needsReason ? { reason: reason.trim() } : {}),
+        remark: remark.trim() || undefined,
       });
-      toast.success(`${spec.title}.`);
+      toast.success(`${STATUS[acting.to].label}.`);
       setActing(null);
       refetch();
     } catch (e) {
@@ -130,7 +172,7 @@ export default function PdcRegisterPage() {
         ),
       },
       { key: 'instrumentNo', header: 'Cheque no', accessor: (r) => r.instrumentNo ?? '—' },
-      { key: 'bank', header: 'Drawn on', accessor: (r) => r.bankAccount?.name ?? '—' },
+      { key: 'bank', header: 'Bank', accessor: (r) => r.bankAccount?.name ?? '—' },
       { key: 'party', header: 'Against', accessor: partyLine },
       {
         key: 'amount',
@@ -138,44 +180,53 @@ export default function PdcRegisterPage() {
         accessor: (r) => money(r.voucher?.totalCredit ?? 0),
       },
       {
-        key: 'voucher',
-        header: 'Voucher',
-        accessor: (r) => r.voucher?.voucherNo ?? '—',
-      },
-      {
         key: 'status',
         header: 'Status',
         render: (r) => {
           const s = r.status ? STATUS[r.status] : null;
-          return s ? <Badge color={s.color}>{s.label}</Badge> : <span>—</span>;
+          if (!s) return <span>—</span>;
+          // The date of the last move, beside it: a cheque that has been
+          // "submitted" for five weeks is a different thing from one submitted
+          // yesterday, and the status alone cannot say which.
+          const since = r.events?.at(-1)?.date;
+          return (
+            <div>
+              <Badge color={s.tone}>{s.label}</Badge>
+              {since && (
+                <span className="ml-2 text-xs text-slate-400">
+                  {formatDate(since)}
+                </span>
+              )}
+            </div>
+          );
         },
       },
       {
-        key: 'settledOn',
-        header: 'Settled',
-        accessor: (r) => (r.settledOn ? formatDate(r.settledOn) : '—'),
+        key: 'remark',
+        header: 'Last remark',
+        accessor: (r) => r.events?.at(-1)?.remark ?? '—',
       },
     ],
     [],
   );
 
-  const spec = acting ? ACTIONS[acting.action] : null;
+  const spec = acting ? MOVES[acting.to] : null;
 
   return (
     <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
         title="PDC Register"
-        description="Post-dated cheques written and not yet gone — what is due, and what has come back"
+        description="Post-dated cheques and where each has got to — what is due, what has been banked, what came back"
         icon={<CalendarClock className="h-5 w-5" />}
         actions={
-          <div className="flex items-center gap-2">
-            {(['ISSUED', 'CLEARED', 'CANCELLED', 'REPLACED', ''] as const).map((s) => (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {(['LIVE', 'SUBMITTED', 'BOUNCED', 'CLEARED', ''] as const).map((s) => (
               <button
                 key={s || 'all'}
                 className={s === status ? 'btn-primary' : 'btn-secondary'}
                 onClick={() => setStatus(s)}
               >
-                {s ? STATUS[s].label : 'All'}
+                {s === 'LIVE' ? 'Live' : s ? STATUS[s].label : 'All'}
               </button>
             ))}
           </div>
@@ -184,35 +235,42 @@ export default function PdcRegisterPage() {
 
       <DataTable
         columns={columns}
-        rows={data ?? []}
+        rows={rows}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
         onRefresh={refetch}
         searchPlaceholder="Search cheques..."
         emptyMessage="No cheques here"
-        rowActions={(r) =>
-          // Only a live cheque has anything left to do; the rest are history.
-          canEdit && r.status === 'ISSUED' ? (
-            <div className="flex items-center gap-1">
-              <button className="btn-secondary" onClick={() => openAction(r, 'clear')}>
-                Clear
-              </button>
-              <button className="btn-secondary" onClick={() => openAction(r, 'cancel')}>
-                Cancel
-              </button>
-              <button className="btn-secondary" onClick={() => openAction(r, 'replace')}>
-                Replace
-              </button>
-            </div>
-          ) : null
-        }
+        rowActions={(r) => (
+          <div className="flex items-center gap-1">
+            <button
+              className="btn-secondary"
+              title="Everything that has happened to it"
+              onClick={() => setHistory(r)}
+            >
+              <History className="h-4 w-4" />
+            </button>
+            {/* Only the moves open from where it is. The rest are not greyed
+                out — they are not choices at all from here. */}
+            {canEdit &&
+              (r.status ? STATUS[r.status].moves : []).map((to) => (
+                <button
+                  key={to}
+                  className="btn-secondary"
+                  onClick={() => openMove(r, to)}
+                >
+                  {MOVES[to].verb}
+                </button>
+              ))}
+          </div>
+        )}
       />
 
       <Drawer
         open={!!acting}
         onClose={() => setActing(null)}
-        title={spec?.title ?? ''}
+        title={acting ? STATUS[acting.to].label : ''}
         subtitle={
           acting
             ? `${acting.row.instrumentNo ?? 'Cheque'} · ${money(acting.row.voucher?.totalCredit ?? 0)}`
@@ -238,17 +296,51 @@ export default function PdcRegisterPage() {
               value={date}
               onChange={setDate}
             />
-            {spec?.needsReason && (
-              <Input
-                label="Reason"
-                required
-                value={reason}
-                placeholder="Why the cheque did not go"
-                onChange={(e) => setReason(e.target.value)}
-              />
-            )}
+            <Input
+              label="Remark"
+              required={spec?.needsRemark}
+              value={remark}
+              placeholder="Returned unpaid — funds insufficient"
+              onChange={(e) => setRemark(e.target.value)}
+            />
           </div>
         </ReadOnlyFieldset>
+      </Drawer>
+
+      {/* The whole life of one cheque, oldest first. */}
+      <Drawer
+        open={!!history}
+        onClose={() => setHistory(null)}
+        title={history?.instrumentNo ?? 'Cheque'}
+        subtitle={
+          history
+            ? `${history.bankAccount?.name ?? ''} · ${money(history.voucher?.totalCredit ?? 0)}`
+            : undefined
+        }
+        icon={<History className="h-5 w-5" />}
+        width="sm"
+        footer={<CloseFooter onClose={() => setHistory(null)} />}
+      >
+        <ol className="space-y-3">
+          {(history?.events ?? []).map((e) => (
+            <li key={e.id} className="flex gap-3">
+              <span className="w-24 flex-none text-xs tabular-nums text-slate-400">
+                {formatDate(e.date)}
+              </span>
+              <span className="min-w-0">
+                <Badge color={STATUS[e.status].tone}>{STATUS[e.status].label}</Badge>
+                {e.remark && (
+                  <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
+                    {e.remark}
+                  </span>
+                )}
+              </span>
+            </li>
+          ))}
+          {!history?.events?.length && (
+            <li className="text-sm text-slate-400">Nothing recorded yet.</li>
+          )}
+        </ol>
       </Drawer>
     </div>
   );

@@ -301,18 +301,38 @@ export class CancelVoucherDto {
   reason!: string;
 }
 
-/** Marking a post-dated cheque cleared: the day the money actually went. */
-export class ClearPdcDto {
+/**
+ * Moving a post-dated cheque on — banked, cleared, bounced, presented again,
+ * replaced, torn up.
+ *
+ * One shape for all of them, because they are all the same fact: it became
+ * something else, on a day, for a reason worth writing down. Which moves are
+ * open from where is the service's business — see PDC_TRANSITIONS.
+ */
+export class PdcMoveDto {
+  @IsIn([
+    'SUBMITTED',
+    'CLEARED',
+    'BOUNCED',
+    'RESUBMITTED',
+    'REPLACED',
+    'CANCELLED',
+  ])
+  status!:
+    | 'SUBMITTED'
+    | 'CLEARED'
+    | 'BOUNCED'
+    | 'RESUBMITTED'
+    | 'REPLACED'
+    | 'CANCELLED';
+
+  /** The day it happened, which is rarely the day it is being entered. */
   @IsISO8601()
   date!: string;
-}
 
-/** Tearing one up, or writing another in its place. */
-export class CancelPdcDto {
-  @IsISO8601()
-  date!: string;
-
+  /** Short, and required where somebody will later ask why. */
+  @IsOptional()
   @IsString()
   @MaxLength(300)
-  reason!: string;
+  remark?: string;
 }
