@@ -3,9 +3,10 @@
 import { VoucherEntryScreen } from '@/components/accounts/VoucherEntryScreen';
 
 /**
- * Debit Note — What the company owes a supplier, reduced: goods sent back, a shortage, a
- * price agreed down after the bill. The supplier is debited and the purchase
- * (or the return account) credited.
+ * Debit Note — a party's balance, charged. Usually a supplier: goods sent back,
+ * a shortage, a price agreed down after the bill. Sometimes a customer, where
+ * the charge is one raised on THEM. Either way the party is debited and
+ * whatever gave rise to it credited — the mirror of the credit note.
  *
  * One kind per screen: the shared form is told which voucher it is writing and
  * never offers to change it.
@@ -19,6 +20,11 @@ export default function DebitNotePage() {
       noun="debit note"
       icon="file-minus"
       description="A charge raised against a supplier — goods returned, a short delivery, an overcharge"
+      // A debit note debits somebody, whichever side they are on: the first
+      // line is locked to Dr and its ledger picker offers the control accounts
+      // aged by either party, so naming the ledger settles whether this is
+      // raised on a supplier or on a customer.
+      firstLine={{ side: 'DR', party: ['SUPPLIER', 'CUSTOMER'] }}
     />
   );
 }
