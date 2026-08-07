@@ -26,6 +26,17 @@ export const ACCOUNTS_SUBS = [
     icon: 'book-open',
     order: 4,
   },
+  // Per-module reference data, as every other module has. Super-admin-only.
+  // The transaction type/subtype lists a voucher is classified by are GLOBAL
+  // and so appear here too — the same taxonomy classifies a stock document, and
+  // one shared list is what lets the two agree.
+  {
+    name: 'Lookups',
+    route: '/accounts/lookups',
+    icon: 'list',
+    order: 5,
+    superAdminOnly: true,
+  },
 ];
 
 // Where the books are actually written. Its own main menu rather than a screen
