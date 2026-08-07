@@ -40,8 +40,10 @@ const HELP = {
     'The balance is only a total — the detail is per party. Sundry Creditors is really the sum of what you owe each supplier, so an entry here records WHICH supplier and the account is aged and settled bill by bill.',
   isGstRelevant:
     'The account feeds the GST returns — output tax, input credit, reverse charge. Tick it on the tax heads, not on the sales or purchase account itself.',
-  isBankOrCash:
-    'Money physically moves through this account: a till, a petty cash box, a bank account. These are what a Cash or Bank voucher pays into and out of.',
+  isCash:
+    'Money in hand: a till, a petty cash box, cash on its way between two of them. Counted by counting it, and what a Cash Receipt or Cash Payment pays into and out of.',
+  isBank:
+    'Money at a bank: a current account, a deposit. Agreed against a statement rather than counted, and what a Bank Receipt or Bank Payment pays into and out of. An account is cash or bank, never both.',
   isReconcilable:
     'The balance is agreed against a statement from outside — a bank statement, a supplier statement. Cash in Transit is ticked because money that has left one place and not yet arrived must be tied out.',
   allowManualJe:
@@ -62,7 +64,8 @@ type Form = {
   hasCostCenter: boolean;
   hasCostObject: boolean;
   isGstRelevant: boolean;
-  isBankOrCash: boolean;
+  isCash: boolean;
+  isBank: boolean;
   isReconcilable: boolean;
   allowManualJe: boolean;
   notes: string;
@@ -81,7 +84,8 @@ const EMPTY: Form = {
   hasCostCenter: false,
   hasCostObject: false,
   isGstRelevant: false,
-  isBankOrCash: false,
+  isCash: false,
+  isBank: false,
   isReconcilable: false,
   allowManualJe: true,
   notes: '',
@@ -136,7 +140,8 @@ export function AccountDrawer({
             hasCostCenter: account.hasCostCenter,
             hasCostObject: account.hasCostObject,
             isGstRelevant: account.isGstRelevant,
-            isBankOrCash: account.isBankOrCash,
+            isCash: account.isCash,
+            isBank: account.isBank,
             isReconcilable: account.isReconcilable,
             allowManualJe: account.allowManualJe,
             notes: account.notes ?? '',
@@ -195,7 +200,8 @@ export function AccountDrawer({
           hasCostCenter: form.hasCostCenter,
           hasCostObject: form.hasCostObject,
           isGstRelevant: form.isGstRelevant,
-          isBankOrCash: form.isBankOrCash,
+          isCash: form.isCash,
+          isBank: form.isBank,
           isReconcilable: form.isReconcilable,
           allowManualJe: form.allowManualJe,
           notes: form.notes || undefined,
@@ -386,12 +392,34 @@ export function AccountDrawer({
             disabled={editing}
             onChange={(e) => setForm({ ...form, isGstRelevant: e.target.checked })}
           />
+          {/* One or the other: ticking one clears the other rather than
+              refusing the pair, since choosing "bank" over "cash" is a
+              correction, not a mistake to be argued with. */}
           <Checkbox
-            label="Bank or cash"
-            help={HELP.isBankOrCash}
-            checked={form.isBankOrCash}
+            label="Cash"
+            help={HELP.isCash}
+            checked={form.isCash}
             disabled={editing}
-            onChange={(e) => setForm({ ...form, isBankOrCash: e.target.checked })}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                isCash: e.target.checked,
+                isBank: e.target.checked ? false : form.isBank,
+              })
+            }
+          />
+          <Checkbox
+            label="Bank"
+            help={HELP.isBank}
+            checked={form.isBank}
+            disabled={editing}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                isBank: e.target.checked,
+                isCash: e.target.checked ? false : form.isCash,
+              })
+            }
           />
           <Checkbox
             label="Reconcilable"

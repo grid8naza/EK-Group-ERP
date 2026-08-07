@@ -75,7 +75,8 @@ const flagsOf = (a: CoaAccount) => {
   else if (a.hasCostCenter) out.push('Cost centre — off for this company');
   if (a.isContra) out.push('Contra');
   if (a.isIntercompany) out.push('Intercompany');
-  if (a.isBankOrCash) out.push('Bank / cash');
+  if (a.isCash) out.push('Cash');
+  if (a.isBank) out.push('Bank');
   if (a.isGstRelevant) out.push('GST');
   if (a.isReconcilable) out.push('Reconcilable');
   if (!a.allowManualJe) out.push('No manual JE');

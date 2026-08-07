@@ -48,6 +48,24 @@ const costFlags = (hasCostCenter?: boolean, hasCostObject?: boolean) => ({
 });
 
 /**
+ * Where the money actually sits: in hand, or at a bank.
+ *
+ * One or the other, never both. They were a single "bank or cash" flag and are
+ * now separate because the two are counted differently — cash by counting the
+ * notes in the drawer, a bank balance by agreeing it against a statement — and
+ * a screen that wants one of them cannot be built out of a flag that means
+ * either. An account claiming both would belong to neither cash book.
+ */
+const moneyFlags = (isCash?: boolean, isBank?: boolean) => {
+  if (isCash && isBank) {
+    throw new BadRequestException(
+      'An account holds cash or sits at a bank — it cannot be both.',
+    );
+  }
+  return { isCash: !!isCash, isBank: !!isBank };
+};
+
+/**
  * The Chart of Accounts as the application reads and maintains it.
  *
  * The 253 accounts and 44 groups shipped by Annexure D are the signed-off
@@ -333,7 +351,7 @@ export class CoaService {
         controlParty: dto.isControl ? dto.controlParty : null,
         ...costFlags(dto.hasCostCenter, dto.hasCostObject),
         isGstRelevant: dto.isGstRelevant ?? false,
-        isBankOrCash: dto.isBankOrCash ?? false,
+        ...moneyFlags(dto.isCash, dto.isBank),
         isReconcilable: dto.isReconcilable ?? false,
         allowManualJe: dto.allowManualJe ?? true,
         notes: dto.notes?.trim() || null,

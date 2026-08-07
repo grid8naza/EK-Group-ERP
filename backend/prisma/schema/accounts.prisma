@@ -276,7 +276,14 @@ model Account {
   hasCostObject Boolean @default(false)
 
   isGstRelevant   Boolean @default(false)
-  isBankOrCash    Boolean @default(false)
+  /// Money in hand. Was one flag with isBank until the two were separated: a
+  /// cash book and a bank book are different books, counted differently (one
+  /// by counting the notes, the other against a statement), and a screen that
+  /// offers "the cash accounts" cannot be built from a flag that also means
+  /// bank. An account is one or the other, never both.
+  isCash          Boolean @default(false)
+  /// Money at a bank — an account with a statement to agree against.
+  isBank          Boolean @default(false)
   isReconcilable  Boolean @default(false)
   /// Eliminated on consolidation, against the account named by eliminationPair.
   isIntercompany  Boolean @default(false)

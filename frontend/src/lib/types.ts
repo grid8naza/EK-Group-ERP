@@ -2133,7 +2133,10 @@ export interface CoaAccount {
   /** Ask for a cost object (department) too. Implies hasCostCenter. */
   hasCostObject: boolean;
   isGstRelevant: boolean;
-  isBankOrCash: boolean;
+  /** Money in hand — a till, a petty cash box. Never true with isBank. */
+  isCash: boolean;
+  /** Money at a bank — an account with a statement to agree against. */
+  isBank: boolean;
   isReconcilable: boolean;
   isIntercompany: boolean;
   eliminationPair: string | null;

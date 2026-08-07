@@ -11,7 +11,8 @@ export type AttributeKey = keyof Pick<
   | 'isContra'
   | 'isControl'
   | 'isGstRelevant'
-  | 'isBankOrCash'
+  | 'isCash'
+  | 'isBank'
   | 'isReconcilable'
   | 'allowManualJe'
   | 'isActive'
@@ -29,7 +30,8 @@ export const ATTRIBUTES: { key: AttributeKey; label: string; hint: string }[] = 
   { key: 'isContra', label: 'Contra', hint: 'Offsets its own group' },
   { key: 'isControl', label: 'Control', hint: 'Aged by a party' },
   { key: 'isGstRelevant', label: 'GST relevant', hint: 'Feeds the GST returns' },
-  { key: 'isBankOrCash', label: 'Bank or cash', hint: 'Money moves through it' },
+  { key: 'isCash', label: 'Cash', hint: 'Money in hand — a till, a petty cash box' },
+  { key: 'isBank', label: 'Bank', hint: 'Money at a bank' },
   { key: 'isReconcilable', label: 'Reconcilable', hint: 'Agreed to an outside statement' },
   {
     key: 'allowManualJe',

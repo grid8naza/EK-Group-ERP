@@ -117,9 +117,15 @@ export class CreateAccountDto {
   @IsBoolean()
   isGstRelevant?: boolean;
 
+  /** Money in hand. Mutually exclusive with isBank — see CoaService. */
   @IsOptional()
   @IsBoolean()
-  isBankOrCash?: boolean;
+  isCash?: boolean;
+
+  /** Money at a bank. */
+  @IsOptional()
+  @IsBoolean()
+  isBank?: boolean;
 
   @IsOptional()
   @IsBoolean()
