@@ -133,6 +133,16 @@ const ASKS_NOTHING: LineAsks = {
  * they were sent, so a screen that reads them cannot disagree with the posting
  * engine about what is required.
  */
+/**
+ * How a ledger reads in a picker — code first, then the company's own name for
+ * it where it has one. Shared so a screen that offers a narrowed list of
+ * accounts words them exactly as the full list does.
+ */
+export const accountOption = (a: CoaAccount) => ({
+  value: String(a.id),
+  label: `${a.code} · ${a.localName ?? a.name}`,
+});
+
 export function useVoucherMasters() {
   const { data: accounts } = useFetch<CoaAccount[]>('/coa/accounts');
   const { data: centres } = useFetch<CostCenter[]>('/cost-centers');
@@ -158,11 +168,7 @@ export function useVoucherMasters() {
   );
 
   const accountOptions = useMemo(
-    () =>
-      postable.map((a) => ({
-        value: String(a.id),
-        label: `${a.code} · ${a.localName ?? a.name}`,
-      })),
+    () => postable.map(accountOption),
     [postable],
   );
 

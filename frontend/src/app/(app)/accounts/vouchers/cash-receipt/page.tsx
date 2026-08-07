@@ -18,6 +18,10 @@ export default function CashReceiptPage() {
       noun="cash receipt"
       icon="hand-coins"
       description="Money taken in over the counter — cash is debited, whoever paid is credited"
+      // The first line IS the receipt: cash coming in, so a debit, and to a
+      // cash account rather than any of the two hundred others. Settled by the
+      // menu the user came through, not asked again on every entry.
+      firstLine={{ side: 'DR', money: 'CASH' }}
     />
   );
 }

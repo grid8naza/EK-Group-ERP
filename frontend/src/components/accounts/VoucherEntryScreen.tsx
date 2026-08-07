@@ -32,6 +32,7 @@ import {
   type DraftBill,
   type Mode,
   VoucherList,
+  accountOption,
   emptyBill,
   money,
   netOf,
@@ -133,6 +134,19 @@ export interface VoucherEntryScreenProps {
    * shown here to be read and never to be typed; see {@link TransactionFields}.
    */
   showTransaction?: boolean;
+  /**
+   * What the FIRST line of this kind always is.
+   *
+   * Some kinds are named after their first line: a cash receipt is money
+   * arriving in the till, so its first line debits a cash account and there is
+   * nothing to decide about that — the decision was made in the menu. Fixing it
+   * takes two answers off every entry and makes the wrong one impossible.
+   *
+   * `side` locks the Dr/Cr toggle on that line; `money` narrows its ledger
+   * picker to the cash accounts or the bank accounts. The lines below are
+   * ordinary and take whatever the entry needs.
+   */
+  firstLine?: { side: 'DR' | 'CR'; money?: 'CASH' | 'BANK' };
 }
 
 /**
@@ -165,6 +179,7 @@ export function VoucherEntryScreen({
   icon,
   noun,
   showTransaction = false,
+  firstLine,
 }: VoucherEntryScreenProps) {
   const { can, activeCompany } = useAuth();
   const toast = useToast();
@@ -212,10 +227,12 @@ export function VoucherEntryScreen({
   const keySeq = useRef(0);
   const nextKey = () => ++keySeq.current;
   // Dr then Cr: a voucher's second line answers its first, and starting both on
-  // the same side would mean correcting one of them on every single entry.
+  // the same side would mean correcting one of them on every single entry. A
+  // kind that fixes its first line says which way round instead.
+  const firstSide = firstLine?.side ?? 'DR';
   const [lines, setLines] = useState<EntryLine[]>(() => [
-    emptyLine(++keySeq.current, 'DR'),
-    emptyLine(++keySeq.current, 'CR'),
+    emptyLine(++keySeq.current, firstSide),
+    emptyLine(++keySeq.current, firstSide === 'DR' ? 'CR' : 'DR'),
   ]);
 
   // Where focus should land once the lines have re-rendered — set by whatever
@@ -228,6 +245,26 @@ export function VoucherEntryScreen({
     pendingFocus.current = null;
     focusById(id);
   }, [lines, mode]);
+
+  /**
+   * Which ledgers a line may name.
+   *
+   * Every line but the fixed first one may name anything this company posts to.
+   * The first line of a kind that declares `money` is narrowed to the cash
+   * accounts or the bank accounts — a cash receipt is received INTO cash, and
+   * offering the other two hundred ledgers there is offering a mistake.
+   *
+   * Whatever the line already holds stays on the list even if it does not
+   * belong there: a voucher written before the rule, or under a ledger since
+   * reclassified, must still read back as what it says rather than as blank.
+   */
+  const ledgerOptions = (index: number, selectedId: string) => {
+    if (index !== 0 || !firstLine?.money) return masters.accountOptions;
+    const wanted = firstLine.money === 'CASH' ? 'isCash' : 'isBank';
+    return masters.accounts
+      .filter((a) => a[wanted] || String(a.id) === selectedId)
+      .map(accountOption);
+  };
 
   const canAdd = can(route, 'add');
   const canEdit = can(route, 'edit');
@@ -262,7 +299,10 @@ export function VoucherEntryScreen({
     setDate(today());
     setReference('');
     setNarration('');
-    setLines([emptyLine(nextKey(), 'DR'), emptyLine(nextKey(), 'CR')]);
+    setLines([
+      emptyLine(nextKey(), firstSide),
+      emptyLine(nextKey(), firstSide === 'DR' ? 'CR' : 'DR'),
+    ]);
     setMode('edit');
     pendingFocus.current = DATE_FIELD;
   };
@@ -321,7 +361,10 @@ export function VoucherEntryScreen({
    * other. The line below only takes it while it is still blank and its own
    * side has never been set: a default may be improved on, a decision may not.
    */
-  const setSide = (index: number, side: 'DR' | 'CR') =>
+  const setSide = (index: number, side: 'DR' | 'CR') => {
+    // The fixed first line is not a question; the toggle is disabled, and this
+    // is the same answer to anything that reaches past it.
+    if (index === 0 && firstLine) return;
     setLines((ls) =>
       ls.map((l, x) => {
         if (x === index) {
@@ -349,6 +392,7 @@ export function VoucherEntryScreen({
         return l;
       }),
     );
+  };
 
   /**
    * Change one bill row — and, where that changes a figure, re-balance the
@@ -911,10 +955,13 @@ export function VoucherEntryScreen({
                       className="grid items-start gap-x-2 gap-y-1.5"
                       style={{ gridTemplateColumns: GRID }}
                     >
+                      {/* Locked on the first line of a kind that names it —
+                          a cash receipt's cash line is a debit by definition,
+                          and there is nothing there to get wrong. */}
                       <SideToggle
                         id={fid(l.key, 'side')}
                         value={l.side}
-                        disabled={readOnly}
+                        disabled={readOnly || (i === 0 && !!firstLine)}
                         onChange={(side) => setSide(i, side)}
                       />
 
@@ -936,8 +983,14 @@ export function VoucherEntryScreen({
                               bills: [],
                             })
                           }
-                          options={masters.accountOptions}
-                          placeholder="Ledger"
+                          options={ledgerOptions(i, l.accountId)}
+                          placeholder={
+                            i === 0 && firstLine?.money
+                              ? firstLine.money === 'CASH'
+                                ? 'Cash account'
+                                : 'Bank account'
+                              : 'Ledger'
+                          }
                         />
 
                         {/* Only where the ledger is a control account — its
