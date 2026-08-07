@@ -25,9 +25,9 @@ export default function BankPaymentPage() {
       noun="bank payment"
       icon="credit-card"
       description="Money paid out of the bank — cheques, transfers, standing charges"
-      // The first line is the money leaving. A bank account on an ordinary
-      // payment; on a post-dated cheque it is the holding account instead, so
-      // the picker offers both and the instrument block says which is right.
+      // The first line is the money leaving, so it is always a credit. WHICH
+      // ledger follows from the instrument rather than from here: the bank on
+      // an ordinary payment, a post-dated cheque ledger on a PDC.
       firstLine={{ side: 'CR' }}
       // Mode, bank, number and date — and, on a cheque, whether it is due now
       // or later.

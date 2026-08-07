@@ -361,6 +361,48 @@ export function VoucherEntryScreen({
   /** How the money moved — asked for only where `askInstrument` is on. */
   const [instrument, setInstrument] = useState({ ...EMPTY_INSTRUMENT });
 
+  /**
+   * Change the instrument, and keep the money line saying the same thing.
+   *
+   * The two must agree, and only one of them is a choice. On anything but a
+   * post-dated cheque the line IS the bank the instrument names, so it follows
+   * it rather than being typed twice and risking a voucher that credits one
+   * bank while the cheque was drawn on another. On a post-dated cheque the two
+   * genuinely differ — the bank is where it WILL go — so the line is cleared
+   * instead, for the narrowed picker to offer the holding ledgers.
+   */
+  const applyInstrument = (next: DraftInstrument) => {
+    setInstrument(next);
+    if (!askInstrument) return;
+    const postDated = next.chequeKind === 'PDC';
+    setLines((ls) => {
+      const [first, ...rest] = ls;
+      if (!first) return ls;
+      const held = masters.accountById.get(Number(first.accountId));
+      const wanted = postDated
+        ? // A bank account left on a line that has just become post-dated is
+          // now the one thing it may not be.
+          held && !held.isPdcIssued && !held.isPdcReceived
+          ? ''
+          : first.accountId
+        : next.bankAccountId;
+      if (wanted === first.accountId) return ls;
+      // A different ledger asks for different things — none of the old answers
+      // survive it, exactly as when one is picked by hand.
+      return [
+        {
+          ...first,
+          accountId: wanted,
+          partyId: '',
+          costCenterId: '',
+          costObjectId: '',
+          bills: [],
+        },
+        ...rest,
+      ];
+    });
+  };
+
   /** A cheque is the one mode with anything left to say. */
   const isCheque = useMemo(() => {
     const mode = paymentModes.find(
@@ -404,12 +446,17 @@ export function VoucherEntryScreen({
    * reclassified, must still read back as what it says rather than as blank.
    */
   const scopeFor = (index: number): LedgerScope | undefined => {
-    // A post-dated cheque does not touch the bank: it waits in a ledger of its
-    // own until it is presented, and which one depends on whose cheque it is.
-    // The side says that without being told — money going out is a cheque we
-    // wrote, money coming in is one we were given.
-    if (index === 0 && askInstrument && instrument.chequeKind === 'PDC') {
-      return { pdc: firstLine?.side === 'DR' ? 'RECEIVED' : 'ISSUED' };
+    // On a bank voucher the first line is the money itself, and WHERE it sits
+    // follows from the instrument. A post-dated cheque has not reached the bank
+    // and waits in a ledger of its own — which one depends on whose cheque it
+    // is, and the side says that without being told: money going out is a
+    // cheque we wrote, money coming in is one we were given. Anything else —
+    // a current-dated cheque, a transfer, a card — moved the bank the day it
+    // was entered, so the line is the bank.
+    if (index === 0 && askInstrument) {
+      return instrument.chequeKind === 'PDC'
+        ? { pdc: firstLine?.side === 'DR' ? 'RECEIVED' : 'ISSUED' }
+        : { money: 'BANK' };
     }
     return index === 0 && (firstLine?.money || firstLine?.party)
       ? firstLine
@@ -1254,7 +1301,7 @@ export function VoucherEntryScreen({
                 options={modeOptions}
                 placeholder={modeOptions.length ? 'How it moved' : 'None set up'}
                 onChange={(e) =>
-                  setInstrument({
+                  applyInstrument({
                     ...instrument,
                     modeValueId: e.target.value,
                     // Only a cheque is dated and numbered; changing away from
@@ -1271,7 +1318,7 @@ export function VoucherEntryScreen({
                 options={bankOptions}
                 placeholder={bankOptions.length ? 'Drawn on' : 'No bank account'}
                 onChange={(e) =>
-                  setInstrument({ ...instrument, bankAccountId: e.target.value })
+                  applyInstrument({ ...instrument, bankAccountId: e.target.value })
                 }
               />
               <Input
@@ -1303,7 +1350,7 @@ export function VoucherEntryScreen({
                     options={CHEQUE_KINDS}
                     placeholder="Now or later?"
                     onChange={(e) =>
-                      setInstrument({
+                      applyInstrument({
                         ...instrument,
                         chequeKind: e.target.value as 'CDC' | 'PDC' | '',
                       })
