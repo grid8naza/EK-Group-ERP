@@ -198,6 +198,15 @@ export class DocumentService implements OnApplicationBootstrap {
     const typeLookup = await claim(TXN_TYPE_LOOKUP);
     const subtypeLookup = await claim(TXN_SUBTYPE_LOOKUP);
 
+    // Declare the pairing on the lookups themselves, not just on the values.
+    // That is what makes the rule hold for values added later by hand: the
+    // Lookups screen asks which type a new subtype sits under, and the API
+    // refuses one that names none.
+    await this.prisma.lookup.update({
+      where: { id: subtypeLookup.id },
+      data: { parentLookupId: typeLookup.id },
+    });
+
     const upsertValue = async (
       lookupId: number,
       value: string,

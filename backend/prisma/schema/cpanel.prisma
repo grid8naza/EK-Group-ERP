@@ -52,6 +52,14 @@ model Lookup {
   name        String
   description String?
   moduleId    Int? // the module this lookup belongs to (null = global / all modules)
+  /// The lookup whose values THIS lookup's values sit under — Transaction
+  /// Subtype under Transaction Type. Null in a flat lookup, which is most.
+  ///
+  /// Declaring the pairing here is what makes the rule enforceable rather than
+  /// conventional: every value of a lookup that has a parent must name one of
+  /// that parent's values, so a subtype list can never hold an entry belonging
+  /// to no type. See LookupValue.parentValueId for the link itself.
+  parentLookupId Int?
   isSystem    Boolean  @default(false)
   isLocked    Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt   DateTime @default(now())
@@ -60,7 +68,12 @@ model Lookup {
   module Module?       @relation(fields: [moduleId], references: [id], onDelete: SetNull)
   values LookupValue[]
 
+  // Restrict: a list other lists hang from cannot simply be deleted.
+  parentLookup Lookup?  @relation("LookupParent", fields: [parentLookupId], references: [id], onDelete: Restrict)
+  childLookups Lookup[] @relation("LookupParent")
+
   @@index([moduleId])
+  @@index([parentLookupId])
   @@map("lookups")
 }
 

@@ -22,6 +22,12 @@ export class CreateLookupDto {
   @IsOptional() @IsString() description?: string;
   /** Module this lookup belongs to (null = global / all modules). */
   @IsOptional() @IsInt() moduleId?: number | null;
+  /**
+   * The lookup this one's values sit under — Transaction Subtype under
+   * Transaction Type. Set it and every value of this lookup must name one of
+   * that lookup's values.
+   */
+  @IsOptional() @IsInt() parentLookupId?: number | null;
   @IsOptional() @IsBoolean() isSystem?: boolean;
 }
 
@@ -47,7 +53,9 @@ export class CreateLookupValueDto {
   @IsOptional() @IsString() remarks?: string;
   /**
    * The value in ANOTHER lookup that this one sits under — a transaction
-   * subtype under its type. Null in a flat lookup, which is most of them.
+   * subtype under its type. Required when the value's lookup declares a
+   * `parentLookupId`, refused when it does not; null in a flat lookup, which is
+   * most of them.
    */
   @IsOptional() @IsInt() parentValueId?: number | null;
   @IsOptional() @IsBoolean() isActive?: boolean;

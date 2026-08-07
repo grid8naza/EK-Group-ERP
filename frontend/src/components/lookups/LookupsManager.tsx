@@ -13,7 +13,7 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
-import { Input, Textarea, Checkbox } from '@/components/ui/Field';
+import { Input, Textarea, Checkbox, Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import { cn } from '@/lib/utils';
 import type { Lookup, LookupValue, Module } from '@/lib/types';
@@ -21,12 +21,16 @@ import type { Lookup, LookupValue, Module } from '@/lib/types';
 const emptyLookup = {
   name: '',
   description: '',
+  /** '' = a flat list. Otherwise the lookup this one's values sit under. */
+  parentLookupId: '',
   isSystem: false,
 };
 const emptyValue = {
   label: '',
   alias: '',
   remarks: '',
+  /** Required on a paired list, unused on a flat one. */
+  parentValueId: '',
   isActive: true,
 };
 
@@ -70,6 +74,9 @@ export function LookupsManager({ moduleCode, route, title, description }: Props)
   const [selected, setSelected] = useState<Lookup | null>(null);
   const [values, setValues] = useState<LookupValue[]>([]);
   const [valuesLoading, setValuesLoading] = useState(false);
+  // The values of the list the selected one sits under — what a new value must
+  // pick from. Loaded only for a paired list; empty for the flat majority.
+  const [parentValues, setParentValues] = useState<LookupValue[]>([]);
 
   const canAdd = can(route, 'add');
   const canEdit = can(route, 'edit');
@@ -126,6 +133,33 @@ export function LookupsManager({ moduleCode, route, title, description }: Props)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
 
+  useEffect(() => {
+    const parentId = selected?.parentLookupId;
+    if (!parentId) {
+      setParentValues([]);
+      return;
+    }
+    let cancelled = false;
+    api
+      .get<LookupValue[]>(`/lookups/${parentId}/values`)
+      .then((res) => {
+        if (!cancelled) setParentValues(res ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setParentValues([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.parentLookupId]);
+
+  /** The list the selected one sits under, when it sits under one. */
+  const parentLookup = useMemo(
+    () =>
+      (lookups ?? []).find((l) => l.id === selected?.parentLookupId) ?? null,
+    [lookups, selected?.parentLookupId],
+  );
+
   // ---- Lookup CRUD ----
   const closeLookupDrawer = () => {
     setLkOpen(false);
@@ -134,6 +168,7 @@ export function LookupsManager({ moduleCode, route, title, description }: Props)
   const lookupFormFrom = (l: Lookup) => ({
     name: l.name,
     description: l.description ?? '',
+    parentLookupId: l.parentLookupId == null ? '' : String(l.parentLookupId),
     isSystem: l.isSystem,
   });
   const openAddLookup = () => {
@@ -162,7 +197,12 @@ export function LookupsManager({ moduleCode, route, title, description }: Props)
     setLkSaving(true);
     try {
       // Code is system-generated; scope every new lookup to this module.
-      const payload = { ...lkForm, moduleId };
+      const payload = {
+        ...lkForm,
+        moduleId,
+        parentLookupId:
+          lkForm.parentLookupId === '' ? null : Number(lkForm.parentLookupId),
+      };
       let saved: Lookup;
       if (lkEditing) {
         saved = await api.patch<Lookup>(`/lookups/${lkEditing.id}`, payload);
@@ -212,6 +252,7 @@ export function LookupsManager({ moduleCode, route, title, description }: Props)
     label: val.label,
     alias: val.alias ?? '',
     remarks: val.remarks ?? '',
+    parentValueId: val.parentValueId == null ? '' : String(val.parentValueId),
     isActive: val.isActive,
   });
   const openAddValue = () => {
@@ -238,10 +279,23 @@ export function LookupsManager({ moduleCode, route, title, description }: Props)
       toast.error('Label is required.');
       return;
     }
+    // A value of a paired list means nothing on its own — "B2C Sale" is only
+    // anything under "Sale" — so it is not saved without one.
+    if (selected.parentLookupId && !vForm.parentValueId) {
+      toast.error(
+        `Choose the ${parentLookup?.name ?? 'parent'} value this sits under.`,
+      );
+      return;
+    }
     setVSaving(true);
     try {
       // Value key is system-generated from the label on first create.
-      const payload = { lookupId: selected.id, ...vForm };
+      const payload = {
+        lookupId: selected.id,
+        ...vForm,
+        parentValueId:
+          vForm.parentValueId === '' ? null : Number(vForm.parentValueId),
+      };
       let saved: LookupValue;
       if (vEditing) {
         saved = await api.patch<LookupValue>(`/lookup-values/${vEditing.id}`, payload);
@@ -291,6 +345,23 @@ export function LookupsManager({ moduleCode, route, title, description }: Props)
         </span>
       ),
     },
+    // Only on a paired list, where it is the column that matters most: it says
+    // which parent each value belongs to, and a blank one would be unreachable.
+    ...(selected?.parentLookupId
+      ? [
+          {
+            key: 'parent',
+            header: `Under ${parentLookup?.name ?? 'parent'}`,
+            accessor: (r: LookupValue) => r.parent?.label ?? '',
+            render: (r: LookupValue) =>
+              r.parent ? (
+                <Badge color="slate">{r.parent.label}</Badge>
+              ) : (
+                <span className="text-xs text-rose-500">Not filed</span>
+              ),
+          } satisfies Column<LookupValue>,
+        ]
+      : []),
     { key: 'alias', header: 'Alias', accessor: (r) => r.alias || '-' },
     { key: 'remarks', header: 'Remarks', accessor: (r) => r.remarks || '-' },
     {
@@ -492,6 +563,27 @@ export function LookupsManager({ moduleCode, route, title, description }: Props)
               value={lkForm.name}
               onChange={(e) => setLkForm({ ...lkForm, name: e.target.value })}
             />
+            {/* Two lists read as one two-level list: Transaction Subtype sits
+                under Transaction Type. Saying so here is what makes every
+                value of this list have to name one of that list's values. */}
+            <div>
+              <Select
+                label="Sits under"
+                value={lkForm.parentLookupId}
+                onChange={(e) =>
+                  setLkForm({ ...lkForm, parentLookupId: e.target.value })
+                }
+                options={(lookups ?? [])
+                  .filter((l) => l.id !== lkEditing?.id && !l.parentLookupId)
+                  .map((l) => ({ value: String(l.id), label: l.name }))}
+                placeholder="A list on its own"
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                Leave it alone for an ordinary list. Choose a list and every
+                value here must say which of ITS values it belongs to — the way
+                a transaction subtype belongs to a transaction type.
+              </p>
+            </div>
             <Checkbox
               label="System lookup (protected from deletion)"
               checked={lkForm.isSystem}
@@ -539,6 +631,25 @@ export function LookupsManager({ moduleCode, route, title, description }: Props)
               value={vForm.label}
               onChange={(e) => setVForm({ ...vForm, label: e.target.value })}
             />
+            {selected?.parentLookupId && (
+              <Select
+                label={parentLookup?.name ?? 'Sits under'}
+                required
+                value={vForm.parentValueId}
+                onChange={(e) =>
+                  setVForm({ ...vForm, parentValueId: e.target.value })
+                }
+                options={parentValues
+                  .filter((p) => p.isActive)
+                  .map((p) => ({ value: String(p.id), label: p.label }))}
+                placeholder={
+                  parentValues.length
+                    ? `Which ${parentLookup?.name ?? 'one'}?`
+                    : 'That list has no values yet'
+                }
+                disabled={!parentValues.length}
+              />
+            )}
             <Input
               label="Alias"
               value={vForm.alias}

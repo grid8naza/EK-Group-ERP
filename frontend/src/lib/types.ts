@@ -168,6 +168,12 @@ export interface Lookup {
   /** Module this lookup belongs to (null = global / all modules). */
   moduleId?: number | null;
   module?: { id: number; name: string } | null;
+  /**
+   * The lookup whose values this one's values sit under — Transaction Subtype
+   * under Transaction Type. Set, and every value here must name one of that
+   * lookup's values. Null in a flat lookup, which is most of them.
+   */
+  parentLookupId?: number | null;
   isSystem: boolean;
   isLocked?: boolean;
   /** Value count (returned by the list endpoint). */
