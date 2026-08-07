@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, Trash2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { useFetch } from '@/lib/hooks';
+import { useFetch, useLookupValues } from '@/lib/hooks';
 import { resolveIcon } from '@/lib/icons';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -125,6 +125,14 @@ export interface VoucherEntryScreenProps {
   description: string;
   icon: string;
   noun: string;
+  /**
+   * Show the transaction type and subtype on the header, read-only.
+   *
+   * For the kinds a document raises rather than a person — sales and purchase.
+   * The classification belongs to the invoice behind the voucher, so it is
+   * shown here to be read and never to be typed; see {@link TransactionFields}.
+   */
+  showTransaction?: boolean;
 }
 
 /**
@@ -156,6 +164,7 @@ export function VoucherEntryScreen({
   description,
   icon,
   noun,
+  showTransaction = false,
 }: VoucherEntryScreenProps) {
   const { can, activeCompany } = useAuth();
   const toast = useToast();
@@ -809,8 +818,9 @@ export function VoucherEntryScreen({
       >
         <ReadOnlyFieldset readOnly={readOnly}>
           {/* Top block. Date, the number the voucher will take, a reference —
-              and no transaction type or subtype: the lines say what the
-              voucher did, and a taxonomy above them only repeats it. */}
+              and, on the kinds an invoice will raise, what that invoice said
+              the transaction was. Nowhere else: the lines say what the voucher
+              did, and a taxonomy typed above them only repeats it. */}
           <div className="card grid grid-cols-1 gap-4 p-4 sm:grid-cols-3">
             <DateInput
               id={DATE_FIELD}
@@ -845,6 +855,7 @@ export function VoucherEntryScreen({
               placeholder="Advice no, bill no, resolution…"
               onChange={(e) => setReference(e.target.value)}
             />
+            {showTransaction && <TransactionFields voucher={editing} />}
           </div>
 
           {/* The lines. Two money columns down the right, as a journal is read;
@@ -1422,6 +1433,47 @@ function onAmountChange(
     amount,
     bills: rebalance(line.bills, amount, line.side),
   });
+}
+
+/**
+ * What the transaction WAS — shown, never asked.
+ *
+ * A sales or purchase voucher is the accounting side of an invoice, and the
+ * plan is for the invoice to raise it: the document already knows which kind of
+ * sale or purchase it recorded, so asking a second time is asking to be told
+ * two different answers. The pair therefore stands on the form disabled — there
+ * to read a generated voucher's classification back, and, until the generation
+ * is built, to say plainly that this is not a field anyone fills in.
+ *
+ * Disabled rather than hidden for the same reason the dead money column is:
+ * a field that vanishes teaches nobody where the answer comes from. It also
+ * keeps both out of the keyboard's path.
+ */
+function TransactionFields({ voucher }: { voucher: Voucher | null }) {
+  const types = useLookupValues('TRANSACTION_TYPE');
+  const subtypes = useLookupValues('TRANSACTION_SUBTYPE');
+
+  const labelOf = (values: { id: number; label: string }[], id?: number | null) =>
+    id ? (values.find((v) => v.id === id)?.label ?? `#${id}`) : '';
+
+  return (
+    <>
+      <Input
+        label="Transaction type"
+        value={labelOf(types, voucher?.transactionTypeId)}
+        placeholder="From the invoice that raises it"
+        disabled
+        readOnly
+      />
+      <Input
+        label="Transaction subtype"
+        value={labelOf(subtypes, voucher?.transactionSubtypeId)}
+        placeholder="From the invoice that raises it"
+        disabled
+        readOnly
+      />
+    </>
+  );
 }
 
 /**
