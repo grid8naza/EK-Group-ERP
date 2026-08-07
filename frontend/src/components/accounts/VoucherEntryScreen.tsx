@@ -97,16 +97,16 @@ const COMMON_NARRATION = 've-common-narration';
  * The one column definition the whole voucher is laid out on: side,
  * particulars, the two money columns, the row's own button.
  *
- * Every row of a line group — the line, its narration, its bill details — is
- * placed in this same grid, so a narration box ends exactly where the ledger
- * box above it ends and a bill amount sits exactly under Debit. Alignment by
- * shared structure rather than by matching spacer widths, which drift the
- * moment a column changes.
+ * Every row of a line — the line itself and its narration — is placed in this
+ * same grid, so a narration box ends exactly where the ledger box above it
+ * ends. Alignment by shared structure rather than by matching spacer widths,
+ * which drift the moment a column changes.
+ *
+ * The bill rows are the exception, and on purpose: they are packed left on
+ * their own widths, because a bill amount sitting under Debit reads as a second
+ * debit when it is only part of the one above it.
  */
 const GRID = '3.5rem minmax(0,1fr) 8rem 8rem 1.75rem';
-
-/** The same columns from Particulars rightward, for rows that start there. */
-const BILL_GRID = 'minmax(0,1fr) 8rem 8rem 1.75rem';
 
 const focusById = (id: string) =>
   requestAnimationFrame(() => document.getElementById(id)?.focus());
@@ -1184,126 +1184,127 @@ export function VoucherEntryScreen({
                       {showBills && (
                         <div className="col-start-2 col-end-6 space-y-1">
                           {l.bills.map((b, bi) => (
-                            <div
-                              key={bi}
-                              className="grid items-center gap-2"
-                              style={{ gridTemplateColumns: BILL_GRID }}
-                            >
-                              <div className="flex min-w-0 items-center gap-2">
-                                {/* Fixed width, or the second bill row would
-                                    start further left than the first. */}
-                                <span className="w-9 flex-none text-xs italic text-slate-400">
-                                  {bi === 0 ? 'Bills' : ''}
-                                </span>
-                                <Select
-                                  id={fid(l.key, `bill-${bi}-type`)}
-                                  value={b.refType}
-                                  disabled={readOnly}
-                                  wrapClassName="w-40 flex-none"
-                                  onChange={(e) => {
-                                    const refType = e.target.value as BillRefType;
-                                    // The amount goes with the reference. It
-                                    // was the outstanding on the bill that was
-                                    // picked, or what an advance was for —
-                                    // either way it belonged to the OLD kind of
-                                    // row, and carrying it into the new one
-                                    // quietly allocates a figure nobody typed
-                                    // for the thing now named.
-                                    setBill(l, bi, {
-                                      refType,
-                                      billRef: '',
-                                      refNote: '',
-                                      againstId: '',
-                                      amount: '',
+                            /* Packed left, and deliberately NOT on the line's
+                               columns: a bill amount under Debit reads as a
+                               second debit, when it is only part of the one
+                               above it. Reference, amount and side stay
+                               together, well inside the money columns, so the
+                               eye sees a detail of the line rather than another
+                               line. */
+                            <div key={bi} className="flex flex-wrap items-center gap-2">
+                              {/* Fixed width, or the second bill row would
+                                  start further left than the first. */}
+                              <span className="w-9 flex-none text-xs italic text-slate-400">
+                                {bi === 0 ? 'Bills' : ''}
+                              </span>
+                              <Select
+                                id={fid(l.key, `bill-${bi}-type`)}
+                                value={b.refType}
+                                disabled={readOnly}
+                                wrapClassName="w-40 flex-none"
+                                onChange={(e) => {
+                                  const refType = e.target.value as BillRefType;
+                                  // The amount goes with the reference. It
+                                  // was the outstanding on the bill that was
+                                  // picked, or what an advance was for —
+                                  // either way it belonged to the OLD kind of
+                                  // row, and carrying it into the new one
+                                  // quietly allocates a figure nobody typed
+                                  // for the thing now named.
+                                  setBill(l, bi, {
+                                    refType,
+                                    billRef: '',
+                                    refNote: '',
+                                    againstId: '',
+                                    amount: '',
+                                  });
+                                  // Settling means picking from the list, so
+                                  // choosing the method IS the request to see
+                                  // it — no second click to get there.
+                                  if (refType === 'AGAINST') {
+                                    setPicking({
+                                      lineKey: l.key,
+                                      lineIndex: i,
+                                      billIndex: bi,
                                     });
-                                    // Settling means picking from the list, so
-                                    // choosing the method IS the request to see
-                                    // it — no second click to get there.
-                                    if (refType === 'AGAINST') {
-                                      setPicking({
-                                        lineKey: l.key,
-                                        lineIndex: i,
-                                        billIndex: bi,
-                                      });
-                                    }
-                                  }}
-                                  options={BILL_TYPES}
+                                  }
+                                }}
+                                options={BILL_TYPES}
+                              />
+                              {b.refType === 'NEW' ? (
+                                <Input
+                                  id={fid(l.key, `bill-${bi}-ref`)}
+                                  value={b.billRef}
+                                  disabled={readOnly}
+                                  wrapClassName="w-56 flex-none"
+                                  className="h-8 text-sm"
+                                  placeholder="Bill number, e.g. INV-001"
+                                  onChange={(e) =>
+                                    setBill(l, bi, {
+                                      billRef: e.target.value,
+                                    })
+                                  }
                                 />
-                                {b.refType === 'NEW' ? (
-                                  <Input
-                                    id={fid(l.key, `bill-${bi}-ref`)}
-                                    value={b.billRef}
-                                    disabled={readOnly}
-                                    wrapClassName="min-w-0 flex-1 max-w-md"
-                                    className="h-8 text-sm"
-                                    placeholder="Bill number, e.g. INV-001"
-                                    onChange={(e) =>
-                                      setBill(l, bi, {
-                                        billRef: e.target.value,
-                                      })
-                                    }
-                                  />
-                                ) : b.refType === 'AGAINST' ? (
-                                  /* Not a dropdown: which invoices a payment
-                                     clears is decided by READING what is owed
-                                     — how old, how overdue, how much left — so
-                                     the button opens the list rather than
-                                     asking for a bill number up front. */
-                                  <button
-                                    id={fid(l.key, `bill-${bi}-ref`)}
-                                    type="button"
-                                    data-field=""
-                                    disabled={readOnly}
-                                    onClick={() =>
-                                      setPicking({
-                                        lineKey: l.key,
-                                        lineIndex: i,
-                                        billIndex: bi,
-                                      })
-                                    }
-                                    onKeyDown={(e) => {
-                                      if (e.key !== 'Enter' && e.key !== ' ') return;
-                                      e.preventDefault();
-                                      setPicking({
-                                        lineKey: l.key,
-                                        lineIndex: i,
-                                        billIndex: bi,
-                                      });
-                                    }}
-                                    className={cn(
-                                      'input-base h-8 min-w-0 max-w-md flex-1 truncate text-left text-sm',
-                                      !b.againstId && 'text-slate-400',
-                                    )}
-                                  >
-                                    {billLabel(bills, b.againstId) ??
-                                      (bills.length
-                                        ? 'Choose bills…'
-                                        : 'Nothing outstanding')}
-                                  </button>
-                                ) : (
-                                  /* An advance or an on-account amount names no
-                                     bill — but it still has to be recognisable
-                                     when someone comes back to it, so it takes
-                                     whatever the entry wants to call it. */
-                                  <Input
-                                    id={fid(l.key, `bill-${bi}-ref`)}
-                                    value={b.refNote}
-                                    disabled={readOnly}
-                                    wrapClassName="min-w-0 flex-1 max-w-md"
-                                    className="h-8 text-sm"
-                                    placeholder={
-                                      b.refType === 'ADVANCE'
-                                        ? 'What this advance is for (optional)'
-                                        : 'What this is against (optional)'
-                                    }
-                                    onChange={(e) =>
-                                      setBill(l, bi, {
-                                        refNote: e.target.value,
-                                      })
-                                    }
-                                  />
-                                )}
-                              </div>
+                              ) : b.refType === 'AGAINST' ? (
+                                /* Not a dropdown: which invoices a payment
+                                   clears is decided by READING what is owed
+                                   — how old, how overdue, how much left — so
+                                   the button opens the list rather than
+                                   asking for a bill number up front. */
+                                <button
+                                  id={fid(l.key, `bill-${bi}-ref`)}
+                                  type="button"
+                                  data-field=""
+                                  disabled={readOnly}
+                                  onClick={() =>
+                                    setPicking({
+                                      lineKey: l.key,
+                                      lineIndex: i,
+                                      billIndex: bi,
+                                    })
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                                    e.preventDefault();
+                                    setPicking({
+                                      lineKey: l.key,
+                                      lineIndex: i,
+                                      billIndex: bi,
+                                    });
+                                  }}
+                                  className={cn(
+                                    'input-base h-8 w-56 flex-none truncate text-left text-sm',
+                                    !b.againstId && 'text-slate-400',
+                                  )}
+                                >
+                                  {billLabel(bills, b.againstId) ??
+                                    (bills.length
+                                      ? 'Choose bills…'
+                                      : 'Nothing outstanding')}
+                                </button>
+                              ) : (
+                                /* An advance or an on-account amount names no
+                                   bill — but it still has to be recognisable
+                                   when someone comes back to it, so it takes
+                                   whatever the entry wants to call it. */
+                                <Input
+                                  id={fid(l.key, `bill-${bi}-ref`)}
+                                  value={b.refNote}
+                                  disabled={readOnly}
+                                  wrapClassName="w-56 flex-none"
+                                  className="h-8 text-sm"
+                                  placeholder={
+                                    b.refType === 'ADVANCE'
+                                      ? 'What this advance is for (optional)'
+                                      : 'What this is against (optional)'
+                                  }
+                                  onChange={(e) =>
+                                    setBill(l, bi, {
+                                      refNote: e.target.value,
+                                    })
+                                  }
+                                />
+                              )}
                               <Input
                                 id={fid(l.key, `bill-${bi}-amount`)}
                                 type="number"
@@ -1311,6 +1312,7 @@ export function VoucherEntryScreen({
                                 min="0"
                                 value={b.amount}
                                 disabled={readOnly}
+                                wrapClassName="w-32 flex-none"
                                 className="no-spinner h-8 text-sm"
                                 onKeyDown={(e) => onBillEnd(i, l, bi, e)}
                                 onChange={(e) =>
@@ -1321,13 +1323,8 @@ export function VoucherEntryScreen({
                                   line's own side — the exception is the credit
                                   or debit note being adjusted against what is
                                   being settled, which is why it is here at all.
-
-                                  Pushed to the right of its column so the bill
-                                  row ends on the same margin as the ledger line
-                                  above it, and the reference, the amount and
-                                  this read as three steps rather than a ragged
-                                  edge. */}
-                              <div className="flex justify-end">
+                                  Kept beside the amount it applies to. */}
+                              <div>
                                 <SideToggle
                                   id={fid(l.key, `bill-${bi}-side`)}
                                   value={b.side}
