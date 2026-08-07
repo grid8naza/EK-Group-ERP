@@ -16,7 +16,6 @@ import { formatDate, isoDate } from '@/lib/utils';
 import { money } from '@/components/accounts/voucher-common';
 import type { PdcStatus, VoucherInstrument } from '@/lib/types';
 
-const ROUTE = '/accounts/pdc-register';
 
 type Tone = 'amber' | 'green' | 'slate' | 'violet' | 'blue' | 'red';
 
@@ -99,17 +98,33 @@ const MOVES: Record<
  * answered by the whole of that history, not by its last line. So every move is
  * kept, with the day it happened and a word about why.
  */
-export default function PdcRegisterPage() {
+export function PdcRegister({
+  side,
+  route,
+  title,
+  description,
+}: {
+  /** Cheques this company WROTE, or ones it was GIVEN. */
+  side: 'ISSUED' | 'RECEIVED';
+  route: string;
+  title: string;
+  description: string;
+}) {
   const { can } = useAuth();
   const toast = useToast();
   const [status, setStatus] = useState<PdcStatus | 'LIVE' | ''>('LIVE');
-  const query = status && status !== 'LIVE' ? `?status=${status}` : '';
+  const query = [
+    `side=${side}`,
+    status && status !== 'LIVE' ? `status=${status}` : '',
+  ]
+    .filter(Boolean)
+    .join('&');
   const { data, loading, refetch } = useFetch<VoucherInstrument[]>(
-    `/vouchers/pdc${query}`,
+    `/vouchers/pdc?${query}`,
     [query],
   );
 
-  const canEdit = can(ROUTE, 'edit');
+  const canEdit = can(route, 'edit');
 
   const [acting, setActing] = useState<{ row: VoucherInstrument; to: PdcStatus } | null>(null);
   const [history, setHistory] = useState<VoucherInstrument | null>(null);
@@ -215,12 +230,15 @@ export default function PdcRegisterPage() {
   return (
     <div className="mx-auto flex h-full max-w-7xl flex-col">
       <PageHeader
-        title="PDC Register"
-        description="Post-dated cheques and where each has got to — what is due, what has been banked, what came back"
+        title={title}
+        description={description}
         icon={<CalendarClock className="h-5 w-5" />}
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {(['LIVE', 'SUBMITTED', 'BOUNCED', 'CLEARED', ''] as const).map((s) => (
+            {(side === 'RECEIVED'
+              ? (['LIVE', 'SUBMITTED', 'BOUNCED', 'CLEARED', ''] as const)
+              : (['LIVE', 'CLEARED', 'CANCELLED', ''] as const)
+            ).map((s) => (
               <button
                 key={s || 'all'}
                 className={s === status ? 'btn-primary' : 'btn-secondary'}

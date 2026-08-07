@@ -25,6 +25,7 @@ const RETIRED_ROUTES: string[] = [
   '/inventory/goods-return-note', // split into sales-return + purchase-return
   '/production/divisions', // dropped — cost centres/objects track production instead
   '/accounts/vouchers', // split into one screen per voucher kind (cash-receipt, …)
+  '/accounts/pdc-register', // split into pdc-issued + pdc-received
 ];
 
 async function cleanupRetiredRoutes(
@@ -656,6 +657,81 @@ async function migrateCrmPurchaseOrderRoutes(
  * Print / PDF / Excel instead of Add / Edit. Idempotent — a no-op once moved,
  * and on a fresh DB where the sync creates it in place.
  */
+/**
+ * Rename two of the Accounts main menus in place.
+ *
+ * An EXTRA menu is matched by name, so a rename in the registry alone would
+ * create a second menu beside the first and leave every screen — and every
+ * privilege granted on it — under the old one. Renaming the row is what makes
+ * the sync find it again.
+ *
+ * Idempotent: a no-op once renamed, and on a fresh database where the sync
+ * creates them under the new names.
+ */
+async function migrateAccountsMenuNames(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  const acc = await prisma.module.findUnique({
+    where: { code: 'ACCOUNTS' },
+    select: { id: true },
+  });
+  if (!acc) return;
+  for (const [from, to] of [
+    ['Accounts Vouchers', 'Accounting Vouchers'],
+    ['Accounts Report', 'Accounts Reports'],
+  ] as const) {
+    await prisma.mainMenu.updateMany({
+      where: { moduleId: acc.id, menuName: from },
+      data: { menuName: to },
+    });
+  }
+
+  // A boot that ran the registry's new name before this rename existed created
+  // an empty menu beside the real one. Fold those away: same name, no screens,
+  // and another by that name holding them.
+  const menus = await prisma.mainMenu.findMany({
+    where: { moduleId: acc.id },
+    select: {
+      id: true,
+      companyId: true,
+      menuName: true,
+      _count: { select: { subMenus: true } },
+    },
+  });
+  const empties = menus.filter(
+    (m) =>
+      m._count.subMenus === 0 &&
+      menus.some(
+        (o) =>
+          o.companyId === m.companyId &&
+          o.menuName === m.menuName &&
+          o._count.subMenus > 0,
+      ),
+  );
+  if (empties.length) {
+    await prisma.mainMenu.deleteMany({
+      where: { id: { in: empties.map((m) => m.id) } },
+    });
+  }
+
+  // The order the module is read in: enter, check, read, agree. Only the
+  // creating sync sets sortOrder, so a menu added later — or renamed into a
+  // different position — keeps whatever it was given the day it appeared.
+  const ORDER = [
+    'Accounts Setup',
+    'Accounting Vouchers',
+    'Accounts Reports',
+    'Financial Statement',
+    'Bank Reports',
+  ];
+  for (const [i, menuName] of ORDER.entries()) {
+    await prisma.mainMenu.updateMany({
+      where: { moduleId: acc.id, menuName },
+      data: { sortOrder: i + 1 },
+    });
+  }
+}
+
 async function migrateAccountsReportMenu(
   prisma: Prisma.TransactionClient,
 ): Promise<void> {
@@ -792,6 +868,7 @@ export async function syncScaffold(
   //     the moved screen is matched under its new menu rather than duplicated.
   await migrateAccountsMenuName(prisma);
   await migrateAccountsReportMenu(prisma);
+  await migrateAccountsMenuNames(prisma);
 
   // 0e2) Rename the product screens → Products - Semifinished / - Finished.
   await migrateProductScreenNames(prisma);

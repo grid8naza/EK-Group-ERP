@@ -653,6 +653,16 @@ model VoucherLine {
   date   DateTime
   status VoucherStatus @default(DRAFT)
 
+  /// The day the BANK says this happened, on a line to a bank account.
+  ///
+  /// Reconciliation is this one field and nothing else. A cheque written on the
+  /// 2nd and presented on the 11th is in the books on the 2nd and on the
+  /// statement on the 11th, and both are true; entering the second date is what
+  /// reconciles the line. What is unreconciled is then simply what has no bank
+  /// date yet, and the balance "as per bank" is the book balance counting only
+  /// the lines that have one — no second ledger, nothing to keep in step.
+  bankDate DateTime?
+
   voucher     Voucher          @relation(fields: [voucherId], references: [id], onDelete: Cascade)
   account     Account          @relation(fields: [accountId], references: [id], onDelete: Restrict)
   /// How this line's amount attaches to the party's bills. Present only on a
@@ -667,6 +677,8 @@ model VoucherLine {
   // in date order.
   @@index([companyId, partyKind, partyId, date])
   @@index([companyId, costCenterId, date])
+  // The reconciliation screen: one bank account, what has cleared and what has not.
+  @@index([companyId, accountId, bankDate])
   @@map("voucher_lines")
 }
 

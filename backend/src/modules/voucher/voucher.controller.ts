@@ -16,6 +16,7 @@ import { BranchId } from '../../auth/branch.decorator';
 import { AuthUser, CurrentUser } from '../../auth/current-user.decorator';
 import { VoucherService } from './voucher.service';
 import {
+  BankDateDto,
   CancelVoucherDto,
   CreateVoucherDto,
   PdcMoveDto,
@@ -48,8 +49,13 @@ export class VoucherController {
   pdc(
     @CompanyId() companyId: number | undefined,
     @Query('status') status?: PdcStatus,
+    @Query('side') side?: string,
   ) {
-    return this.service.listPdc(companyId, status);
+    return this.service.listPdc(
+      companyId,
+      status,
+      side ? side === 'RECEIVED' : undefined,
+    );
   }
 
   /**
@@ -65,6 +71,28 @@ export class VoucherController {
     @Body() dto: PdcMoveDto,
   ) {
     return this.service.movePdc(user.id, companyId, id, dto);
+  }
+
+  // ---- bank reconciliation -------------------------------------------------
+
+  /** One bank account: what the books say, what the bank says, and the gap. */
+  @Get('bank-reconciliation')
+  bankReconciliation(
+    @CompanyId() companyId: number | undefined,
+    @Query('accountId') accountId: string,
+    @Query('asOn') asOn: string,
+  ) {
+    return this.service.bankReconciliation(companyId, Number(accountId), asOn);
+  }
+
+  /** Tell one line the day the bank saw it, or take that back. */
+  @Patch('lines/:id/bank-date')
+  setBankDate(
+    @CompanyId() companyId: number | undefined,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: BankDateDto,
+  ) {
+    return this.service.setBankDate(companyId, id, dto.bankDate ?? null);
   }
 
   @Get()

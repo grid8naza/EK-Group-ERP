@@ -26,14 +26,6 @@ export const ACCOUNTS_SUBS = [
     icon: 'book-open',
     order: 4,
   },
-  // Where a post-dated cheque lives after the voucher that wrote it is
-  // finished: what is due, what has cleared, what came back.
-  {
-    name: 'PDC Register',
-    route: '/accounts/pdc-register',
-    icon: 'calendar-clock',
-    order: 5,
-  },
   // Per-module reference data, as every other module has. Super-admin-only.
   // The transaction type/subtype lists a voucher is classified by are GLOBAL
   // and so appear here too — the same taxonomy classifies a stock document, and
@@ -42,7 +34,7 @@ export const ACCOUNTS_SUBS = [
     name: 'Lookups',
     route: '/accounts/lookups',
     icon: 'list',
-    order: 6,
+    order: 5,
     superAdminOnly: true,
   },
 ];
@@ -62,7 +54,7 @@ export const ACCOUNTS_SUBS = [
 // screen's `code` (see VOUCHER_TYPES) is what its page passes to the shared
 // form.
 export const ACCOUNTS_VOUCHER_MENU = {
-  name: 'Accounts Vouchers',
+  name: 'Accounting Vouchers',
   icon: 'book-open-check',
   subs: [
     { name: 'Cash Receipt', route: '/accounts/vouchers/cash-receipt', icon: 'hand-coins', order: 1 },
@@ -84,7 +76,7 @@ export const ACCOUNTS_VOUCHER_MENU = {
 // privileges already granted on it follow it into this menu.
 export const ACCOUNTS_REPORT_MENUS = [
   {
-    name: 'Accounts Report',
+    name: 'Accounts Reports',
     icon: 'bar-chart-3',
     subs: [
       {
@@ -124,3 +116,55 @@ export const ACCOUNTS_REPORT_MENUS = [
     ],
   },
 ];
+
+// The statements themselves — the trial balance and what is drawn from it.
+// Its own main menu because reading the books and maintaining them are
+// different work: everything above is somebody entering or checking a figure,
+// and this is somebody asking what the figures came to.
+//
+// Empty until the statements are built. Declared now so the shape of the module
+// is settled and each one lands where it belongs rather than wherever there was
+// room at the time.
+export const ACCOUNTS_STATEMENT_MENU = {
+  name: 'Financial Statement',
+  icon: 'file-bar-chart',
+  subs: [] as {
+    name: string;
+    route: string;
+    icon: string;
+    order: number;
+    objectType?: ObjectType;
+  }[],
+};
+
+// What the bank says, against what the books say.
+//
+// The two post-dated cheque registers are here rather than under Setup because
+// they are not setup at all — they are the daily question "what is still out
+// there", asked of cheques written and cheques taken in. Split in two because
+// nobody asks it of both at once: chasing a customer's cheque and watching what
+// is about to leave the account are different mornings' work.
+export const ACCOUNTS_BANK_MENU = {
+  name: 'Bank Reports',
+  icon: 'landmark',
+  subs: [
+    {
+      name: 'PDC Issued',
+      route: '/accounts/pdc-issued',
+      icon: 'file-up',
+      order: 1,
+    },
+    {
+      name: 'PDC Received',
+      route: '/accounts/pdc-received',
+      icon: 'file-down',
+      order: 2,
+    },
+    {
+      name: 'Bank Reconciliation',
+      route: '/accounts/bank-reconciliation',
+      icon: 'scale',
+      order: 3,
+    },
+  ],
+};

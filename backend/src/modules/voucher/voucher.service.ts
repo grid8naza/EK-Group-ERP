@@ -697,13 +697,26 @@ export class VoucherService {
    * Read off the instruments rather than off the vouchers: a PDC's life happens
    * after its voucher is finished, and this is the table that has a life.
    */
-  async listPdc(companyId: number | undefined, status?: PdcStatus) {
+  async listPdc(
+    companyId: number | undefined,
+    status?: PdcStatus,
+    received?: boolean,
+  ) {
     if (!companyId) throw new BadRequestException('Select a company first.');
     return this.prisma.voucherInstrument.findMany({
       where: {
         companyId,
         chequeKind: 'PDC',
         ...(status ? { status } : {}),
+        // Which side of the drawer. Read off the voucher's kind rather than
+        // stored twice: a receipt takes cheques in, a payment writes them out.
+        ...(received === undefined
+          ? {}
+          : {
+              voucher: {
+                type: { code: received ? 'BANK_RECEIPT' : 'BANK_PAYMENT' },
+              },
+            }),
       },
       include: {
         events: { orderBy: { date: 'asc' } },
@@ -728,6 +741,149 @@ export class VoucherService {
         bankAccount: { select: { id: true, code: true, name: true } },
       },
       orderBy: [{ instrumentDate: 'asc' }, { id: 'asc' }],
+    });
+  }
+
+  // ---- bank reconciliation -----------------------------------------------------
+
+  /**
+   * One bank account, as the books have it and as the bank has it.
+   *
+   * The whole of reconciliation is one date per line. A cheque written on the
+   * 2nd and presented on the 11th is in the books on the 2nd and on the
+   * statement on the 11th — both true — and entering the second date is what
+   * ties them together. So:
+   *
+   *   · balance as per books = every posted line to the account, to the date;
+   *   · balance as per bank  = only the lines the bank has also seen by then;
+   *   · the difference is the list of the rest, which is the reconciliation
+   *     statement itself and needs no reconciling of its own.
+   *
+   * Nothing is stored twice and there is no second ledger to keep in step: what
+   * is unreconciled is simply what has no bank date yet.
+   */
+  async bankReconciliation(
+    companyId: number | undefined,
+    accountId: number,
+    asOn: string,
+  ) {
+    if (!companyId) throw new BadRequestException('Select a company first.');
+    const account = await this.prisma.account.findUnique({
+      where: { id: accountId },
+      select: { id: true, code: true, name: true, isBank: true },
+    });
+    if (!account) throw new NotFoundException('Account not found');
+    if (!account.isBank) {
+      throw new BadRequestException(
+        `${account.name} is not a bank account — there is no statement to agree it against.`,
+      );
+    }
+    const to = new Date(`${asOn}T23:59:59.999`);
+    if (Number.isNaN(to.getTime())) {
+      throw new BadRequestException('Give the date to reconcile to.');
+    }
+
+    const lines = await this.prisma.voucherLine.findMany({
+      where: {
+        companyId,
+        accountId,
+        status: 'POSTED',
+        // Everything in the books by that date, plus anything the bank saw by
+        // then that the books date later — a deposit credited on the 30th and
+        // entered on the 2nd belongs on this statement, not the next one.
+        OR: [{ date: { lte: to } }, { bankDate: { lte: to } }],
+      },
+      select: {
+        id: true,
+        date: true,
+        bankDate: true,
+        debit: true,
+        credit: true,
+        narration: true,
+        voucher: {
+          select: {
+            voucherNo: true,
+            narration: true,
+            reference: true,
+            instrument: {
+              select: { instrumentNo: true, chequeKind: true },
+            },
+          },
+        },
+      },
+      orderBy: [{ date: 'asc' }, { id: 'asc' }],
+    });
+
+    let books = 0;
+    let bank = 0;
+    for (const l of lines) {
+      const net = paise(Number(l.debit)) - paise(Number(l.credit));
+      if (l.date <= to) books += net;
+      if (l.bankDate && l.bankDate <= to) bank += net;
+    }
+    return {
+      account,
+      asOn,
+      perBooks: fromPaise(books),
+      perBank: fromPaise(bank),
+      difference: fromPaise(books - bank),
+      lines: lines.map((l) => ({
+        ...l,
+        debit: Number(l.debit),
+        credit: Number(l.credit),
+      })),
+    };
+  }
+
+  /**
+   * Tell a line the day the bank saw it — or take that back.
+   *
+   * The one write reconciliation makes. Only on a bank account, and only on a
+   * posted line: a draft is not in the books, and a cancelled one never was.
+   */
+  async setBankDate(
+    companyId: number | undefined,
+    lineId: number,
+    bankDate: string | null,
+  ) {
+    if (!companyId) throw new BadRequestException('Select a company first.');
+    const line = await this.prisma.voucherLine.findUnique({
+      where: { id: lineId },
+      select: {
+        companyId: true,
+        date: true,
+        status: true,
+        account: { select: { name: true, isBank: true } },
+      },
+    });
+    if (!line || line.companyId !== companyId) {
+      throw new NotFoundException('That line is not this company’s.');
+    }
+    if (!line.account.isBank) {
+      throw new BadRequestException(
+        `${line.account.name} is not a bank account.`,
+      );
+    }
+    if (line.status !== 'POSTED') {
+      throw new BadRequestException(
+        'Only a posted entry can appear on a bank statement.',
+      );
+    }
+    if (bankDate === null) {
+      return this.prisma.voucherLine.update({
+        where: { id: lineId },
+        data: { bankDate: null },
+      });
+    }
+    const when = this.assertDate(bankDate);
+    if (when < line.date) {
+      throw new BadRequestException(
+        'The bank cannot have seen it before it happened.',
+      );
+    }
+    return this.prisma.voucherLine.update({
+      where: { id: lineId },
+      data: { bankDate: when },
     });
   }
 

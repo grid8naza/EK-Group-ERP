@@ -301,6 +301,13 @@ export class CancelVoucherDto {
   reason!: string;
 }
 
+/** The day the bank saw a line — null takes it back off the statement. */
+export class BankDateDto {
+  @IsOptional()
+  @IsISO8601()
+  bankDate?: string | null;
+}
+
 /**
  * Moving a post-dated cheque on — banked, cleared, bounced, presented again,
  * replaced, torn up.
