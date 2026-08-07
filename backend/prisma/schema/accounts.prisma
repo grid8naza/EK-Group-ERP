@@ -27,11 +27,10 @@ model Supplier {
   /// Other Creditors. The sub-ledger under one control account is then exactly
   /// the parties pointing at it, which is what a voucher line offers to name.
   ///
-  /// Null on parties recorded before the main ledger was asked for. Those are
-  /// offered under every control account of their kind rather than none, so a
-  /// supplier that pre-dates this cannot become unpostable — set it and the
-  /// supplier narrows to that one ledger.
-  controlAccountId Int?
+  /// Required. Every sub-ledger belongs to exactly one main ledger: a supplier
+  /// under no control account is a balance that is part of no total, which no
+  /// trial balance can be made to agree.
+  controlAccountId Int
   isActive      Boolean  @default(true)
   isLocked      Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt     DateTime @default(now())
@@ -39,7 +38,7 @@ model Supplier {
 
   /// Same domain file, so this is a real FK — Restrict, because a control
   /// account with a sub-ledger behind it cannot simply vanish.
-  controlAccount Account? @relation("SupplierControlAccount", fields: [controlAccountId], references: [id], onDelete: Restrict)
+  controlAccount Account @relation("SupplierControlAccount", fields: [controlAccountId], references: [id], onDelete: Restrict)
 
   @@unique([companyId, code])
   @@index([companyId])
@@ -69,14 +68,14 @@ model Customer {
   /// The most that may stand unpaid at once. Null = no ceiling agreed.
   creditLimit   Decimal? @db.Decimal(18, 2)
   /// The receivable control account this customer's balance is part of — the
-  /// mirror of Supplier.controlAccountId, and read the same way.
-  controlAccountId Int?
+  /// mirror of Supplier.controlAccountId, required for the same reason.
+  controlAccountId Int
   isActive      Boolean  @default(true)
   isLocked      Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  controlAccount Account? @relation("CustomerControlAccount", fields: [controlAccountId], references: [id], onDelete: Restrict)
+  controlAccount Account @relation("CustomerControlAccount", fields: [controlAccountId], references: [id], onDelete: Restrict)
 
   @@unique([companyId, code])
   @@index([companyId])

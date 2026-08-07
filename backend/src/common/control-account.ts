@@ -15,16 +15,25 @@ import { PrismaService } from '../prisma/prisma.service';
  * rule seen from opposite sides, and the day a third master arrives (employees,
  * once HR builds them) it is the same rule again.
  *
+ * Mandatory: every sub-ledger belongs to exactly one main ledger. A party under
+ * no control account is a balance that is part of no total, and no picker could
+ * offer it without offering it everywhere.
+ *
  * Returns the id to store, having checked it is a control account of the right
- * kind that THIS company may actually post to. Null clears the mapping.
+ * kind that THIS company may actually post to.
  */
 export async function resolveControlAccount(
   prisma: PrismaService,
   companyId: number,
   accountId: number | null | undefined,
   kind: PartyKind,
-): Promise<number | null> {
-  if (accountId == null) return null;
+): Promise<number> {
+  if (accountId == null) {
+    throw new BadRequestException(
+      `Choose the main ledger this ${kind.toLowerCase()} is kept under — ` +
+        `every ${kind.toLowerCase()} belongs to one control account.`,
+    );
+  }
 
   const account = await prisma.account.findUnique({
     where: { id: accountId },

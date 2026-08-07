@@ -1785,10 +1785,10 @@ export interface PartyMaster {
   creditLimit?: string | number | null;
   /**
    * The MAIN LEDGER this party is kept under — the control account whose total
-   * its balance is part of. Null on parties recorded before it was asked for;
-   * those are offered under every control account of their kind.
+   * its balance is part of. Required: every party belongs to exactly one, so a
+   * voucher line naming that account offers exactly the parties under it.
    */
-  controlAccountId?: number | null;
+  controlAccountId: number;
   controlAccount?: { id: number; code: string; name: string } | null;
   isActive: boolean;
   isLocked?: boolean;

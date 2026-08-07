@@ -51,10 +51,12 @@ export class CreateSupplierDto {
   @Min(0)
   creditLimit?: number | null;
 
-  /** Which control account this party's balance is part of — its main ledger. */
-  @IsOptional()
-  @IsInt()
-  controlAccountId?: number | null;
+  /**
+   * Which control account this party's balance is part of — its main ledger.
+   * Required: a supplier under no control account is part of no total.
+   */
+  @IsInt({ message: 'Choose the main ledger this supplier is kept under.' })
+  controlAccountId!: number;
 
   @IsOptional()
   @IsBoolean()
@@ -104,7 +106,10 @@ export class UpdateSupplierDto {
   @Min(0)
   creditLimit?: number | null;
 
-  /** Which control account this party's balance is part of — its main ledger. */
+  /**
+   * Which control account this party's balance is part of — its main ledger.
+   * May be left out of a patch, but not sent empty: it cannot be cleared.
+   */
   @IsOptional()
   @IsInt()
   controlAccountId?: number | null;

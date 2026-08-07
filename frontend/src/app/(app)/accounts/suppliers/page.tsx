@@ -132,6 +132,12 @@ export default function SuppliersPage() {
       toast.error('Supplier name is required.');
       return;
     }
+    // Every sub-ledger belongs to one main ledger — a supplier under no control
+    // account is a balance that is part of no total.
+    if (!form.controlAccountId) {
+      toast.error('Choose the main ledger this supplier is kept under.');
+      return;
+    }
     const payload = {
       name: form.name.trim(),
       contactPerson: form.contactPerson.trim() || null,
@@ -142,8 +148,7 @@ export default function SuppliersPage() {
       // Blank means "no term agreed", which is not the same as zero days.
       creditDays: form.creditDays === '' ? null : Number(form.creditDays),
       creditLimit: form.creditLimit === '' ? null : Number(form.creditLimit),
-      controlAccountId:
-        form.controlAccountId === '' ? null : Number(form.controlAccountId),
+      controlAccountId: Number(form.controlAccountId),
       isActive: form.isActive,
     };
     setSaving(true);
@@ -217,7 +222,7 @@ export default function SuppliersPage() {
             {r.controlAccount.code} · {r.controlAccount.name}
           </span>
         ) : (
-          <span className="text-xs text-slate-300 dark:text-slate-600">Any</span>
+          <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
         ),
     },
     {
@@ -342,6 +347,7 @@ export default function SuppliersPage() {
             <div className="sm:col-span-2">
               <Select
                 label="Main ledger"
+                required
                 value={form.controlAccountId}
                 onChange={(e) =>
                   setForm({ ...form, controlAccountId: e.target.value })
@@ -349,7 +355,7 @@ export default function SuppliersPage() {
                 options={mainLedgers}
                 placeholder={
                   mainLedgers.length
-                    ? 'Any payable ledger'
+                    ? 'Select a payable ledger'
                     : 'No payable control account in use here'
                 }
                 disabled={!mainLedgers.length}
@@ -357,8 +363,7 @@ export default function SuppliersPage() {
               <p className="mt-1 text-xs text-slate-400">
                 The control account this supplier is kept under — Trade Creditors,
                 Other Creditors. A voucher line naming that account offers only the
-                suppliers kept under it. Left blank, this supplier is offered under
-                every payable ledger.
+                suppliers kept under it, so every supplier belongs to exactly one.
               </p>
             </div>
             {/* The terms THEY give us. Left blank, a bill is due the day it is

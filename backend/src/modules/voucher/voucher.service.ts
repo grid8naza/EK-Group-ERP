@@ -903,12 +903,9 @@ export class VoucherService {
     }
     // A party kept under ANOTHER control account cannot be posted here: its
     // balance is part of that account's total, and putting it under this one
-    // would leave two accounts each holding half of one party's history.
-    //
-    // A party with no main ledger set is allowed under any control account of
-    // its kind — that is what a master recorded before the mapping existed looks
-    // like, and refusing it would make old suppliers unpostable overnight.
-    if (party.controlAccountId && party.controlAccountId !== account.id) {
+    // would leave two accounts each holding half of one party's history. Every
+    // party has a main ledger, so there is no "belongs anywhere" case.
+    if (party.controlAccountId !== account.id) {
       throw new BadRequestException(
         `That ${kind.toLowerCase()} is kept under a different main ledger, so it ` +
           `cannot be named on a line to ${account.code} ${account.name} (${at}).`,
@@ -1223,16 +1220,14 @@ export class VoucherService {
 
   /**
    * Is this party one of the company's, and still live? And if so, which main
-   * ledger is it kept under?
-   *
-   * Null main ledger = the party pre-dates the mapping and is accepted under any
-   * control account of its kind; the caller decides what to do with that.
+   * ledger is it kept under? Every party master carries one, so the answer is
+   * always an account id — what the caller checks the line's account against.
    */
   private async findParty(
     companyId: number,
     kind: PartyKind,
     partyId: number,
-  ): Promise<{ controlAccountId: number | null } | null> {
+  ): Promise<{ controlAccountId: number } | null> {
     const where = { id: partyId, companyId, isActive: true };
     const select = { controlAccountId: true };
     switch (kind) {

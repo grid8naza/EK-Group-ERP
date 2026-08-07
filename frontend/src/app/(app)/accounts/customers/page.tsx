@@ -131,6 +131,12 @@ export default function CustomersPage() {
       toast.error('Customer name is required.');
       return;
     }
+    // Every sub-ledger belongs to one main ledger — a customer under no control
+    // account is a balance that is part of no total.
+    if (!form.controlAccountId) {
+      toast.error('Choose the main ledger this customer is kept under.');
+      return;
+    }
     const payload = {
       name: form.name.trim(),
       contactPerson: form.contactPerson.trim() || null,
@@ -141,8 +147,7 @@ export default function CustomersPage() {
       // Blank means "no term agreed", which is not the same as zero days.
       creditDays: form.creditDays === '' ? null : Number(form.creditDays),
       creditLimit: form.creditLimit === '' ? null : Number(form.creditLimit),
-      controlAccountId:
-        form.controlAccountId === '' ? null : Number(form.controlAccountId),
+      controlAccountId: Number(form.controlAccountId),
       isActive: form.isActive,
     };
     setSaving(true);
@@ -216,7 +221,7 @@ export default function CustomersPage() {
             {r.controlAccount.code} · {r.controlAccount.name}
           </span>
         ) : (
-          <span className="text-xs text-slate-300 dark:text-slate-600">Any</span>
+          <span className="text-xs text-slate-300 dark:text-slate-600">—</span>
         ),
     },
     {
@@ -340,6 +345,7 @@ export default function CustomersPage() {
             <div className="sm:col-span-2">
               <Select
                 label="Main ledger"
+                required
                 value={form.controlAccountId}
                 onChange={(e) =>
                   setForm({ ...form, controlAccountId: e.target.value })
@@ -347,15 +353,15 @@ export default function CustomersPage() {
                 options={mainLedgers}
                 placeholder={
                   mainLedgers.length
-                    ? 'Any receivable ledger'
+                    ? 'Select a receivable ledger'
                     : 'No receivable control account in use here'
                 }
                 disabled={!mainLedgers.length}
               />
               <p className="mt-1 text-xs text-slate-400">
                 The control account this customer is kept under. A voucher line
-                naming that account offers only the customers kept under it. Left
-                blank, this customer is offered under every receivable ledger.
+                naming that account offers only the customers kept under it, so
+                every customer belongs to exactly one.
               </p>
             </div>
             <Textarea

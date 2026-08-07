@@ -189,9 +189,8 @@ export function useVoucherMasters() {
    * Creditors and the trade suppliers are offered, not every supplier in the
    * company.
    *
-   * A party with no main ledger set is offered under every control account of
-   * its kind — that is what a master recorded before the mapping existed looks
-   * like, and dropping it from every picker would make it unpostable. The server
+   * Every party master carries a main ledger, so the narrowing is exact: a
+   * party is offered under its own control account and no other. The server
    * applies the same rule, so the list and the save agree.
    */
   const partyOptions = (kind: PartyKind | null, accountId?: string | number) => {
@@ -203,11 +202,7 @@ export function useVoucherMasters() {
           : [];
     const account = accountId != null ? Number(accountId) : null;
     return list
-      .filter(
-        (p) =>
-          p.isActive &&
-          (!account || !p.controlAccountId || p.controlAccountId === account),
-      )
+      .filter((p) => p.isActive && (!account || p.controlAccountId === account))
       .map((p) => ({ value: String(p.id), label: `${p.code} · ${p.name}` }));
   };
 
