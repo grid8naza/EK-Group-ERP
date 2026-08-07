@@ -1390,7 +1390,7 @@ export function VoucherEntryScreen({
               however long the voucher grows — on a twenty-line entry, whether
               the two columns agree is the one thing worth always seeing. */}
           <div
-            className="card sticky bottom-0 z-10 grid items-center gap-2 bg-slate-50 px-3 py-1.5 text-sm font-semibold shadow-sm dark:bg-slate-800"
+            className="card sticky bottom-0 z-10 grid items-center gap-2 border-slate-400 bg-slate-50 px-3 py-1.5 text-sm font-semibold shadow-sm dark:border-slate-500 dark:bg-slate-800"
             style={{ gridTemplateColumns: GRID }}
           >
             <span />
@@ -1421,12 +1421,11 @@ export function VoucherEntryScreen({
                     : `Out by ${money(Math.abs(totals.diff))}`}
               </span>
             </span>
-            <span className="border-t border-slate-400 text-right tabular-nums">
-              {money(totals.dr)}
-            </span>
-            <span className="border-t border-slate-400 text-right tabular-nums">
-              {money(totals.cr)}
-            </span>
+            {/* No rule above the figures: the box around the totals already
+                says these are the totals, and a second line under the last
+                amount only crowds it. */}
+            <span className="text-right tabular-nums">{money(totals.dr)}</span>
+            <span className="text-right tabular-nums">{money(totals.cr)}</span>
             <span />
           </div>
 
