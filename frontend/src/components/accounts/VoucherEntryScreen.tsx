@@ -738,7 +738,10 @@ export function VoucherEntryScreen({
         }
         icon={<Icon className="h-5 w-5" />}
         actions={
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          // One line, always: the four ways to finish are read as a set, and a
+          // row that breaks in two reads as two decisions. The header lets the
+          // title wrap instead.
+          <div className="flex items-center justify-end gap-2">
             <button className="btn-secondary" onClick={closeForm}>
               <ArrowLeft className="mr-1 inline h-4 w-4" />
               Back
@@ -787,7 +790,6 @@ export function VoucherEntryScreen({
                   }
                   onClick={() => void save(true, true)}
                 >
-                  <Check className="mr-1 inline h-4 w-4" />
                   Post &amp; New
                 </button>
               </>
@@ -821,7 +823,14 @@ export function VoucherEntryScreen({
               and, on the kinds an invoice will raise, what that invoice said
               the transaction was. Nowhere else: the lines say what the voucher
               did, and a taxonomy typed above them only repeats it. */}
-          <div className="card grid grid-cols-1 gap-4 p-4 sm:grid-cols-3">
+          <div
+            className={cn(
+              'card grid grid-cols-1 gap-4 p-4 sm:grid-cols-3',
+              // Five fields on one row where there is room for five, so the
+              // whole header is read at a glance rather than in two passes.
+              showTransaction && 'xl:grid-cols-5',
+            )}
+          >
             <DateInput
               id={DATE_FIELD}
               label="Date"
