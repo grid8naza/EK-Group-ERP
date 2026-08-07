@@ -9,6 +9,7 @@ import {
   BalanceSide,
   BillRefType,
   PartyKind,
+  PdcStatus,
   Prisma,
   VoucherStatus,
 } from '@prisma/client';
@@ -24,12 +25,20 @@ import {
   type CompanyEntrySetup,
 } from '../../common/entry-rules';
 import {
+  CancelPdcDto,
   CancelVoucherDto,
+  ClearPdcDto,
   CreateVoucherDto,
+  InstrumentInput,
   UpdateVoucherDto,
   VoucherLineInput,
   BillAllocationInput,
 } from './voucher.dto';
+import {
+  CHEQUE_MODE,
+  PAYMENT_MODE_LOOKUP,
+  PDC_HOLDING_ACCOUNT_CODE,
+} from '../../common/instruments';
 import { VOUCHER_NUMBER_PREFIX } from './voucher-types';
 import { sideOf } from './bill-side';
 
@@ -39,6 +48,7 @@ const fromPaise = (n: number) => n / 100;
 
 const withLines = {
   type: true,
+  instrument: true,
   lines: {
     orderBy: { sequence: 'asc' as const },
     include: {
@@ -127,6 +137,35 @@ interface ResolvedLine extends ResolvedTransaction {
   partyKind: PartyKind | null;
   partyId: number | null;
 }
+
+/**
+ * The kinds that move money through a bank, and so must say how.
+ *
+ * Cash needs no instrument — notes are notes — and a journal moves no money at
+ * all. These two are where a cheque number, an advice or a UPI reference is a
+ * fact worth keeping, and where a post-dated cheque can arise.
+ */
+const BANK_VOUCHER_TYPES = ['BANK_PAYMENT', 'BANK_RECEIPT'];
+
+/** A stored instrument read back as an input, so a re-save re-runs the rules. */
+const instrumentAsInput = (
+  i: {
+    modeValueId: number;
+    bankAccountId: number;
+    instrumentNo: string | null;
+    instrumentDate: Date | null;
+    chequeKind: 'CDC' | 'PDC' | null;
+  } | null,
+): InstrumentInput | undefined =>
+  i
+    ? {
+        modeValueId: i.modeValueId,
+        bankAccountId: i.bankAccountId,
+        instrumentNo: i.instrumentNo,
+        instrumentDate: i.instrumentDate?.toISOString() ?? null,
+        chequeKind: i.chequeKind,
+      }
+    : undefined;
 
 /** Codes of the two global lookups the classification is drawn from. */
 const TXN_TYPE_LOOKUP_CODE = 'TRANSACTION_TYPE';
@@ -325,6 +364,12 @@ export class VoucherService {
       date,
     );
     if (dto.post) this.assertBalanced(lines);
+    const instrument = await this.resolveInstrument(
+      companyId,
+      type.code,
+      dto.instrument,
+      lines,
+    );
 
     const totals = this.totals(lines);
     const status: VoucherStatus = dto.post ? 'POSTED' : 'DRAFT';
@@ -380,6 +425,9 @@ export class VoucherService {
                 : {}),
             })),
           },
+          ...(instrument
+            ? { instrument: { create: { companyId, ...instrument } } }
+            : {}),
         },
         include: withLines,
       }),
@@ -432,6 +480,15 @@ export class VoucherService {
       existing.id,
     );
     if (dto.post) this.assertBalanced(lines);
+    // Re-checked whether or not the patch mentions it: the lines may have moved
+    // under a cheque that was already there, and a post-dated one that now
+    // names the bank has to be caught here as surely as on the first save.
+    const instrument = await this.resolveInstrument(
+      existing.companyId,
+      existing.type.code,
+      dto.instrument ?? instrumentAsInput(existing.instrument),
+      lines,
+    );
 
     const totals = this.totals(lines);
     const status: VoucherStatus = dto.post ? 'POSTED' : 'DRAFT';
@@ -487,6 +544,16 @@ export class VoucherService {
                 : {}),
             })),
           },
+          ...(instrument
+            ? {
+                instrument: {
+                  upsert: {
+                    create: { companyId: existing.companyId, ...instrument },
+                    update: instrument,
+                  },
+                },
+              }
+            : {}),
         },
         include: withLines,
       });
@@ -566,6 +633,238 @@ export class VoucherService {
     });
   }
 
+  // ---- post-dated cheques ------------------------------------------------------
+
+  /**
+   * The cheques written and not yet gone.
+   *
+   * Read off the instruments rather than off the vouchers: a PDC's life happens
+   * after its voucher is finished, and this is the table that has a life.
+   */
+  async listPdc(companyId: number | undefined, status?: PdcStatus) {
+    if (!companyId) throw new BadRequestException('Select a company first.');
+    return this.prisma.voucherInstrument.findMany({
+      where: {
+        companyId,
+        chequeKind: 'PDC',
+        ...(status ? { status } : {}),
+      },
+      include: {
+        voucher: {
+          select: {
+            id: true,
+            voucherNo: true,
+            date: true,
+            status: true,
+            narration: true,
+            totalCredit: true,
+            lines: {
+              orderBy: { sequence: 'asc' as const },
+              select: {
+                partyKind: true,
+                partyId: true,
+                account: { select: { id: true, name: true } },
+              },
+            },
+          },
+        },
+        bankAccount: { select: { id: true, code: true, name: true } },
+      },
+      orderBy: [{ instrumentDate: 'asc' }, { id: 'asc' }],
+    });
+  }
+
+  /**
+   * The cheque was presented and the money went.
+   *
+   * This is the entry the register exists to raise: on the day it actually
+   * cleared — which is rarely the day written on the leaf — the liability that
+   * has been standing since it was issued is discharged against the bank it was
+   * always drawn on. Its own voucher, on its own date, because that is when it
+   * happened; back-dating it into the issuing voucher would put money out of
+   * the bank on a day the bank says it was still there.
+   */
+  async clearPdc(
+    userId: number,
+    companyId: number | undefined,
+    id: number,
+    dto: ClearPdcDto,
+  ) {
+    const pdc = await this.livePdc(companyId, id);
+    const date = this.assertDate(dto.date);
+    if (date < pdc.voucher.date) {
+      throw new BadRequestException(
+        'A cheque cannot clear before the day it was written.',
+      );
+    }
+    const holding = await this.pdcHoldingAccount(pdc.companyId);
+    const amount = pdc.voucher.totalCredit;
+
+    const type = await this.prisma.voucherType.findFirst({
+      where: { code: 'JOURNAL' },
+    });
+    if (!type) {
+      throw new BadRequestException('The journal voucher type is not set up.');
+    }
+
+    const settlement = await this.withNumberRetry(
+      { companyId: pdc.companyId, branchId: pdc.voucher.branchId ?? undefined },
+      type.documentCode,
+      type.code,
+      date,
+      (voucherNo) =>
+        this.prisma.voucher.create({
+          data: {
+            companyId: pdc.companyId,
+            branchId: pdc.voucher.branchId,
+            voucherTypeId: type.id,
+            voucherNo,
+            date,
+            narration:
+              `Cheque ${pdc.instrumentNo ?? ''} cleared — ${pdc.voucher.voucherNo}`.trim(),
+            reference: pdc.instrumentNo,
+            status: 'POSTED',
+            totalDebit: amount,
+            totalCredit: amount,
+            createdByUserId: userId,
+            postedByUserId: userId,
+            postedAt: new Date(),
+            sourceModule: 'accounts',
+            sourceDocType: 'PDC_CLEARANCE',
+            sourceDocId: pdc.id,
+            lines: {
+              create: [
+                {
+                  sequence: 0,
+                  companyId: pdc.companyId,
+                  branchId: pdc.voucher.branchId,
+                  date,
+                  status: 'POSTED',
+                  accountId: holding.id,
+                  debit: amount,
+                  credit: 0,
+                },
+                {
+                  sequence: 1,
+                  companyId: pdc.companyId,
+                  branchId: pdc.voucher.branchId,
+                  date,
+                  status: 'POSTED',
+                  accountId: pdc.bankAccountId,
+                  debit: 0,
+                  credit: amount,
+                },
+              ],
+            },
+          },
+          include: withLines,
+        }),
+    );
+
+    await this.prisma.voucherInstrument.update({
+      where: { id: pdc.id },
+      data: {
+        status: 'CLEARED',
+        settledOn: date,
+        settlementVoucherId: settlement.id,
+      },
+    });
+    return settlement;
+  }
+
+  /**
+   * The cheque was torn up, or another was written in its place.
+   *
+   * Nothing is posted: cancelling the voucher that issued it is the whole of
+   * it. Its lines and its bill allocations go CANCELLED, and because what a
+   * party still owes is DERIVED from the live allocations rather than stored,
+   * the bill it was paying stands open again by itself — see cancel().
+   *
+   * REPLACED rather than CANCELLED where a fresh cheque follows, so the
+   * register can say which of the two happened; the replacement names this one
+   * when it is written.
+   */
+  async cancelPdc(
+    companyId: number | undefined,
+    id: number,
+    dto: CancelPdcDto,
+    replaced = false,
+  ) {
+    const pdc = await this.livePdc(companyId, id);
+    const date = this.assertDate(dto.date);
+    await this.cancel(companyId, pdc.voucherId, {
+      reason: dto.reason.trim(),
+    });
+    return this.prisma.voucherInstrument.update({
+      where: { id: pdc.id },
+      data: {
+        status: replaced ? 'REPLACED' : 'CANCELLED',
+        settledOn: date,
+      },
+    });
+  }
+
+  /** The cheque this company issued, still live, or a reason it is not. */
+  private async livePdc(companyId: number | undefined, id: number) {
+    if (!companyId) throw new BadRequestException('Select a company first.');
+    const pdc = await this.prisma.voucherInstrument.findUnique({
+      where: { id },
+      include: {
+        voucher: {
+          select: {
+            id: true,
+            voucherNo: true,
+            date: true,
+            branchId: true,
+            totalCredit: true,
+            status: true,
+          },
+        },
+      },
+    });
+    if (!pdc || pdc.companyId !== companyId) {
+      throw new NotFoundException('That cheque is not on the register.');
+    }
+    if (pdc.chequeKind !== 'PDC') {
+      throw new BadRequestException(
+        'Only a post-dated cheque has anything left to do.',
+      );
+    }
+    if (pdc.status !== 'ISSUED') {
+      throw new BadRequestException(
+        `That cheque is already ${pdc.status?.toLowerCase()}.`,
+      );
+    }
+    return pdc;
+  }
+
+  /** Where an issued cheque waits. Adopted by the company, or it cannot post. */
+  private async pdcHoldingAccount(companyId: number) {
+    const account = await this.prisma.account.findUnique({
+      where: { code: PDC_HOLDING_ACCOUNT_CODE },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        isActive: true,
+        companies: { where: { companyId }, select: { isActive: true } },
+      },
+    });
+    if (!account || !account.isActive) {
+      throw new BadRequestException(
+        `Account ${PDC_HOLDING_ACCOUNT_CODE} (Post-dated Cheques Issued) is not ` +
+          `in the chart. It is seeded on boot — restart the API.`,
+      );
+    }
+    if (!account.companies.length || account.companies[0].isActive === false) {
+      throw new BadRequestException(
+        `${account.code} ${account.name} is not in use by this company — adopt ` +
+          `it on Account Ledgers before writing post-dated cheques.`,
+      );
+    }
+    return account;
+  }
+
   /** Only a draft can be thrown away; a posted voucher is cancelled instead. */
   async remove(companyId: number | undefined, id: number) {
     const existing = await this.findOne(companyId, id);
@@ -584,6 +883,135 @@ export class VoucherService {
           : `A posted voucher cannot be ${verb} — reverse it with a fresh voucher instead.`,
       );
     }
+  }
+
+  /**
+   * How the money moved — checked, and refused where it makes no sense.
+   *
+   * Asked for by the bank kinds and by nothing else. A cheque must say which
+   * one and when, and whether it is due now or later; every other mode is done
+   * the moment it is entered and has nothing more to say.
+   *
+   * A post-dated cheque must NOT touch the bank: the bank knows nothing about
+   * a leaf that has not been presented, and a books balance that runs ahead of
+   * the statement is the thing this whole arrangement exists to prevent. It
+   * credits the holding account instead, and the bank named here is the record
+   * of which chequebook it came from.
+   */
+  private async resolveInstrument(
+    companyId: number,
+    typeCode: string,
+    input: InstrumentInput | undefined,
+    lines: { accountId: number }[],
+  ) {
+    const wanted = BANK_VOUCHER_TYPES.includes(typeCode);
+    if (!wanted) {
+      if (input) {
+        throw new BadRequestException(
+          'Only a bank receipt or payment carries an instrument.',
+        );
+      }
+      return null;
+    }
+    if (!input) {
+      throw new BadRequestException('Say how the money moved.');
+    }
+
+    const mode = await this.prisma.lookupValue.findUnique({
+      where: { id: input.modeValueId },
+      select: {
+        value: true,
+        label: true,
+        isActive: true,
+        lookup: { select: { code: true } },
+      },
+    });
+    if (
+      !mode ||
+      mode.lookup.code !== PAYMENT_MODE_LOOKUP ||
+      !mode.isActive
+    ) {
+      throw new BadRequestException('Choose how the money moved.');
+    }
+
+    const bank = await this.prisma.account.findUnique({
+      where: { id: input.bankAccountId },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        isBank: true,
+        isActive: true,
+        companies: { where: { companyId }, select: { isActive: true } },
+      },
+    });
+    if (!bank || !bank.isBank || !bank.isActive) {
+      throw new BadRequestException('Choose the bank account it goes through.');
+    }
+    if (!bank.companies.length || bank.companies[0].isActive === false) {
+      throw new BadRequestException(
+        `${bank.code} ${bank.name} is not in use by this company.`,
+      );
+    }
+
+    const isCheque = mode.value === CHEQUE_MODE || mode.label === CHEQUE_MODE;
+    if (!isCheque) {
+      if (input.chequeKind) {
+        throw new BadRequestException(
+          `${mode.label} is not a cheque, so it is neither post-dated nor current-dated.`,
+        );
+      }
+      return {
+        modeValueId: input.modeValueId,
+        bankAccountId: bank.id,
+        instrumentNo: input.instrumentNo?.trim() || null,
+        instrumentDate: input.instrumentDate
+          ? this.assertDate(input.instrumentDate)
+          : null,
+        chequeKind: null,
+        status: null,
+      };
+    }
+
+    if (!input.instrumentNo?.trim()) {
+      throw new BadRequestException('Give the cheque number.');
+    }
+    if (!input.instrumentDate) {
+      throw new BadRequestException('Give the date written on the cheque.');
+    }
+    if (!input.chequeKind) {
+      throw new BadRequestException(
+        'Say whether the cheque is current-dated or post-dated.',
+      );
+    }
+    const instrumentDate = this.assertDate(input.instrumentDate);
+
+    if (input.chequeKind === 'PDC') {
+      if (lines.some((l) => l.accountId === bank.id)) {
+        throw new BadRequestException(
+          `A post-dated cheque does not touch ${bank.name} until it is presented — ` +
+            `post it to Post-dated Cheques Issued and clear it from the PDC register.`,
+        );
+      }
+      const holding = await this.pdcHoldingAccount(companyId);
+      if (!lines.some((l) => l.accountId === holding.id)) {
+        throw new BadRequestException(
+          `A post-dated cheque is held in ${holding.name} until it clears — name ` +
+            `that account on the line instead of the bank.`,
+        );
+      }
+    }
+
+    return {
+      modeValueId: input.modeValueId,
+      bankAccountId: bank.id,
+      instrumentNo: input.instrumentNo.trim(),
+      instrumentDate,
+      chequeKind: input.chequeKind,
+      // A current-dated cheque is finished the moment it is written; only a
+      // post-dated one has anywhere left to go.
+      status: input.chequeKind === 'PDC' ? ('ISSUED' as const) : null,
+    };
   }
 
   private async assertManualType(voucherTypeId: number) {

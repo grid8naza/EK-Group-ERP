@@ -10,13 +10,15 @@ import {
   Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { PartyKind, VoucherStatus } from '@prisma/client';
+import { PartyKind, PdcStatus, VoucherStatus } from '@prisma/client';
 import { CompanyId } from '../../auth/company.decorator';
 import { BranchId } from '../../auth/branch.decorator';
 import { AuthUser, CurrentUser } from '../../auth/current-user.decorator';
 import { VoucherService } from './voucher.service';
 import {
+  CancelPdcDto,
   CancelVoucherDto,
+  ClearPdcDto,
   CreateVoucherDto,
   UpdateVoucherDto,
 } from './voucher.dto';
@@ -37,6 +39,49 @@ export class VoucherController {
   @Get('types')
   types() {
     return this.service.types();
+  }
+
+  // ---- the post-dated cheque register -------------------------------------
+  // Above the :id routes, or 'pdc' would be read as a voucher id.
+
+  /** Cheques written and not yet gone. */
+  @Get('pdc')
+  pdc(
+    @CompanyId() companyId: number | undefined,
+    @Query('status') status?: PdcStatus,
+  ) {
+    return this.service.listPdc(companyId, status);
+  }
+
+  /** It was presented and the money went — on the day it actually went. */
+  @Patch('pdc/:id/clear')
+  clearPdc(
+    @CurrentUser() user: AuthUser,
+    @CompanyId() companyId: number | undefined,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ClearPdcDto,
+  ) {
+    return this.service.clearPdc(user.id, companyId, id, dto);
+  }
+
+  /** It was torn up. */
+  @Patch('pdc/:id/cancel')
+  cancelPdc(
+    @CompanyId() companyId: number | undefined,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CancelPdcDto,
+  ) {
+    return this.service.cancelPdc(companyId, id, dto);
+  }
+
+  /** It was torn up and another written for the same debt. */
+  @Patch('pdc/:id/replace')
+  replacePdc(
+    @CompanyId() companyId: number | undefined,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CancelPdcDto,
+  ) {
+    return this.service.cancelPdc(companyId, id, dto, true);
   }
 
   @Get()

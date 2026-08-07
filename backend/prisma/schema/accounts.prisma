@@ -174,6 +174,29 @@ enum VoucherStatus {
   CANCELLED
 }
 
+/// A cheque is either due now or due later, and the difference is not a detail:
+/// a current-dated cheque leaves the bank when it is written, a post-dated one
+/// is a promise that has to be watched until the day it is presented.
+enum ChequeKind {
+  CDC
+  PDC
+}
+
+/// Where a post-dated cheque has got to.
+///
+/// ISSUED is a liability standing in the books — the party has been paid, the
+/// bank has not yet. It leaves that state exactly once: CLEARED when the money
+/// actually goes, CANCELLED when the cheque is torn up, REPLACED when a fresh
+/// cheque is written for the same debt. Every one of those posts its own entry
+/// on its own date, so the register and the ledger can never say different
+/// things.
+enum PdcStatus {
+  ISSUED
+  CLEARED
+  CANCELLED
+  REPLACED
+}
+
 /// How an amount posted to a party is attached to that party's bills — Tally's
 /// method of adjustment.
 ///
@@ -314,6 +337,8 @@ model Account {
   /// parties whose balances add up to its total.
   suppliers    Supplier[]       @relation("SupplierControlAccount")
   customers    Customer[]       @relation("CustomerControlAccount")
+  /// Cheques and transfers drawn on this account, where it is a bank.
+  instruments  VoucherInstrument[] @relation("InstrumentBank")
 
   @@index([groupId])
   @@index([isActive])
@@ -453,6 +478,7 @@ model Voucher {
 
   type  VoucherType   @relation(fields: [voucherTypeId], references: [id], onDelete: Restrict)
   lines VoucherLine[]
+  instrument VoucherInstrument?
 
   /// One number per kind per company. Numbers are derived (MAX + 1), so the
   /// constraint is what makes a race loud rather than silent.
@@ -461,6 +487,64 @@ model Voucher {
   @@index([companyId, status])
   @@index([sourceModule, sourceDocType, sourceDocId])
   @@map("vouchers")
+}
+
+/// HOW a bank voucher's money moved, and — where it moved by cheque — the
+/// cheque's own life.
+///
+/// Separate from the voucher because it is a different fact with a different
+/// lifetime. The voucher is finished the moment it is posted and is never
+/// edited again; a post-dated cheque written on it goes on being a live thing
+/// for weeks, and is cleared, cancelled or replaced long after. Kept here, the
+/// register is one table to read and the voucher stays the immovable record it
+/// is supposed to be.
+///
+/// One per voucher, and only on the kinds that move money through a bank.
+model VoucherInstrument {
+  id        Int @id @default(autoincrement())
+  companyId Int // -> Cpanel Company (plain id)
+  voucherId Int @unique
+
+  /// How it was paid — a PAYMENT_MODE lookup value (Cheque, NEFT, UPI…).
+  /// -> Cpanel LookupValue (plain cross-domain id).
+  modeValueId Int
+
+  /// The bank it is drawn on. Recorded at entry WHATEVER the posting does with
+  /// it: a post-dated cheque credits the holding account rather than the bank,
+  /// and without this nobody could say which chequebook the leaf came out of.
+  bankAccountId Int
+
+  /// The cheque or advice number, and the date written on it — which for a
+  /// post-dated cheque is the day it may be presented, not the day it was
+  /// written.
+  instrumentNo   String?
+  instrumentDate DateTime?
+
+  /// Set only where the mode is a cheque.
+  chequeKind ChequeKind?
+  /// Set only on a post-dated cheque; null on everything that settled at once.
+  status PdcStatus?
+  /// When it left ISSUED, and by which voucher — the entry that took it to the
+  /// bank, or reversed it back out.
+  settledOn           DateTime?
+  settlementVoucherId Int?
+  /// The cheque this one was written to replace, on a replacement.
+  replacesInstrumentId Int? @unique
+
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  voucher Voucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  /// Restrict: a bank account a cheque was drawn on cannot simply vanish.
+  bankAccount Account @relation("InstrumentBank", fields: [bankAccountId], references: [id], onDelete: Restrict)
+  replaces    VoucherInstrument? @relation("PdcReplacement", fields: [replacesInstrumentId], references: [id], onDelete: SetNull)
+  replacedBy  VoucherInstrument? @relation("PdcReplacement")
+
+  @@index([companyId, status])
+  @@index([companyId, instrumentDate])
+  @@index([bankAccountId])
+  @@map("voucher_instruments")
 }
 
 /// The general ledger itself: one row per debit or credit.

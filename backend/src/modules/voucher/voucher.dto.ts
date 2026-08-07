@@ -146,6 +146,44 @@ export class VoucherLineInput {
   transactionSubtypeId?: number;
 }
 
+/**
+ * How a bank voucher's money moved — and, on a cheque, what was written on it.
+ *
+ * Asked for by the bank kinds and refused by the rest: an instrument on a
+ * journal would be a fact about a payment that never happened.
+ */
+export class InstrumentInput {
+  /** A live PAYMENT_MODE lookup value. */
+  @IsInt()
+  @IsPositive()
+  modeValueId!: number;
+
+  /**
+   * The bank it is drawn on. Recorded whatever the posting does with it — a
+   * post-dated cheque credits the holding account rather than this, and the
+   * chequebook it came out of still has to be on the record.
+   */
+  @IsInt()
+  @IsPositive()
+  bankAccountId!: number;
+
+  /** Required on a cheque; free on everything else. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  instrumentNo?: string | null;
+
+  /** The date written on it — on a PDC, the day it may be presented. */
+  @IsOptional()
+  @IsISO8601()
+  instrumentDate?: string | null;
+
+  /** Required on a cheque, refused on anything else. */
+  @IsOptional()
+  @IsIn(['CDC', 'PDC'])
+  chequeKind?: 'CDC' | 'PDC' | null;
+}
+
 export class CreateVoucherDto {
   @IsInt()
   @IsPositive()
@@ -185,6 +223,12 @@ export class CreateVoucherDto {
   @ValidateNested({ each: true })
   @Type(() => VoucherLineInput)
   lines!: VoucherLineInput[];
+
+  /** Required on the bank kinds; refused on the others. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => InstrumentInput)
+  instrument?: InstrumentInput;
 
   /** Write it straight to the books rather than leaving it as a draft. */
   @IsOptional()
@@ -231,12 +275,34 @@ export class UpdateVoucherDto {
   @Type(() => VoucherLineInput)
   lines?: VoucherLineInput[];
 
+  /** Left out of a patch: the draft keeps the instrument it already had. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => InstrumentInput)
+  instrument?: InstrumentInput;
+
   @IsOptional()
   @IsBoolean()
   post?: boolean;
 }
 
 export class CancelVoucherDto {
+  @IsString()
+  @MaxLength(300)
+  reason!: string;
+}
+
+/** Marking a post-dated cheque cleared: the day the money actually went. */
+export class ClearPdcDto {
+  @IsISO8601()
+  date!: string;
+}
+
+/** Tearing one up, or writing another in its place. */
+export class CancelPdcDto {
+  @IsISO8601()
+  date!: string;
+
   @IsString()
   @MaxLength(300)
   reason!: string;

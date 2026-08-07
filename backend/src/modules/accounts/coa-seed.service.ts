@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { PAYMENT_MODES, PAYMENT_MODE_LOOKUP } from '../../common/instruments';
 import {
   COA_MAIN_GROUPS,
   COA_MAIN_GROUP_CORRECTIONS,
@@ -93,6 +94,7 @@ export class CoaSeedService implements OnApplicationBootstrap {
       const accounts = await this.seedAccounts();
       const adoptions = await this.seedAdoptions();
       const categories = await this.seedCategories();
+      await this.seedPaymentModes();
       await this.markShipped();
       await this.backfillCostFlags();
       await this.backfillMainGroups();
@@ -108,6 +110,45 @@ export class CoaSeedService implements OnApplicationBootstrap {
       this.logger.error(
         `Chart of Accounts seed failed: ${e instanceof Error ? e.message : e}`,
       );
+    }
+  }
+
+  /**
+   * How money moves through a bank — the list a bank voucher picks from.
+   *
+   * A lookup rather than an enum, because this is the company's list: a bank
+   * that stops taking one of these, or starts taking something new, is a change
+   * to reference data and not to the software. Cheque is the one the code knows
+   * by name, since a cheque is the only one of them with a life after the
+   * payment; see PdcStatus.
+   *
+   * Owned by the Accounts module, so it is edited from that module's Lookups
+   * screen and appears in no other.
+   */
+  private async seedPaymentModes(): Promise<void> {
+    const module = await this.prisma.module.findUnique({
+      where: { code: 'ACCOUNTS' },
+      select: { id: true },
+    });
+    const lookup = await this.prisma.lookup.upsert({
+      where: { code: PAYMENT_MODE_LOOKUP },
+      create: {
+        code: PAYMENT_MODE_LOOKUP,
+        name: 'Payment Mode',
+        moduleId: module?.id ?? null,
+        isSystem: true,
+        description: 'How a bank receipt or payment moved the money.',
+      },
+      update: { isSystem: true },
+    });
+    for (const [i, value] of PAYMENT_MODES.entries()) {
+      await this.prisma.lookupValue.upsert({
+        where: { lookupId_value: { lookupId: lookup.id, value } },
+        create: { lookupId: lookup.id, value, label: value, sortOrder: i },
+        // Only the order: a company may rename "Card" to "POS card" and that
+        // is theirs to keep.
+        update: { sortOrder: i },
+      });
     }
   }
 
