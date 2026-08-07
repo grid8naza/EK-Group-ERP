@@ -109,6 +109,19 @@ const COMMON_NARRATION = 've-common-narration';
  */
 const GRID = '3.5rem minmax(0,1fr) 8rem 8rem 1.75rem';
 
+/**
+ * The gutter the rows UNDER a line start after — wide enough for the longest of
+ * the little italic labels that sit in it.
+ *
+ * One width, shared: the narration box and the bill rows below it are both
+ * indented past their own label, and two labels of their own natural widths
+ * would start those controls at two different places for no reason anyone
+ * reading the voucher could name.
+ */
+const ROW_LABEL = 'w-[4.5rem] flex-none text-xs italic text-slate-400';
+/** The same gutter, for a row with no label of its own to hold it open. */
+const ROW_INDENT = 'pl-[5rem]';
+
 const focusById = (id: string) =>
   requestAnimationFrame(() => document.getElementById(id)?.focus());
 
@@ -1157,9 +1170,7 @@ export function VoucherEntryScreen({
                           Particulars column, so its box ends exactly where the
                           ledger box above it ends. */}
                       <div className="col-start-2 flex items-center gap-2">
-                        <label className="flex-none text-xs italic text-slate-400">
-                          Narration
-                        </label>
+                        <label className={ROW_LABEL}>Narration</label>
                         <Input
                           id={fid(l.key, 'narration')}
                           value={l.narration}
@@ -1193,9 +1204,9 @@ export function VoucherEntryScreen({
                                eye sees a detail of the line rather than another
                                line. */
                             <div key={bi} className="flex flex-wrap items-center gap-2">
-                              {/* Fixed width, or the second bill row would
-                                  start further left than the first. */}
-                              <span className="w-9 flex-none text-xs italic text-slate-400">
+                              {/* Held open even when empty, or the second bill
+                                  row would start further left than the first. */}
+                              <span className={ROW_LABEL}>
                                 {bi === 0 ? 'Bills' : ''}
                               </span>
                               <Select
@@ -1352,7 +1363,12 @@ export function VoucherEntryScreen({
                               </div>
                             </div>
                           ))}
-                          <div className="flex items-center gap-3 pl-11 text-xs">
+                          <div
+                            className={cn(
+                              'flex items-center gap-3 text-xs',
+                              ROW_INDENT,
+                            )}
+                          >
                             {!readOnly && (
                               <button
                                 type="button"
