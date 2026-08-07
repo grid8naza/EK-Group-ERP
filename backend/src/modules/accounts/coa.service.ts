@@ -48,21 +48,41 @@ const costFlags = (hasCostCenter?: boolean, hasCostObject?: boolean) => ({
 });
 
 /**
- * Where the money actually sits: in hand, or at a bank.
+ * Where the money actually sits — and, for a cheque not yet honoured, where it
+ * waits.
  *
- * One or the other, never both. They were a single "bank or cash" flag and are
- * now separate because the two are counted differently — cash by counting the
- * notes in the drawer, a bank balance by agreeing it against a statement — and
- * a screen that wants one of them cannot be built out of a flag that means
- * either. An account claiming both would belong to neither cash book.
+ * Four kinds, and an account is at most one of them. Cash is counted by
+ * counting the notes; a bank balance is agreed against a statement; a
+ * post-dated cheque we wrote is a promise standing as a liability until it is
+ * presented, and one we were given is an asset until it clears. Each is a
+ * different book, and a screen that wants one of them cannot be built out of a
+ * flag that means several.
  */
-const moneyFlags = (isCash?: boolean, isBank?: boolean) => {
-  if (isCash && isBank) {
+const MONEY_KINDS = [
+  ['isCash', 'holds cash'],
+  ['isBank', 'sits at a bank'],
+  ['isPdcIssued', 'holds post-dated cheques issued'],
+  ['isPdcReceived', 'holds post-dated cheques received'],
+] as const;
+
+const moneyFlags = (dto: {
+  isCash?: boolean;
+  isBank?: boolean;
+  isPdcIssued?: boolean;
+  isPdcReceived?: boolean;
+}) => {
+  const claimed = MONEY_KINDS.filter(([key]) => dto[key]);
+  if (claimed.length > 1) {
     throw new BadRequestException(
-      'An account holds cash or sits at a bank — it cannot be both.',
+      `An account ${claimed.map(([, said]) => said).join(' or ')} — it cannot be more than one.`,
     );
   }
-  return { isCash: !!isCash, isBank: !!isBank };
+  return {
+    isCash: !!dto.isCash,
+    isBank: !!dto.isBank,
+    isPdcIssued: !!dto.isPdcIssued,
+    isPdcReceived: !!dto.isPdcReceived,
+  };
 };
 
 /**
@@ -351,7 +371,7 @@ export class CoaService {
         controlParty: dto.isControl ? dto.controlParty : null,
         ...costFlags(dto.hasCostCenter, dto.hasCostObject),
         isGstRelevant: dto.isGstRelevant ?? false,
-        ...moneyFlags(dto.isCash, dto.isBank),
+        ...moneyFlags(dto),
         isReconcilable: dto.isReconcilable ?? false,
         allowManualJe: dto.allowManualJe ?? true,
         notes: dto.notes?.trim() || null,

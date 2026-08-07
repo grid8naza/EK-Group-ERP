@@ -147,6 +147,8 @@ function billLabel(bills: OutstandingBill[], againstId: string): string | null {
 type LedgerScope = {
   money?: 'CASH' | 'BANK' | Array<'CASH' | 'BANK'>;
   party?: PartyKind | PartyKind[];
+  /** The ledgers a post-dated cheque waits in — written out, or taken in. */
+  pdc?: 'ISSUED' | 'RECEIVED';
 };
 
 const asList = <T,>(v: T | T[] | undefined): T[] =>
@@ -401,19 +403,31 @@ export function VoucherEntryScreen({
    * belong there: a voucher written before the rule, or under a ledger since
    * reclassified, must still read back as what it says rather than as blank.
    */
-  const scopeFor = (index: number): LedgerScope | undefined =>
-    index === 0 && (firstLine?.money || firstLine?.party)
+  const scopeFor = (index: number): LedgerScope | undefined => {
+    // A post-dated cheque does not touch the bank: it waits in a ledger of its
+    // own until it is presented, and which one depends on whose cheque it is.
+    // The side says that without being told — money going out is a cheque we
+    // wrote, money coming in is one we were given.
+    if (index === 0 && askInstrument && instrument.chequeKind === 'PDC') {
+      return { pdc: firstLine?.side === 'DR' ? 'RECEIVED' : 'ISSUED' };
+    }
+    return index === 0 && (firstLine?.money || firstLine?.party)
       ? firstLine
       : lineScope;
+  };
 
   const ledgerOptions = (index: number, selectedId: string) => {
     const scope = scopeFor(index);
     const monies = asList(scope?.money);
     const parties = asList(scope?.party);
-    if (!monies.length && !parties.length) return masters.accountOptions;
+    if (!monies.length && !parties.length && !scope?.pdc) {
+      return masters.accountOptions;
+    }
     const wanted = (a: CoaAccount) =>
       monies.some((m) => (m === 'CASH' ? a.isCash : a.isBank)) ||
-      (a.isControl && !!a.controlParty && parties.includes(a.controlParty));
+      (a.isControl && !!a.controlParty && parties.includes(a.controlParty)) ||
+      (scope?.pdc === 'ISSUED' && a.isPdcIssued) ||
+      (scope?.pdc === 'RECEIVED' && a.isPdcReceived);
     return masters.accounts
       .filter((a) => wanted(a) || String(a.id) === selectedId)
       .map(accountOption);
@@ -421,8 +435,14 @@ export function VoucherEntryScreen({
 
   /** What a narrowed ledger picker calls itself. */
   const ledgerPlaceholder = (index: number) => {
-    const monies = asList(scopeFor(index)?.money);
-    const parties = asList(scopeFor(index)?.party);
+    const scope = scopeFor(index);
+    if (scope?.pdc) {
+      return scope.pdc === 'ISSUED'
+        ? 'Post-dated cheques issued'
+        : 'Post-dated cheques received';
+    }
+    const monies = asList(scope?.money);
+    const parties = asList(scope?.party);
     if (monies.length && parties.length) return 'Ledger';
     if (monies.length > 1) return 'Cash or bank account';
     if (monies.length) {

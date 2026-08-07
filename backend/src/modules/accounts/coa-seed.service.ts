@@ -95,6 +95,7 @@ export class CoaSeedService implements OnApplicationBootstrap {
       const adoptions = await this.seedAdoptions();
       const categories = await this.seedCategories();
       await this.seedPaymentModes();
+      await this.backfillPdcLedgers();
       await this.markShipped();
       await this.backfillCostFlags();
       await this.backfillMainGroups();
@@ -148,6 +149,29 @@ export class CoaSeedService implements OnApplicationBootstrap {
         // Only the order: a company may rename "Card" to "POS card" and that
         // is theirs to keep.
         update: { sortOrder: i },
+      });
+    }
+  }
+
+  /**
+   * Tick the two post-dated cheque ledgers in a database that already had them
+   * before the flags existed — otherwise a bank payment by PDC would find no
+   * ledger to offer and the register could never be used.
+   *
+   * Only where NOTHING carries the flag yet: a company that has moved it to an
+   * account of its own has decided where its cheques wait, and that decision
+   * is not the seed's to overrule.
+   */
+  private async backfillPdcLedgers(): Promise<void> {
+    for (const [code, flag] of [
+      ['29010', 'isPdcIssued'],
+      ['29011', 'isPdcReceived'],
+    ] as const) {
+      const already = await this.prisma.account.count({ where: { [flag]: true } });
+      if (already) continue;
+      await this.prisma.account.updateMany({
+        where: { code },
+        data: { [flag]: true },
       });
     }
   }
@@ -587,6 +611,8 @@ export class CoaSeedService implements OnApplicationBootstrap {
           isGstRelevant: a.isGstRelevant,
           isCash: a.isCash,
           isBank: a.isBank,
+          isPdcIssued: a.isPdcIssued,
+          isPdcReceived: a.isPdcReceived,
           isReconcilable: a.isReconcilable,
           isIntercompany: a.isIntercompany,
           eliminationPair: a.eliminationPair,

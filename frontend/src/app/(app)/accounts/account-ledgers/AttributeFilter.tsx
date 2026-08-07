@@ -13,6 +13,8 @@ export type AttributeKey = keyof Pick<
   | 'isGstRelevant'
   | 'isCash'
   | 'isBank'
+  | 'isPdcIssued'
+  | 'isPdcReceived'
   | 'isReconcilable'
   | 'allowManualJe'
   | 'isActive'
@@ -32,6 +34,16 @@ export const ATTRIBUTES: { key: AttributeKey; label: string; hint: string }[] = 
   { key: 'isGstRelevant', label: 'GST relevant', hint: 'Feeds the GST returns' },
   { key: 'isCash', label: 'Cash', hint: 'Money in hand — a till, a petty cash box' },
   { key: 'isBank', label: 'Bank', hint: 'Money at a bank' },
+  {
+    key: 'isPdcIssued',
+    label: 'PDC issued',
+    hint: 'Holds cheques we wrote, until they are presented',
+  },
+  {
+    key: 'isPdcReceived',
+    label: 'PDC received',
+    hint: 'Holds cheques we were given, until they clear',
+  },
   { key: 'isReconcilable', label: 'Reconcilable', hint: 'Agreed to an outside statement' },
   {
     key: 'allowManualJe',

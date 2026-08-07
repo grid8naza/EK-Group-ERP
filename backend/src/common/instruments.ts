@@ -35,18 +35,3 @@ export const PAYMENT_MODES = [
  * a life of its own until it clears.
  */
 export const CHEQUE_MODE = 'Cheque';
-
-/**
- * Where a post-dated cheque sits between being written and being presented.
- *
- * Issuing one pays the party — their balance falls that day, because the debt
- * is discharged the moment they have the cheque — but it does NOT touch the
- * bank, which knows nothing about it until the leaf is presented. The
- * difference has to live somewhere, and this is it: a liability that says "the
- * bank owes this out, on a date that has not come yet".
- *
- * It is what makes the bank balance in the books agree with the bank's own
- * statement on any day you care to ask, which is the whole point of keeping
- * PDCs out of the bank account.
- */
-export const PDC_HOLDING_ACCOUNT_CODE = '29010';

@@ -34,11 +34,7 @@ import {
   VoucherLineInput,
   BillAllocationInput,
 } from './voucher.dto';
-import {
-  CHEQUE_MODE,
-  PAYMENT_MODE_LOOKUP,
-  PDC_HOLDING_ACCOUNT_CODE,
-} from '../../common/instruments';
+import { CHEQUE_MODE, PAYMENT_MODE_LOOKUP } from '../../common/instruments';
 import { VOUCHER_NUMBER_PREFIX } from './voucher-types';
 import { sideOf } from './bill-side';
 
@@ -697,7 +693,13 @@ export class VoucherService {
         'A cheque cannot clear before the day it was written.',
       );
     }
-    const holding = await this.pdcHoldingAccount(pdc.companyId);
+    if (!pdc.holdingAccountId) {
+      throw new BadRequestException(
+        'That cheque was not parked in a post-dated cheque ledger, so there is ' +
+          'nothing to clear it out of.',
+      );
+    }
+    const holdingAccountId = pdc.holdingAccountId;
     const amount = pdc.voucher.totalCredit;
 
     const type = await this.prisma.voucherType.findFirst({
@@ -740,7 +742,7 @@ export class VoucherService {
                   branchId: pdc.voucher.branchId,
                   date,
                   status: 'POSTED',
-                  accountId: holding.id,
+                  accountId: holdingAccountId,
                   debit: amount,
                   credit: 0,
                 },
@@ -838,31 +840,42 @@ export class VoucherService {
     return pdc;
   }
 
-  /** Where an issued cheque waits. Adopted by the company, or it cannot post. */
-  private async pdcHoldingAccount(companyId: number) {
-    const account = await this.prisma.account.findUnique({
-      where: { code: PDC_HOLDING_ACCOUNT_CODE },
-      select: {
-        id: true,
-        code: true,
-        name: true,
+  /**
+   * The post-dated cheque ledger this voucher parks the promise in.
+   *
+   * Found by the FLAG on the account rather than by a code: which ledger holds
+   * post-dated cheques is the company's own decision, made on Account Ledgers,
+   * and a code written into the software would be wrong for the first company
+   * that keeps two of them.
+   */
+  private async pdcLedgerOnLines(
+    companyId: number,
+    lines: { accountId: number }[],
+    received: boolean,
+  ) {
+    const ledgers = await this.prisma.account.findMany({
+      where: {
+        id: { in: lines.map((l) => l.accountId) },
+        ...(received ? { isPdcReceived: true } : { isPdcIssued: true }),
         isActive: true,
-        companies: { where: { companyId }, select: { isActive: true } },
+        companies: { some: { companyId, isActive: true } },
       },
+      select: { id: true, code: true, name: true },
     });
-    if (!account || !account.isActive) {
+    if (!ledgers.length) {
       throw new BadRequestException(
-        `Account ${PDC_HOLDING_ACCOUNT_CODE} (Post-dated Cheques Issued) is not ` +
-          `in the chart. It is seeded on boot — restart the API.`,
+        `A post-dated cheque waits in a ledger of its own until it clears — name ` +
+          `an account ticked "PDC ${received ? 'received' : 'issued'}" on the ` +
+          `line instead of the bank.`,
       );
     }
-    if (!account.companies.length || account.companies[0].isActive === false) {
+    if (ledgers.length > 1) {
       throw new BadRequestException(
-        `${account.code} ${account.name} is not in use by this company — adopt ` +
-          `it on Account Ledgers before writing post-dated cheques.`,
+        'Two post-dated cheque ledgers on one voucher — the register would not ' +
+          'know which one to clear.',
       );
     }
-    return account;
+    return ledgers[0];
   }
 
   /** Only a draft can be thrown away; a posted voucher is cancelled instead. */
@@ -986,20 +999,22 @@ export class VoucherService {
     }
     const instrumentDate = this.assertDate(input.instrumentDate);
 
+    let holdingAccountId: number | null = null;
     if (input.chequeKind === 'PDC') {
       if (lines.some((l) => l.accountId === bank.id)) {
         throw new BadRequestException(
           `A post-dated cheque does not touch ${bank.name} until it is presented — ` +
-            `post it to Post-dated Cheques Issued and clear it from the PDC register.`,
+            `post it to a post-dated cheque ledger and clear it from the PDC register.`,
         );
       }
-      const holding = await this.pdcHoldingAccount(companyId);
-      if (!lines.some((l) => l.accountId === holding.id)) {
-        throw new BadRequestException(
-          `A post-dated cheque is held in ${holding.name} until it clears — name ` +
-            `that account on the line instead of the bank.`,
-        );
-      }
+      // Which side of the promise this is, and so which ledger holds it: a
+      // payment writes a cheque out, a receipt takes one in.
+      const holding = await this.pdcLedgerOnLines(
+        companyId,
+        lines,
+        typeCode === 'BANK_RECEIPT',
+      );
+      holdingAccountId = holding.id;
     }
 
     return {
@@ -1008,6 +1023,7 @@ export class VoucherService {
       instrumentNo: input.instrumentNo.trim(),
       instrumentDate,
       chequeKind: input.chequeKind,
+      holdingAccountId,
       // A current-dated cheque is finished the moment it is written; only a
       // post-dated one has anywhere left to go.
       status: input.chequeKind === 'PDC' ? ('ISSUED' as const) : null,

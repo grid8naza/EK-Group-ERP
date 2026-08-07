@@ -77,6 +77,8 @@ const flagsOf = (a: CoaAccount) => {
   if (a.isIntercompany) out.push('Intercompany');
   if (a.isCash) out.push('Cash');
   if (a.isBank) out.push('Bank');
+  if (a.isPdcIssued) out.push('PDC issued');
+  if (a.isPdcReceived) out.push('PDC received');
   if (a.isGstRelevant) out.push('GST');
   if (a.isReconcilable) out.push('Reconcilable');
   if (!a.allowManualJe) out.push('No manual JE');

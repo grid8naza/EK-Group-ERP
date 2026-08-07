@@ -2137,6 +2137,10 @@ export interface CoaAccount {
   isCash: boolean;
   /** Money at a bank — an account with a statement to agree against. */
   isBank: boolean;
+  /** Where a post-dated cheque we wrote waits until it is presented. */
+  isPdcIssued: boolean;
+  /** Where a post-dated cheque we were given waits until it clears. */
+  isPdcReceived: boolean;
   isReconcilable: boolean;
   isIntercompany: boolean;
   eliminationPair: string | null;

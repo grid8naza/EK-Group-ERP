@@ -43,7 +43,11 @@ const HELP = {
   isCash:
     'Money in hand: a till, a petty cash box, cash on its way between two of them. Counted by counting it, and what a Cash Receipt or Cash Payment pays into and out of.',
   isBank:
-    'Money at a bank: a current account, a deposit. Agreed against a statement rather than counted, and what a Bank Receipt or Bank Payment pays into and out of. An account is cash or bank, never both.',
+    'Money at a bank: a current account, a deposit. Agreed against a statement rather than counted, and what a Bank Receipt or Bank Payment pays into and out of.',
+  isPdcIssued:
+    'Where a post-dated cheque WE wrote waits between the day it is handed over and the day it is presented. Not money — a promise, standing as a liability. A Bank Payment by post-dated cheque offers only these, and the PDC Register clears it out of here into the bank on the day it goes.',
+  isPdcReceived:
+    'The other side of the same idea: a post-dated cheque somebody gave US, held as an asset until it clears. A Bank Receipt by post-dated cheque offers only these. An account is one of cash, bank, PDC issued or PDC received — never two.',
   isReconcilable:
     'The balance is agreed against a statement from outside — a bank statement, a supplier statement. Cash in Transit is ticked because money that has left one place and not yet arrived must be tied out.',
   allowManualJe:
@@ -51,6 +55,21 @@ const HELP = {
   isActive:
     'Untick to retire the account. It keeps everything already posted to it and stops being offered on new entries.',
 };
+
+/**
+ * Where the money sits, as four boxes of which at most one may be ticked.
+ *
+ * Ticking one clears the others rather than refusing the pair: moving an
+ * account from Bank to PDC issued is a correction, not a mistake to argue with.
+ * The server holds the same rule, so a payload that says two is still refused.
+ */
+const MONEY_FLAGS = ['isCash', 'isBank', 'isPdcIssued', 'isPdcReceived'] as const;
+type MoneyFlag = (typeof MONEY_FLAGS)[number];
+
+const money = (flag: MoneyFlag, on: boolean) =>
+  Object.fromEntries(
+    MONEY_FLAGS.map((f) => [f, f === flag ? on : false]),
+  ) as Record<MoneyFlag, boolean>;
 
 type Form = {
   groupId: string;
@@ -66,6 +85,8 @@ type Form = {
   isGstRelevant: boolean;
   isCash: boolean;
   isBank: boolean;
+  isPdcIssued: boolean;
+  isPdcReceived: boolean;
   isReconcilable: boolean;
   allowManualJe: boolean;
   notes: string;
@@ -86,6 +107,8 @@ const EMPTY: Form = {
   isGstRelevant: false,
   isCash: false,
   isBank: false,
+  isPdcIssued: false,
+  isPdcReceived: false,
   isReconcilable: false,
   allowManualJe: true,
   notes: '',
@@ -142,6 +165,8 @@ export function AccountDrawer({
             isGstRelevant: account.isGstRelevant,
             isCash: account.isCash,
             isBank: account.isBank,
+            isPdcIssued: account.isPdcIssued,
+            isPdcReceived: account.isPdcReceived,
             isReconcilable: account.isReconcilable,
             allowManualJe: account.allowManualJe,
             notes: account.notes ?? '',
@@ -202,6 +227,8 @@ export function AccountDrawer({
           isGstRelevant: form.isGstRelevant,
           isCash: form.isCash,
           isBank: form.isBank,
+          isPdcIssued: form.isPdcIssued,
+          isPdcReceived: form.isPdcReceived,
           isReconcilable: form.isReconcilable,
           allowManualJe: form.allowManualJe,
           notes: form.notes || undefined,
@@ -400,25 +427,31 @@ export function AccountDrawer({
             help={HELP.isCash}
             checked={form.isCash}
             disabled={editing}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                isCash: e.target.checked,
-                isBank: e.target.checked ? false : form.isBank,
-              })
-            }
+            onChange={(e) => setForm({ ...form, ...money('isCash', e.target.checked) })}
           />
           <Checkbox
             label="Bank"
             help={HELP.isBank}
             checked={form.isBank}
             disabled={editing}
+            onChange={(e) => setForm({ ...form, ...money('isBank', e.target.checked) })}
+          />
+          <Checkbox
+            label="PDC issued"
+            help={HELP.isPdcIssued}
+            checked={form.isPdcIssued}
+            disabled={editing}
             onChange={(e) =>
-              setForm({
-                ...form,
-                isBank: e.target.checked,
-                isCash: e.target.checked ? false : form.isCash,
-              })
+              setForm({ ...form, ...money('isPdcIssued', e.target.checked) })
+            }
+          />
+          <Checkbox
+            label="PDC received"
+            help={HELP.isPdcReceived}
+            checked={form.isPdcReceived}
+            disabled={editing}
+            onChange={(e) =>
+              setForm({ ...form, ...money('isPdcReceived', e.target.checked) })
             }
           />
           <Checkbox

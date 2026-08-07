@@ -127,6 +127,16 @@ export class CreateAccountDto {
   @IsBoolean()
   isBank?: boolean;
 
+  /** Where a post-dated cheque we wrote waits until it is presented. */
+  @IsOptional()
+  @IsBoolean()
+  isPdcIssued?: boolean;
+
+  /** Where a post-dated cheque we were given waits until it clears. */
+  @IsOptional()
+  @IsBoolean()
+  isPdcReceived?: boolean;
+
   @IsOptional()
   @IsBoolean()
   isReconcilable?: boolean;

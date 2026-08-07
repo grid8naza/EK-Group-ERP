@@ -307,6 +307,13 @@ model Account {
   isCash          Boolean @default(false)
   /// Money at a bank — an account with a statement to agree against.
   isBank          Boolean @default(false)
+  /// Where a post-dated cheque WE wrote waits between the day it was handed
+  /// over and the day it is presented. Not money: a promise to pay, standing
+  /// as a liability until the bank actually parts with it.
+  isPdcIssued     Boolean @default(false)
+  /// The other side of the same idea — a post-dated cheque somebody gave US.
+  /// An asset, and not the bank's problem until it is banked and clears.
+  isPdcReceived   Boolean @default(false)
   isReconcilable  Boolean @default(false)
   /// Eliminated on consolidation, against the account named by eliminationPair.
   isIntercompany  Boolean @default(false)
@@ -519,6 +526,12 @@ model VoucherInstrument {
   /// written.
   instrumentNo   String?
   instrumentDate DateTime?
+
+  /// Where a post-dated cheque was parked on issue — the ledger the clearing
+  /// entry takes it back out of. Stored rather than looked up again, because
+  /// the flags may be moved to a different account after this one was written
+  /// and the entry that clears it must undo the one that made it.
+  holdingAccountId Int?
 
   /// Set only where the mode is a cheque.
   chequeKind ChequeKind?
