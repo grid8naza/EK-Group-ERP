@@ -582,7 +582,17 @@ export function JournalVoucherScreen({
       })),
   });
 
-  const save = async (post: boolean) => {
+  /**
+   * Write the voucher — as a draft or into the books — and say what happens to
+   * the form afterwards.
+   *
+   * Saving never abandons the voucher. `andNew` is the only thing that clears
+   * the form, and it is asked for by its own button: a draft saved mid-entry is
+   * work still in hand, and sending it back to the register would make the user
+   * find it again to carry on. So the form re-opens on what the server actually
+   * stored — which is also how the real voucher number replaces the preview.
+   */
+  const save = async (post: boolean, andNew = false) => {
     const payload = body();
     if (!payload.voucherTypeId) {
       return toast.error(`The ${noun} type is not set up yet.`);
@@ -595,18 +605,19 @@ export function JournalVoucherScreen({
     }
     setSaving(true);
     try {
-      if (editing) {
-        await api.patch(`/vouchers/${editing.id}`, { ...payload, post });
-      } else {
-        await api.post('/vouchers', { ...payload, post });
-      }
+      const saved = editing
+        ? await api.patch<Voucher>(`/vouchers/${editing.id}`, { ...payload, post })
+        : await api.post<Voucher>('/vouchers', { ...payload, post });
       toast.success(post ? 'Voucher posted.' : 'Draft saved.');
       await Promise.all([refetch(), refetchNextNo()]);
-      // Posting one journal is usually the start of posting several, so the
-      // form stays open on a fresh voucher. A draft is unfinished work and
-      // goes back to the register.
-      if (post && !editing) startNew();
-      else closeForm();
+      if (andNew) {
+        startNew();
+      } else {
+        // Re-opening a POSTED voucher lands in view mode by itself — a posted
+        // voucher is read, not edited.
+        open(saved);
+        if (!post) pendingFocus.current = DATE_FIELD;
+      }
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
     } finally {
@@ -712,22 +723,34 @@ export function JournalVoucherScreen({
         }
         icon={<Icon className="h-5 w-5" />}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <button className="btn-secondary" onClick={closeForm}>
               <ArrowLeft className="mr-1 inline h-4 w-4" />
               Back
             </button>
             {!readOnly && (
               <>
+                {/* Two ways to finish, each with a "and start the next one"
+                    twin: a draft is saved to be carried on with, and posting
+                    one journal is usually the start of posting several. */}
                 <button
-                  className="btn-secondary"
+                  className="btn-secondary whitespace-nowrap"
                   disabled={saving}
+                  title="Save it as a draft and stay on it"
                   onClick={() => void save(false)}
                 >
-                  Save draft
+                  {saving ? 'Saving...' : 'Save'}
                 </button>
                 <button
-                  className="btn-primary"
+                  className="btn-secondary whitespace-nowrap"
+                  disabled={saving}
+                  title="Save it as a draft and open a fresh voucher"
+                  onClick={() => void save(false, true)}
+                >
+                  Save &amp; New
+                </button>
+                <button
+                  className="btn-primary whitespace-nowrap"
                   disabled={saving || !balanced}
                   title={
                     balanced
@@ -738,6 +761,19 @@ export function JournalVoucherScreen({
                 >
                   <Check className="mr-1 inline h-4 w-4" />
                   Post
+                </button>
+                <button
+                  className="btn-secondary whitespace-nowrap"
+                  disabled={saving || !balanced}
+                  title={
+                    balanced
+                      ? 'Write it to the books and open a fresh voucher'
+                      : 'It does not balance yet'
+                  }
+                  onClick={() => void save(true, true)}
+                >
+                  <Check className="mr-1 inline h-4 w-4" />
+                  Post &amp; New
                 </button>
               </>
             )}
