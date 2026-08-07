@@ -591,7 +591,15 @@ export function VoucherEntryScreen({
     });
   };
 
+  /** The line a fixed kind is built on — never removed, so never offered. */
+  const isFixedLine = (key: number) => !!firstLine && lines[0]?.key === key;
+
   const removeLine = (key: number) => {
+    // The first line of a fixed kind IS the kind: a cash receipt without its
+    // cash line is not a cash receipt, so it is corrected rather than dropped.
+    if (isFixedLine(key)) {
+      return toast.error(`The first line is what makes this a ${noun}.`);
+    }
     // Two lines is the least a voucher can be; below that there is nothing to
     // balance against.
     if (lines.length <= 2) {
@@ -1131,7 +1139,7 @@ export function VoucherEntryScreen({
                       />
 
                       <div className="pt-1.5 text-center">
-                        {!readOnly && lines.length > 2 && (
+                        {!readOnly && lines.length > 2 && !isFixedLine(l.key) && (
                           <button
                             type="button"
                             tabIndex={-1}
@@ -1371,49 +1379,55 @@ export function VoucherEntryScreen({
                 );
               })}
             </div>
+          </div>
 
-            {/* The foot of the page: the two columns totalled, as they are
-                printed, and what is still between them. */}
-            <div
-              className="grid items-center gap-2 border-t-2 border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold dark:border-slate-700 dark:bg-slate-800/60"
-              style={{ gridTemplateColumns: GRID }}
-            >
-              <span />
-              <span className="min-w-0">
-                {!readOnly && (
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    className="text-xs font-normal text-brand-600 hover:underline"
-                    title="Alt+Enter"
-                    onClick={addLine}
-                  >
-                    + Add line
-                  </button>
-                )}
-                <span
-                  className={cn(
-                    'ml-3 text-xs font-normal',
-                    balanced
-                      ? 'text-emerald-600 dark:text-emerald-400'
-                      : 'text-amber-600 dark:text-amber-400',
-                  )}
+          {/* The foot of the page: the two columns totalled, as they are
+              printed, and what is still between them.
+
+              Frozen to the bottom of the form, and outside the lines card to be
+              able to: `overflow-hidden` on that card would pin a sticky child
+              inside it and it would never move. So the totals stay in view
+              however long the voucher grows — on a twenty-line entry, whether
+              the two columns agree is the one thing worth always seeing. */}
+          <div
+            className="card sticky bottom-0 z-10 grid items-center gap-2 bg-slate-50 px-3 py-1.5 text-sm font-semibold shadow-sm dark:bg-slate-800"
+            style={{ gridTemplateColumns: GRID }}
+          >
+            <span />
+            <span className="min-w-0">
+              {!readOnly && (
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  className="text-xs font-normal text-brand-600 hover:underline"
+                  title="Alt+Enter"
+                  onClick={addLine}
                 >
-                  {balanced
-                    ? 'Balanced'
-                    : totals.dr === 0 && totals.cr === 0
-                      ? 'Nothing entered yet'
-                      : `Out by ${money(Math.abs(totals.diff))}`}
-                </span>
+                  + Add line
+                </button>
+              )}
+              <span
+                className={cn(
+                  'ml-3 text-xs font-normal',
+                  balanced
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-amber-600 dark:text-amber-400',
+                )}
+              >
+                {balanced
+                  ? 'Balanced'
+                  : totals.dr === 0 && totals.cr === 0
+                    ? 'Nothing entered yet'
+                    : `Out by ${money(Math.abs(totals.diff))}`}
               </span>
-              <span className="border-t border-slate-400 pt-0.5 text-right tabular-nums">
-                {money(totals.dr)}
-              </span>
-              <span className="border-t border-slate-400 pt-0.5 text-right tabular-nums">
-                {money(totals.cr)}
-              </span>
-              <span />
-            </div>
+            </span>
+            <span className="border-t border-slate-400 text-right tabular-nums">
+              {money(totals.dr)}
+            </span>
+            <span className="border-t border-slate-400 text-right tabular-nums">
+              {money(totals.cr)}
+            </span>
+            <span />
           </div>
 
           {/* Bottom block — the narration for the voucher as a whole. */}
