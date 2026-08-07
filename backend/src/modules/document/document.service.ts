@@ -87,10 +87,9 @@ const TXN_TAXONOMY: { type: string; subtypes: string[] }[] = [
   { type: 'Opening Stock', subtypes: ['Opening Stock'] },
   { type: 'Production', subtypes: ['Internal Production'] },
   { type: 'Stock Transfer', subtypes: ['Intercompany Transfer'] },
-  {
-    type: 'Purchase',
-    subtypes: ['Intercompany Purchase', 'B2B Purchase', 'B2C Purchase'],
-  },
+  // No B2C purchase: the company buys from businesses, and a purchase from a
+  // consumer is not a thing this business does.
+  { type: 'Purchase', subtypes: ['Intercompany Purchase', 'B2B Purchase'] },
   { type: 'Sale', subtypes: ['Intercompany Sale', 'B2B Sale', 'B2C Sale'] },
   {
     type: 'Purchase Return',
@@ -103,6 +102,15 @@ const TXN_TAXONOMY: { type: string; subtypes: string[] }[] = [
   { type: 'Material Issue', subtypes: ['Consumption'] },
   { type: 'Adjustment', subtypes: ['Missing'] },
 ];
+
+/**
+ * Taxonomy values that were shipped and are no longer offered. Deactivated
+ * rather than deleted, and on every boot: a voucher or a document already filed
+ * under one still has to read back as what it says, and the id it stored is not
+ * ours to take away. Nothing offers an inactive value, and the posting rules
+ * refuse one, so it leaves by being unusable rather than by vanishing.
+ */
+const RETIRED_TXN_SUBTYPES = ['B2C Purchase'];
 
 /** Document code → its transaction type + subtype (lookup value strings). */
 const DOC_TXN_MAP: Record<string, { type: string; subtype: string }> = {
@@ -235,6 +243,15 @@ export class DocumentService implements OnApplicationBootstrap {
         );
       }
     }
+
+    await this.prisma.lookupValue.updateMany({
+      where: {
+        lookupId: subtypeLookup.id,
+        value: { in: RETIRED_TXN_SUBTYPES },
+        isActive: true,
+      },
+      data: { isActive: false },
+    });
 
     for (const [code, m] of Object.entries(DOC_TXN_MAP)) {
       const transactionTypeId = typeMap.get(m.type) ?? null;
