@@ -171,12 +171,15 @@ export interface VoucherEntryScreenProps {
    * picker to the cash or the bank accounts; `party` narrows it instead to the
    * control accounts aged by that party, so a purchase can only be credited to
    * a payable and the sub-ledger beside it offers the suppliers kept under it.
-   * The lines below are ordinary and take whatever the entry needs.
+   * More than one party where the kind serves more than one — a credit note is
+   * raised on a customer or on a supplier, and which is not settled until the
+   * ledger is named. The lines below are ordinary and take whatever the entry
+   * needs.
    */
   firstLine?: {
     side: 'DR' | 'CR';
     money?: 'CASH' | 'BANK';
-    party?: PartyKind;
+    party?: PartyKind | PartyKind[];
   };
 }
 
@@ -320,14 +323,22 @@ export function VoucherEntryScreen({
    * belong there: a voucher written before the rule, or under a ledger since
    * reclassified, must still read back as what it says rather than as blank.
    */
+  /** The kinds of party the first line may be kept by — none, one, or both. */
+  const firstParties = useMemo(() => {
+    const p = firstLine?.party;
+    return p ? (Array.isArray(p) ? p : [p]) : [];
+  }, [firstLine?.party]);
+
   const ledgerOptions = (index: number, selectedId: string) => {
     const wanted = (a: CoaAccount) => {
       if (firstLine?.money) {
         return firstLine.money === 'CASH' ? a.isCash : a.isBank;
       }
-      return a.isControl && a.controlParty === firstLine?.party;
+      return (
+        a.isControl && !!a.controlParty && firstParties.includes(a.controlParty)
+      );
     };
-    if (index !== 0 || !(firstLine?.money || firstLine?.party)) {
+    if (index !== 0 || !(firstLine?.money || firstParties.length)) {
       return masters.accountOptions;
     }
     return masters.accounts
@@ -340,11 +351,13 @@ export function VoucherEntryScreen({
     ? firstLine.money === 'CASH'
       ? 'Cash account'
       : 'Bank account'
-    : firstLine?.party === 'SUPPLIER'
-      ? 'Payable ledger'
-      : firstLine?.party === 'CUSTOMER'
-        ? 'Receivable ledger'
-        : 'Ledger';
+    : firstParties.length > 1
+      ? 'Supplier or customer ledger'
+      : firstParties[0] === 'SUPPLIER'
+        ? 'Payable ledger'
+        : firstParties[0] === 'CUSTOMER'
+          ? 'Receivable ledger'
+          : 'Ledger';
 
   const canAdd = can(route, 'add');
   const canEdit = can(route, 'edit');
