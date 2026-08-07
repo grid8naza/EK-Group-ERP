@@ -1,6 +1,6 @@
 'use client';
 
-import { VoucherScreen } from '@/components/accounts/VoucherScreen';
+import { VoucherEntryScreen } from '@/components/accounts/VoucherEntryScreen';
 
 /**
  * Contra Voucher — Cash deposited into the bank, or drawn out of it. Both sides are the
@@ -12,7 +12,7 @@ import { VoucherScreen } from '@/components/accounts/VoucherScreen';
  */
 export default function ContraVoucherPage() {
   return (
-    <VoucherScreen
+    <VoucherEntryScreen
       typeCode="CONTRA"
       route="/accounts/vouchers/contra"
       title="Contra Voucher"

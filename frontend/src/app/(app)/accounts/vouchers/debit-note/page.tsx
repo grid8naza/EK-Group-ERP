@@ -1,6 +1,6 @@
 'use client';
 
-import { VoucherScreen } from '@/components/accounts/VoucherScreen';
+import { VoucherEntryScreen } from '@/components/accounts/VoucherEntryScreen';
 
 /**
  * Debit Note — What the company owes a supplier, reduced: goods sent back, a shortage, a
@@ -12,7 +12,7 @@ import { VoucherScreen } from '@/components/accounts/VoucherScreen';
  */
 export default function DebitNotePage() {
   return (
-    <VoucherScreen
+    <VoucherEntryScreen
       typeCode="DEBIT_NOTE"
       route="/accounts/vouchers/debit-note"
       title="Debit Note"

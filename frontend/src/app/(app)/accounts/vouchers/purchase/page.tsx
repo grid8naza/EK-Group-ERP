@@ -1,6 +1,6 @@
 'use client';
 
-import { VoucherScreen } from '@/components/accounts/VoucherScreen';
+import { VoucherEntryScreen } from '@/components/accounts/VoucherEntryScreen';
 
 /**
  * Purchase Voucher — A purchase recorded when the supplier is billed rather than when they are
@@ -12,7 +12,7 @@ import { VoucherScreen } from '@/components/accounts/VoucherScreen';
  */
 export default function PurchaseVoucherPage() {
   return (
-    <VoucherScreen
+    <VoucherEntryScreen
       typeCode="PURCHASE"
       route="/accounts/vouchers/purchase"
       title="Purchase Voucher"

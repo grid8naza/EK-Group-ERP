@@ -43,7 +43,7 @@ import {
 } from './voucher-common';
 
 /**
- * One line of a journal, as the form holds it.
+ * One line of a voucher, as the form holds it.
  *
  * `key` is not the line's identity in the books — a line has none until it is
  * saved — but its identity on SCREEN. Lines are added, removed and re-ordered
@@ -55,7 +55,7 @@ import {
  * two money columns because an accountant reads two, and only the side's own
  * column accepts anything.
  */
-type JvLine = {
+type EntryLine = {
   key: number;
   side: 'DR' | 'CR';
   /** The user has said which side this is, so nothing may quietly change it. */
@@ -70,7 +70,7 @@ type JvLine = {
   bills: DraftBill[];
 };
 
-const emptyLine = (key: number, side: 'DR' | 'CR' = 'DR', amount = ''): JvLine => ({
+const emptyLine = (key: number, side: 'DR' | 'CR' = 'DR', amount = ''): EntryLine => ({
   key,
   side,
   sideTouched: false,
@@ -84,9 +84,9 @@ const emptyLine = (key: number, side: 'DR' | 'CR' = 'DR', amount = ''): JvLine =
 });
 
 /** Every control on the form has a stable id, so focus can be aimed at it. */
-const fid = (key: number, part: string) => `jv-${key}-${part}`;
-const DATE_FIELD = 'jv-date';
-const COMMON_NARRATION = 'jv-common-narration';
+const fid = (key: number, part: string) => `ve-${key}-${part}`;
+const DATE_FIELD = 've-date';
+const COMMON_NARRATION = 've-common-narration';
 
 /**
  * The one column definition the whole voucher is laid out on: side,
@@ -116,7 +116,7 @@ function billLabel(bills: OutstandingBill[], againstId: string): string | null {
     : (bill.billRef ?? '—');
 }
 
-export interface JournalVoucherScreenProps {
+export interface VoucherEntryScreenProps {
   /** The one kind this screen writes — a `VoucherType.code`. */
   typeCode: string;
   /** This screen's own route; privileges are keyed on it. */
@@ -128,14 +128,20 @@ export interface JournalVoucherScreenProps {
 }
 
 /**
- * Journal Voucher — entered the way a journal is written.
+ * A voucher, entered the way a voucher is written.
  *
  * The shape is Tally's, because Tally's shape is the one every accountant who
  * will use this already has in their hands: a date and a reference at the top,
  * then Dr and Cr lines down the page with a narration under each, and the two
- * money columns totalled at the foot. What is NOT there matters as much — a
- * journal moves no money and sells nothing, so it is not classified by
- * transaction type; that question belongs to the sales and purchase screens.
+ * money columns totalled at the foot. Written for the journal first, it turned
+ * out to be the right shape for every kind — a sale, a receipt and a contra are
+ * all Dr and Cr lines that must agree — so it is now the form behind all of
+ * them but cash's two bank cousins, which keep {@link VoucherScreen} for the
+ * cheque and instrument details it asks for.
+ *
+ * What is NOT here matters as much: no transaction type or subtype. The lines
+ * and their accounts say what the voucher did, and a taxonomy sitting above
+ * them is a second answer to the same question, kept in step by hand.
  *
  * It is built for the keyboard first. Every picker is searchable, Enter walks
  * forward through the fields, and leaving the last field of the last line while
@@ -143,14 +149,14 @@ export interface JournalVoucherScreenProps {
  * on the opposite side — which is almost always the line the user was about to
  * type. Reaching for the mouse during entry should never be necessary.
  */
-export function JournalVoucherScreen({
+export function VoucherEntryScreen({
   typeCode,
   route,
   title,
   description,
   icon,
   noun,
-}: JournalVoucherScreenProps) {
+}: VoucherEntryScreenProps) {
   const { can, activeCompany } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
@@ -196,9 +202,9 @@ export function JournalVoucherScreen({
   const [narration, setNarration] = useState('');
   const keySeq = useRef(0);
   const nextKey = () => ++keySeq.current;
-  // Dr then Cr: a journal's second line answers its first, and starting both on
+  // Dr then Cr: a voucher's second line answers its first, and starting both on
   // the same side would mean correcting one of them on every single entry.
-  const [lines, setLines] = useState<JvLine[]>(() => [
+  const [lines, setLines] = useState<EntryLine[]>(() => [
     emptyLine(++keySeq.current, 'DR'),
     emptyLine(++keySeq.current, 'CR'),
   ]);
@@ -296,7 +302,7 @@ export function JournalVoucherScreen({
 
   // ---- editing the lines --------------------------------------------------------
 
-  const setLine = (key: number, patch: Partial<JvLine>) =>
+  const setLine = (key: number, patch: Partial<EntryLine>) =>
     setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...patch } : l)));
 
   /**
@@ -347,7 +353,7 @@ export function JournalVoucherScreen({
    *
    * Changes to the last row itself are left alone — that one IS being typed.
    */
-  const setBill = (l: JvLine, bi: number, patch: Partial<DraftBill>) => {
+  const setBill = (l: EntryLine, bi: number, patch: Partial<DraftBill>) => {
     const next = l.bills.map((b, y) => (y === bi ? { ...b, ...patch } : b));
     const isLast = bi === l.bills.length - 1;
     // A side is a figure too — flipping a row to Dr changes what the stack
@@ -460,7 +466,7 @@ export function JournalVoucherScreen({
    * Open another bill row on a line, carrying whatever of it is still
    * unallocated — the same rule as adding a line, one level down.
    */
-  const addBill = (l: JvLine, remainderPaise: number) => {
+  const addBill = (l: EntryLine, remainderPaise: number) => {
     pendingFocus.current = fid(l.key, `bill-${l.bills.length}-type`);
     setLine(l.key, {
       bills: [
@@ -482,7 +488,7 @@ export function JournalVoucherScreen({
     // Two lines is the least a voucher can be; below that there is nothing to
     // balance against.
     if (lines.length <= 2) {
-      return toast.error('A journal needs at least two lines.');
+      return toast.error(`A ${noun} needs at least two lines.`);
     }
     setLines((ls) => ls.filter((l) => l.key !== key));
   };
@@ -523,7 +529,7 @@ export function JournalVoucherScreen({
    * up to the whole, another row opens for the rest. Only once they agree does
    * the line itself close.
    */
-  const onBillEnd = (i: number, l: JvLine, bi: number, e: React.KeyboardEvent) => {
+  const onBillEnd = (i: number, l: EntryLine, bi: number, e: React.KeyboardEvent) => {
     const enter = e.key === 'Enter';
     const tab = e.key === 'Tab' && !e.shiftKey;
     if (!enter && !tab) return;
@@ -732,7 +738,7 @@ export function JournalVoucherScreen({
               <>
                 {/* Two ways to finish, each with a "and start the next one"
                     twin: a draft is saved to be carried on with, and posting
-                    one journal is usually the start of posting several. */}
+                    one voucher is usually the start of posting several. */}
                 <button
                   className="btn-secondary whitespace-nowrap"
                   disabled={saving}
@@ -802,9 +808,9 @@ export function JournalVoucherScreen({
         }}
       >
         <ReadOnlyFieldset readOnly={readOnly}>
-          {/* Top block. No transaction type or subtype: a journal moves no
-              money and sells nothing, so there is nothing for that taxonomy to
-              say about it. */}
+          {/* Top block. Date, the number the voucher will take, a reference —
+              and no transaction type or subtype: the lines say what the
+              voucher did, and a taxonomy above them only repeats it. */}
           <div className="card grid grid-cols-1 gap-4 p-4 sm:grid-cols-3">
             <DateInput
               id={DATE_FIELD}
@@ -832,7 +838,7 @@ export function JournalVoucherScreen({
               )}
             </div>
             <Input
-              id="jv-reference"
+              id="ve-reference"
               label="Reference"
               value={reference}
               disabled={readOnly}
@@ -1408,9 +1414,9 @@ function rebalance(
  * the same rule.
  */
 function onAmountChange(
-  line: JvLine,
+  line: EntryLine,
   amount: string,
-  setLine: (key: number, patch: Partial<JvLine>) => void,
+  setLine: (key: number, patch: Partial<EntryLine>) => void,
 ) {
   setLine(line.key, {
     amount,

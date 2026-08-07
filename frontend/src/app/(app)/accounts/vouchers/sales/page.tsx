@@ -1,6 +1,6 @@
 'use client';
 
-import { VoucherScreen } from '@/components/accounts/VoucherScreen';
+import { VoucherEntryScreen } from '@/components/accounts/VoucherEntryScreen';
 
 /**
  * Sales Voucher — A sale recorded when the customer is invoiced rather than when they pay.
@@ -12,7 +12,7 @@ import { VoucherScreen } from '@/components/accounts/VoucherScreen';
  */
 export default function SalesVoucherPage() {
   return (
-    <VoucherScreen
+    <VoucherEntryScreen
       typeCode="SALES"
       route="/accounts/vouchers/sales"
       title="Sales Voucher"

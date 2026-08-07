@@ -1,6 +1,6 @@
 'use client';
 
-import { VoucherScreen } from '@/components/accounts/VoucherScreen';
+import { VoucherEntryScreen } from '@/components/accounts/VoucherEntryScreen';
 
 /**
  * Credit Note — What a customer owes, reduced: a return accepted, a discount allowed after
@@ -12,7 +12,7 @@ import { VoucherScreen } from '@/components/accounts/VoucherScreen';
  */
 export default function CreditNotePage() {
   return (
-    <VoucherScreen
+    <VoucherEntryScreen
       typeCode="CREDIT_NOTE"
       route="/accounts/vouchers/credit-note"
       title="Credit Note"

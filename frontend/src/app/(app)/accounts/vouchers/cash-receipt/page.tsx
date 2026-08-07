@@ -1,6 +1,6 @@
 'use client';
 
-import { VoucherScreen } from '@/components/accounts/VoucherScreen';
+import { VoucherEntryScreen } from '@/components/accounts/VoucherEntryScreen';
 
 /**
  * Cash Receipt — Cash received in hand: a customer settling an invoice, an advance, a
@@ -11,7 +11,7 @@ import { VoucherScreen } from '@/components/accounts/VoucherScreen';
  */
 export default function CashReceiptPage() {
   return (
-    <VoucherScreen
+    <VoucherEntryScreen
       typeCode="CASH_RECEIPT"
       route="/accounts/vouchers/cash-receipt"
       title="Cash Receipt"

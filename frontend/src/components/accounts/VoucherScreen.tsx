@@ -75,13 +75,16 @@ const emptyLine = (): DraftLine => ({
 });
 
 /**
- * One kind of voucher, on its own screen.
+ * One kind of voucher, on its own screen — now only the two bank kinds.
+ *
+ * The other eight moved to {@link VoucherEntryScreen}, which enters a voucher
+ * the way one is written. Bank Payment and Bank Receipt were held back to be
+ * taken separately — they still have the instrument to ask about — so this
+ * form, with its lines table and its transaction type and subtype, is what
+ * those two show until then.
  *
  * The kind is settled by the menu the user came through, not by a dropdown on
- * the form — so this component is given it and never offers to change it. That
- * is also what lets each kind be customised later: a screen passes its own
- * heading and, in time, its own extra fields, without the other nine inheriting
- * them.
+ * the form — so this component is given it and never offers to change it.
  *
  * A voucher is a balanced statement, so the form is built around that one fact:
  * the totals sit under the lines and Post is refused until they agree. A draft

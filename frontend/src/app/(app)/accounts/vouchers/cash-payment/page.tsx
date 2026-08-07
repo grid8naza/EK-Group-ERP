@@ -1,6 +1,6 @@
 'use client';
 
-import { VoucherScreen } from '@/components/accounts/VoucherScreen';
+import { VoucherEntryScreen } from '@/components/accounts/VoucherEntryScreen';
 
 /**
  * Cash Payment — Cash paid out of hand: wages, a supplier settled in notes, petty expenses.
@@ -11,7 +11,7 @@ import { VoucherScreen } from '@/components/accounts/VoucherScreen';
  */
 export default function CashPaymentPage() {
   return (
-    <VoucherScreen
+    <VoucherEntryScreen
       typeCode="CASH_PAYMENT"
       route="/accounts/vouchers/cash-payment"
       title="Cash Payment"
