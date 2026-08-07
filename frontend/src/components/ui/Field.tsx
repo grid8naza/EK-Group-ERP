@@ -126,6 +126,110 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   );
 });
 
+// ---- MoneyInput: a figure that reads as money the moment it is left ----
+
+/** 1234.5 → "1,234.50". Blank stays blank: an empty box is not zero. */
+export function formatMoney(value: string | number | null | undefined): string {
+  if (value === '' || value === null || value === undefined) return '';
+  const n = Number(String(value).replace(/,/g, ''));
+  if (!Number.isFinite(n)) return String(value);
+  return n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+/**
+ * What the form stores: digits and at most one dot, no separators.
+ *
+ * A second dot is dropped rather than kept, because "1.2.3" parses to nothing
+ * and the field would silently be worth zero. Unsigned — which way an amount
+ * pulls is said by its side, never by a minus in the box. Two decimals at most,
+ * so what is stored is what the box shows rather than a third digit that only
+ * reappears when something rounds.
+ */
+const stripMoney = (text: string) => {
+  const [whole, ...rest] = text.replace(/[^\d.]/g, '').split('.');
+  return rest.length ? `${whole}.${rest.join('').slice(0, 2)}` : whole;
+};
+
+interface MoneyInputProps
+  extends Omit<
+    React.InputHTMLAttributes<HTMLInputElement>,
+    'value' | 'onChange' | 'type'
+  > {
+  label?: string;
+  required?: boolean;
+  error?: string;
+  wrapClassName?: string;
+  /** The stored figure, unformatted — '', '3500', '3500.5'. */
+  value: string;
+  /** Called with the unformatted figure, so nothing downstream sees a comma. */
+  onChange: (value: string) => void;
+}
+
+/**
+ * A money field: grouped and to two decimals whenever it is not being typed in.
+ *
+ * A column of figures is read by comparing their shapes, and 500.5 next to 3500
+ * defeats that — the eye has to parse each one. So the box shows 500.50 and
+ * 3,500.00, and drops back to the plain number the moment the caret arrives:
+ * separators are for reading, and having to type around them is worse than not
+ * having them at all.
+ *
+ * The value that leaves here is always unformatted, so what is stored, sent and
+ * totalled never carries a comma.
+ */
+export function MoneyInput({
+  label,
+  required,
+  error,
+  wrapClassName,
+  className,
+  value,
+  onChange,
+  onFocus,
+  onBlur,
+  ...props
+}: MoneyInputProps) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+
+  return (
+    <FieldWrap
+      label={label}
+      required={required}
+      error={error}
+      className={wrapClassName}
+    >
+      <input
+        type="text"
+        inputMode="decimal"
+        className={cn('input-base text-right', className)}
+        {...props}
+        value={editing ? draft : formatMoney(value)}
+        onFocus={(e) => {
+          setDraft(value);
+          setEditing(true);
+          // Arrived at by the keyboard, so the next digit typed REPLACES the
+          // figure — correcting an amount is retyping it. Same rule as Input.
+          e.currentTarget.select();
+          onFocus?.(e);
+        }}
+        onChange={(e) => {
+          const next = stripMoney(e.target.value);
+          setDraft(next);
+          onChange(next);
+        }}
+        onBlur={(e) => {
+          setEditing(false);
+          onBlur?.(e);
+        }}
+      />
+    </FieldWrap>
+  );
+}
+
 // ---- DateInput: a typed DD-MM-YYYY field that auto-formats as you type ----
 // Sidesteps the native <input type="date"> quirk where single-digit months
 // don't auto-advance to the year. `value`/`onChange` speak ISO (YYYY-MM-DD).

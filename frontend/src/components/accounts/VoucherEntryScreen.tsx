@@ -17,6 +17,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import {
   DateInput,
   Input,
+  MoneyInput,
   Select,
   Textarea,
   focusNextField,
@@ -1305,19 +1306,14 @@ export function VoucherEntryScreen({
                                   }
                                 />
                               )}
-                              <Input
+                              <MoneyInput
                                 id={fid(l.key, `bill-${bi}-amount`)}
-                                type="number"
-                                step="0.01"
-                                min="0"
                                 value={b.amount}
                                 disabled={readOnly}
                                 wrapClassName="w-32 flex-none"
-                                className="no-spinner h-8 text-sm"
+                                className="h-8 text-sm"
                                 onKeyDown={(e) => onBillEnd(i, l, bi, e)}
-                                onChange={(e) =>
-                                  setBill(l, bi, { amount: e.target.value })
-                                }
+                                onChange={(amount) => setBill(l, bi, { amount })}
                               />
                               {/* Which way this one pulls. Nearly always the
                                   line's own side — the exception is the credit
@@ -1636,17 +1632,12 @@ function AmountCell({
   onChange: (v: string) => void;
 }) {
   return (
-    <Input
+    <MoneyInput
       id={id}
-      type="number"
-      step="0.01"
-      min="0"
       value={active ? value : ''}
       disabled={disabled || !active}
-      // No spinner: nobody nudges money a penny at a time with a mouse, and the
-      // arrows only steal width from the figure.
-      className={cn('no-spinner', !active && 'bg-slate-50 dark:bg-slate-800/40')}
-      onChange={(e) => onChange(e.target.value)}
+      className={cn(!active && 'bg-slate-50 dark:bg-slate-800/40')}
+      onChange={onChange}
     />
   );
 }

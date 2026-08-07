@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
-import { Input } from '@/components/ui/Field';
+import { Input, MoneyInput } from '@/components/ui/Field';
 import type { BalanceSide, OutstandingBill } from '@/lib/types';
 import { money, num, paise } from './voucher-common';
 
@@ -348,14 +348,11 @@ export function BillPicker({
                     {/* Stops the click bubbling to the row, or typing in the
                         amount would untick the bill it belongs to. */}
                     <div onClick={(e) => e.stopPropagation()}>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
+                      <MoneyInput
                         value={amount}
                         disabled={!on}
                         className={cn(
-                          'no-spinner h-8 text-sm',
+                          'h-8 text-sm',
                           over && 'border-rose-400 text-rose-600',
                         )}
                         title={
@@ -363,10 +360,8 @@ export function BillPicker({
                             ? `Only ${money(b.pending)} is outstanding on this bill`
                             : undefined
                         }
-                        onChange={(e) =>
-                          setPicked((m) =>
-                            new Map(m).set(b.id, e.target.value),
-                          )
+                        onChange={(next) =>
+                          setPicked((m) => new Map(m).set(b.id, next))
                         }
                       />
                     </div>
