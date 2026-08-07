@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Search, X } from 'lucide-react';
-import { FieldWrap } from './Field';
+import { FIELD_CHANGE_EVENT, FieldWrap } from './Field';
 import { ICON_OPTIONS, resolveIcon } from '@/lib/icons';
 import { cn } from '@/lib/utils';
 
@@ -60,8 +60,16 @@ export function IconPicker({
       )
     : ICON_OPTIONS;
 
+  // Like the combobox, this one changes value through a callback rather than
+  // through the DOM, so it says so itself — see FIELD_CHANGE_EVENT.
+  const announce = () =>
+    ref.current?.dispatchEvent(
+      new CustomEvent(FIELD_CHANGE_EVENT, { bubbles: true }),
+    );
+
   const pick = (name: string) => {
     onChange(name);
+    announce();
     setOpen(false);
   };
 
@@ -97,6 +105,7 @@ export function IconPicker({
               onClick={(e) => {
                 e.stopPropagation();
                 onChange('');
+                announce();
               }}
             />
           )}

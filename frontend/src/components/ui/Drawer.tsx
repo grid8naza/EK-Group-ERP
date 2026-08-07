@@ -1,19 +1,17 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUnsavedChangesGuard } from '@/lib/hooks';
 import { useConfirm } from '@/providers/ConfirmProvider';
+import { FIELD_CHANGE_EVENT } from '@/components/ui/Field';
 
-// What counts as an editable field inside an open panel — the same three kinds
-// the Enter-to-advance rule walks (see Field.tsx), minus anything the form has
-// switched off. A view drawer wraps its body in a disabled <fieldset>, so its
-// controls all match :disabled and none of them are found here.
-const EDITABLE_FIELD =
-  'input:not([type="hidden"]):not(:disabled):not([readonly]),' +
-  'textarea:not(:disabled):not([readonly]),' +
-  'button[data-field]:not(:disabled)';
+// What a field fires when the user changes it. `input` and `change` come from
+// the browser and cover every native control; FIELD_CHANGE_EVENT is the
+// combobox saying the same thing, since it changes value through a callback
+// rather than through the DOM.
+const EDIT_EVENTS = ['input', 'change', FIELD_CHANGE_EVENT];
 
 interface DrawerProps {
   open: boolean;
@@ -71,20 +69,49 @@ export function Drawer({
   const panelRef = useRef<HTMLDivElement>(null);
   const confirm = useConfirm();
 
-  // An open data-entry drawer holds work that no Save has persisted yet. Rather
-  // than have every screen track its own draft, the drawer itself is the signal:
-  // open with at least one editable field in it. Read-only (view) drawers
-  // disable their fields, so they never count.
-  const unsaved = () => open && !!panelRef.current?.querySelector(EDITABLE_FIELD);
+  /**
+   * Has anything actually been entered since this drawer opened?
+   *
+   * Asked of the DOM rather than of the screen, so no form has to thread a
+   * `dirty` flag down: every field announces its own change, the panel hears it
+   * on the way up, and one flag covers every drawer in the app.
+   *
+   * It is TOUCHED, not different-from-original: typing a character and deleting
+   * it again still counts. That errs the safe way — the flag decides whether an
+   * accidental click can throw work away, and the cost of asking once too often
+   * is a click, while the cost of asking once too seldom is the form.
+   *
+   * A view drawer disables its fields, which fire nothing, so it never asks.
+   */
+  const dirtyRef = useRef(false);
+  const unsaved = useCallback(() => open && dirtyRef.current, [open]);
+
+  // Reset on opening, not on closing: a drawer that closes and re-opens on the
+  // same record starts clean, and a drawer left mounted between records does
+  // not inherit the last one's edits.
+  useEffect(() => {
+    if (!open) return;
+    dirtyRef.current = false;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const mark = () => {
+      dirtyRef.current = true;
+    };
+    for (const type of EDIT_EVENTS) panel.addEventListener(type, mark);
+    return () => {
+      for (const type of EDIT_EVENTS) panel.removeEventListener(type, mark);
+    };
+  }, [open]);
 
   // Leaving the page behind the drawer (a browser refresh; an in-app link, on
   // the layouts where one is reachable) would drop that work.
   useUnsavedChangesGuard(unsaved);
 
   // Clicking the blurred backdrop is the easy accident — this panel sits above
-  // the sidebar, so a click aimed at the left menu lands here and, until now,
-  // threw the form away without a word. The X, Esc and Cancel are deliberate
-  // and still close straight away.
+  // the sidebar, so a click aimed at the left menu lands here and would throw
+  // the form away without a word. Asked only when there is something to lose:
+  // a form merely opened and read is closed by the same click, no question.
+  // The X, Esc and Cancel are deliberate and still close straight away.
   const dismiss = async () => {
     if (unsaved()) {
       const ok = await confirm({

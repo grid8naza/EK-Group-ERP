@@ -6,6 +6,21 @@ import { Check, ChevronDown, HelpCircle, Search, X } from 'lucide-react';
 import { cn, isoDate } from '@/lib/utils';
 
 /**
+ * What a control fires when the user has changed it and no native event would
+ * say so.
+ *
+ * An input, a textarea and a checkbox all announce themselves: the browser
+ * raises `input` or `change` and it bubbles to whatever is listening. The
+ * searchable combobox does not — it hands the new value straight to a callback
+ * — so a form wrapper watching the DOM for edits would never hear it, and would
+ * think a form the user had filled in was untouched.
+ *
+ * Bubbles, so any ancestor may listen. The Drawer does, to know whether closing
+ * would actually lose anything.
+ */
+export const FIELD_CHANGE_EVENT = 'ek:field-change';
+
+/**
  * Move focus to the field after `from`, in DOM order, within the nearest
  * data-entry container (`[data-enter-advance]` — every form body wrapped in
  * ReadOnlyFieldset). "Fields" are the visible, enabled inputs and textareas plus
@@ -437,6 +452,11 @@ export function Select({
 
   const choose = (val: string | number, viaKeyboard = false) => {
     onChange?.({ target: { value: String(val) } });
+    // Say out loud that a field changed. The callback above reaches the form's
+    // state; this reaches whatever wraps the form — see FIELD_CHANGE_EVENT.
+    ref.current?.dispatchEvent(
+      new CustomEvent(FIELD_CHANGE_EVENT, { bubbles: true }),
+    );
     setOpen(false);
     if (!advanceToId && viaKeyboard) {
       // Same rule as the plain inputs: picking a value with Enter moves on to
