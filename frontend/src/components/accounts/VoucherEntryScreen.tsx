@@ -249,13 +249,13 @@ export interface VoucherEntryScreenProps {
  * then Dr and Cr lines down the page with a narration under each, and the two
  * money columns totalled at the foot. Written for the journal first, it turned
  * out to be the right shape for every kind — a sale, a receipt and a contra are
- * all Dr and Cr lines that must agree — so it is now the form behind all of
- * them but cash's two bank cousins, which keep {@link VoucherScreen} for the
- * cheque and instrument details it asks for.
+ * all Dr and Cr lines that must agree — and it is now the form behind all ten,
+ * the bank pair included.
  *
- * What is NOT here matters as much: no transaction type or subtype. The lines
- * and their accounts say what the voucher did, and a taxonomy sitting above
- * them is a second answer to the same question, kept in step by hand.
+ * What each kind adds to it, it adds from its own page: a first line fixed to a
+ * side and a set of ledgers, a classification it always carries, the instrument
+ * a bank voucher moved by. Nothing here knows what a cash receipt is; every one
+ * of those is a prop, so a new kind is a page and not a fork of this file.
  *
  * It is built for the keyboard first. Every picker is searchable, Enter walks
  * forward through the fields, and leaving the last field of the last line while
