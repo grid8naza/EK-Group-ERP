@@ -18,6 +18,10 @@ export default function CashPaymentPage() {
       noun="cash payment"
       icon="banknote"
       description="Money paid out in cash — cash is credited, what it was spent on is debited"
+      // The mirror of the cash receipt: the first line IS the payment, so it
+      // credits a cash account and nothing else. Settled by the menu the user
+      // came through, not asked again on every entry.
+      firstLine={{ side: 'CR', money: 'CASH' }}
     />
   );
 }
