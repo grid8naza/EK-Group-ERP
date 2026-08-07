@@ -478,9 +478,7 @@ export function VoucherScreen({
               ? txnLabel.get(v.transactionSubtypeId) ?? '—'
               : '',
             `${v.lines.length} line${v.lines.length === 1 ? '' : 's'}`,
-            v.lines[0]?.account
-              ? `${v.lines[0].account.code} ${v.lines[0].account.name}`
-              : '',
+            v.lines[0]?.account ? v.lines[0].account.name : '',
           ]
             .filter(Boolean)
             .join(' · ')

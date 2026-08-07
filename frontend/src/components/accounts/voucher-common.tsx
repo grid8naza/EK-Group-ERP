@@ -134,13 +134,21 @@ const ASKS_NOTHING: LineAsks = {
  * engine about what is required.
  */
 /**
- * How a ledger reads in a picker — code first, then the company's own name for
- * it where it has one. Shared so a screen that offers a narrowed list of
- * accounts words them exactly as the full list does.
+ * How a ledger reads in a picker: its name, and the company's own name for it
+ * where it has one.
+ *
+ * No code. A voucher is written and read in the names of the accounts — nobody
+ * says "post it to 14101" — and the code in front of every option only made the
+ * list harder to scan and the search harder to use. The chart of accounts is
+ * where a code is looked up; see the searchable-picker convention, which is
+ * name-only across every master.
+ *
+ * Shared so a screen that offers a narrowed list of accounts words them exactly
+ * as the full list does.
  */
 export const accountOption = (a: CoaAccount) => ({
   value: String(a.id),
-  label: `${a.code} · ${a.localName ?? a.name}`,
+  label: a.localName ?? a.name,
 });
 
 export function useVoucherMasters() {
@@ -198,6 +206,10 @@ export function useVoucherMasters() {
    * Every party master carries a main ledger, so the narrowing is exact: a
    * party is offered under its own control account and no other. The server
    * applies the same rule, so the list and the save agree.
+   *
+   * Named, not coded — the same rule the ledger picker follows. Nobody settles
+   * a bill with SUP-0007; the code belongs on the master and the register, not
+   * in front of every option in a list being searched by name.
    */
   const partyOptions = (kind: PartyKind | null, accountId?: string | number) => {
     const list =
@@ -209,7 +221,7 @@ export function useVoucherMasters() {
     const account = accountId != null ? Number(accountId) : null;
     return list
       .filter((p) => p.isActive && (!account || p.controlAccountId === account))
-      .map((p) => ({ value: String(p.id), label: `${p.code} · ${p.name}` }));
+      .map((p) => ({ value: String(p.id), label: p.name }));
   };
 
   const asksFor = (accountId: string | number): LineAsks => {
@@ -320,9 +332,7 @@ export function VoucherList({
             {subLabel
               ? subLabel(v)
               : `${v.lines.length} line${v.lines.length === 1 ? '' : 's'}${
-                  v.lines[0]?.account
-                    ? ` · ${v.lines[0].account.code} ${v.lines[0].account.name}`
-                    : ''
+                  v.lines[0]?.account ? ` · ${v.lines[0].account.name}` : ''
                 }`}
           </div>
         </div>
