@@ -1202,11 +1202,19 @@ export function VoucherEntryScreen({
                                   wrapClassName="w-40 flex-none"
                                   onChange={(e) => {
                                     const refType = e.target.value as BillRefType;
+                                    // The amount goes with the reference. It
+                                    // was the outstanding on the bill that was
+                                    // picked, or what an advance was for —
+                                    // either way it belonged to the OLD kind of
+                                    // row, and carrying it into the new one
+                                    // quietly allocates a figure nobody typed
+                                    // for the thing now named.
                                     setBill(l, bi, {
                                       refType,
                                       billRef: '',
                                       refNote: '',
                                       againstId: '',
+                                      amount: '',
                                     });
                                     // Settling means picking from the list, so
                                     // choosing the method IS the request to see
@@ -1226,7 +1234,7 @@ export function VoucherEntryScreen({
                                     id={fid(l.key, `bill-${bi}-ref`)}
                                     value={b.billRef}
                                     disabled={readOnly}
-                                    wrapClassName="min-w-0 flex-1"
+                                    wrapClassName="min-w-0 flex-1 max-w-md"
                                     className="h-8 text-sm"
                                     placeholder="Bill number, e.g. INV-001"
                                     onChange={(e) =>
@@ -1263,7 +1271,7 @@ export function VoucherEntryScreen({
                                       });
                                     }}
                                     className={cn(
-                                      'input-base h-8 min-w-0 flex-1 truncate text-left text-sm',
+                                      'input-base h-8 min-w-0 max-w-md flex-1 truncate text-left text-sm',
                                       !b.againstId && 'text-slate-400',
                                     )}
                                   >
@@ -1281,7 +1289,7 @@ export function VoucherEntryScreen({
                                     id={fid(l.key, `bill-${bi}-ref`)}
                                     value={b.refNote}
                                     disabled={readOnly}
-                                    wrapClassName="min-w-0 flex-1"
+                                    wrapClassName="min-w-0 flex-1 max-w-md"
                                     className="h-8 text-sm"
                                     placeholder={
                                       b.refType === 'ADVANCE'
@@ -1312,8 +1320,14 @@ export function VoucherEntryScreen({
                               {/* Which way this one pulls. Nearly always the
                                   line's own side — the exception is the credit
                                   or debit note being adjusted against what is
-                                  being settled, which is why it is here at all. */}
-                              <div>
+                                  being settled, which is why it is here at all.
+
+                                  Pushed to the right of its column so the bill
+                                  row ends on the same margin as the ledger line
+                                  above it, and the reference, the amount and
+                                  this read as three steps rather than a ragged
+                                  edge. */}
+                              <div className="flex justify-end">
                                 <SideToggle
                                   id={fid(l.key, `bill-${bi}-side`)}
                                   value={b.side}
