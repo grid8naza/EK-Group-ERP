@@ -463,7 +463,26 @@ export function VoucherEntryScreen({
       : lineScope;
   };
 
+  /**
+   * The money line of an ordinary bank voucher is not a choice at all.
+   *
+   * The bank was named on the instrument, and this line is that same bank — so
+   * it is shown, filled in and locked rather than offered again. Two fields
+   * that must hold one answer should be asked once; asking twice only creates
+   * the chance of a voucher that credits one bank while the cheque was drawn on
+   * another. A post-dated cheque is the exception, where the two are genuinely
+   * different accounts.
+   */
+  const ledgerLocked = (index: number) =>
+    index === 0 && askInstrument && instrument.chequeKind !== 'PDC';
+
   const ledgerOptions = (index: number, selectedId: string) => {
+    if (ledgerLocked(index)) {
+      // One option, and it is the one already chosen above.
+      return masters.accounts
+        .filter((a) => String(a.id) === instrument.bankAccountId)
+        .map(accountOption);
+    }
     const scope = scopeFor(index);
     const monies = asList(scope?.money);
     const parties = asList(scope?.party);
@@ -482,6 +501,7 @@ export function VoucherEntryScreen({
 
   /** What a narrowed ledger picker calls itself. */
   const ledgerPlaceholder = (index: number) => {
+    if (ledgerLocked(index)) return 'Choose the bank account above';
     const scope = scopeFor(index);
     if (scope?.pdc) {
       return scope.pdc === 'ISSUED'
@@ -1426,7 +1446,7 @@ export function VoucherEntryScreen({
                         <Select
                           id={fid(l.key, 'ledger')}
                           value={l.accountId}
-                          disabled={readOnly}
+                          disabled={readOnly || ledgerLocked(i)}
                           wrapClassName="min-w-[16rem] flex-1"
                           onChange={(e) =>
                             // A different ledger may be kept by a different
