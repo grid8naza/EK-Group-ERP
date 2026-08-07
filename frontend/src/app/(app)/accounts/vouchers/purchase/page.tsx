@@ -21,7 +21,7 @@ export default function PurchaseVoucherPage() {
       description="A purchase booked against a supplier — what was bought is debited, the supplier credited"
       // The first line is the supplier being credited: a payable ledger, so the
       // sub-ledger beside it offers the suppliers kept under that account.
-      firstLine={{ side: 'CR', money: undefined, party: 'SUPPLIER' }}
+      firstLine={{ side: 'CR', party: 'SUPPLIER' }}
       // Always a purchase — the menu said so. Which KIND of purchase is the one
       // thing the lines cannot say, so that is the one thing asked.
       transaction={{ type: 'Purchase', askSubtype: true }}
