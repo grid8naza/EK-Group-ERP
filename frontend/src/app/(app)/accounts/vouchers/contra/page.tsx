@@ -19,6 +19,11 @@ export default function ContraVoucherPage() {
       noun="contra voucher"
       icon="arrow-left-right"
       description="Money moved between the company's own cash and bank accounts"
+      // Both sides are the company's own money, so every line is a cash or a
+      // bank account and an ordinary ledger has no business on either. Which
+      // way round is left open: a contra is a deposit or a withdrawal, and the
+      // form should not decide which one is being written.
+      lines={{ money: ['CASH', 'BANK'] }}
     />
   );
 }

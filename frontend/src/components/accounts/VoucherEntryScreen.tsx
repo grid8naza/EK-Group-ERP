@@ -136,6 +136,22 @@ function billLabel(bills: OutstandingBill[], againstId: string): string | null {
     : (bill.billRef ?? '—');
 }
 
+/**
+ * Which ledgers a line may name — the money it is kept in, the party it is kept
+ * by, or both where a kind serves both.
+ *
+ * Naming what a kind is ABOUT rather than listing accounts: the chart is the
+ * company's to change, and a screen that named Trade Creditors would be wrong
+ * the first time somebody added a second payable.
+ */
+type LedgerScope = {
+  money?: 'CASH' | 'BANK' | Array<'CASH' | 'BANK'>;
+  party?: PartyKind | PartyKind[];
+};
+
+const asList = <T,>(v: T | T[] | undefined): T[] =>
+  v === undefined ? [] : Array.isArray(v) ? v : [v];
+
 export interface VoucherEntryScreenProps {
   /** The one kind this screen writes — a `VoucherType.code`. */
   typeCode: string;
@@ -167,20 +183,22 @@ export interface VoucherEntryScreenProps {
    * nothing to decide about that — the decision was made in the menu. Fixing it
    * takes two answers off every entry and makes the wrong one impossible.
    *
-   * `side` locks the Dr/Cr toggle on that line. `money` narrows its ledger
-   * picker to the cash or the bank accounts; `party` narrows it instead to the
-   * control accounts aged by that party, so a purchase can only be credited to
-   * a payable and the sub-ledger beside it offers the suppliers kept under it.
-   * More than one party where the kind serves more than one — a credit note is
-   * raised on a customer or on a supplier, and which is not settled until the
-   * ledger is named. The lines below are ordinary and take whatever the entry
-   * needs.
+   * `side` locks the Dr/Cr toggle on that line, and the {@link LedgerScope}
+   * narrows its ledger picker — to the cash accounts on a cash receipt, or to
+   * the control accounts aged by a party on a purchase, where naming the ledger
+   * is what makes the sub-ledger beside it offer the right people. The lines
+   * below are ordinary and take whatever the entry needs, unless `lines` says
+   * otherwise.
    */
-  firstLine?: {
-    side: 'DR' | 'CR';
-    money?: 'CASH' | 'BANK';
-    party?: PartyKind | PartyKind[];
-  };
+  firstLine?: { side: 'DR' | 'CR' } & LedgerScope;
+  /**
+   * What EVERY line of this kind may name.
+   *
+   * For the kinds that are about one thing from top to bottom: a contra moves
+   * the company's own money between its own accounts, so both sides of it are
+   * cash or bank and an ordinary ledger has no business on either.
+   */
+  lines?: LedgerScope;
 }
 
 /**
@@ -214,6 +232,7 @@ export function VoucherEntryScreen({
   noun,
   transaction,
   firstLine,
+  lines: lineScope,
 }: VoucherEntryScreenProps) {
   const { can, activeCompany } = useAuth();
   const toast = useToast();
@@ -313,51 +332,47 @@ export function VoucherEntryScreen({
   /**
    * Which ledgers a line may name.
    *
-   * Every line but the fixed first one may name anything this company posts to.
-   * The first line of a fixed kind is narrowed to what that kind is about: the
-   * cash or bank accounts where it says `money`, or the control accounts aged
-   * by a party where it says `party` — a purchase is credited to a payable, and
-   * offering the other two hundred ledgers there is offering a mistake.
+   * A line is narrowed to what its kind is about — the cash accounts on a cash
+   * receipt, the payables on a purchase, cash or bank on either side of a
+   * contra. Offering the other two hundred ledgers there is offering a mistake.
+   * The first line may be narrowed further than the rest.
    *
    * Whatever the line already holds stays on the list even if it does not
    * belong there: a voucher written before the rule, or under a ledger since
    * reclassified, must still read back as what it says rather than as blank.
    */
-  /** The kinds of party the first line may be kept by — none, one, or both. */
-  const firstParties = useMemo(() => {
-    const p = firstLine?.party;
-    return p ? (Array.isArray(p) ? p : [p]) : [];
-  }, [firstLine?.party]);
+  const scopeFor = (index: number): LedgerScope | undefined =>
+    index === 0 && (firstLine?.money || firstLine?.party)
+      ? firstLine
+      : lineScope;
 
   const ledgerOptions = (index: number, selectedId: string) => {
-    const wanted = (a: CoaAccount) => {
-      if (firstLine?.money) {
-        return firstLine.money === 'CASH' ? a.isCash : a.isBank;
-      }
-      return (
-        a.isControl && !!a.controlParty && firstParties.includes(a.controlParty)
-      );
-    };
-    if (index !== 0 || !(firstLine?.money || firstParties.length)) {
-      return masters.accountOptions;
-    }
+    const scope = scopeFor(index);
+    const monies = asList(scope?.money);
+    const parties = asList(scope?.party);
+    if (!monies.length && !parties.length) return masters.accountOptions;
+    const wanted = (a: CoaAccount) =>
+      monies.some((m) => (m === 'CASH' ? a.isCash : a.isBank)) ||
+      (a.isControl && !!a.controlParty && parties.includes(a.controlParty));
     return masters.accounts
       .filter((a) => wanted(a) || String(a.id) === selectedId)
       .map(accountOption);
   };
 
-  /** What the fixed first line's ledger picker calls itself. */
-  const firstLedgerPlaceholder = firstLine?.money
-    ? firstLine.money === 'CASH'
-      ? 'Cash account'
-      : 'Bank account'
-    : firstParties.length > 1
-      ? 'Supplier or customer ledger'
-      : firstParties[0] === 'SUPPLIER'
-        ? 'Payable ledger'
-        : firstParties[0] === 'CUSTOMER'
-          ? 'Receivable ledger'
-          : 'Ledger';
+  /** What a narrowed ledger picker calls itself. */
+  const ledgerPlaceholder = (index: number) => {
+    const monies = asList(scopeFor(index)?.money);
+    const parties = asList(scopeFor(index)?.party);
+    if (monies.length && parties.length) return 'Ledger';
+    if (monies.length > 1) return 'Cash or bank account';
+    if (monies.length) {
+      return monies[0] === 'CASH' ? 'Cash account' : 'Bank account';
+    }
+    if (parties.length > 1) return 'Supplier or customer ledger';
+    if (parties[0] === 'SUPPLIER') return 'Payable ledger';
+    if (parties[0] === 'CUSTOMER') return 'Receivable ledger';
+    return 'Ledger';
+  };
 
   const canAdd = can(route, 'add');
   const canEdit = can(route, 'edit');
@@ -1172,9 +1187,7 @@ export function VoucherEntryScreen({
                             })
                           }
                           options={ledgerOptions(i, l.accountId)}
-                          placeholder={
-                            i === 0 ? firstLedgerPlaceholder : 'Ledger'
-                          }
+                          placeholder={ledgerPlaceholder(i)}
                         />
 
                         {/* Only where the ledger is a control account — its
