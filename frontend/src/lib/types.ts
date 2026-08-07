@@ -2312,6 +2312,34 @@ export interface OutstandingBill {
   overdueDays: number;
 }
 
+/** How a post-dated cheque ends: presented, torn up, or written again. */
+export type PdcStatus = 'ISSUED' | 'CLEARED' | 'CANCELLED' | 'REPLACED';
+
+/**
+ * How a bank voucher's money moved — and, on a cheque, what was written on it.
+ *
+ * A post-dated cheque keeps living after its voucher is finished: it is
+ * cleared, cancelled or replaced from the PDC register, weeks later.
+ */
+export interface VoucherInstrument {
+  id: number;
+  voucherId: number;
+  /** A PAYMENT_MODE lookup value. */
+  modeValueId: number;
+  /** The bank it is drawn on, recorded even where the posting goes elsewhere. */
+  bankAccountId: number;
+  bankAccount?: { id: number; code: string; name: string };
+  instrumentNo: string | null;
+  /** On a PDC, the day it may be presented. */
+  instrumentDate: string | null;
+  chequeKind: 'CDC' | 'PDC' | null;
+  status: PdcStatus | null;
+  /** The day it left ISSUED, and the voucher that took it there. */
+  settledOn: string | null;
+  settlementVoucherId: number | null;
+  voucher?: Voucher;
+}
+
 export interface Voucher {
   id: number;
   companyId: number;
@@ -2327,6 +2355,8 @@ export interface Voucher {
   /** What the transaction WAS — TRANSACTION_TYPE / TRANSACTION_SUBTYPE values. */
   transactionTypeId: number | null;
   transactionSubtypeId: number | null;
+  /** How the money moved. Only on the bank kinds. */
+  instrument?: VoucherInstrument | null;
   totalDebit: string | number;
   totalCredit: string | number;
   cancelReason: string | null;

@@ -152,6 +152,33 @@ type LedgerScope = {
 const asList = <T,>(v: T | T[] | undefined): T[] =>
   v === undefined ? [] : Array.isArray(v) ? v : [v];
 
+/** How the money moved, as the form holds it — ids and dates as text. */
+type DraftInstrument = {
+  modeValueId: string;
+  bankAccountId: string;
+  instrumentNo: string;
+  instrumentDate: string;
+  chequeKind: '' | 'CDC' | 'PDC';
+};
+
+/**
+ * Due now, or due later. Two options and a real difference: a current-dated
+ * cheque leaves the bank when it is written, a post-dated one is watched on the
+ * PDC register until the day it is presented.
+ */
+const CHEQUE_KINDS = [
+  { value: 'CDC', label: 'Current-dated (CDC)' },
+  { value: 'PDC', label: 'Post-dated (PDC)' },
+];
+
+const EMPTY_INSTRUMENT: DraftInstrument = {
+  modeValueId: '',
+  bankAccountId: '',
+  instrumentNo: '',
+  instrumentDate: '',
+  chequeKind: '',
+};
+
 export interface VoucherEntryScreenProps {
   /** The one kind this screen writes — a `VoucherType.code`. */
   typeCode: string;
@@ -199,6 +226,14 @@ export interface VoucherEntryScreenProps {
    * cash or bank and an ordinary ledger has no business on either.
    */
   lines?: LedgerScope;
+  /**
+   * Ask how the money moved — the bank kinds, and nothing else.
+   *
+   * Cash needs no instrument and a journal moves no money. Here it is the
+   * difference between a payment and a record of one: which bank, by what
+   * means, on whose cheque. See {@link InstrumentFields}.
+   */
+  askInstrument?: boolean;
 }
 
 /**
@@ -233,6 +268,7 @@ export function VoucherEntryScreen({
   transaction,
   firstLine,
   lines: lineScope,
+  askInstrument = false,
 }: VoucherEntryScreenProps) {
   const { can, activeCompany } = useAuth();
   const toast = useToast();
@@ -266,6 +302,19 @@ export function VoucherEntryScreen({
         : null,
     [txnTypes, transaction?.type],
   );
+  // How the money may have moved — the company's own list, fetched only by the
+  // kinds that ask.
+  const paymentModes = useLookupValues(askInstrument ? 'PAYMENT_MODE' : '');
+  const modeOptions = useMemo(
+    () => paymentModes.map((m) => ({ value: String(m.id), label: m.label })),
+    [paymentModes],
+  );
+  /** The banks this company may draw on. */
+  const bankOptions = useMemo(
+    () => masters.accounts.filter((a) => a.isBank).map(accountOption),
+    [masters.accounts],
+  );
+
   /** The ways of being that type — all a person is asked for. */
   const txnSubtypeOptions = useMemo(
     () =>
@@ -307,6 +356,17 @@ export function VoucherEntryScreen({
   const [narration, setNarration] = useState('');
   /** Which kind of purchase, sale… — asked for only where `askSubtype` is on. */
   const [txnSubtypeId, setTxnSubtypeId] = useState('');
+  /** How the money moved — asked for only where `askInstrument` is on. */
+  const [instrument, setInstrument] = useState({ ...EMPTY_INSTRUMENT });
+
+  /** A cheque is the one mode with anything left to say. */
+  const isCheque = useMemo(() => {
+    const mode = paymentModes.find(
+      (m) => String(m.id) === instrument.modeValueId,
+    );
+    return mode?.value === 'Cheque' || mode?.label === 'Cheque';
+  }, [paymentModes, instrument.modeValueId]);
+
   const keySeq = useRef(0);
   const nextKey = () => ++keySeq.current;
   // Dr then Cr: a voucher's second line answers its first, and starting both on
@@ -413,13 +473,14 @@ export function VoucherEntryScreen({
    */
   const baselineRef = useRef('');
   const snapshot = () =>
-    JSON.stringify({ date, reference, narration, txnSubtypeId, lines });
+    JSON.stringify({ date, reference, narration, txnSubtypeId, instrument, lines });
   /** Take what is on the form now as the clean state. */
   const rebaseline = (
     d: string,
     r: string,
     n: string,
     sub: string,
+    inst: DraftInstrument,
     ls: EntryLine[],
   ) => {
     baselineRef.current = JSON.stringify({
@@ -427,6 +488,7 @@ export function VoucherEntryScreen({
       reference: r,
       narration: n,
       txnSubtypeId: sub,
+      instrument: inst,
       lines: ls,
     });
   };
@@ -446,7 +508,8 @@ export function VoucherEntryScreen({
     setNarration('');
     setLines(ls);
     setTxnSubtypeId('');
-    rebaseline(d, '', '', '', ls);
+    setInstrument({ ...EMPTY_INSTRUMENT });
+    rebaseline(d, '', '', '', EMPTY_INSTRUMENT, ls);
     setMode('edit');
     pendingFocus.current = DATE_FIELD;
   };
@@ -456,6 +519,15 @@ export function VoucherEntryScreen({
     const reference = v.reference ?? '';
     const narration = v.narration ?? '';
     const sub = v.transactionSubtypeId ? String(v.transactionSubtypeId) : '';
+    const inst: DraftInstrument = v.instrument
+      ? {
+          modeValueId: String(v.instrument.modeValueId),
+          bankAccountId: String(v.instrument.bankAccountId),
+          instrumentNo: v.instrument.instrumentNo ?? '',
+          instrumentDate: v.instrument.instrumentDate?.slice(0, 10) ?? '',
+          chequeKind: v.instrument.chequeKind ?? '',
+        }
+      : { ...EMPTY_INSTRUMENT };
     const ls: EntryLine[] = v.lines.map((l) => ({
       key: nextKey(),
       side: (num(l.debit) > 0 ? 'DR' : 'CR') as 'DR' | 'CR',
@@ -483,8 +555,9 @@ export function VoucherEntryScreen({
     setReference(reference);
     setNarration(narration);
     setTxnSubtypeId(sub);
+    setInstrument(inst);
     setLines(ls);
-    rebaseline(date, reference, narration, sub, ls);
+    rebaseline(date, reference, narration, sub, inst, ls);
     setMode(v.status === 'DRAFT' ? 'edit' : 'view');
     // A saved voucher's parties already have bills on file; load them so the
     // rows read as bills rather than ids.
@@ -789,6 +862,19 @@ export function VoucherEntryScreen({
           transactionSubtypeId: txnSubtypeId ? Number(txnSubtypeId) : null,
         }
       : {}),
+    ...(askInstrument
+      ? {
+          instrument: {
+            modeValueId: Number(instrument.modeValueId),
+            bankAccountId: Number(instrument.bankAccountId),
+            instrumentNo: instrument.instrumentNo.trim() || null,
+            instrumentDate: instrument.instrumentDate || null,
+            // Only a cheque is post-dated or current-dated; the server refuses
+            // the field on anything else.
+            chequeKind: isCheque ? instrument.chequeKind || null : null,
+          },
+        }
+      : {}),
     lines: lines
       .filter((l) => l.accountId && num(l.amount) > 0)
       .map((l) => ({
@@ -842,6 +928,27 @@ export function VoucherEntryScreen({
     }
     if (post && !balanced) {
       return toast.error('Debits and credits must agree before posting.');
+    }
+    // Caught here as well as on the server, so the answer arrives while the
+    // field is still under the cursor rather than after a round trip.
+    if (askInstrument) {
+      if (!instrument.modeValueId) return toast.error('Say how the money moved.');
+      if (!instrument.bankAccountId) {
+        return toast.error('Choose the bank account it goes through.');
+      }
+      if (isCheque) {
+        if (!instrument.instrumentNo.trim()) {
+          return toast.error('Give the cheque number.');
+        }
+        if (!instrument.instrumentDate) {
+          return toast.error('Give the date written on the cheque.');
+        }
+        if (!instrument.chequeKind) {
+          return toast.error(
+            'Say whether the cheque is current-dated or post-dated.',
+          );
+        }
+      }
     }
     setSaving(true);
     try {
@@ -1113,6 +1220,86 @@ export function VoucherEntryScreen({
               />
             )}
           </div>
+
+          {/* How the money actually moved. Its own block under the header,
+              because it is a different kind of fact from the entry: the lines
+              say what the payment DID, this says what carried it. */}
+          {askInstrument && (
+            <div className="card mt-3 grid grid-cols-1 gap-4 p-4 sm:grid-cols-3 xl:grid-cols-5">
+              <Select
+                label="Mode"
+                required
+                value={instrument.modeValueId}
+                disabled={readOnly}
+                options={modeOptions}
+                placeholder={modeOptions.length ? 'How it moved' : 'None set up'}
+                onChange={(e) =>
+                  setInstrument({
+                    ...instrument,
+                    modeValueId: e.target.value,
+                    // Only a cheque is dated and numbered; changing away from
+                    // one takes its answers with it rather than sending them.
+                    chequeKind: '',
+                  })
+                }
+              />
+              <Select
+                label="Bank account"
+                required
+                value={instrument.bankAccountId}
+                disabled={readOnly}
+                options={bankOptions}
+                placeholder={bankOptions.length ? 'Drawn on' : 'No bank account'}
+                onChange={(e) =>
+                  setInstrument({ ...instrument, bankAccountId: e.target.value })
+                }
+              />
+              <Input
+                label={isCheque ? 'Cheque no' : 'Reference no'}
+                required={isCheque}
+                value={instrument.instrumentNo}
+                disabled={readOnly}
+                placeholder={isCheque ? 'e.g. 004512' : 'UTR, advice no…'}
+                onChange={(e) =>
+                  setInstrument({ ...instrument, instrumentNo: e.target.value })
+                }
+              />
+              <DateInput
+                label={isCheque ? 'Cheque date' : 'Instrument date'}
+                required={isCheque}
+                value={instrument.instrumentDate}
+                disabled={readOnly}
+                onChange={(v) =>
+                  setInstrument({ ...instrument, instrumentDate: v })
+                }
+              />
+              {isCheque && (
+                <div>
+                  <Select
+                    label="Due"
+                    required
+                    value={instrument.chequeKind}
+                    disabled={readOnly}
+                    options={CHEQUE_KINDS}
+                    placeholder="Now or later?"
+                    onChange={(e) =>
+                      setInstrument({
+                        ...instrument,
+                        chequeKind: e.target.value as 'CDC' | 'PDC' | '',
+                      })
+                    }
+                  />
+                  {instrument.chequeKind === 'PDC' && (
+                    <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                      Post it to Post-dated Cheques Issued, not to the bank — the
+                      bank is credited from the PDC register on the day it
+                      clears.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* The lines. Two money columns down the right, as a journal is read;
               everything that varies by ledger sits in Particulars so those two

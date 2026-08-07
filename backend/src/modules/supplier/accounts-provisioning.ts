@@ -26,6 +26,14 @@ export const ACCOUNTS_SUBS = [
     icon: 'book-open',
     order: 4,
   },
+  // Where a post-dated cheque lives after the voucher that wrote it is
+  // finished: what is due, what has cleared, what came back.
+  {
+    name: 'PDC Register',
+    route: '/accounts/pdc-register',
+    icon: 'calendar-clock',
+    order: 5,
+  },
   // Per-module reference data, as every other module has. Super-admin-only.
   // The transaction type/subtype lists a voucher is classified by are GLOBAL
   // and so appear here too — the same taxonomy classifies a stock document, and
@@ -34,7 +42,7 @@ export const ACCOUNTS_SUBS = [
     name: 'Lookups',
     route: '/accounts/lookups',
     icon: 'list',
-    order: 5,
+    order: 6,
     superAdminOnly: true,
   },
 ];
