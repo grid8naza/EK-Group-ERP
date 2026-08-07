@@ -27,6 +27,7 @@ import { BillPicker, type BillPick } from './BillPicker';
 import type {
   BalanceSide,
   BillRefType,
+  CoaAccount,
   OutstandingBill,
   PartyKind,
   Voucher,
@@ -145,13 +146,19 @@ export interface VoucherEntryScreenProps {
   icon: string;
   noun: string;
   /**
-   * Show the transaction type and subtype on the header, read-only.
+   * Show what the transaction WAS — the type and subtype — on the header.
    *
-   * For the kinds a document raises rather than a person — sales and purchase.
-   * The classification belongs to the invoice behind the voucher, so it is
-   * shown here to be read and never to be typed; see {@link TransactionFields}.
+   * Present at all: the pair is shown. `type` names the one this kind always
+   * is (by its lookup label, e.g. 'Purchase'), which is then fixed rather than
+   * asked. `askSubtype` makes the subtype a picker narrowed to that type — the
+   * one part of the classification a person still chooses, because which KIND
+   * of purchase this was is not something the ledger lines say.
+   *
+   * With neither, both fields stand disabled: on the kinds an invoice will
+   * raise, the document behind the voucher is what will say. See
+   * {@link TransactionFields}.
    */
-  showTransaction?: boolean;
+  transaction?: { type?: string; askSubtype?: boolean };
   /**
    * What the FIRST line of this kind always is.
    *
@@ -160,11 +167,17 @@ export interface VoucherEntryScreenProps {
    * nothing to decide about that — the decision was made in the menu. Fixing it
    * takes two answers off every entry and makes the wrong one impossible.
    *
-   * `side` locks the Dr/Cr toggle on that line; `money` narrows its ledger
-   * picker to the cash accounts or the bank accounts. The lines below are
-   * ordinary and take whatever the entry needs.
+   * `side` locks the Dr/Cr toggle on that line. `money` narrows its ledger
+   * picker to the cash or the bank accounts; `party` narrows it instead to the
+   * control accounts aged by that party, so a purchase can only be credited to
+   * a payable and the sub-ledger beside it offers the suppliers kept under it.
+   * The lines below are ordinary and take whatever the entry needs.
    */
-  firstLine?: { side: 'DR' | 'CR'; money?: 'CASH' | 'BANK' };
+  firstLine?: {
+    side: 'DR' | 'CR';
+    money?: 'CASH' | 'BANK';
+    party?: PartyKind;
+  };
 }
 
 /**
@@ -196,7 +209,7 @@ export function VoucherEntryScreen({
   description,
   icon,
   noun,
-  showTransaction = false,
+  transaction,
   firstLine,
 }: VoucherEntryScreenProps) {
   const { can, activeCompany } = useAuth();
@@ -212,6 +225,34 @@ export function VoucherEntryScreen({
   const voucherType = useMemo(
     () => (types ?? []).find((t) => t.code === typeCode) ?? null,
     [types, typeCode],
+  );
+
+  // The taxonomy, fetched only by the kinds that show it. `useLookupValues`
+  // with no code finds no lookup and returns nothing, which is what the other
+  // six kinds want.
+  const txnTypes = useLookupValues(transaction ? 'TRANSACTION_TYPE' : '');
+  const txnSubtypes = useLookupValues(
+    transaction?.askSubtype ? 'TRANSACTION_SUBTYPE' : '',
+  );
+  /** The one type this kind always is, resolved from its label. */
+  const txnType = useMemo(
+    () =>
+      transaction?.type
+        ? (txnTypes.find(
+            (v) => v.value === transaction.type || v.label === transaction.type,
+          ) ?? null)
+        : null,
+    [txnTypes, transaction?.type],
+  );
+  /** The ways of being that type — all a person is asked for. */
+  const txnSubtypeOptions = useMemo(
+    () =>
+      txnType
+        ? txnSubtypes
+            .filter((v) => v.parentValueId === txnType.id)
+            .map((v) => ({ value: String(v.id), label: v.label }))
+        : [],
+    [txnSubtypes, txnType],
   );
 
   const [statusFilter, setStatusFilter] = useState('');
@@ -242,6 +283,8 @@ export function VoucherEntryScreen({
   const [date, setDate] = useState(today());
   const [reference, setReference] = useState('');
   const [narration, setNarration] = useState('');
+  /** Which kind of purchase, sale… — asked for only where `askSubtype` is on. */
+  const [txnSubtypeId, setTxnSubtypeId] = useState('');
   const keySeq = useRef(0);
   const nextKey = () => ++keySeq.current;
   // Dr then Cr: a voucher's second line answers its first, and starting both on
@@ -268,8 +311,9 @@ export function VoucherEntryScreen({
    * Which ledgers a line may name.
    *
    * Every line but the fixed first one may name anything this company posts to.
-   * The first line of a kind that declares `money` is narrowed to the cash
-   * accounts or the bank accounts — a cash receipt is received INTO cash, and
+   * The first line of a fixed kind is narrowed to what that kind is about: the
+   * cash or bank accounts where it says `money`, or the control accounts aged
+   * by a party where it says `party` — a purchase is credited to a payable, and
    * offering the other two hundred ledgers there is offering a mistake.
    *
    * Whatever the line already holds stays on the list even if it does not
@@ -277,12 +321,30 @@ export function VoucherEntryScreen({
    * reclassified, must still read back as what it says rather than as blank.
    */
   const ledgerOptions = (index: number, selectedId: string) => {
-    if (index !== 0 || !firstLine?.money) return masters.accountOptions;
-    const wanted = firstLine.money === 'CASH' ? 'isCash' : 'isBank';
+    const wanted = (a: CoaAccount) => {
+      if (firstLine?.money) {
+        return firstLine.money === 'CASH' ? a.isCash : a.isBank;
+      }
+      return a.isControl && a.controlParty === firstLine?.party;
+    };
+    if (index !== 0 || !(firstLine?.money || firstLine?.party)) {
+      return masters.accountOptions;
+    }
     return masters.accounts
-      .filter((a) => a[wanted] || String(a.id) === selectedId)
+      .filter((a) => wanted(a) || String(a.id) === selectedId)
       .map(accountOption);
   };
+
+  /** What the fixed first line's ledger picker calls itself. */
+  const firstLedgerPlaceholder = firstLine?.money
+    ? firstLine.money === 'CASH'
+      ? 'Cash account'
+      : 'Bank account'
+    : firstLine?.party === 'SUPPLIER'
+      ? 'Payable ledger'
+      : firstLine?.party === 'CUSTOMER'
+        ? 'Receivable ledger'
+        : 'Ledger';
 
   const canAdd = can(route, 'add');
   const canEdit = can(route, 'edit');
@@ -322,18 +384,21 @@ export function VoucherEntryScreen({
    * back to what it was leaves nothing to warn about.
    */
   const baselineRef = useRef('');
-  const snapshot = () => JSON.stringify({ date, reference, narration, lines });
+  const snapshot = () =>
+    JSON.stringify({ date, reference, narration, txnSubtypeId, lines });
   /** Take what is on the form now as the clean state. */
   const rebaseline = (
     d: string,
     r: string,
     n: string,
+    sub: string,
     ls: EntryLine[],
   ) => {
     baselineRef.current = JSON.stringify({
       date: d,
       reference: r,
       narration: n,
+      txnSubtypeId: sub,
       lines: ls,
     });
   };
@@ -352,7 +417,8 @@ export function VoucherEntryScreen({
     setReference('');
     setNarration('');
     setLines(ls);
-    rebaseline(d, '', '', ls);
+    setTxnSubtypeId('');
+    rebaseline(d, '', '', '', ls);
     setMode('edit');
     pendingFocus.current = DATE_FIELD;
   };
@@ -361,6 +427,7 @@ export function VoucherEntryScreen({
     const date = v.date.slice(0, 10);
     const reference = v.reference ?? '';
     const narration = v.narration ?? '';
+    const sub = v.transactionSubtypeId ? String(v.transactionSubtypeId) : '';
     const ls: EntryLine[] = v.lines.map((l) => ({
       key: nextKey(),
       side: (num(l.debit) > 0 ? 'DR' : 'CR') as 'DR' | 'CR',
@@ -387,8 +454,9 @@ export function VoucherEntryScreen({
     setDate(date);
     setReference(reference);
     setNarration(narration);
+    setTxnSubtypeId(sub);
     setLines(ls);
-    rebaseline(date, reference, narration, ls);
+    rebaseline(date, reference, narration, sub, ls);
     setMode(v.status === 'DRAFT' ? 'edit' : 'view');
     // A saved voucher's parties already have bills on file; load them so the
     // rows read as bills rather than ids.
@@ -684,6 +752,15 @@ export function VoucherEntryScreen({
     // alone", so omitting a cleared reference would quietly restore the old one.
     reference: reference.trim(),
     narration,
+    // Only from the kinds that show it. Left out entirely elsewhere, so a
+    // classification an invoice put on a voucher is not wiped by a form that
+    // never asked about it — an omitted field is left alone.
+    ...(txnType ? { transactionTypeId: txnType.id } : {}),
+    ...(transaction?.askSubtype
+      ? {
+          transactionSubtypeId: txnSubtypeId ? Number(txnSubtypeId) : null,
+        }
+      : {}),
     lines: lines
       .filter((l) => l.accountId && num(l.amount) > 0)
       .map((l) => ({
@@ -948,7 +1025,7 @@ export function VoucherEntryScreen({
               'card grid grid-cols-1 gap-4 p-4 sm:grid-cols-3',
               // Five fields on one row where there is room for five, so the
               // whole header is read at a glance rather than in two passes.
-              showTransaction && 'xl:grid-cols-5',
+              transaction && 'xl:grid-cols-5',
             )}
           >
             <DateInput
@@ -984,7 +1061,29 @@ export function VoucherEntryScreen({
               placeholder="Advice no, bill no, resolution…"
               onChange={(e) => setReference(e.target.value)}
             />
-            {showTransaction && <TransactionFields voucher={editing} />}
+            {transaction && (
+              <TransactionFields
+                // The kind's own type where it has one; otherwise whatever the
+                // voucher already carries, which is nothing until an invoice
+                // raises it.
+                typeLabel={
+                  txnType?.label ??
+                  txnTypes.find((v) => v.id === editing?.transactionTypeId)
+                    ?.label ??
+                  ''
+                }
+                subtypeId={txnSubtypeId}
+                subtypeOptions={txnSubtypeOptions}
+                askSubtype={!!transaction.askSubtype}
+                readOnlySubtypeLabel={
+                  txnSubtypes.find(
+                    (v) => v.id === editing?.transactionSubtypeId,
+                  )?.label ?? ''
+                }
+                disabled={readOnly}
+                onSubtypeChange={setTxnSubtypeId}
+              />
+            )}
           </div>
 
           {/* The lines. Two money columns down the right, as a journal is read;
@@ -1061,11 +1160,7 @@ export function VoucherEntryScreen({
                           }
                           options={ledgerOptions(i, l.accountId)}
                           placeholder={
-                            i === 0 && firstLine?.money
-                              ? firstLine.money === 'CASH'
-                                ? 'Cash account'
-                                : 'Bank account'
-                              : 'Ledger'
+                            i === 0 ? firstLedgerPlaceholder : 'Ledger'
                           }
                         />
 
@@ -1588,42 +1683,66 @@ function onAmountChange(
 }
 
 /**
- * What the transaction WAS — shown, never asked.
+ * What the transaction WAS.
  *
- * A sales or purchase voucher is the accounting side of an invoice, and the
- * plan is for the invoice to raise it: the document already knows which kind of
- * sale or purchase it recorded, so asking a second time is asking to be told
- * two different answers. The pair therefore stands on the form disabled — there
- * to read a generated voucher's classification back, and, until the generation
- * is built, to say plainly that this is not a field anyone fills in.
+ * The TYPE is never asked: a purchase voucher records a purchase, and a field
+ * offering nine answers to a question the menu already settled is a field that
+ * will one day be answered wrongly. It is shown, disabled, so a reader can see
+ * what the voucher is filed as — and on the kinds an invoice will raise, where
+ * even the type comes from the document, it stands empty saying where the
+ * answer is meant to come from.
  *
- * Disabled rather than hidden for the same reason the dead money column is:
- * a field that vanishes teaches nobody where the answer comes from. It also
- * keeps both out of the keyboard's path.
+ * The SUBTYPE is the part a person still chooses, on the kinds that ask: which
+ * KIND of purchase this was — intercompany, B2B, B2C — is not something the
+ * ledger lines say, and nothing else on the form can work it out. Narrowed to
+ * the subtypes belonging to the type, so the pair cannot disagree.
  */
-function TransactionFields({ voucher }: { voucher: Voucher | null }) {
-  const types = useLookupValues('TRANSACTION_TYPE');
-  const subtypes = useLookupValues('TRANSACTION_SUBTYPE');
-
-  const labelOf = (values: { id: number; label: string }[], id?: number | null) =>
-    id ? (values.find((v) => v.id === id)?.label ?? `#${id}`) : '';
-
+function TransactionFields({
+  typeLabel,
+  subtypeId,
+  subtypeOptions,
+  askSubtype,
+  readOnlySubtypeLabel,
+  disabled,
+  onSubtypeChange,
+}: {
+  typeLabel: string;
+  subtypeId: string;
+  subtypeOptions: { value: string; label: string }[];
+  askSubtype: boolean;
+  readOnlySubtypeLabel: string;
+  disabled: boolean;
+  onSubtypeChange: (id: string) => void;
+}) {
   return (
     <>
       <Input
         label="Transaction type"
-        value={labelOf(types, voucher?.transactionTypeId)}
+        value={typeLabel}
         placeholder="From the invoice that raises it"
         disabled
         readOnly
       />
-      <Input
-        label="Transaction subtype"
-        value={labelOf(subtypes, voucher?.transactionSubtypeId)}
-        placeholder="From the invoice that raises it"
-        disabled
-        readOnly
-      />
+      {askSubtype ? (
+        <Select
+          label="Transaction subtype"
+          value={subtypeId}
+          disabled={disabled}
+          options={subtypeOptions}
+          placeholder={
+            subtypeOptions.length ? 'Which kind?' : 'None set up for this type'
+          }
+          onChange={(e) => onSubtypeChange(e.target.value)}
+        />
+      ) : (
+        <Input
+          label="Transaction subtype"
+          value={readOnlySubtypeLabel}
+          placeholder="From the invoice that raises it"
+          disabled
+          readOnly
+        />
+      )}
     </>
   );
 }

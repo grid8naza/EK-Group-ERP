@@ -19,10 +19,11 @@ export default function SalesVoucherPage() {
       noun="sales voucher"
       icon="receipt"
       description="A sale booked against a customer — the customer is debited, sales credited"
-      // The invoice will raise this voucher and say what kind of sale it was.
-      // Shown so a generated one can be read; disabled so nobody answers it
-      // twice.
-      showTransaction
+      // The invoice will raise this voucher and say what kind of sale it was —
+      // both the type and the subtype. Shown so a generated one can be read,
+      // and asked for by neither; see the purchase voucher for the shape that
+      // fixes a type and asks for its subtype.
+      transaction={{}}
     />
   );
 }

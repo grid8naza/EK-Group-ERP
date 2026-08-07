@@ -19,10 +19,12 @@ export default function PurchaseVoucherPage() {
       noun="purchase voucher"
       icon="shopping-cart"
       description="A purchase booked against a supplier — what was bought is debited, the supplier credited"
-      // The supplier's bill will raise this voucher and say what kind of
-      // purchase it was. Shown so a generated one can be read; disabled so
-      // nobody answers it twice.
-      showTransaction
+      // The first line is the supplier being credited: a payable ledger, so the
+      // sub-ledger beside it offers the suppliers kept under that account.
+      firstLine={{ side: 'CR', money: undefined, party: 'SUPPLIER' }}
+      // Always a purchase — the menu said so. Which KIND of purchase is the one
+      // thing the lines cannot say, so that is the one thing asked.
+      transaction={{ type: 'Purchase', askSubtype: true }}
     />
   );
 }
