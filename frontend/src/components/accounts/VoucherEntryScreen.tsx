@@ -4,7 +4,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, Trash2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { useFetch, useLookupValues } from '@/lib/hooks';
+import {
+  useFetch,
+  useLookupValues,
+  useUnsavedChangesGuard,
+} from '@/lib/hooks';
 import { resolveIcon } from '@/lib/icons';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -294,48 +298,83 @@ export function VoucherEntryScreen({
 
   // ---- opening and closing the form -------------------------------------------
 
+  /**
+   * The voucher as it stood when it was opened, or as it was last saved.
+   *
+   * A voucher is a page, not a drawer: leaving it is a click on Back, on the
+   * sidebar, or a browser refresh, and any of the three would take an unfinished
+   * entry with it. Compared against the same fields it was hydrated from, so it
+   * says touched-and-different rather than merely touched — retyping a figure
+   * back to what it was leaves nothing to warn about.
+   */
+  const baselineRef = useRef('');
+  const snapshot = () => JSON.stringify({ date, reference, narration, lines });
+  /** Take what is on the form now as the clean state. */
+  const rebaseline = (
+    d: string,
+    r: string,
+    n: string,
+    ls: EntryLine[],
+  ) => {
+    baselineRef.current = JSON.stringify({
+      date: d,
+      reference: r,
+      narration: n,
+      lines: ls,
+    });
+  };
+  // A posted voucher is read, not written, so only an editable one can be dirty.
+  const dirty = () => mode === 'edit' && snapshot() !== baselineRef.current;
+  useUnsavedChangesGuard(dirty);
+
   const startNew = () => {
-    setEditing(null);
-    setDate(today());
-    setReference('');
-    setNarration('');
-    setLines([
+    const ls = [
       emptyLine(nextKey(), firstSide),
       emptyLine(nextKey(), firstSide === 'DR' ? 'CR' : 'DR'),
-    ]);
+    ];
+    const d = today();
+    setEditing(null);
+    setDate(d);
+    setReference('');
+    setNarration('');
+    setLines(ls);
+    rebaseline(d, '', '', ls);
     setMode('edit');
     pendingFocus.current = DATE_FIELD;
   };
 
   const open = (v: Voucher) => {
-    setEditing(v);
-    setDate(v.date.slice(0, 10));
-    setReference(v.reference ?? '');
-    setNarration(v.narration ?? '');
-    setLines(
-      v.lines.map((l) => ({
-        key: nextKey(),
-        side: (num(l.debit) > 0 ? 'DR' : 'CR') as 'DR' | 'CR',
-        // A saved line's side is a fact, not a default waiting to be improved.
-        sideTouched: true,
-        accountId: String(l.accountId),
-        partyId: l.partyId ? String(l.partyId) : '',
-        costCenterId: l.costCenterId ? String(l.costCenterId) : '',
-        costObjectId: l.costObjectId ? String(l.costObjectId) : '',
-        amount: String(num(l.debit) > 0 ? num(l.debit) : num(l.credit)),
-        narration: l.narration ?? '',
-        bills: (l.billRefs ?? []).map((b) => ({
-          refType: b.refType,
-          // Written before allocations carried a side: those all went the way
-          // of their line, which is what null means.
-          side: b.side ?? ((num(l.debit) > 0 ? 'DR' : 'CR') as BalanceSide),
-          billRef: b.billRef ?? '',
-          refNote: b.refNote ?? '',
-          againstId: b.againstId ? String(b.againstId) : '',
-          amount: String(b.amount),
-        })),
+    const date = v.date.slice(0, 10);
+    const reference = v.reference ?? '';
+    const narration = v.narration ?? '';
+    const ls: EntryLine[] = v.lines.map((l) => ({
+      key: nextKey(),
+      side: (num(l.debit) > 0 ? 'DR' : 'CR') as 'DR' | 'CR',
+      // A saved line's side is a fact, not a default waiting to be improved.
+      sideTouched: true,
+      accountId: String(l.accountId),
+      partyId: l.partyId ? String(l.partyId) : '',
+      costCenterId: l.costCenterId ? String(l.costCenterId) : '',
+      costObjectId: l.costObjectId ? String(l.costObjectId) : '',
+      amount: String(num(l.debit) > 0 ? num(l.debit) : num(l.credit)),
+      narration: l.narration ?? '',
+      bills: (l.billRefs ?? []).map((b) => ({
+        refType: b.refType,
+        // Written before allocations carried a side: those all went the way
+        // of their line, which is what null means.
+        side: b.side ?? ((num(l.debit) > 0 ? 'DR' : 'CR') as BalanceSide),
+        billRef: b.billRef ?? '',
+        refNote: b.refNote ?? '',
+        againstId: b.againstId ? String(b.againstId) : '',
+        amount: String(b.amount),
       })),
-    );
+    }));
+    setEditing(v);
+    setDate(date);
+    setReference(reference);
+    setNarration(narration);
+    setLines(ls);
+    rebaseline(date, reference, narration, ls);
     setMode(v.status === 'DRAFT' ? 'edit' : 'view');
     // A saved voucher's parties already have bills on file; load them so the
     // rows read as bills rather than ids.
@@ -344,7 +383,22 @@ export function VoucherEntryScreen({
     }
   };
 
-  const closeForm = () => {
+  // Back to the register. The one deliberate way out of the form, so it asks
+  // before dropping an entry that has been written but not saved — the sidebar
+  // and a browser refresh are covered by the guard above.
+  const closeForm = async () => {
+    if (dirty()) {
+      const ok = await confirm({
+        title: `Leave this ${noun}?`,
+        message:
+          'What has been entered here has not been saved. Go back and lose it?',
+        danger: true,
+        confirmText: 'Yes',
+        cancelText: 'No',
+        defaultCancel: true,
+      });
+      if (!ok) return;
+    }
     setMode('list');
     setEditing(null);
   };
@@ -786,7 +840,7 @@ export function VoucherEntryScreen({
           // row that breaks in two reads as two decisions. The header lets the
           // title wrap instead.
           <div className="flex items-center justify-end gap-2">
-            <button className="btn-secondary" onClick={closeForm}>
+            <button className="btn-secondary" onClick={() => void closeForm()}>
               <ArrowLeft className="mr-1 inline h-4 w-4" />
               Back
             </button>

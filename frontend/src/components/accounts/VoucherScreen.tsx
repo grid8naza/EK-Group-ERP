@@ -1,10 +1,14 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, Trash2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { useFetch, useLookupValues } from '@/lib/hooks';
+import {
+  useFetch,
+  useLookupValues,
+  useUnsavedChangesGuard,
+} from '@/lib/hooks';
 import { resolveIcon } from '@/lib/icons';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -73,6 +77,15 @@ const emptyLine = (): DraftLine => ({
   partyId: '',
   bills: [],
 });
+
+/** Everything the form holds — one object, so it can be compared as one. */
+type Draft = {
+  date: string;
+  narration: string;
+  txnTypeId: string;
+  txnSubtypeId: string;
+  lines: DraftLine[];
+};
 
 /**
  * One kind of voucher, on its own screen — now only the two bank kinds.
@@ -163,53 +176,102 @@ export function VoucherScreen({
   const canEdit = can(route, 'edit');
   const canDelete = can(route, 'delete');
 
-  const startNew = () => {
+  /**
+   * The voucher as it stood when it was opened, or as it was last saved.
+   *
+   * A voucher is a page, not a drawer: leaving it is a click on Back, on the
+   * sidebar, or a browser refresh, and any of the three would take an
+   * unfinished entry with it. Compared against the same fields it was hydrated
+   * from, so retyping a figure back to what it was leaves nothing to warn about.
+   */
+  const baselineRef = useRef('');
+  const snapshot = () =>
+    JSON.stringify({ date, narration, txnTypeId, txnSubtypeId, lines });
+  const rebaseline = (d: Draft) => {
+    baselineRef.current = JSON.stringify(d);
+  };
+  // A posted voucher is read, not written, so only an editable one can be dirty.
+  const dirty = () => mode === 'edit' && snapshot() !== baselineRef.current;
+  useUnsavedChangesGuard(dirty);
+
+  // Back to the register — the deliberate way out, so it asks before dropping
+  // an entry that has been written but not saved.
+  const leaveForm = async () => {
+    if (dirty()) {
+      const ok = await confirm({
+        title: `Leave this ${noun}?`,
+        message:
+          'What has been entered here has not been saved. Go back and lose it?',
+        danger: true,
+        confirmText: 'Yes',
+        cancelText: 'No',
+        defaultCancel: true,
+      });
+      if (!ok) return;
+    }
+    setMode('list');
     setEditing(null);
-    setDate(today());
-    setNarration('');
-    setTxnTypeId('');
-    setTxnSubtypeId('');
-    setLines([emptyLine(), emptyLine()]);
+  };
+
+  const startNew = () => {
+    const fresh: Draft = {
+      date: today(),
+      narration: '',
+      txnTypeId: '',
+      txnSubtypeId: '',
+      lines: [emptyLine(), emptyLine()],
+    };
+    setEditing(null);
+    setDate(fresh.date);
+    setNarration(fresh.narration);
+    setTxnTypeId(fresh.txnTypeId);
+    setTxnSubtypeId(fresh.txnSubtypeId);
+    setLines(fresh.lines);
+    rebaseline(fresh);
     setMode('edit');
   };
 
   const open = (v: Voucher, next: Mode) => {
-    setEditing(v);
-    setDate(v.date.slice(0, 10));
-    setNarration(v.narration ?? '');
-    setTxnTypeId(v.transactionTypeId ? String(v.transactionTypeId) : '');
-    setTxnSubtypeId(
-      v.transactionSubtypeId ? String(v.transactionSubtypeId) : '',
-    );
-    setLines(
-      v.lines.map((l) => ({
-        accountId: String(l.accountId),
-        side: num(l.debit) > 0 ? 'DR' : 'CR',
-        amount: String(num(l.debit) > 0 ? num(l.debit) : num(l.credit)),
-        costCenterId: l.costCenterId ? String(l.costCenterId) : '',
-        costObjectId: l.costObjectId ? String(l.costObjectId) : '',
-        narration: l.narration ?? '',
-        // Only a line that says something DIFFERENT from the header is an
-        // override; one that merely matches was inherited and stays so.
-        txnSubtypeId:
-          l.transactionSubtypeId &&
-          l.transactionSubtypeId !== v.transactionSubtypeId
-            ? String(l.transactionSubtypeId)
-            : '',
-        partyId: l.partyId ? String(l.partyId) : '',
-        bills: (l.billRefs ?? []).map((b) => ({
-          refType: b.refType,
-          // This form does not offer adjustments, but it must not lose one
-          // written elsewhere. Null means the row predates the column, and
-          // those all went the way of their line.
-          side: b.side ?? ((num(l.debit) > 0 ? 'DR' : 'CR') as BalanceSide),
-          billRef: b.billRef ?? '',
-          refNote: b.refNote ?? '',
-          againstId: b.againstId ? String(b.againstId) : '',
-          amount: String(b.amount),
-        })),
+    const date = v.date.slice(0, 10);
+    const narration = v.narration ?? '';
+    const txnTypeId = v.transactionTypeId ? String(v.transactionTypeId) : '';
+    const txnSubtypeId = v.transactionSubtypeId
+      ? String(v.transactionSubtypeId)
+      : '';
+    const ls: DraftLine[] = v.lines.map((l) => ({
+      accountId: String(l.accountId),
+      side: num(l.debit) > 0 ? 'DR' : 'CR',
+      amount: String(num(l.debit) > 0 ? num(l.debit) : num(l.credit)),
+      costCenterId: l.costCenterId ? String(l.costCenterId) : '',
+      costObjectId: l.costObjectId ? String(l.costObjectId) : '',
+      narration: l.narration ?? '',
+      // Only a line that says something DIFFERENT from the header is an
+      // override; one that merely matches was inherited and stays so.
+      txnSubtypeId:
+        l.transactionSubtypeId &&
+        l.transactionSubtypeId !== v.transactionSubtypeId
+          ? String(l.transactionSubtypeId)
+          : '',
+      partyId: l.partyId ? String(l.partyId) : '',
+      bills: (l.billRefs ?? []).map((b) => ({
+        refType: b.refType,
+        // This form does not offer adjustments, but it must not lose one
+        // written elsewhere. Null means the row predates the column, and
+        // those all went the way of their line.
+        side: b.side ?? ((num(l.debit) > 0 ? 'DR' : 'CR') as BalanceSide),
+        billRef: b.billRef ?? '',
+        refNote: b.refNote ?? '',
+        againstId: b.againstId ? String(b.againstId) : '',
+        amount: String(b.amount),
       })),
-    );
+    }));
+    setEditing(v);
+    setDate(date);
+    setNarration(narration);
+    setTxnTypeId(txnTypeId);
+    setTxnSubtypeId(txnSubtypeId);
+    setLines(ls);
+    rebaseline({ date, narration, txnTypeId, txnSubtypeId, lines: ls });
     setMode(next);
   };
 
@@ -443,13 +505,7 @@ export function VoucherScreen({
         icon={<Icon className="h-5 w-5" />}
         actions={
           <div className="flex items-center gap-2">
-            <button
-              className="btn-secondary"
-              onClick={() => {
-                setMode('list');
-                setEditing(null);
-              }}
-            >
+            <button className="btn-secondary" onClick={() => void leaveForm()}>
               <ArrowLeft className="mr-1 inline h-4 w-4" />
               Back
             </button>
