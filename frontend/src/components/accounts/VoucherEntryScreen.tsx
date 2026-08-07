@@ -175,6 +175,13 @@ const CHEQUE_KINDS = [
   { value: 'PDC', label: 'Post-dated (PDC)' },
 ];
 
+/** Written out, because Tailwind reads the class names rather than the number. */
+const INSTRUMENT_COLUMNS: Record<number, string> = {
+  4: 'xl:grid-cols-4',
+  5: 'xl:grid-cols-5',
+  6: 'xl:grid-cols-6',
+};
+
 const EMPTY_INSTRUMENT: DraftInstrument = {
   modeValueId: '',
   bankAccountId: '',
@@ -1337,7 +1344,19 @@ export function VoucherEntryScreen({
               because it is a different kind of fact from the entry: the lines
               say what the payment DID, this says what carried it. */}
           {askInstrument && (
-            <div className="card mt-3 grid grid-cols-1 gap-4 p-4 sm:grid-cols-3 xl:grid-cols-5">
+            <div
+              className={cn(
+                'card mt-3 grid grid-cols-1 gap-4 p-4 sm:grid-cols-3',
+                // As many columns as there are fields, so the block is one row
+                // wherever there is room for one. How many there are depends on
+                // the mode and the kind — a transfer asks four questions, a
+                // cheque taken in asks six — and a fixed count would leave one
+                // field stranded on a line of its own.
+                INSTRUMENT_COLUMNS[
+                  4 + (isCheque ? 1 : 0) + (takesIssuer && isCheque ? 1 : 0)
+                ],
+              )}
+            >
               <Select
                 label="Mode"
                 required
