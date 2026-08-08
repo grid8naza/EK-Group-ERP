@@ -792,7 +792,13 @@ export default function ProductsPage() {
                 Declared, not inferred from a missing recipe, and it governs
                 the two BOM capabilities below: resale stock is bought
                 ready-made, so choosing Purchased clears and locks them. */}
-            <div className="flex flex-col gap-1 sm:col-start-1">
+            {/* Pinned to the left column only while the picture is there to
+                hold the right one. A product that is not sold has no picture,
+                and pinning then walks the fields down one side of the drawer
+                with a hole beside each of them. */}
+            <div
+              className={`flex flex-col gap-1 ${form.canSell ? 'sm:col-start-1' : ''}`}
+            >
               <Select
                 id="pf-source"
                 advanceToId="pf-name"
@@ -831,7 +837,7 @@ export default function ProductsPage() {
               id="pf-name"
               onKeyDown={enterTo(editing ? 'pf-unit' : 'pf-parent')}
               className="font-semibold"
-              wrapClassName="sm:col-start-1"
+              wrapClassName={form.canSell ? 'sm:col-start-1' : undefined}
             />
 
             {/* Product picture — only for sellable products. */}
@@ -1076,8 +1082,12 @@ export default function ProductsPage() {
             {/* Pack content — how the stock is boxed, so it follows the unit.
                 Off by default and hidden with it: plenty of products are never
                 handled by the box. Not gated by Can Sell either way — it is how
-                the product is handled, whether or not it is sold. */}
-            <div className="sm:col-span-2">
+                the product is handled, whether or not it is sold.
+                Sits BESIDE the unit rather than on its own row: it is one
+                checkbox and it reads off the unit, so a full row of its own
+                only put a hole to the right of Unit. Bottom-aligned so it lines
+                up with the select, which carries a label above it. */}
+            <div className="flex items-end pb-2.5">
               <Checkbox
                 label="Box packing applicable"
                 checked={form.boxApplicable}
