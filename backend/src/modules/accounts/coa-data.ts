@@ -428,7 +428,7 @@ export const COA_ADOPTIONS: Record<string, string[]> = {
   "12010": ["MFG", "TRD", "RTL"],
   "12011": ["MFG", "TRD", "RTL"],
   "13001": ["MFG", "TRD", "RTL"],
-  "13002": ["MFG", "TRD"],
+  "13002": ["MFG", "TRD", "RTL"],
   "13003": ["RTL"],
   "13004": ["RTL"],
   "13005": ["RTL"],
