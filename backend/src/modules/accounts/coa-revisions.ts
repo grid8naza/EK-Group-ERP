@@ -71,6 +71,16 @@ export const COA_ACCOUNT_RENAMES: CoaRename[] = [
     from: 'Outstanding and Accrued Expenses',
     to: 'Security Deposits Received',
   },
+  // Raw material was shipped split three ways — bulk, dairy, flavours — which is
+  // a STORE's classification, not a ledger's: what a sack of flour and a drum of
+  // shortening have in common at the trial balance is that both are raw
+  // material, and which is which the item master already answers. The other two
+  // are withdrawn below and this one carries the block.
+  {
+    code: '12001',
+    from: 'Raw Materials - Flour, Sugar and Bulk',
+    to: 'Raw Materials',
+  },
 ];
 
 /**
@@ -94,6 +104,9 @@ export const COA_RETIRED_ACCOUNTS: { code: string; was: string }[] = [
   // Withdrawn as a code, not as a heading: 23002 above now carries it.
   { code: '23007', was: 'Security Deposits Received' },
   { code: '23008', was: 'Other Statutory Dues Payable' },
+  // Both fold into 12001 Raw Materials, renamed above.
+  { code: '12002', was: 'Raw Materials - Dairy, Fats and Perishables' },
+  { code: '12003', was: 'Raw Materials - Flavours, Additives and Ingredients' },
 ];
 
 /**
@@ -122,7 +135,7 @@ export const COA_RETIRED_ACCOUNTS: { code: string; was: string }[] = [
 const WAS_MANDATORY = [
   '10103', '10201', '10202', '10203', '10204', '10205', '10301', '10302',
   '10401', '10402', '10501', '12001', '12002', '12003', '12004', '12005',
-  '12006', '12007', '12008', '12009', '12010', '12011', '12012', '13003',
+  '12006', '12007', '12008', '12009', '12010', '13003',
   '13004', '13005', '14102', '14103', '14104', '17004', '23004', '25001',
   '26003', '30001', '30002', '30003', '30004', '30005', '30006', '30007',
   '30008', '31001', '31002', '31003', '31004', '32001', '32002', '32003',
@@ -139,7 +152,7 @@ const WAS_MANDATORY = [
 
 const WAS_OPTIONAL = [
   '10102', '10303', '10502', '10601', '10602', '10603', '10604', '10605',
-  '12013', '13001', '13002', '13006', '14101', '14201', '14202', '15001',
+  '12011', '13001', '13002', '13006', '14101', '14201', '14202', '15001',
   '15002', '15003', '15005', '15006', '23001', '23002', '23003', '25009',
   '26001', '26002', '22002', '27002', '29001',
 ];
@@ -414,6 +427,25 @@ export const COA_RECODED_ACCOUNTS: {
   { from: '68001', to: '58001', name: 'Income Tax Expense - Current' },
   { from: '68002', to: '58002', name: 'Deferred Tax Expense' },
   { from: '68003', to: '58003', name: 'Prior Period Adjustments' },
+
+  // ---- inventories, closing the hole the two raw material accounts left ----
+  //
+  // 12002 and 12003 are withdrawn above, so the block would read 12001, then
+  // jump to 12004. Everything from Packing Materials down comes up two, and the
+  // block reads 12001-12011 without a gap.
+  //
+  // ORDER MATTERS, ascending as always: 12004 can only take 12002 because the
+  // withdrawal ran first, and 12005 can only take 12003 for the same reason.
+  { from: '12004', to: '12002', name: 'Packing Materials' },
+  { from: '12005', to: '12003', name: 'Work in Progress' },
+  { from: '12006', to: '12004', name: 'Finished Goods - Bakery' },
+  { from: '12007', to: '12005', name: 'Finished Goods - Pastry and Cakes' },
+  { from: '12008', to: '12006', name: 'Finished Goods - Sweets and Savories' },
+  { from: '12009', to: '12007', name: 'Traded Goods - Confectionery and Beverages' },
+  { from: '12010', to: '12008', name: 'Consumables and Stores' },
+  { from: '12011', to: '12009', name: 'Mess and Canteen Provisions' },
+  { from: '12012', to: '12010', name: 'Goods in Transit - Intercompany' },
+  { from: '12013', to: '12011', name: 'Stock Valuation Adjustment' },
 ];
 
 /**
