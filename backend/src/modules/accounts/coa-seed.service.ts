@@ -58,6 +58,11 @@ export const ccDefaultsOf = (rule: CcRequirement) => ({
  * edited before its revision entry is written, which is exactly how a chart
  * change gets made — and it is the difference between a boot that waits and a
  * boot that quietly doubles the block.
+ *
+ * `existing` must be the codes the database held BEFORE this seed run, not a
+ * set the run is still adding to. A row the seed has just created cannot be one
+ * a revision is waiting to move, and treating it as one skips a code that is
+ * genuinely missing.
  */
 const awaitingRecode = (
   recodes: readonly { from: string; to: string }[],
@@ -584,10 +589,24 @@ export class CoaSeedService implements OnApplicationBootstrap {
         await this.prisma.accountGroup.findMany({ select: { id: true, code: true } })
       ).map((g) => [g.code, g.id]),
     );
+    // The codes this database ALREADY held, frozen before anything is created.
+    //
+    // `existing` has to keep growing through the loop, because a child group
+    // looks its parent's id up in it — but awaitingRecode must not see those
+    // additions. Only a group that was here BEFORE the seed can be one a
+    // revision is about to move; a group this very loop just created cannot be.
+    //
+    // Reading the growing map instead lost whole blocks on a fresh database:
+    // the loop runs in ascending code order, so it created 22000, then reached
+    // 25000, found the recode 22000 -> 25000 with 22000 now "present", and
+    // skipped 25000 as a code still to be vacated. Same for 27000 -> 28000.
+    // Employee Related Liabilities and Intercompany Payable were never created,
+    // and the twenty-nine accounts under them were skipped after them.
+    const before = new Set(existing.keys());
     let created = 0;
     for (const g of [...COA_GROUPS].sort((a, b) => a.code.localeCompare(b.code))) {
       if (existing.has(g.code)) continue;
-      if (awaitingRecode(COA_RECODED_GROUPS, g.code, existing)) continue;
+      if (awaitingRecode(COA_RECODED_GROUPS, g.code, before)) continue;
       const parentId = g.parentCode ? (existing.get(g.parentCode) ?? null) : null;
       if (g.parentCode && parentId == null) {
         // Cannot happen with the shipped data (the converter checks it), but a
