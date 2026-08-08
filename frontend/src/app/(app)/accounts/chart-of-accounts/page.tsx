@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { ListTree } from 'lucide-react';
+import { ListTree, Search, X } from 'lucide-react';
 import { useFetch } from '@/lib/hooks';
 import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
@@ -65,6 +65,18 @@ const COST_OPTIONS = [
 ];
 
 const costAnalysis = (a: CoaAccount) => COST_LABEL[costKey(a)];
+
+/**
+ * The Used Here column, asked as a question.
+ *
+ * Only worth asking of the whole master: on "accounts this company uses" every
+ * row already answers Yes, so the filter would be a control with one useful
+ * setting and one that empties the page.
+ */
+const USED_OPTIONS = [
+  { value: 'yes', label: 'Used here' },
+  { value: 'no', label: 'Not used here' },
+];
 
 /** Blank on a group row — a heading has no nature of its own to state twice. */
 const ALL_COLUMNS: ReportColumn<ChartRow>[] = [
@@ -143,6 +155,13 @@ export default function ChartOfAccountsReportPage() {
   const [groupId, setGroupId] = useState(''); // '' = every group in scope
   // What a line to the account is asked for — '' = don't ask.
   const [cost, setCost] = useState(''); // '' | 'OBJECT' | 'CENTRE' | 'NONE'
+  // Adopted or not, asked only of the whole master. '' = either.
+  const [used, setUsed] = useState(''); // '' | 'yes' | 'no'
+  // Typed, and the term actually applied. Held apart so a half-typed word does
+  // not rewrite the report — and the printed subtitle names what was searched,
+  // which a live box would change under the reader mid-keystroke.
+  const [draft, setDraft] = useState('');
+  const [search, setSearch] = useState('');
 
   const { hidden, toggle, selected } = useReportColumns(ROUTE, ALL_COLUMNS);
   const companyName = resolveCompanyName(
@@ -151,14 +170,25 @@ export default function ChartOfAccountsReportPage() {
     activeCompany?.name,
   );
 
-  const rows = useMemo(
-    () =>
-      (accounts ?? []).filter(
-        (a) =>
-          (scope === 'all' || a.adopted) && (!cost || costKey(a) === cost),
-      ),
-    [accounts, scope, cost],
-  );
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return (accounts ?? []).filter((a) => {
+      if (scope !== 'all' && !a.adopted) return false;
+      if (cost && costKey(a) !== cost) return false;
+      // Only the whole master can hold a row that answers No, so the filter is
+      // ignored outright on the adopted scope rather than emptying the page.
+      if (scope === 'all' && used && (used === 'yes') !== !!a.adopted) return false;
+      // Code and name together, so "12001" and "raw mat" both land — and the
+      // local name where the company has given the account one, since that is
+      // what the reader is looking at in the column.
+      if (
+        q &&
+        !`${a.code} ${a.localName ?? ''} ${a.name}`.toLowerCase().includes(q)
+      )
+        return false;
+      return true;
+    });
+  }, [accounts, scope, cost, used, search]);
 
   // The schedules a filter can pick from — those of the chosen primary group,
   // or all nine.
@@ -299,6 +329,10 @@ export default function ChartOfAccountsReportPage() {
     // Worth naming on the printed page: "44 accounts" with the cost filter on
     // is a different statement from "44 accounts".
     cost ? `Asks for: ${COST_OPTIONS.find((o) => o.value === cost)?.label}` : null,
+    scope === 'all' && used
+      ? USED_OPTIONS.find((o) => o.value === used)?.label
+      : null,
+    search.trim() ? `Search: ${search.trim()}` : null,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -360,15 +394,23 @@ export default function ChartOfAccountsReportPage() {
       />
 
       <div className="card flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-4 dark:border-slate-800">
+        {/* One line, and it stays one line: every control shrinks (min-w-0 with
+            a shared basis) rather than the row wrapping or running past the
+            card. The dropdowns render in a portal, so narrowing the trigger
+            costs the menu nothing. */}
+        <div className="flex items-center gap-2 border-b border-slate-200 p-4 dark:border-slate-800">
           <Select
             value={scope}
-            onChange={(e) => setScope(e.target.value)}
+            onChange={(e) => {
+              setScope(e.target.value);
+              // Nothing to ask once the scope is what the company uses.
+              if (e.target.value !== 'all') setUsed('');
+            }}
             options={[
               { value: 'adopted', label: 'Accounts this company uses' },
               { value: 'all', label: 'The whole master' },
             ]}
-            className="w-60"
+            wrapClassName="min-w-0 flex-[1.4] basis-0"
           />
           <Select
             value={primary}
@@ -381,7 +423,7 @@ export default function ChartOfAccountsReportPage() {
             }}
             options={PRIMARY_GROUPS.map((p) => ({ value: p.key, label: p.label }))}
             placeholder="All primary groups"
-            className="w-44"
+            wrapClassName="min-w-0 flex-1 basis-0"
           />
           <Select
             value={main}
@@ -391,14 +433,14 @@ export default function ChartOfAccountsReportPage() {
             }}
             options={mainOptions}
             placeholder="All main groups"
-            className="w-52"
+            wrapClassName="min-w-0 flex-1 basis-0"
           />
           <Select
             value={groupId}
             onChange={(e) => setGroupId(e.target.value)}
             options={groupOptions}
             placeholder="All groups"
-            className="w-60"
+            wrapClassName="min-w-0 flex-1 basis-0"
           />
           {/* The Cost Analysis column, asked as a question: which accounts make
               an entry name a division, which go down to the department, and
@@ -408,18 +450,67 @@ export default function ChartOfAccountsReportPage() {
             onChange={(e) => setCost(e.target.value)}
             options={COST_OPTIONS}
             placeholder="Any cost analysis"
-            className="w-48"
+            wrapClassName="min-w-0 flex-1 basis-0"
           />
-          <div className="ml-auto flex items-center gap-2">
+          {/* The Used Here column, asked as a question — of the master only. */}
+          {scope === 'all' && (
+            <Select
+              value={used}
+              onChange={(e) => setUsed(e.target.value)}
+              options={USED_OPTIONS}
+              placeholder="Used or not"
+              wrapClassName="min-w-0 flex-1 basis-0"
+            />
+          )}
+          <div className="relative min-w-0 flex-1 basis-0">
+            <input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              // Enter is what a reader reaches for in a search box; the button
+              // beside it is the same action for a reader who does not.
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  setSearch(draft);
+                } else if (e.key === 'Escape' && (draft || search)) {
+                  setDraft('');
+                  setSearch('');
+                }
+              }}
+              placeholder="Code or account"
+              aria-label="Search the chart by code or account name"
+              className="input-base w-full pr-8"
+            />
+            {(draft || search) && (
+              <button
+                type="button"
+                title="Clear the search"
+                aria-label="Clear the search"
+                onClick={() => {
+                  setDraft('');
+                  setSearch('');
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          <button
+            type="button"
+            title="Search"
+            aria-label="Search"
+            onClick={() => setSearch(draft)}
+            className="btn-secondary flex-none px-2.5"
+          >
+            <Search className="h-4 w-4" />
+          </button>
+          <div className="flex-none">
             <ColumnToggle
               columns={ALL_COLUMNS.map((c) => ({ key: c.key, label: c.header }))}
               hidden={hidden}
               onToggle={toggle}
             />
-            <span className="text-sm text-slate-500 dark:text-slate-400">
-              {shown} account{shown === 1 ? '' : 's'} in {blockCount} group
-              {blockCount === 1 ? '' : 's'}
-            </span>
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
@@ -429,6 +520,16 @@ export default function ChartOfAccountsReportPage() {
             blocks={blocks}
             loading={loading}
             darkCol={selected.darkCol}
+            // What the page is holding, on the fold row rather than up in the
+            // filter bar — that line is full of controls, and this is an answer
+            // rather than another question.
+            toolbarNote={
+              <>
+                {shown} account{shown === 1 ? '' : 's'} in {blockCount} group
+                {blockCount === 1 ? '' : 's'}
+                {filterNote ? ` · ${filterNote}` : ''}
+              </>
+            }
             // Thirty-six blocks over four sections is more than fits on a
             // screen, so the reader can fold away what they are not looking at.
             collapsible

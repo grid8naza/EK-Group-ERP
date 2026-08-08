@@ -84,6 +84,15 @@ interface ReportViewProps {
   subHeaders?: (string | undefined)[];
   emptyText?: string;
   /**
+   * A line about the report itself — how much is on the page, what it was
+   * narrowed to — shown on the fold row above the first block.
+   *
+   * It belongs here rather than in the caller's filter bar: it describes the
+   * RESULT, not the query, and a filter bar wide enough to hold it as well is a
+   * filter bar that wraps.
+   */
+  toolbarNote?: React.ReactNode;
+  /**
    * Let the reader fold a section (block heading) or one of its tables
    * (sub-heading) away. On-screen only — an export always carries everything,
    * since a printed report the reader cannot unfold is just an incomplete one.
@@ -177,6 +186,7 @@ export function ReportView({
   groups,
   subHeaders,
   emptyText = 'No records found.',
+  toolbarNote,
   collapsible = false,
 }: ReportViewProps) {
   const total = blocks.reduce(
@@ -356,23 +366,30 @@ export function ReportView({
 
   return (
     <div className="pt-4">
-      {collapsible && topKeys.length > 0 && (
-        <div className="mb-1 flex justify-end gap-3 text-xs">
-          <button
-            type="button"
-            onClick={() => foldAll(topKeys, false)}
-            className="text-slate-500 hover:text-brand-600 dark:text-slate-400"
-          >
-            Expand all
-          </button>
-          <span className="text-slate-300 dark:text-slate-700">|</span>
-          <button
-            type="button"
-            onClick={() => foldAll(topKeys, true)}
-            className="text-slate-500 hover:text-brand-600 dark:text-slate-400"
-          >
-            Collapse all
-          </button>
+      {(toolbarNote || (collapsible && topKeys.length > 0)) && (
+        <div className="mb-1 flex items-center justify-between gap-3 text-xs">
+          <span className="min-w-0 truncate text-slate-500 dark:text-slate-400">
+            {toolbarNote}
+          </span>
+          {collapsible && topKeys.length > 0 && (
+            <span className="flex flex-none items-center gap-3">
+              <button
+                type="button"
+                onClick={() => foldAll(topKeys, false)}
+                className="text-slate-500 hover:text-brand-600 dark:text-slate-400"
+              >
+                Expand all
+              </button>
+              <span className="text-slate-300 dark:text-slate-700">|</span>
+              <button
+                type="button"
+                onClick={() => foldAll(topKeys, true)}
+                className="text-slate-500 hover:text-brand-600 dark:text-slate-400"
+              >
+                Collapse all
+              </button>
+            </span>
+          )}
         </div>
       )}
       {blocks.map((b, bi) => {
