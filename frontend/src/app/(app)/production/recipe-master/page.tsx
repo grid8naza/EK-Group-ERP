@@ -30,7 +30,7 @@ import type {
 const ROUTE = '/production/recipe-master';
 
 export default function RecipeMasterPage() {
-  const { can } = useAuth();
+  const { can, activeCompany, activeCompanyId } = useAuth();
   const toast = useToast();
   const router = useRouter();
   const { data, loading, refetch } = useFetch<Product[]>('/products');
@@ -86,6 +86,35 @@ export default function RecipeMasterPage() {
     }
   };
 
+  /**
+   * Does the ACTIVE company make this product?
+   *
+   * A recipe is how a thing is made, so it belongs to whoever makes it. A
+   * company that buys the product in — canProduce false on its own company row
+   * — has no business being offered the recipe: it never runs it, and the
+   * ingredients are bought and consumed in the company that does.
+   *
+   * Not a filter the user can turn off, deliberately. Which company is active
+   * is already the answer to "whose screen is this", and a switch that let a
+   * buy-and-sell company edit somebody else's recipe would be a way to get it
+   * wrong rather than a feature.
+   */
+  const weProduce = (p: Product) =>
+    !!p.companies?.some(
+      (c) => c.companyId === activeCompanyId && c.canProduce,
+    );
+
+  /**
+   * Empty because this company makes none of it, rather than because nothing
+   * exists or a filter is too narrow. Three different things, and a bare "no
+   * records" makes the first look like a fault.
+   */
+  const buysEverythingIn =
+    (data ?? []).some((p) => p.source === 'MANUFACTURED' && p.hasRecipe) &&
+    !(data ?? []).some(
+      (p) => p.source === 'MANUFACTURED' && p.hasRecipe && weProduce(p),
+    );
+
   const [categoryFilter, setCategoryFilter] = useState('');
   const [primaryFilter, setPrimaryFilter] = useState('');
   const [groupFilter, setGroupFilter] = useState('');
@@ -133,7 +162,7 @@ export default function RecipeMasterPage() {
     // purchased product cannot hold hasRecipe, and is kept as the explicit
     // statement of intent at the point of use.
     let rows = (data ?? []).filter(
-      (p) => p.source === 'MANUFACTURED' && p.hasRecipe,
+      (p) => p.source === 'MANUFACTURED' && p.hasRecipe && weProduce(p),
     );
     if (categoryFilter)
       rows = rows.filter((p) => String(p.categoryId) === categoryFilter);
@@ -209,6 +238,9 @@ export default function RecipeMasterPage() {
     (p) =>
       p.source === 'MANUFACTURED' &&
       p.hasRecipe &&
+      // Same rule as the listing: you cannot start a recipe for something this
+      // company does not make, or the row would vanish the moment it is saved.
+      weProduce(p) &&
       (!pickCategory || String(p.categoryId) === pickCategory) &&
       (!pickPrimaryPrefix ||
         groupById.get(p.groupId ?? -1)?.code.startsWith(pickPrimaryPrefix)) &&
@@ -371,7 +403,11 @@ export default function RecipeMasterPage() {
             onToggle={() => toggleLock(r)}
           />
         )}
-        emptyMessage="No products found — create products under Inventory → Product Master"
+        emptyMessage={
+          buysEverythingIn
+            ? `${activeCompany?.name ?? 'This company'} buys these in rather than making them — a recipe is kept in the company that runs it`
+            : 'No products found — create products under Inventory → Product Master'
+        }
       />
 
       <Drawer

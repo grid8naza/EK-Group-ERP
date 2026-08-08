@@ -13,27 +13,22 @@ import { LockButton } from '@/components/ui/LockButton';
 import { Drawer } from '@/components/ui/Drawer';
 import { Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import { PRODUCT_KINDS } from '@/lib/types';
 import type { Product, Category, Group } from '@/lib/types';
 
 const ROUTE = '/production/packing-master';
 
 export default function PackingMasterPage() {
-  const { can } = useAuth();
+  const { can, activeCompany, activeCompanyId } = useAuth();
   const toast = useToast();
   const router = useRouter();
   const { data, loading, refetch } = useFetch<Product[]>('/products');
   const { data: categories } = useFetch<Category[]>('/categories');
   const { data: groups } = useFetch<Group[]>('/groups');
 
-  const [categoryFilter, setCategoryFilter] = useState('');
   const [primaryFilter, setPrimaryFilter] = useState('');
   const [groupFilter, setGroupFilter] = useState('');
   const [packingFilter, setPackingFilter] = useState(''); // '' | 'with' | 'without'
 
-  const filterCategories = (categories ?? []).filter((c) =>
-    PRODUCT_KINDS.includes(c.kind),
-  );
   // A group serving a FINISHED category. Packing is a finished-goods step, so
   // those primaries are always offered; anything else has to earn its place by
   // actually holding a product this screen lists.
@@ -50,15 +45,35 @@ export default function PackingMasterPage() {
   // The group hierarchy is two filters, not one: primary (level 1) and the leaf
   // group a product attaches to. The leaf list is scoped by the chosen primary's
   // L1 code prefix (shared by its whole subtree).
-  const productGroups = (groups ?? []).filter(
-    (g) =>
-      g.forProduct &&
-      (!categoryFilter || g.categoryIds.includes(Number(categoryFilter))),
-  );
+  const productGroups = (groups ?? []).filter((g) => g.forProduct);
   const groupById = useMemo(
     () => new Map((groups ?? []).map((g) => [g.id, g])),
     [groups],
   );
+  /**
+   * Does the ACTIVE company pack this product?
+   *
+   * Packing is work, so it belongs to whoever does it. A company that buys the
+   * pack ready-made — canProduce false on its own company row — never runs the
+   * packing, and the material is bought and consumed where it is run.
+   *
+   * Mirrors Recipe Master, and for the same reason: which company is active
+   * already says whose screen this is, so it is a rule rather than a filter.
+   */
+  const wePack = (p: Product) =>
+    !!p.companies?.some((c) => c.companyId === activeCompanyId && c.canProduce);
+
+  /**
+   * Empty because this company packs none of it, rather than because nothing
+   * exists or a filter is too narrow. Three different things, and a bare "no
+   * records" makes the first look like a fault.
+   */
+  const buysEverythingIn =
+    (data ?? []).some((p) => p.source === 'MANUFACTURED' && p.hasPacking) &&
+    !(data ?? []).some(
+      (p) => p.source === 'MANUFACTURED' && p.hasPacking && wePack(p),
+    );
+
   // Which primaries the dropdown offers. FINISHED is always there — packing is a
   // finished-goods step, so it stands even before any product exists. Any other
   // primary (Semi Finished) appears only once it actually holds a product this
@@ -66,10 +81,10 @@ export default function PackingMasterPage() {
   const packableCodes = useMemo(
     () =>
       (data ?? [])
-        .filter((p) => p.source === 'MANUFACTURED' && p.hasPacking)
+        .filter((p) => p.source === 'MANUFACTURED' && p.hasPacking && wePack(p))
         .map((p) => groupById.get(p.groupId ?? -1)?.code)
         .filter((c): c is string => !!c),
-    [data, groupById],
+    [data, groupById, activeCompanyId],
   );
   const primaryGroups = productGroups.filter(
     (g) =>
@@ -104,10 +119,8 @@ export default function PackingMasterPage() {
     // redundant against the server rule that a purchased product cannot hold
     // hasPacking, and is kept as the explicit statement of intent.
     let rows = (data ?? []).filter(
-      (p) => p.source === 'MANUFACTURED' && p.hasPacking,
+      (p) => p.source === 'MANUFACTURED' && p.hasPacking && wePack(p),
     );
-    if (categoryFilter)
-      rows = rows.filter((p) => String(p.categoryId) === categoryFilter);
     // Primary = the whole subtree under it (matched on the code prefix of the
     // product's own leaf group); group = that exact leaf.
     if (primaryPrefix)
@@ -122,11 +135,11 @@ export default function PackingMasterPage() {
     return rows;
   }, [
     data,
-    categoryFilter,
     primaryPrefix,
     groupFilter,
     packingFilter,
     groupById,
+    activeCompanyId,
   ]);
 
   const canAdd = can(ROUTE, 'add');
@@ -156,16 +169,11 @@ export default function PackingMasterPage() {
   // "Add New Packing" — pick a packed product, then open the full-screen editor.
   // Products themselves are created under Inventory.
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickCategory, setPickCategory] = useState('');
   const [pickPrimary, setPickPrimary] = useState('');
   const [pickGroup, setPickGroup] = useState('');
   const [pickProduct, setPickProduct] = useState('');
   // Same two-level split (and same primary-option rule) as the toolbar.
-  const pickerGroupPool = (groups ?? []).filter(
-    (g) =>
-      g.forProduct &&
-      (!pickCategory || g.categoryIds.includes(Number(pickCategory))),
-  );
+  const pickerGroupPool = (groups ?? []).filter((g) => g.forProduct);
   const pickerPrimaries = pickerGroupPool.filter(
     (g) =>
       g.level === 1 &&
@@ -185,13 +193,14 @@ export default function PackingMasterPage() {
     (p) =>
       p.source === 'MANUFACTURED' &&
       p.hasPacking &&
-      (!pickCategory || String(p.categoryId) === pickCategory) &&
+      // Same rule as the listing: starting a packing BOM for something this
+      // company does not pack would create a row it cannot then see.
+      wePack(p) &&
       (!pickPrimaryPrefix ||
         groupById.get(p.groupId ?? -1)?.code.startsWith(pickPrimaryPrefix)) &&
       (!pickGroup || String(p.groupId) === pickGroup),
   );
   const openPicker = () => {
-    setPickCategory('');
     setPickPrimary('');
     setPickGroup('');
     setPickProduct('');
@@ -273,7 +282,7 @@ export default function PackingMasterPage() {
       <DataTable
         columns={columns}
         rows={visibleRows}
-        key={`${categoryFilter}|${primaryFilter}|${groupFilter}|${packingFilter}`}
+        key={`${primaryFilter}|${groupFilter}|${packingFilter}`}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
@@ -281,20 +290,10 @@ export default function PackingMasterPage() {
         searchPlaceholder="Search products..."
         toolbar={
           <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={categoryFilter}
-              onChange={(e) => {
-                setCategoryFilter(e.target.value);
-                setPrimaryFilter('');
-                setGroupFilter('');
-              }}
-              wrapClassName="w-44"
-              placeholder="All categories"
-              options={filterCategories.map((c) => ({
-                value: String(c.id),
-                label: c.name,
-              }))}
-            />
+            {/* No category filter: packing is a finished-goods step, so the
+                only category this screen can ever hold is Finished Products,
+                and a dropdown with one choice is a control that answers a
+                question nobody asked. */}
             <Select
               value={primaryFilter}
               onChange={(e) => {
@@ -345,7 +344,11 @@ export default function PackingMasterPage() {
             onToggle={() => toggleLock(r)}
           />
         )}
-        emptyMessage="No packed products found — mark a product “Packed” under Inventory → Products - Finished"
+        emptyMessage={
+          buysEverythingIn
+            ? `${activeCompany?.name ?? 'This company'} buys these in ready-packed — packing is kept in the company that runs it`
+            : 'No packed products found — mark a product “Packed” under Inventory → Products - Finished'
+        }
       />
 
       <Drawer
@@ -373,21 +376,8 @@ export default function PackingMasterPage() {
             &amp; costing). New products are created under Inventory → Products -
             Packed.
           </p>
-          <Select
-            label="Category"
-            value={pickCategory}
-            onChange={(e) => {
-              setPickCategory(e.target.value);
-              setPickPrimary('');
-              setPickGroup('');
-              setPickProduct('');
-            }}
-            placeholder="All categories"
-            options={filterCategories.map((c) => ({
-              value: String(c.id),
-              label: c.name,
-            }))}
-          />
+          {/* No category picker either, for the same reason the toolbar has
+              none: everything this screen can open is a finished product. */}
           <Select
             label="Primary Group"
             value={pickPrimary}
