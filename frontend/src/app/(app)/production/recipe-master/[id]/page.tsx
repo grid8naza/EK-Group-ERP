@@ -2000,27 +2000,28 @@ function CostLabelRow({
         }`}
       >
         {onInfo ? (
-          <span className="inline-flex items-center gap-1.5">
+          /* The WHOLE label opens the breakdown, not just the icon. The icon
+             alone was a 14px glyph in 2px of padding — an 18px target, under
+             any reasonable minimum, and easy to miss entirely.
+             A span rather than a button: this table sits inside the
+             ReadOnlyFieldset, which disables every control in it in view
+             mode — and the breakdown is worth reading there too. */
+          <span
+            role="button"
+            tabIndex={0}
+            title="Show the breakdown"
+            aria-label={`${label} — show the breakdown`}
+            onClick={onInfo}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onInfo();
+              }
+            }}
+            className="-my-1 inline-flex cursor-pointer items-center gap-1.5 rounded py-1 transition hover:text-brand-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:hover:text-brand-400"
+          >
             <span>{label}</span>
-            {/* A span rather than a button: this table sits inside the
-                ReadOnlyFieldset, which disables every control in it in view
-                mode — and the breakdown is worth reading there too. */}
-            <span
-              role="button"
-              tabIndex={0}
-              title="Show the breakdown"
-              aria-label={`${label} — show the breakdown`}
-              onClick={onInfo}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  onInfo();
-                }
-              }}
-              className="cursor-pointer rounded-full p-0.5 text-slate-400 transition hover:bg-slate-200 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-200"
-            >
-              <Info className="h-3.5 w-3.5" />
-            </span>
+            <Info className="h-4 w-4 flex-none text-slate-400" />
           </span>
         ) : (
           label
