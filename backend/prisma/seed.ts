@@ -157,23 +157,42 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
-  // Two demo companies with different module sets.
+  // The three EK Group companies, with different module sets.
+  //
+  // ORDER MATTERS: they are created EK001, EK002, EK003 so their ids come out
+  // 1, 2, 3. Master data that ships with the application names companies by id
+  // — the inventory classification tree does (see
+  // modules/category/inventory-tree-data.ts), and the Chart of Accounts maps
+  // MFG/RTL/TRD onto these same three codes. Seeding a different company first
+  // would hand id 1 to the wrong company and scope that master data to it,
+  // silently: companyId is a plain cross-domain id, so nothing would object.
   // -------------------------------------------------------------------------
-  const acme = await seedCompany({
-    code: 'ACME',
-    name: 'Acme Industries',
-    legalName: 'Acme Industries Private Limited',
+  const ek001 = await seedCompany({
+    code: 'EK001',
+    name: 'EK Food Products',
+    legalName: 'Edakkattukudiyil Regency Food Products Private Limited',
     city: 'Kochi',
-    enabledModules: ['CPANEL', 'CRM', 'ACCOUNTS', 'PRODUCTION'],
+    enabledModules: ['CPANEL', 'CRM', 'ACCOUNTS', 'INVENTORY', 'HR', 'PRODUCTION'],
     author: 'Pavani',
   });
-  const globex = await seedCompany({
-    code: 'GLOBEX',
-    name: 'Globex Corporation',
-    legalName: 'Globex Corporation Private Limited',
-    city: 'Bengaluru',
-    enabledModules: ['CPANEL', 'CRM'],
+  const ek002 = await seedCompany({
+    code: 'EK002',
+    name: 'EK Bake House',
+    legalName: 'Edakkattukudiyil Regency Bake House Private Limited',
+    city: 'Muvattupuzha',
+    enabledModules: ['CPANEL', 'CRM', 'ACCOUNTS', 'INVENTORY', 'HR', 'PRODUCTION'],
     author: 'Vismaya',
+  });
+  // The trading company: it buys and resells rather than manufacturing, which
+  // is why Production is off here and why the Chart of Accounts gives TRD no
+  // raw-material or work-in-progress inventory accounts.
+  const ek003 = await seedCompany({
+    code: 'EK003',
+    name: 'Regency Bakers',
+    legalName: 'Regency Bakers & Confectionaries',
+    city: 'Kochi',
+    enabledModules: ['CPANEL', 'CRM', 'ACCOUNTS', 'INVENTORY', 'HR'],
+    author: 'Pavani',
   });
 
   // -------------------------------------------------------------------------
@@ -197,8 +216,9 @@ async function main() {
       defaultModuleId: modules['CPANEL'],
       companies: {
         create: [
-          { companyId: acme.company.id, isDefault: true },
-          { companyId: globex.company.id },
+          { companyId: ek001.company.id, isDefault: true },
+          { companyId: ek002.company.id },
+          { companyId: ek003.company.id },
         ],
       },
     },
@@ -206,7 +226,7 @@ async function main() {
   void admin;
 
   // -------------------------------------------------------------------------
-  // Regular user — Administrators in Acme, CRM Team in Globex. Demonstrates a
+  // Regular user — Administrators in EK001, CRM Team in EK002. Demonstrates a
   // user whose group / rights vary by company.
   // -------------------------------------------------------------------------
   const johnHash = await bcrypt.hash('User@123', 10);
@@ -224,29 +244,29 @@ async function main() {
       defaultModuleId: modules['CPANEL'],
       companies: {
         create: [
-          // Per-company default module: Cpanel in Acme, CRM in Globex.
+          // Per-company default module: Cpanel in EK001, CRM in EK002.
           {
-            companyId: acme.company.id,
+            companyId: ek001.company.id,
             isDefault: true,
             defaultModuleId: modules['CPANEL'],
           },
-          { companyId: globex.company.id, defaultModuleId: modules['CRM'] },
+          { companyId: ek002.company.id, defaultModuleId: modules['CRM'] },
         ],
       },
       groupAssignments: {
         create: [
-          { userGroupId: acme.adminGroup.id },
-          ...(globex.crmGroup ? [{ userGroupId: globex.crmGroup.id }] : []),
+          { userGroupId: ek001.adminGroup.id },
+          ...(ek002.crmGroup ? [{ userGroupId: ek002.crmGroup.id }] : []),
         ],
       },
       // Per-company module assignment (always a subset of the modules the
-      // user's groups manage). In Acme (Administrators -> all modules) give
-      // Cpanel + CRM but not Accounts. In Globex (CRM Team -> CRM only) give CRM.
+      // user's groups manage). In EK001 (Administrators -> all modules) give
+      // Cpanel + CRM but not Accounts. In EK002 (CRM Team -> CRM only) give CRM.
       modules: {
         create: [
-          { companyId: acme.company.id, moduleId: modules['CPANEL'] },
-          { companyId: acme.company.id, moduleId: modules['CRM'] },
-          { companyId: globex.company.id, moduleId: modules['CRM'] },
+          { companyId: ek001.company.id, moduleId: modules['CPANEL'] },
+          { companyId: ek001.company.id, moduleId: modules['CRM'] },
+          { companyId: ek002.company.id, moduleId: modules['CRM'] },
         ],
       },
     },
