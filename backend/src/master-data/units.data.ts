@@ -79,6 +79,7 @@ export const HSN_CODES: SeedHsn[] = [
   { code: "1905", description: "Bread (branded & unbranded)", cgst: 0, sgst: 0, igst: 0, cess: 0, isActive: true },
   { code: "190520", description: "Rusk, toasted bread & similar toasted products", cgst: 2.5, sgst: 2.5, igst: 5, cess: 0, isActive: true },
   { code: "190590", description: "Pastry, cakes, biscuits & other bakers’ wares", cgst: 9, sgst: 9, igst: 18, cess: 0, isActive: true },
+  { code: "19059030", description: "Savoury baked snacks (puffs, rolls & similar)", cgst: 2.5, sgst: 2.5, igst: 5, cess: 0, isActive: true },
   { code: "2007", description: "Jam, fruit jelly & marmalade", cgst: 2.5, sgst: 2.5, igst: 5, cess: 0, isActive: true },
   { code: "2102", description: "Yeast & prepared baking powders", cgst: 2.5, sgst: 2.5, igst: 5, cess: 0, isActive: true },
   { code: "2105", description: "Ice cream & other edible ice", cgst: 2.5, sgst: 2.5, igst: 5, cess: 0, isActive: true },
