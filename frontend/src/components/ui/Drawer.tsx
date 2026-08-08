@@ -171,8 +171,19 @@ export function Drawer({
           style={{ right: PANEL_OFFSET[width] }}
           onClick={() => void dismiss()}
         >
+          {/* Clickable only while the drawer is OPEN. The root turns pointer
+              events off when closed, but this card used to switch them back on
+              for itself unconditionally — so a shut drawer left an invisible,
+              full-height, 28rem-wide block at z-50 over the page, swallowing
+              every click that landed on it. Invisible because the wrapper is
+              opacity-0, and only above `lg`, where the aside is not display:
+              none — which is why the page came right the moment a devtools
+              panel narrowed the window. */}
           <div
-            className="pointer-events-auto max-h-full w-full max-w-md overflow-y-auto"
+            className={cn(
+              'max-h-full w-full max-w-md overflow-y-auto',
+              open ? 'pointer-events-auto' : 'pointer-events-none',
+            )}
             onClick={(e) => e.stopPropagation()}
           >
             {aside}
