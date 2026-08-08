@@ -1,5 +1,5 @@
 /**
- * Recipes — the bill of materials and the process flow behind every product that is made rather than bought. Quantities and times are PER BATCH; the product's yieldQty says what that batch produces.
+ * Recipes and packing — the bill of materials and the process flow behind every product that is made or packed rather than bought. A line kind says which BOM it belongs to: RECIPE for the ingredients, PACKING for the wrapper, label and carton. Quantities and times are PER BATCH; the yieldQty on the product says what that batch produces.
  *
  * Captured from the database this was first built in, so a new one comes up
  * with the same masters instead of an empty screen. The seeder beside this
@@ -456,6 +456,40 @@ export const RECIPES: SeedRecipe[] = [
     ],
   },
   {
+    productCode: "04010100000000003",
+    bom: [
+      { itemCode: "02140000000000001", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000004", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000001", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000002", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02160000000000004", kind: "PACKING", quantity: 20.8333, unitCode: "NOS" },
+      { itemCode: "02170000000000003", kind: "PACKING", quantity: 0.5208, unitCode: "NOS" },
+    ],
+    processes: [
+      { name: "Weighing & Portioning", description: null, timeValue: 60, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Filling & Sealing", description: null, timeValue: 90, timeUnit: "MIN", machineCode: "01010500000000002", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }, { designationCode: "01010000000000002", workerCount: 1 }] },
+      { name: "Labelling & Coding", description: null, timeValue: 45, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Cartoning", description: null, timeValue: 30, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
+    ],
+  },
+  {
+    productCode: "04010100000000004",
+    bom: [
+      { itemCode: "02140000000000001", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000004", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000001", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000002", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02160000000000004", kind: "PACKING", quantity: 20.8333, unitCode: "NOS" },
+      { itemCode: "02170000000000003", kind: "PACKING", quantity: 0.5208, unitCode: "NOS" },
+    ],
+    processes: [
+      { name: "Weighing & Portioning", description: null, timeValue: 60, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Filling & Sealing", description: null, timeValue: 90, timeUnit: "MIN", machineCode: "01010500000000002", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }, { designationCode: "01010000000000002", workerCount: 1 }] },
+      { name: "Labelling & Coding", description: null, timeValue: 45, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Cartoning", description: null, timeValue: 30, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
+    ],
+  },
+  {
     productCode: "04010200000000001",
     bom: [
       { itemCode: "01040300000000001", kind: "RECIPE", quantity: 20, unitCode: "KG" },
@@ -498,6 +532,40 @@ export const RECIPES: SeedRecipe[] = [
     ],
   },
   {
+    productCode: "04010200000000003",
+    bom: [
+      { itemCode: "02140000000000002", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000004", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000001", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000002", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02160000000000004", kind: "PACKING", quantity: 20.8333, unitCode: "NOS" },
+      { itemCode: "02170000000000003", kind: "PACKING", quantity: 0.5208, unitCode: "NOS" },
+    ],
+    processes: [
+      { name: "Weighing & Portioning", description: null, timeValue: 60, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Filling & Sealing", description: null, timeValue: 90, timeUnit: "MIN", machineCode: "01010500000000002", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }, { designationCode: "01010000000000002", workerCount: 1 }] },
+      { name: "Labelling & Coding", description: null, timeValue: 45, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Cartoning", description: null, timeValue: 30, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
+    ],
+  },
+  {
+    productCode: "04010200000000004",
+    bom: [
+      { itemCode: "02140000000000005", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000004", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000001", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000002", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02160000000000004", kind: "PACKING", quantity: 20.8333, unitCode: "NOS" },
+      { itemCode: "02170000000000003", kind: "PACKING", quantity: 0.5208, unitCode: "NOS" },
+    ],
+    processes: [
+      { name: "Weighing & Portioning", description: null, timeValue: 60, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Filling & Sealing", description: null, timeValue: 90, timeUnit: "MIN", machineCode: "01010500000000002", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }, { designationCode: "01010000000000002", workerCount: 1 }] },
+      { name: "Labelling & Coding", description: null, timeValue: 45, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Cartoning", description: null, timeValue: 30, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
+    ],
+  },
+  {
     productCode: "04010300000000001",
     bom: [
       { itemCode: "01040300000000001", kind: "RECIPE", quantity: 14, unitCode: "KG" },
@@ -515,6 +583,54 @@ export const RECIPES: SeedRecipe[] = [
       { name: "Cooling & Resting", description: null, timeValue: 60, timeUnit: "MIN", machineCode: "01010500000000005", manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
       { name: "Slicing", description: null, timeValue: 20, timeUnit: "MIN", machineCode: "01010400000000003", manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
       { name: "Toasting & Drying", description: null, timeValue: 90, timeUnit: "MIN", machineCode: "01010400000000005", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }] },
+    ],
+  },
+  {
+    productCode: "04010300000000002",
+    bom: [
+      { itemCode: "02140000000000003", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000001", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000002", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02160000000000004", kind: "PACKING", quantity: 20.8333, unitCode: "NOS" },
+      { itemCode: "02170000000000003", kind: "PACKING", quantity: 0.5208, unitCode: "NOS" },
+    ],
+    processes: [
+      { name: "Weighing & Portioning", description: null, timeValue: 60, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Filling & Sealing", description: null, timeValue: 90, timeUnit: "MIN", machineCode: "01010500000000002", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }, { designationCode: "01010000000000002", workerCount: 1 }] },
+      { name: "Labelling & Coding", description: null, timeValue: 45, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Cartoning", description: null, timeValue: 30, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
+    ],
+  },
+  {
+    productCode: "04010300000000003",
+    bom: [
+      { itemCode: "02140000000000006", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000001", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000002", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02160000000000004", kind: "PACKING", quantity: 20.8333, unitCode: "NOS" },
+      { itemCode: "02170000000000003", kind: "PACKING", quantity: 0.5208, unitCode: "NOS" },
+    ],
+    processes: [
+      { name: "Weighing & Portioning", description: null, timeValue: 60, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Filling & Sealing", description: null, timeValue: 90, timeUnit: "MIN", machineCode: "01010500000000002", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }, { designationCode: "01010000000000002", workerCount: 1 }] },
+      { name: "Labelling & Coding", description: null, timeValue: 45, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Cartoning", description: null, timeValue: 30, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
+    ],
+  },
+  {
+    productCode: "04010300000000004",
+    bom: [
+      { itemCode: "02140000000000007", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000001", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000002", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02160000000000004", kind: "PACKING", quantity: 20.8333, unitCode: "NOS" },
+      { itemCode: "02170000000000003", kind: "PACKING", quantity: 0.5208, unitCode: "NOS" },
+    ],
+    processes: [
+      { name: "Weighing & Portioning", description: null, timeValue: 60, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Filling & Sealing", description: null, timeValue: 90, timeUnit: "MIN", machineCode: "01010500000000002", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }, { designationCode: "01010000000000002", workerCount: 1 }] },
+      { name: "Labelling & Coding", description: null, timeValue: 45, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Cartoning", description: null, timeValue: 30, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
     ],
   },
   {
@@ -551,6 +667,38 @@ export const RECIPES: SeedRecipe[] = [
       { name: "Depositing", description: null, timeValue: 25, timeUnit: "MIN", machineCode: "01010200000000007", manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
       { name: "Baking", description: null, timeValue: 18, timeUnit: "MIN", machineCode: "01010400000000004", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }] },
       { name: "Cooling", description: null, timeValue: 30, timeUnit: "MIN", machineCode: "01010500000000005", manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
+    ],
+  },
+  {
+    productCode: "04010400000000003",
+    bom: [
+      { itemCode: "02140000000000004", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000001", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000002", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02160000000000004", kind: "PACKING", quantity: 20.8333, unitCode: "NOS" },
+      { itemCode: "02170000000000003", kind: "PACKING", quantity: 0.5208, unitCode: "NOS" },
+    ],
+    processes: [
+      { name: "Weighing & Portioning", description: null, timeValue: 60, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Filling & Sealing", description: null, timeValue: 90, timeUnit: "MIN", machineCode: "01010500000000002", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }, { designationCode: "01010000000000002", workerCount: 1 }] },
+      { name: "Labelling & Coding", description: null, timeValue: 45, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Cartoning", description: null, timeValue: 30, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
+    ],
+  },
+  {
+    productCode: "04010400000000004",
+    bom: [
+      { itemCode: "02140000000000008", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000001", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000002", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02160000000000004", kind: "PACKING", quantity: 20.8333, unitCode: "NOS" },
+      { itemCode: "02170000000000003", kind: "PACKING", quantity: 0.5208, unitCode: "NOS" },
+    ],
+    processes: [
+      { name: "Weighing & Portioning", description: null, timeValue: 60, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Filling & Sealing", description: null, timeValue: 90, timeUnit: "MIN", machineCode: "01010500000000002", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }, { designationCode: "01010000000000002", workerCount: 1 }] },
+      { name: "Labelling & Coding", description: null, timeValue: 45, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Cartoning", description: null, timeValue: 30, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
     ],
   },
   {
@@ -665,6 +813,57 @@ export const RECIPES: SeedRecipe[] = [
       { name: "Depositing", description: null, timeValue: 15, timeUnit: "MIN", machineCode: "01010200000000008", manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
       { name: "Baking", description: null, timeValue: 45, timeUnit: "MIN", machineCode: "01010400000000002", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }] },
       { name: "Cooling", description: null, timeValue: 60, timeUnit: "MIN", machineCode: "01010500000000001", manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
+    ],
+  },
+  {
+    productCode: "04020200000000002",
+    bom: [
+      { itemCode: "02140000000000009", kind: "PACKING", quantity: 300, unitCode: "NOS" },
+      { itemCode: "02130000000000001", kind: "PACKING", quantity: 300, unitCode: "NOS" },
+      { itemCode: "02170000000000001", kind: "PACKING", quantity: 300, unitCode: "NOS" },
+      { itemCode: "02170000000000002", kind: "PACKING", quantity: 300, unitCode: "NOS" },
+      { itemCode: "02160000000000004", kind: "PACKING", quantity: 12.5, unitCode: "NOS" },
+      { itemCode: "02170000000000003", kind: "PACKING", quantity: 0.3125, unitCode: "NOS" },
+    ],
+    processes: [
+      { name: "Weighing & Portioning", description: null, timeValue: 60, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Filling & Sealing", description: null, timeValue: 90, timeUnit: "MIN", machineCode: "01010500000000002", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }, { designationCode: "01010000000000002", workerCount: 1 }] },
+      { name: "Labelling & Coding", description: null, timeValue: 45, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Cartoning", description: null, timeValue: 30, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
+    ],
+  },
+  {
+    productCode: "04020200000000003",
+    bom: [
+      { itemCode: "02140000000000010", kind: "PACKING", quantity: 300, unitCode: "NOS" },
+      { itemCode: "02130000000000001", kind: "PACKING", quantity: 300, unitCode: "NOS" },
+      { itemCode: "02170000000000001", kind: "PACKING", quantity: 300, unitCode: "NOS" },
+      { itemCode: "02170000000000002", kind: "PACKING", quantity: 300, unitCode: "NOS" },
+      { itemCode: "02160000000000004", kind: "PACKING", quantity: 12.5, unitCode: "NOS" },
+      { itemCode: "02170000000000003", kind: "PACKING", quantity: 0.3125, unitCode: "NOS" },
+    ],
+    processes: [
+      { name: "Weighing & Portioning", description: null, timeValue: 60, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Filling & Sealing", description: null, timeValue: 90, timeUnit: "MIN", machineCode: "01010500000000002", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }, { designationCode: "01010000000000002", workerCount: 1 }] },
+      { name: "Labelling & Coding", description: null, timeValue: 45, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Cartoning", description: null, timeValue: 30, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
+    ],
+  },
+  {
+    productCode: "04020200000000004",
+    bom: [
+      { itemCode: "02140000000000011", kind: "PACKING", quantity: 300, unitCode: "NOS" },
+      { itemCode: "02130000000000001", kind: "PACKING", quantity: 300, unitCode: "NOS" },
+      { itemCode: "02170000000000001", kind: "PACKING", quantity: 300, unitCode: "NOS" },
+      { itemCode: "02170000000000002", kind: "PACKING", quantity: 300, unitCode: "NOS" },
+      { itemCode: "02160000000000004", kind: "PACKING", quantity: 12.5, unitCode: "NOS" },
+      { itemCode: "02170000000000003", kind: "PACKING", quantity: 0.3125, unitCode: "NOS" },
+    ],
+    processes: [
+      { name: "Weighing & Portioning", description: null, timeValue: 60, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Filling & Sealing", description: null, timeValue: 90, timeUnit: "MIN", machineCode: "01010500000000002", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }, { designationCode: "01010000000000002", workerCount: 1 }] },
+      { name: "Labelling & Coding", description: null, timeValue: 45, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Cartoning", description: null, timeValue: 30, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
     ],
   },
   {
@@ -901,6 +1100,54 @@ export const RECIPES: SeedRecipe[] = [
     ],
   },
   {
+    productCode: "04030200000000002",
+    bom: [
+      { itemCode: "02150000000000001", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000001", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000002", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02160000000000004", kind: "PACKING", quantity: 20.8333, unitCode: "NOS" },
+      { itemCode: "02170000000000003", kind: "PACKING", quantity: 0.5208, unitCode: "NOS" },
+    ],
+    processes: [
+      { name: "Weighing & Portioning", description: null, timeValue: 60, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Nitrogen Flush & Seal", description: null, timeValue: 100, timeUnit: "MIN", machineCode: "01010500000000003", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }, { designationCode: "01010000000000002", workerCount: 1 }] },
+      { name: "Labelling & Coding", description: null, timeValue: 45, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Cartoning", description: null, timeValue: 30, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
+    ],
+  },
+  {
+    productCode: "04030200000000003",
+    bom: [
+      { itemCode: "02150000000000005", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000001", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000002", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02160000000000004", kind: "PACKING", quantity: 20.8333, unitCode: "NOS" },
+      { itemCode: "02170000000000003", kind: "PACKING", quantity: 0.5208, unitCode: "NOS" },
+    ],
+    processes: [
+      { name: "Weighing & Portioning", description: null, timeValue: 60, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Nitrogen Flush & Seal", description: null, timeValue: 100, timeUnit: "MIN", machineCode: "01010500000000003", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }, { designationCode: "01010000000000002", workerCount: 1 }] },
+      { name: "Labelling & Coding", description: null, timeValue: 45, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Cartoning", description: null, timeValue: 30, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
+    ],
+  },
+  {
+    productCode: "04030200000000004",
+    bom: [
+      { itemCode: "02150000000000001", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000001", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000002", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02160000000000004", kind: "PACKING", quantity: 20.8333, unitCode: "NOS" },
+      { itemCode: "02170000000000003", kind: "PACKING", quantity: 0.5208, unitCode: "NOS" },
+    ],
+    processes: [
+      { name: "Weighing & Portioning", description: null, timeValue: 60, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Nitrogen Flush & Seal", description: null, timeValue: 100, timeUnit: "MIN", machineCode: "01010500000000003", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }, { designationCode: "01010000000000002", workerCount: 1 }] },
+      { name: "Labelling & Coding", description: null, timeValue: 45, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Cartoning", description: null, timeValue: 30, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
+    ],
+  },
+  {
     productCode: "04030300000000001",
     bom: [
       { itemCode: "01100300000000002", kind: "RECIPE", quantity: 12, unitCode: "KG" },
@@ -949,6 +1196,86 @@ export const RECIPES: SeedRecipe[] = [
       { name: "Ingredient Cooking", description: null, timeValue: 60, timeUnit: "MIN", machineCode: "01010700000000001", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }, { designationCode: "01010000000000002", workerCount: 1 }] },
       { name: "Shaping & Setting", description: null, timeValue: 40, timeUnit: "MIN", machineCode: "01010700000000003", manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
       { name: "Cooling", description: null, timeValue: 45, timeUnit: "MIN", machineCode: "01010700000000003", manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
+    ],
+  },
+  {
+    productCode: "04030300000000004",
+    bom: [
+      { itemCode: "02160000000000001", kind: "PACKING", quantity: 200, unitCode: "NOS" },
+      { itemCode: "02130000000000002", kind: "PACKING", quantity: 200, unitCode: "NOS" },
+      { itemCode: "02170000000000001", kind: "PACKING", quantity: 200, unitCode: "NOS" },
+      { itemCode: "02170000000000002", kind: "PACKING", quantity: 200, unitCode: "NOS" },
+      { itemCode: "02160000000000004", kind: "PACKING", quantity: 8.3333, unitCode: "NOS" },
+      { itemCode: "02170000000000003", kind: "PACKING", quantity: 0.2083, unitCode: "NOS" },
+    ],
+    processes: [
+      { name: "Portioning & Boxing", description: null, timeValue: 90, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Sealing & Labelling", description: null, timeValue: 45, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Cartoning", description: null, timeValue: 25, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
+    ],
+  },
+  {
+    productCode: "04030400000000001",
+    bom: [
+      { itemCode: "02150000000000002", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000001", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000002", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02160000000000004", kind: "PACKING", quantity: 20.8333, unitCode: "NOS" },
+      { itemCode: "02170000000000003", kind: "PACKING", quantity: 0.5208, unitCode: "NOS" },
+    ],
+    processes: [
+      { name: "Weighing & Portioning", description: null, timeValue: 60, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Nitrogen Flush & Seal", description: null, timeValue: 100, timeUnit: "MIN", machineCode: "01010500000000003", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }, { designationCode: "01010000000000002", workerCount: 1 }] },
+      { name: "Labelling & Coding", description: null, timeValue: 45, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Cartoning", description: null, timeValue: 30, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
+    ],
+  },
+  {
+    productCode: "04030400000000002",
+    bom: [
+      { itemCode: "02150000000000006", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000001", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000002", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02160000000000004", kind: "PACKING", quantity: 20.8333, unitCode: "NOS" },
+      { itemCode: "02170000000000003", kind: "PACKING", quantity: 0.5208, unitCode: "NOS" },
+    ],
+    processes: [
+      { name: "Weighing & Portioning", description: null, timeValue: 60, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Nitrogen Flush & Seal", description: null, timeValue: 100, timeUnit: "MIN", machineCode: "01010500000000003", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }, { designationCode: "01010000000000002", workerCount: 1 }] },
+      { name: "Labelling & Coding", description: null, timeValue: 45, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Cartoning", description: null, timeValue: 30, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
+    ],
+  },
+  {
+    productCode: "04030400000000003",
+    bom: [
+      { itemCode: "02150000000000003", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000001", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000002", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02160000000000004", kind: "PACKING", quantity: 20.8333, unitCode: "NOS" },
+      { itemCode: "02170000000000003", kind: "PACKING", quantity: 0.5208, unitCode: "NOS" },
+    ],
+    processes: [
+      { name: "Weighing & Portioning", description: null, timeValue: 60, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Nitrogen Flush & Seal", description: null, timeValue: 100, timeUnit: "MIN", machineCode: "01010500000000003", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }, { designationCode: "01010000000000002", workerCount: 1 }] },
+      { name: "Labelling & Coding", description: null, timeValue: 45, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Cartoning", description: null, timeValue: 30, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
+    ],
+  },
+  {
+    productCode: "04030400000000004",
+    bom: [
+      { itemCode: "02150000000000004", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000001", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02170000000000002", kind: "PACKING", quantity: 500, unitCode: "NOS" },
+      { itemCode: "02160000000000004", kind: "PACKING", quantity: 20.8333, unitCode: "NOS" },
+      { itemCode: "02170000000000003", kind: "PACKING", quantity: 0.5208, unitCode: "NOS" },
+    ],
+    processes: [
+      { name: "Weighing & Portioning", description: null, timeValue: 60, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Nitrogen Flush & Seal", description: null, timeValue: 100, timeUnit: "MIN", machineCode: "01010500000000003", manpower: [{ designationCode: "01010000000000001", workerCount: 1 }, { designationCode: "01010000000000002", workerCount: 1 }] },
+      { name: "Labelling & Coding", description: null, timeValue: 45, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 2 }] },
+      { name: "Cartoning", description: null, timeValue: 30, timeUnit: "MIN", machineCode: null, manpower: [{ designationCode: "01010000000000002", workerCount: 1 }] },
     ],
   },
 ];
