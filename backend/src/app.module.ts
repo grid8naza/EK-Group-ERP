@@ -49,6 +49,7 @@ import { DocumentModule } from './modules/document/document.module';
 import { DocumentNumberingModule } from './modules/document-numbering/document-numbering.module';
 import { BatchNumberingModule } from './modules/batch-numbering/batch-numbering.module';
 import { ScaffoldModule } from './scaffold/scaffold.module';
+import { MasterDataModule } from './master-data/master-data.module';
 
 @Module({
   imports: [
@@ -100,6 +101,8 @@ import { ScaffoldModule } from './scaffold/scaffold.module';
     DocumentNumberingModule,
     BatchNumberingModule,
     ScaffoldModule,
+
+    MasterDataModule,
   ],
   providers: [
     // JWT required everywhere except routes marked @Public()
