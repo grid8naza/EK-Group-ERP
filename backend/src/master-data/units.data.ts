@@ -72,7 +72,7 @@ export const HSN_CODES: SeedHsn[] = [
   { code: "1517", description: "Margarine, bakery shortening & edible fat mixtures", cgst: 2.5, sgst: 2.5, igst: 5, cess: 0, isActive: true },
   { code: "1701", description: "Sugar (refined / granulated)", cgst: 2.5, sgst: 2.5, igst: 5, cess: 0, isActive: true },
   { code: "1702", description: "Glucose, invert sugar & sugar syrups", cgst: 2.5, sgst: 2.5, igst: 5, cess: 0, isActive: true },
-  { code: "1704", description: "Sugar confectionery (candy, toffee) without cocoa", cgst: 2.5, sgst: 2.5, igst: 5, cess: 0, isActive: true },
+  { code: "1704", description: "Sugar confectionery (candy, toffee) without cocoa", cgst: 9, sgst: 9, igst: 18, cess: 0, isActive: true },
   { code: "1805", description: "Cocoa powder", cgst: 2.5, sgst: 2.5, igst: 5, cess: 0, isActive: true },
   { code: "1806", description: "Chocolate & other cocoa preparations", cgst: 2.5, sgst: 2.5, igst: 5, cess: 0, isActive: true },
   { code: "1901", description: "Malt extract & flour-based food preparations", cgst: 2.5, sgst: 2.5, igst: 5, cess: 0, isActive: true },
@@ -82,6 +82,6 @@ export const HSN_CODES: SeedHsn[] = [
   { code: "2007", description: "Jam, fruit jelly & marmalade", cgst: 2.5, sgst: 2.5, igst: 5, cess: 0, isActive: true },
   { code: "2102", description: "Yeast & prepared baking powders", cgst: 2.5, sgst: 2.5, igst: 5, cess: 0, isActive: true },
   { code: "2105", description: "Ice cream & other edible ice", cgst: 2.5, sgst: 2.5, igst: 5, cess: 0, isActive: true },
-  { code: "2106", description: "Food preparations n.e.s. (baking premixes, custard powder, improvers)", cgst: 2.5, sgst: 2.5, igst: 5, cess: 0, isActive: true },
+  { code: "2106", description: "Food preparations n.e.s. (baking premixes, custard powder, improvers)", cgst: 6, sgst: 6, igst: 12, cess: 0, isActive: true },
   { code: "2501", description: "Salt", cgst: 0, sgst: 0, igst: 0, cess: 0, isActive: true },
 ];
