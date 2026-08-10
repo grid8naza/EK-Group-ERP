@@ -39,6 +39,24 @@ export interface UserLookupPort {
   canAccessCompany(userId: number, companyId: number): Promise<boolean>;
 
   /**
+   * True if the user may work in this module, in this company — the same
+   * "effective access" the application itself grants: the module is enabled for
+   * the company, one of the user's groups there manages it, and it is in the
+   * user's own module assignment where they have one. Super admins may work in
+   * any enabled module; core modules are theirs alone.
+   *
+   * Asked by the workflow engine so an approver is only sent documents they can
+   * actually reach. Kept HERE rather than worked out by the caller because the
+   * rule is the user module's to define, and two answers to "may they" is one
+   * too many.
+   */
+  canAccessModule(
+    userId: number,
+    companyId: number,
+    moduleId: number,
+  ): Promise<boolean>;
+
+  /**
    * Active user ids assigned to the given user group. Used by the workflow engine
    * to resolve a step's approvers when no explicit users are named. (User groups
    * are company-scoped, so this is already limited to that group's company.)

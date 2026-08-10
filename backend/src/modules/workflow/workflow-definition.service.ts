@@ -114,7 +114,7 @@ export class WorkflowDefinitionService {
     if (!cid) throw new BadRequestException('A company is required.');
     this.assertStepsValid(dto.steps);
     await this.assertBranchBelongs(cid, dto.branchId ?? null);
-    await this.assertApproversHaveAccess(cid, dto.steps);
+    await this.assertApproversHaveAccess(cid, dto.moduleId, dto.steps);
     if (dto.isActive ?? true) {
       await this.assertOnlyActiveFor({
         companyId: cid,
@@ -164,7 +164,7 @@ export class WorkflowDefinitionService {
         where: { definitionId: id },
         select: { userGroupId: true, users: { select: { userId: true } } },
       });
-      await this.assertApproversHaveAccess(existing.companyId, dto.steps, {
+      await this.assertApproversHaveAccess(existing.companyId, existing.moduleId, dto.steps, {
         groupIds: new Set(
           prior.map((s) => s.userGroupId).filter((g): g is number => g != null),
         ),
@@ -249,6 +249,7 @@ export class WorkflowDefinitionService {
    */
   private async assertApproversHaveAccess(
     definitionCompanyId: number,
+    definitionModuleId: number,
     steps: WorkflowStepInput[] | undefined,
     /** Groups and users already on this workflow — see the caller in update. */
     already: { groupIds: Set<number>; userIds: Set<number> } = {
@@ -284,6 +285,30 @@ export class WorkflowDefinitionService {
           throw new BadRequestException(
             `${user?.name ?? `User ${userId}`} has no access to ${company?.name ?? `company ${companyId}`}, ` +
               `so they cannot act for it at step ${step.sequence}. Give them access to that company, or name somebody who has it.`,
+          );
+        }
+
+        // The module, on the same rule as the company: whoever cannot work in
+        // it cannot act in it. Tested in the company the document belongs to,
+        // because module access is granted per company.
+        const moduleId = step.targetModuleId ?? definitionModuleId;
+        if (
+          !(await this.users.canAccessModule(
+            userId,
+            definitionCompanyId,
+            moduleId,
+          ))
+        ) {
+          const [user, mod] = await Promise.all([
+            this.users.findById(userId),
+            this.prisma.module.findUnique({
+              where: { id: moduleId },
+              select: { name: true },
+            }),
+          ]);
+          throw new BadRequestException(
+            `${user?.name ?? `User ${userId}`} cannot work in ${mod?.name ?? `module ${moduleId}`}, ` +
+              `so they cannot act there at step ${step.sequence}. Give them that module, or name somebody who has it.`,
           );
         }
       }

@@ -249,10 +249,11 @@ export class WorkflowRuntimeService {
       [userId],
       step,
       instance.companyId,
+      instance.moduleId,
     );
     if (!allowed) {
       throw new ForbiddenException(
-        'You no longer have access to the company this document belongs to, so you cannot act on it.',
+        'You no longer have access to the company or the module this document belongs to, so you cannot act on it.',
       );
     }
 
@@ -718,7 +719,7 @@ export class WorkflowRuntimeService {
       if (!def) return { governed: false, allowed: true };
       return {
         governed: true,
-        allowed: await this.userInCreateStep(userId, def.id, def.companyId),
+        allowed: await this.userInCreateStep(userId, def.id, def.companyId, moduleId),
       };
     }
     const defs = await this.prisma.workflowDefinition.findMany({
@@ -727,7 +728,7 @@ export class WorkflowRuntimeService {
     });
     if (!defs.length) return { governed: false, allowed: true };
     for (const d of defs) {
-      if (await this.userInCreateStep(userId, d.id, d.companyId)) {
+      if (await this.userInCreateStep(userId, d.id, d.companyId, moduleId)) {
         return { governed: true, allowed: true };
       }
     }
@@ -744,6 +745,7 @@ export class WorkflowRuntimeService {
     userId: number,
     definitionId: number,
     definitionCompanyId: number,
+    definitionModuleId: number,
   ): Promise<boolean> {
     const steps = await this.prisma.workflowStep.findMany({
       where: {
@@ -753,7 +755,11 @@ export class WorkflowRuntimeService {
       include: { users: { select: { userId: true } } },
     });
     for (const s of steps) {
-      const assignees = await this.resolveAssignees(s, definitionCompanyId);
+      const assignees = await this.resolveAssignees(
+        s,
+        definitionCompanyId,
+        definitionModuleId,
+      );
       if (assignees.includes(userId)) return true;
     }
     return false;
@@ -807,7 +813,11 @@ export class WorkflowRuntimeService {
       return;
     }
 
-    const assignees = await this.resolveAssignees(next, instance.companyId);
+    const assignees = await this.resolveAssignees(
+      next,
+      instance.companyId,
+      instance.moduleId,
+    );
     if (assignees.length === 0) {
       // Nobody can act at this level, so the document STOPS here. It used to
       // skip on, which quietly threw the level away: a control somebody had
@@ -882,16 +892,23 @@ export class WorkflowRuntimeService {
     step: {
       userGroupId: number | null;
       targetCompanyId: number | null;
+      targetModuleId: number | null;
       users: { userId: number }[];
     },
     documentCompanyId: number,
+    documentModuleId: number,
   ): Promise<number[]> {
     const named = step.users.length
       ? [...new Set(step.users.map((u) => u.userId))]
       : step.userGroupId
         ? await this.users.usersInGroup(step.userGroupId)
         : [];
-    return this.withCompanyAccess(named, step, documentCompanyId);
+    return this.withCompanyAccess(
+      named,
+      step,
+      documentCompanyId,
+      documentModuleId,
+    );
   }
 
   /**
@@ -908,17 +925,22 @@ export class WorkflowRuntimeService {
    */
   private async withCompanyAccess(
     userIds: number[],
-    step: { targetCompanyId: number | null },
+    step: { targetCompanyId: number | null; targetModuleId: number | null },
     documentCompanyId: number,
+    documentModuleId: number,
   ): Promise<number[]> {
     const needed = [
       ...new Set([step.targetCompanyId ?? documentCompanyId, documentCompanyId]),
     ];
+    // The module the step acts in, tested in the company the document is in —
+    // module access is granted per company, so the pair is the question.
+    const moduleId = step.targetModuleId ?? documentModuleId;
     const allowed: number[] = [];
     for (const userId of userIds) {
-      const ok = await Promise.all(
-        needed.map((c) => this.users.canAccessCompany(userId, c)),
-      );
+      const ok = await Promise.all([
+        ...needed.map((c) => this.users.canAccessCompany(userId, c)),
+        this.users.canAccessModule(userId, documentCompanyId, moduleId),
+      ]);
       if (ok.every(Boolean)) allowed.push(userId);
     }
     return allowed;
