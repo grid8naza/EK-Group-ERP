@@ -791,14 +791,37 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
  * It sits inside the field's <label>, so the click must be stopped from
  * reaching the control and toggling it.
  */
+/**
+ * The box that would cut this element off — the nearest ancestor that scrolls
+ * or hides what overflows it. Null when nothing does and only the window bounds.
+ *
+ * `overflow-y: auto` alone is enough: a box that scrolls in one direction
+ * clips in the other, so a drawer body set to scroll vertically will cut a
+ * tooltip off at its left and right edges without ever being asked to.
+ */
+function clippingRect(el: HTMLElement): DOMRect | null {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const { overflowX, overflowY } = getComputedStyle(p);
+    if (/auto|scroll|hidden|clip/.test(`${overflowX} ${overflowY}`)) {
+      return p.getBoundingClientRect();
+    }
+  }
+  return null;
+}
+
 export function HelpTip({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
   const tip = useRef<HTMLSpanElement>(null);
   const [shift, setShift] = useState(0);
 
-  // The bubble is centred under the ?, which spills off-screen for a control
-  // sitting near the right-hand edge of a drawer — the reader sees half a
-  // sentence. Once it is on screen, nudge it back inside the window.
+  // The bubble is centred under the ?, which for a control near either edge of
+  // a drawer puts half the sentence where it cannot be read. Once it is on
+  // screen, nudge it back inside whatever would cut it off.
+  //
+  // That is rarely the window. A drawer's body scrolls, so it CLIPS: a panel
+  // inset from the left of the screen cuts a bubble off at its own edge with
+  // the window nowhere near. So the bounds are the nearest clipping ancestor's,
+  // narrowed by the window — either can be the tighter of the two.
   useEffect(() => {
     if (!open) {
       setShift(0);
@@ -806,11 +829,16 @@ export function HelpTip({ text }: { text: string }) {
     }
     const el = tip.current;
     if (!el) return;
-    const { left, right } = el.getBoundingClientRect();
     const margin = 8;
-    const overshoot = right - (window.innerWidth - margin);
-    if (overshoot > 0) setShift(-overshoot);
-    else if (left < margin) setShift(margin - left);
+    const clip = clippingRect(el);
+    const min = Math.max(clip?.left ?? 0, 0) + margin;
+    const max = Math.min(clip?.right ?? window.innerWidth, window.innerWidth) - margin;
+    const { left, right } = el.getBoundingClientRect();
+    // Left wins where the bubble is wider than the space it has: a sentence
+    // read from its first word is worth more than one centred and clipped
+    // at both ends.
+    if (left < min) setShift(min - left);
+    else if (right > max) setShift(Math.max(max - right, min - left));
   }, [open, text]);
 
   return (
