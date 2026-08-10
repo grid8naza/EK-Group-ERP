@@ -64,6 +64,14 @@ export class WorkflowDefinitionService {
     const cid = companyId ?? dto.companyId;
     if (!cid) throw new BadRequestException('A company is required.');
     this.assertStepsValid(dto.steps);
+    if (dto.isActive ?? true) {
+      await this.assertOnlyActiveFor({
+        companyId: cid,
+        branchId: dto.branchId ?? null,
+        moduleId: dto.moduleId,
+        objectId: dto.objectId,
+      });
+    }
     const created = await this.prisma.workflowDefinition.create({
       data: {
         name: dto.name.trim(),
@@ -83,6 +91,28 @@ export class WorkflowDefinitionService {
     const existing = await this.findOne(companyId, id);
     assertUnlocked(existing, 'workflow', 'editing');
     if (dto.steps !== undefined) this.assertStepsValid(dto.steps);
+
+    // Re-checked on the two edits that can create a clash: switching a
+    // definition back on, and moving it between a branch and the company as a
+    // whole. Editing the steps of one that is already the only active one
+    // cannot clash with anything, so it is not re-tested.
+    const willBeActive = dto.isActive ?? existing.isActive;
+    const willBeBranch =
+      dto.branchId !== undefined ? dto.branchId : existing.branchId;
+    if (
+      willBeActive &&
+      (dto.isActive === true || dto.branchId !== undefined)
+    ) {
+      await this.assertOnlyActiveFor(
+        {
+          companyId: existing.companyId,
+          branchId: willBeBranch ?? null,
+          moduleId: existing.moduleId,
+          objectId: existing.objectId,
+        },
+        id,
+      );
+    }
 
     const updated = await this.prisma.workflowDefinition.update({
       where: { id },
@@ -118,6 +148,52 @@ export class WorkflowDefinitionService {
   }
 
   // --- helpers ---
+
+  /**
+   * One active workflow per form, per company, per branch.
+   *
+   * A second one is not a richer configuration — it is a silent one. The runtime
+   * matches a definition by (company, branch, module, form) and takes the lowest
+   * id, so the other never governs anything: somebody edits it, saves it, sees
+   * it listed as active, and nothing they wrote ever fires. Refused at the point
+   * of making it rather than explained afterwards.
+   *
+   * A branch workflow alongside a company-wide one is NOT a clash — the runtime
+   * prefers the branch's and falls back to the company's, which is exactly what
+   * that pair is for. Only two at the same level collide, and `null` is a level.
+   *
+   * Inactive ones are left alone entirely: keeping last year's chain switched off
+   * beside this year's is how anybody would expect to revise one.
+   */
+  private async assertOnlyActiveFor(
+    scope: {
+      companyId: number;
+      branchId: number | null;
+      moduleId: number;
+      objectId: number;
+    },
+    exceptId?: number,
+  ) {
+    const clash = await this.prisma.workflowDefinition.findFirst({
+      where: {
+        ...scope,
+        isActive: true,
+        ...(exceptId ? { id: { not: exceptId } } : {}),
+      },
+      select: { id: true, name: true },
+    });
+    if (!clash) return;
+
+    const form = await this.prisma.objectMaster.findUnique({
+      where: { id: scope.objectId },
+      select: { objectName: true },
+    });
+    const where = scope.branchId ? 'this branch' : 'the company as a whole';
+    throw new BadRequestException(
+      `“${clash.name}” is already the active workflow for ${form?.objectName ?? 'this form'} in ${where}. ` +
+        `Switch it off first, or edit it — two active workflows on one form would leave one of them never firing.`,
+    );
+  }
 
   private assertStepsValid(steps: WorkflowStepInput[] | undefined) {
     const list = steps ?? [];
