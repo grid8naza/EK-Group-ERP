@@ -112,6 +112,7 @@ export class WorkflowDefinitionService {
     const cid = companyId ?? dto.companyId;
     if (!cid) throw new BadRequestException('A company is required.');
     this.assertStepsValid(dto.steps);
+    await this.assertBranchBelongs(cid, dto.branchId ?? null);
     await this.assertApproversHaveAccess(cid, dto.steps);
     if (dto.isActive ?? true) {
       await this.assertOnlyActiveFor({
@@ -139,6 +140,12 @@ export class WorkflowDefinitionService {
   async update(companyId: number | undefined, id: number, dto: UpdateWorkflowDto) {
     const existing = await this.findOne(companyId, id);
     assertUnlocked(existing, 'workflow', 'editing');
+    // Only when it is actually MOVING. Re-sending the branch a workflow already
+    // sits on must not refuse the save — see the grandfathering below, and for
+    // the same reason: nothing should stand between somebody and a repair.
+    if (dto.branchId !== undefined && dto.branchId !== existing.branchId) {
+      await this.assertBranchBelongs(existing.companyId, dto.branchId);
+    }
     if (dto.steps !== undefined) this.assertStepsValid(dto.steps);
     if (dto.steps !== undefined) {
       // What was already on this workflow may be saved again. The rules below
@@ -279,6 +286,42 @@ export class WorkflowDefinitionService {
           );
         }
       }
+    }
+  }
+
+  /**
+   * A workflow bound to a branch must be bound to one of its OWN company's.
+   *
+   * A branch belongs to exactly one company, and the runtime matches a document
+   * to a definition by company AND branch together — so a workflow on another
+   * company's branch matches nothing, ever. It saves cleanly, lists as active,
+   * is not a duplicate of anything, and simply never fires: the worst shape a
+   * misconfiguration can take, because there is nothing to notice.
+   *
+   * Null is always valid — that is the company-wide workflow, which is what
+   * every branch without one of its own falls back to.
+   */
+  private async assertBranchBelongs(
+    companyId: number,
+    branchId: number | null,
+  ) {
+    if (branchId == null) return;
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: branchId },
+      select: { name: true, companyId: true, company: { select: { name: true } } },
+    });
+    if (!branch) {
+      throw new BadRequestException('That branch no longer exists.');
+    }
+    if (branch.companyId !== companyId) {
+      const owner = await this.prisma.company.findUnique({
+        where: { id: companyId },
+        select: { name: true },
+      });
+      throw new BadRequestException(
+        `${branch.name} is a branch of ${branch.company.name}, not ${owner?.name ?? 'this company'}. ` +
+          `A workflow bound to it would never match anything. Choose one of this company's branches, or leave it company-wide.`,
+      );
     }
   }
 
