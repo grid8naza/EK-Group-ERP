@@ -1,11 +1,16 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
+import {
+  USER_LOOKUP,
+  type UserLookupPort,
+} from '../../contracts/user-lookup.port';
 import {
   CreateWorkflowDto,
   UpdateWorkflowDto,
@@ -22,7 +27,10 @@ const withSteps = {
 
 @Injectable()
 export class WorkflowDefinitionService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(USER_LOOKUP) private readonly users: UserLookupPort,
+  ) {}
 
   /** Definitions for the active company (optionally filtered by module/form). */
   async findAll(
@@ -104,6 +112,7 @@ export class WorkflowDefinitionService {
     const cid = companyId ?? dto.companyId;
     if (!cid) throw new BadRequestException('A company is required.');
     this.assertStepsValid(dto.steps);
+    await this.assertApproversHaveAccess(cid, dto.steps);
     if (dto.isActive ?? true) {
       await this.assertOnlyActiveFor({
         companyId: cid,
@@ -131,6 +140,9 @@ export class WorkflowDefinitionService {
     const existing = await this.findOne(companyId, id);
     assertUnlocked(existing, 'workflow', 'editing');
     if (dto.steps !== undefined) this.assertStepsValid(dto.steps);
+    if (dto.steps !== undefined) {
+      await this.assertApproversHaveAccess(existing.companyId, dto.steps);
+    }
 
     // Re-checked on the two edits that can create a clash: switching a
     // definition back on, and moving it between a branch and the company as a
@@ -188,6 +200,50 @@ export class WorkflowDefinitionService {
   }
 
   // --- helpers ---
+
+  /**
+   * An approver may only be named for a company they can reach.
+   *
+   * A workflow is a list of people who will be asked to act for a company. Name
+   * somebody who has no access to it and the task still lands in their inbox and
+   * still blocks the document — they simply cannot open it, and there is no
+   * message anywhere saying why. So it is refused where it is written.
+   *
+   * TWO companies are tested where a step is routed elsewhere: the one it acts
+   * for, and the one whose document it is. Routing a step to another company
+   * does not move the document — a voucher stays in the books of the company
+   * that raised it — so an approver who can reach the routed company but not the
+   * originating one still cannot read the thing they are approving.
+   *
+   * Only explicitly-named users are checked here. A step that names a GROUP is
+   * checked at runtime instead: membership changes without the workflow being
+   * touched, so a save-time answer would go stale. See resolveAssignees.
+   */
+  private async assertApproversHaveAccess(
+    definitionCompanyId: number,
+    steps: WorkflowStepInput[] | undefined,
+  ) {
+    for (const step of steps ?? []) {
+      const acting = step.targetCompanyId ?? definitionCompanyId;
+      const needed = [...new Set([acting, definitionCompanyId])];
+      for (const userId of step.userIds ?? []) {
+        for (const companyId of needed) {
+          if (await this.users.canAccessCompany(userId, companyId)) continue;
+          const [user, company] = await Promise.all([
+            this.users.findById(userId),
+            this.prisma.company.findUnique({
+              where: { id: companyId },
+              select: { name: true },
+            }),
+          ]);
+          throw new BadRequestException(
+            `${user?.name ?? `User ${userId}`} has no access to ${company?.name ?? `company ${companyId}`}, ` +
+              `so they cannot act for it at step ${step.sequence}. Give them access to that company, or name somebody who has it.`,
+          );
+        }
+      }
+    }
+  }
 
   /**
    * One active workflow per form, per company, per branch.

@@ -210,6 +210,21 @@ export class WorkflowRuntimeService {
       where: { id: task.stepId },
     });
     if (!step) throw new NotFoundException('Workflow step not found');
+
+    // Access can be withdrawn while a task is already sitting in somebody's
+    // inbox. Whoever cannot act for a company cannot act for it at any level,
+    // including one they were legitimately given yesterday.
+    const [allowed] = await this.withCompanyAccess(
+      [userId],
+      step,
+      instance.companyId,
+    );
+    if (!allowed) {
+      throw new ForbiddenException(
+        'You no longer have access to the company this document belongs to, so you cannot act on it.',
+      );
+    }
+
     const flags = this.stepFlags(task.sequence, step);
 
     // --- terminal actions: reject / cancel ---
@@ -537,25 +552,34 @@ export class WorkflowRuntimeService {
         objectId,
       });
       if (!def) return { governed: false, allowed: true };
-      return { governed: true, allowed: await this.userInCreateStep(userId, def.id) };
+      return {
+        governed: true,
+        allowed: await this.userInCreateStep(userId, def.id, def.companyId),
+      };
     }
     const defs = await this.prisma.workflowDefinition.findMany({
       where: { moduleId, objectId, isActive: true },
-      select: { id: true },
+      select: { id: true, companyId: true },
     });
     if (!defs.length) return { governed: false, allowed: true };
     for (const d of defs) {
-      if (await this.userInCreateStep(userId, d.id)) {
+      if (await this.userInCreateStep(userId, d.id, d.companyId)) {
         return { governed: true, allowed: true };
       }
     }
     return { governed: true, allowed: false };
   }
 
-  /** Whether the user is an assignee of a Create-action step of a definition. */
+  /**
+   * Whether the user is an assignee of a Create-action step of a definition.
+   *
+   * Company access counts here as everywhere else: somebody who cannot reach
+   * the company is not one of its designated creators, whatever a step says.
+   */
   private async userInCreateStep(
     userId: number,
     definitionId: number,
+    definitionCompanyId: number,
   ): Promise<boolean> {
     const steps = await this.prisma.workflowStep.findMany({
       where: {
@@ -565,7 +589,7 @@ export class WorkflowRuntimeService {
       include: { users: { select: { userId: true } } },
     });
     for (const s of steps) {
-      const assignees = await this.resolveAssignees(s);
+      const assignees = await this.resolveAssignees(s, definitionCompanyId);
       if (assignees.includes(userId)) return true;
     }
     return false;
@@ -604,10 +628,25 @@ export class WorkflowRuntimeService {
       return;
     }
 
-    const assignees = await this.resolveAssignees(next);
+    const assignees = await this.resolveAssignees(next, instance.companyId);
     if (assignees.length === 0) {
-      // No one to act at this level — skip it and continue (guarded by sequence).
-      await this.log(instance.id, next.id, next.sequence, instance.startedByUserId, 'AUTO_SKIP');
+      // No one to act at this level — skip it and continue (guarded by
+      // sequence). The reason is written into the trail rather than left to be
+      // inferred: a level that was configured and then skipped because nobody
+      // named on it can reach the company reads, in the document's history,
+      // exactly like a level nobody was ever put on.
+      const named =
+        next.users.length > 0 || next.userGroupId != null
+          ? 'nobody named on this level has access to the company'
+          : 'no approver is named on this level';
+      await this.log(
+        instance.id,
+        next.id,
+        next.sequence,
+        instance.startedByUserId,
+        'AUTO_SKIP',
+        named,
+      );
       await this.activateNext(instance, next.sequence);
       return;
     }
@@ -664,17 +703,50 @@ export class WorkflowRuntimeService {
   }
 
   /** Explicit step users, else all active users in the step's user group. */
-  private async resolveAssignees(step: {
-    userGroupId: number | null;
-    users: { userId: number }[];
-  }): Promise<number[]> {
-    if (step.users.length) {
-      return [...new Set(step.users.map((u) => u.userId))];
+  private async resolveAssignees(
+    step: {
+      userGroupId: number | null;
+      targetCompanyId: number | null;
+      users: { userId: number }[];
+    },
+    documentCompanyId: number,
+  ): Promise<number[]> {
+    const named = step.users.length
+      ? [...new Set(step.users.map((u) => u.userId))]
+      : step.userGroupId
+        ? await this.users.usersInGroup(step.userGroupId)
+        : [];
+    return this.withCompanyAccess(named, step, documentCompanyId);
+  }
+
+  /**
+   * Only those who can reach the companies this step involves.
+   *
+   * Naming an approver is checked when a workflow is saved, but that answer goes
+   * stale: a group gains a member, somebody's access to a company is withdrawn,
+   * and a workflow nobody has touched since starts raising tasks for people who
+   * cannot open the document. Whoever cannot act for a company is not asked to,
+   * at any level — so the list is re-tested every time a level activates.
+   *
+   * Both companies, where a step is routed: the one it acts for, and the one
+   * whose document it is. Routing does not move the document.
+   */
+  private async withCompanyAccess(
+    userIds: number[],
+    step: { targetCompanyId: number | null },
+    documentCompanyId: number,
+  ): Promise<number[]> {
+    const needed = [
+      ...new Set([step.targetCompanyId ?? documentCompanyId, documentCompanyId]),
+    ];
+    const allowed: number[] = [];
+    for (const userId of userIds) {
+      const ok = await Promise.all(
+        needed.map((c) => this.users.canAccessCompany(userId, c)),
+      );
+      if (ok.every(Boolean)) allowed.push(userId);
     }
-    if (step.userGroupId) {
-      return this.users.usersInGroup(step.userGroupId);
-    }
-    return [];
+    return allowed;
   }
 
   /**
