@@ -2460,6 +2460,12 @@ export interface VoucherWorkflowState {
   /** Who wrote it — the one name in the trail the engine does not hold. */
   preparedBy: string | null;
   preparedOn: string | null;
+  /**
+   * Whether THIS viewer may pull it back out of the approval: their own
+   * voucher, still in progress, no task of their own on it, and a create step
+   * that allows it. Answered by the server, not worked out here.
+   */
+  canWithdraw: boolean;
 }
 
 export interface CostCentreCategory {

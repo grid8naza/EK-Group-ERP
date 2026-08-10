@@ -734,6 +734,17 @@ export class VoucherService {
       state,
       preparedBy: preparedBy?.name ?? null,
       preparedOn: voucher.createdAt,
+      /**
+       * Whether THIS viewer may pull it back — answered here rather than left
+       * to the screen, because it turns on four things the screen would have to
+       * be told separately, one of them being who wrote the voucher. Sending an
+       * id so a button can compare it is how a screen ends up enforcing a rule.
+       */
+      canWithdraw:
+        voucher.createdByUserId === userId &&
+        state.status === 'IN_PROGRESS' &&
+        !state.myTask &&
+        !!first?.canCancel,
     };
   }
 
@@ -809,6 +820,12 @@ export class VoucherService {
   ) {
     const voucher = await this.findOne(companyId, id);
     const ref = await this.docRef(voucher);
+
+    if (dto.action === 'CANCEL' && voucher.createdByUserId === userId) {
+      const withdrawn = await this.withdraw(userId, companyId, voucher, ref);
+      if (withdrawn) return withdrawn;
+    }
+
     const res = await this.workflow.actOnDocument(
       userId,
       ref,
@@ -862,6 +879,61 @@ export class VoucherService {
         `${type.name} needs approval before it reaches the books. Save it and send it for approval instead.`,
       );
     }
+  }
+
+  /**
+   * The writer pulling their own voucher back out of the approval it is in.
+   *
+   * Having forwarded it, the writer holds no task on it — so this cannot go
+   * through the task path at all, and is gated instead on the create step's own
+   * `canCancel`: whoever configured the workflow decides whether a voucher may
+   * be recalled once it has been sent, and that answer lives on the step.
+   *
+   * It goes back to being a plain DRAFT, NOT to cancelled. That is where this
+   * parts company with the LPO, which cancels: an order withdrawn was really
+   * placed with a supplier and is dead, while a voucher withdrawn never reached
+   * the books at all. The writer is pulling it back to correct a figure and send
+   * it again, which is the same place a rejection lands it — and a voucher
+   * marked CANCELLED without ever having been posted would be a cancellation of
+   * nothing, sitting in the register looking like a reversed entry.
+   *
+   * Null when there is nothing to withdraw, so the caller falls through to the
+   * ordinary task path — an approver cancelling is a different act.
+   */
+  private async withdraw(
+    userId: number,
+    companyId: number | undefined,
+    voucher: { id: number; companyId: number; branchId: number | null },
+    ref: DocumentRef,
+  ) {
+    const state = await this.workflow.docState(userId, ref);
+    if (state.status !== 'IN_PROGRESS' || state.myTask) return null;
+
+    const first = await this.workflow.firstStep(
+      voucher.companyId,
+      voucher.branchId,
+      ref.moduleId,
+      ref.objectId,
+    );
+    if (!first?.canCancel) {
+      throw new ForbiddenException(
+        'This voucher cannot be recalled once it has been sent. Ask the approver to send it back.',
+      );
+    }
+
+    await this.workflow.cancelForDocument(
+      ref.moduleId,
+      ref.objectId,
+      ref.documentId,
+    );
+    // The instance is let go of, exactly as on a rejection: what comes back is
+    // a draft to correct, and correcting it starts a fresh approval rather than
+    // resuming one people have already acted on.
+    await this.prisma.voucher.update({
+      where: { id: voucher.id },
+      data: { workflowInstanceId: null, workflowStatus: null },
+    });
+    return this.findOne(companyId, voucher.id);
   }
 
   /**

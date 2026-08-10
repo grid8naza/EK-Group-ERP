@@ -9,6 +9,7 @@ import {
   Printer,
   Send,
   Trash2,
+  Undo2,
   X,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
@@ -925,18 +926,31 @@ export function VoucherEntryScreen({
   const actOnTask = async (
     action: 'APPROVE' | 'FORWARD' | 'REJECT' | 'CANCEL',
   ) => {
-    const needsWhy = action === 'REJECT';
-    if (needsWhy) {
-      const ok = await confirm({
-        title: `Reject ${editing?.voucherNo}`,
-        message:
-          'It goes back to its writer as a draft they may correct and send ' +
-          'again. Nothing reaches the books.',
-        confirmText: 'Reject',
-        cancelText: 'Keep',
-        danger: true,
-        defaultCancel: true,
-      });
+    // The two that undo somebody's work ask first. Approving and forwarding are
+    // the ordinary way through and do not.
+    const ask =
+      action === 'REJECT'
+        ? {
+            title: `Reject ${editing?.voucherNo}`,
+            message:
+              'It goes back to its writer as a draft they may correct and send ' +
+              'again. Nothing reaches the books.',
+            confirmText: 'Reject',
+            cancelText: 'Keep',
+          }
+        : action === 'CANCEL'
+          ? {
+              title: `Withdraw ${editing?.voucherNo}`,
+              message:
+                'It comes back to you as a draft to correct. Whoever has ' +
+                'already signed will have to sign again when you send it once ' +
+                'more.',
+              confirmText: 'Withdraw',
+              cancelText: 'Leave it',
+            }
+          : null;
+    if (ask) {
+      const ok = await confirm({ ...ask, danger: true, defaultCancel: true });
       if (!ok) return;
     }
     setSaving(true);
@@ -947,7 +961,11 @@ export function VoucherEntryScreen({
       toast.success(
         res.status === 'POSTED'
           ? `${res.voucherNo} approved and posted.`
-          : 'Done.',
+          : action === 'CANCEL'
+            ? `${res.voucherNo} withdrawn — it is yours to correct again.`
+            : action === 'REJECT'
+              ? `${res.voucherNo} sent back to its writer.`
+              : 'Done.',
       );
       await Promise.all([refetch(), refetchWorkflow()]);
       open(res);
@@ -1014,26 +1032,34 @@ export function VoucherEntryScreen({
       // The writer, then everybody who acted after them. CREATE is dropped: it
       // IS the writer, and a sheet naming the same person twice — once as
       // preparer and once as creator — reads as two people.
-      signatories: governed
-        ? [
-            ...(wf?.preparedBy
-              ? [
-                  {
-                    role: 'Prepared by',
-                    name: wf.preparedBy,
-                    on: wf.preparedOn,
-                  },
-                ]
-              : []),
-            ...trail
-              .filter((t) => t.action !== 'CREATE')
-              .map((t) => ({
-                role: signedAs(t.action),
-                name: t.userName,
-                on: t.createdAt,
-              })),
-          ]
-        : [],
+      //
+      // Only a LIVE or approved chain signs. A withdrawn or rejected attempt is
+      // history worth keeping on the screen, but printing it would put
+      // "Checked by" against a name on a voucher that was pulled back — a
+      // signature on a document nobody has agreed to.
+      signatories:
+        governed &&
+        (wf?.state.status === 'IN_PROGRESS' ||
+          wf?.state.status === 'APPROVED')
+          ? [
+              ...(wf?.preparedBy
+                ? [
+                    {
+                      role: 'Prepared by',
+                      name: wf.preparedBy,
+                      on: wf.preparedOn,
+                    },
+                  ]
+                : []),
+              ...trail
+                .filter((t) => t.action !== 'CREATE')
+                .map((t) => ({
+                  role: signedAs(t.action),
+                  name: t.userName,
+                  on: t.createdAt,
+                })),
+            ]
+          : [],
     });
     if (!openPrintWindow(html)) {
       toast.error('The browser blocked the print window. Allow pop-ups for this site.');
@@ -1725,6 +1751,21 @@ export function VoucherEntryScreen({
                   </>
                 )}
               </>
+            )}
+            {/* The writer's way out, on a voucher of their own that is away
+                being signed. Not among the approver's buttons below: this is
+                the only thing the person who wrote it can still do, and it is
+                the opposite of acting on it. */}
+            {wf?.canWithdraw && (
+              <button
+                className="btn-secondary whitespace-nowrap"
+                disabled={saving}
+                title="Pull it back out of the approval to correct it"
+                onClick={() => void actOnTask('CANCEL')}
+              >
+                <Undo2 className="mr-1 inline h-4 w-4" />
+                Withdraw
+              </button>
             )}
             {/* The approver's side of the same header. Shown on a voucher the
                 viewer holds a task on, whatever mode the form is in — a posted
@@ -2503,6 +2544,8 @@ export function VoucherEntryScreen({
               <p className="mt-3 text-xs text-slate-400">
                 Waiting on the next level. It reaches the books when the last
                 approver has signed, not before.
+                {wf?.canWithdraw &&
+                  ' You may withdraw it while it is still with them.'}
               </p>
             )}
           </div>
