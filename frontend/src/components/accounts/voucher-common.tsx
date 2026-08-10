@@ -239,6 +239,19 @@ export function useVoucherMasters() {
     return (list ?? []).find((p) => p.id === id)?.name ?? null;
   };
 
+  /**
+   * What a division and a department are called, for a line already written.
+   *
+   * Like partyName, and unfiltered for the same reason: `objectOptions` narrows
+   * the departments to one division, which is what a picker wants and what a
+   * printed voucher does not — the line already says which.
+   */
+  const centreName = (id: number | null) =>
+    id ? ((centres ?? []).find((c) => c.id === id)?.name ?? null) : null;
+
+  const objectName = (id: number | null) =>
+    id ? ((objects ?? []).find((o) => o.id === id)?.name ?? null) : null;
+
   const asksFor = (accountId: string | number): LineAsks => {
     const account = accountById.get(Number(accountId));
     if (!account) return ASKS_NOTHING;
@@ -258,6 +271,8 @@ export function useVoucherMasters() {
     objectOptions,
     partyOptions,
     partyName,
+    centreName,
+    objectName,
     asksFor,
   };
 }

@@ -15,25 +15,8 @@
  */
 
 import { amountInWords, type CurrencyWords, RUPEES } from './amountWords';
+import { esc, fmtDate, money } from './docFormat';
 import type { BankAccountDetail } from './types';
-
-const money = (v: number) =>
-  (v || 0).toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-
-const esc = (s: unknown) =>
-  String(s ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-
-const fmtDate = (iso?: string | null) => {
-  if (!iso) return '';
-  const [y, m, d] = iso.slice(0, 10).split('-');
-  return d && m && y ? `${d}-${m}-${y}` : iso;
-};
 
 /**
  * A bank account number on a document that leaves the building.
@@ -440,17 +423,3 @@ export function buildChequeHtml(c: ChequeInput): string {
 </html>`;
 }
 
-/**
- * Open a print window and write a built document into it.
- *
- * Called straight from the click, with nothing awaited first — a window opened
- * after an await is a pop-up as far as the browser is concerned, and is blocked.
- */
-export function openPrintWindow(html: string, width = 900, height = 1000): boolean {
-  const w = window.open('', '_blank', `width=${width},height=${height}`);
-  if (!w) return false;
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-  return true;
-}

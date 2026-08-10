@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, FileText, Printer, Trash2 } from 'lucide-react';
+import { ArrowLeft, Banknote, Check, FileText, Printer, Trash2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import {
@@ -25,12 +25,13 @@ import {
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { BillPicker, type BillPick } from './BillPicker';
 import { RUPEES, type CurrencyWords } from '@/lib/amountWords';
+import { fmtDate, openPrintWindow } from '@/lib/docFormat';
 import {
   buildChequeHtml,
   buildPaymentAdviceHtml,
-  openPrintWindow,
   type DocBill,
 } from '@/lib/paymentDocs';
+import { buildVoucherHtml, type VoucherDocLine } from '@/lib/voucherPrint';
 import type {
   BalanceSide,
   BillRefType,
@@ -40,6 +41,7 @@ import type {
   OutstandingBill,
   PartyKind,
   Voucher,
+  VoucherLine,
   VoucherType,
 } from '@/lib/types';
 import {
@@ -706,17 +708,19 @@ export function VoucherEntryScreen({
   // already — the party masters and the account master, bank details included,
   // come with `masters`, and the bills came with the voucher.
 
-  const wantsDocs = !!documents?.length;
-  // Fetched only by the kinds that print. The letterhead needs more of the
-  // company than the profile carries, and the words on a cheque need the
-  // currency's own name for its units.
+  // Every kind prints the voucher itself, so these are fetched once a form is
+  // open rather than by the kinds that print something extra — but not on the
+  // register, which is most of the time this screen is on and needs neither.
+  // The letterhead wants more of the company than the profile carries, and the
+  // words on a cheque want the currency's own name for its units.
+  const onForm = mode !== 'list';
   const { data: companies } = useFetch<Company[]>(
-    wantsDocs ? '/companies' : null,
-    [wantsDocs],
+    onForm ? '/companies' : null,
+    [onForm],
   );
   const { data: currencies } = useFetch<Currency[]>(
-    wantsDocs ? '/currencies' : null,
-    [wantsDocs],
+    onForm ? '/currencies' : null,
+    [onForm],
   );
 
   /** The bank the money left, and this company's own account behind it. */
@@ -766,33 +770,35 @@ export function VoucherEntryScreen({
    * there — it is still shown, by amount, rather than dropped: the payee has to
    * be able to add the lines up to the total whatever we can name.
    */
-  const docBills = useMemo((): DocBill[] => {
-    if (!editing) return [];
-    const out: DocBill[] = [];
-    for (const l of editing.lines) {
-      const bills = openBills[billsKey(l.partyKind, String(l.partyId ?? ''))] ?? [];
-      for (const b of l.billRefs ?? []) {
-        const against = b.againstId
-          ? bills.find((x) => x.id === b.againstId)
-          : null;
-        out.push({
-          billRef:
-            b.billRef ??
-            against?.billRef ??
-            b.refNote ??
-            (b.refType === 'ADVANCE'
-              ? 'Advance'
-              : b.refType === 'ON_ACCOUNT'
-                ? 'On account'
-                : '—'),
-          date: against?.date ?? null,
-          dueDate: b.dueDate ?? against?.dueDate ?? null,
-          amount: num(b.amount),
-        });
-      }
-    }
-    return out;
-  }, [editing, openBills]);
+  const billsOfLine = (l: VoucherLine): DocBill[] =>
+    (l.billRefs ?? []).map((b) => {
+      const against = b.againstId
+        ? (openBills[billsKey(l.partyKind, String(l.partyId ?? ''))] ?? []).find(
+            (x) => x.id === b.againstId,
+          )
+        : null;
+      return {
+        billRef:
+          b.billRef ??
+          against?.billRef ??
+          b.refNote ??
+          (b.refType === 'ADVANCE'
+            ? 'Advance'
+            : b.refType === 'ON_ACCOUNT'
+              ? 'On account'
+              : '—'),
+        date: against?.date ?? null,
+        dueDate: b.dueDate ?? against?.dueDate ?? null,
+        amount: num(b.amount),
+      };
+    });
+
+  const docBills = useMemo(
+    (): DocBill[] => (editing?.lines ?? []).flatMap(billsOfLine),
+    // billsOfLine reads both of these and nothing else.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [editing, openBills],
+  );
 
   /** How the money moved, by the label the company gave the mode. */
   const docMode = useMemo(
@@ -820,6 +826,63 @@ export function VoucherEntryScreen({
       gstin: c?.gstin,
     };
   }, [companies, activeCompany]);
+
+  /**
+   * The voucher itself — every kind, and the one document all ten share.
+   *
+   * The lines are read off the SAVED voucher and dressed with what only the
+   * screen knows: a party is an id on a line and a name in the master, and the
+   * same is true of a division and a department. A document showing ids would
+   * be a document nobody can check the entry against.
+   */
+  const printVoucher = () => {
+    if (!editing) return;
+    const lines: VoucherDocLine[] = editing.lines.map((l) => {
+      const debit = num(l.debit);
+      return {
+        side: debit > 0 ? 'DR' : 'CR',
+        accountCode: l.account?.code ?? '',
+        accountName: l.account?.name ?? '',
+        amount: debit > 0 ? debit : num(l.credit),
+        party: masters.partyName(l.partyKind, l.partyId),
+        costCentre: masters.centreName(l.costCenterId),
+        costObject: masters.objectName(l.costObjectId),
+        narration: l.narration,
+        bills: billsOfLine(l).map((b) => ({
+          label: b.dueDate
+            ? `${b.billRef} (due ${fmtDate(b.dueDate)})`
+            : b.billRef,
+          amount: b.amount,
+        })),
+      };
+    });
+    const html = buildVoucherHtml({
+      company: docCompany,
+      branchName: activeBranch?.name ?? null,
+      kind: title,
+      voucherNo: editing.voucherNo,
+      date: editing.date,
+      status: editing.status,
+      cancelReason: editing.cancelReason,
+      postedAt: editing.postedAt,
+      reference: editing.reference,
+      narration: editing.narration,
+      transactionType: txnType?.label ?? null,
+      transactionSubtype:
+        txnSubtypes.find((s) => s.id === editing.transactionSubtypeId)?.label ??
+        null,
+      mode: docMode,
+      instrumentNo: editing.instrument?.instrumentNo ?? null,
+      instrumentDate: editing.instrument?.instrumentDate ?? null,
+      postDated: editing.instrument?.chequeKind === 'PDC',
+      bankLedger: docBank ? `${docBank.code} — ${docBank.name}` : null,
+      lines,
+      currency: docCurrency,
+    });
+    if (!openPrintWindow(html)) {
+      toast.error('The browser blocked the print window. Allow pop-ups for this site.');
+    }
+  };
 
   const printAdvice = () => {
     if (!editing) return;
@@ -1389,9 +1452,19 @@ export function VoucherEntryScreen({
               <ArrowLeft className="mr-1 inline h-4 w-4" />
               Back
             </button>
-            {/* The paper, on a voucher that exists. Both print what was SAVED,
-                so they sit apart from the ways of finishing rather than among
-                them — and a draft prints marked as one. */}
+            {/* The paper, on a voucher that exists. All of it prints what was
+                SAVED, so it sits apart from the ways of finishing rather than
+                among them — and a draft prints marked as one. */}
+            {editing && (
+              <button
+                className="btn-secondary whitespace-nowrap"
+                title="Print the voucher — the entry as the books hold it"
+                onClick={printVoucher}
+              >
+                <Printer className="mr-1 inline h-4 w-4" />
+                Print
+              </button>
+            )}
             {canPrintAdvice && (
               <button
                 className="btn-secondary whitespace-nowrap"
@@ -1408,7 +1481,7 @@ export function VoucherEntryScreen({
                 title="Print onto a pre-printed cheque leaf from this bank's book"
                 onClick={printCheque}
               >
-                <Printer className="mr-1 inline h-4 w-4" />
+                <Banknote className="mr-1 inline h-4 w-4" />
                 Cheque
               </button>
             )}
