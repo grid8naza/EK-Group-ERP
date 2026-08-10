@@ -326,11 +326,26 @@ export default function WorkflowsPage() {
         .map((b) => ({ value: b.id, label: b.name })),
     [branches, def.companyId],
   );
+  /**
+   * The forms of the chosen module, each shown with the screen it is.
+   *
+   * The name alone is ambiguous once the list is flat. Accounts offers a form
+   * called "Purchase" and another called "Sales", which read plainly enough
+   * under the Accounting Vouchers menu and not at all beside Account Ledgers
+   * and Customer Master — and binding a workflow to the wrong one is not a
+   * mistake anybody would notice until an approval failed to appear.
+   *
+   * It also gives the search something to bite on: typing "vouchers" narrows to
+   * the ten voucher screens, which no part of the name would have done.
+   */
   const formOptions = useMemo(
     () =>
       forms
         .filter((o) => !def.moduleId || o.moduleId === Number(def.moduleId))
-        .map((o) => ({ value: o.id, label: o.objectName })),
+        .map((o) => ({
+          value: o.id,
+          label: o.route ? `${o.objectName} — ${o.route}` : o.objectName,
+        })),
     [forms, def.moduleId],
   );
 
