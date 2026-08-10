@@ -793,6 +793,26 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
  */
 export function HelpTip({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
+  const tip = useRef<HTMLSpanElement>(null);
+  const [shift, setShift] = useState(0);
+
+  // The bubble is centred under the ?, which spills off-screen for a control
+  // sitting near the right-hand edge of a drawer — the reader sees half a
+  // sentence. Once it is on screen, nudge it back inside the window.
+  useEffect(() => {
+    if (!open) {
+      setShift(0);
+      return;
+    }
+    const el = tip.current;
+    if (!el) return;
+    const { left, right } = el.getBoundingClientRect();
+    const margin = 8;
+    const overshoot = right - (window.innerWidth - margin);
+    if (overshoot > 0) setShift(-overshoot);
+    else if (left < margin) setShift(margin - left);
+  }, [open, text]);
+
   return (
     <span className="relative inline-flex">
       <button
@@ -813,8 +833,10 @@ export function HelpTip({ text }: { text: string }) {
       </button>
       {open && (
         <span
+          ref={tip}
           role="tooltip"
-          className="absolute left-1/2 top-full z-50 mt-1.5 w-60 max-w-[min(15rem,80vw)] -translate-x-1/2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-normal leading-relaxed text-slate-600 shadow-lg dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+          style={{ transform: `translateX(calc(-50% + ${shift}px))` }}
+          className="absolute left-1/2 top-full z-50 mt-1.5 w-60 max-w-[min(15rem,80vw)] rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-normal leading-relaxed text-slate-600 shadow-lg dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
         >
           {text}
         </span>
