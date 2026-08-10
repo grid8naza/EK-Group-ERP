@@ -2468,6 +2468,12 @@ export interface VoucherWorkflowState {
     status: 'IN_PROGRESS' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | null;
     currentSequence: number;
     myTask: WorkflowViewerTask | null;
+    /**
+     * Still going, and waiting on nobody — the level it has reached has no one
+     * who can act. It resumes by itself once the workflow or that access is put
+     * right; nothing here needs to be pressed.
+     */
+    stalled?: boolean;
     timeline: WorkflowTimelineEntry[];
   };
   /** Who wrote it — the one name in the trail the engine does not hold. */

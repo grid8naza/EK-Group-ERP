@@ -451,6 +451,12 @@ export class WorkflowRuntimeService {
         timeline: [],
       };
     }
+    // A stalled instance heals itself the moment somebody looks at the
+    // document, so putting the configuration right — restoring access, adding
+    // an approver to a group — is all anyone has to do. Without this a stall
+    // would need a button nobody would know to press.
+    const stalled = await this.retryStalled(instance);
+
     const full = await this.getInstance(instance.id);
     const pending = await this.prisma.workflowTask.findFirst({
       where: {
@@ -481,6 +487,8 @@ export class WorkflowRuntimeService {
       status: instance.status as WorkflowStatus,
       currentSequence: instance.currentSequence,
       myTask,
+      /** Waiting on nobody: the level it has reached has no one who can act. */
+      stalled,
       timeline: full.timeline.map((t) => ({
         id: t.id,
         sequence: t.sequence,
@@ -491,6 +499,38 @@ export class WorkflowRuntimeService {
         createdAt: t.createdAt,
       })),
     };
+  }
+
+  /**
+   * Try a stalled level again, and say whether it is still stalled.
+   *
+   * An instance that is IN_PROGRESS with no pending task anywhere can only be
+   * stalled: every other path either raises a task, finishes the instance, or
+   * stalls it deliberately. So this needs no flag of its own — the absence of
+   * work IS the condition.
+   *
+   * `currentSequence - 1` re-runs activation from the stalled level rather than
+   * the one after it, which is the whole point: the level was never acted on.
+   */
+  private async retryStalled(instance: WorkflowInstance): Promise<boolean> {
+    if (instance.status !== 'IN_PROGRESS') return false;
+    const pending = await this.prisma.workflowTask.count({
+      where: { instanceId: instance.id, status: 'PENDING' },
+    });
+    if (pending) return false;
+
+    await this.activateNext(instance, instance.currentSequence - 1);
+
+    const nowPending = await this.prisma.workflowTask.count({
+      where: { instanceId: instance.id, status: 'PENDING' },
+    });
+    const after = await this.prisma.workflowInstance.findUnique({
+      where: { id: instance.id },
+      select: { status: true },
+    });
+    // Still stalled only if it is still going and still has nothing to do —
+    // an instance that finished on the retry is not stalled, it is done.
+    return after?.status === 'IN_PROGRESS' && nowPending === 0;
   }
 
   /** Preview the first configured step, to label a draft's forward button. */
@@ -630,24 +670,46 @@ export class WorkflowRuntimeService {
 
     const assignees = await this.resolveAssignees(next, instance.companyId);
     if (assignees.length === 0) {
-      // No one to act at this level — skip it and continue (guarded by
-      // sequence). The reason is written into the trail rather than left to be
-      // inferred: a level that was configured and then skipped because nobody
-      // named on it can reach the company reads, in the document's history,
-      // exactly like a level nobody was ever put on.
-      const named =
-        next.users.length > 0 || next.userGroupId != null
-          ? 'nobody named on this level has access to the company'
-          : 'no approver is named on this level';
-      await this.log(
-        instance.id,
-        next.id,
-        next.sequence,
-        instance.startedByUserId,
-        'AUTO_SKIP',
-        named,
-      );
-      await this.activateNext(instance, next.sequence);
+      // Nobody can act at this level, so the document STOPS here. It used to
+      // skip on, which quietly threw the level away: a control somebody had
+      // configured disappeared because a group emptied or an approver's access
+      // was withdrawn, and the document went to the next level — or to approved
+      // — with nothing but a line in the trail to show for it.
+      //
+      // A step always names a group or a user (see assertStepsValid), so a level
+      // resolving to nobody is never a deliberately blank one. It is a
+      // configuration that has stopped being true, and the answer to that is to
+      // wait for somebody to put it right, not to carry on without it.
+      //
+      // The instance stays IN_PROGRESS and its sequence sits ON the stalled
+      // level, so retryStalled can pick it up again the moment it can be filled.
+      await this.prisma.workflowInstance.update({
+        where: { id: instance.id },
+        data: { currentSequence: next.sequence },
+      });
+      // Said ONCE per level. Every read of the document retries the stall, and
+      // a line per retry would bury the trail under the same sentence repeated
+      // as often as anybody looked.
+      const alreadySaid = await this.prisma.workflowActionLog.findFirst({
+        where: {
+          instanceId: instance.id,
+          sequence: next.sequence,
+          action: 'STALLED',
+        },
+        select: { id: true },
+      });
+      if (!alreadySaid) {
+        await this.log(
+          instance.id,
+          next.id,
+          next.sequence,
+          instance.startedByUserId,
+          'STALLED',
+          next.users.length > 0 || next.userGroupId != null
+            ? 'nobody named on this level can act for this company'
+            : 'no approver is named on this level',
+        );
+      }
       return;
     }
 

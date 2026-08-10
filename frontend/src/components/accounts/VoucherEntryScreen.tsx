@@ -900,12 +900,24 @@ export function VoucherEntryScreen({
     setSaving(true);
     try {
       await api.patch(`/vouchers/${saved.id}/submit`, {});
-      const fresh = await api.get<Voucher>(`/vouchers/${saved.id}`);
-      toast.success(
-        fresh.status === 'POSTED'
-          ? `${fresh.voucherNo} posted.`
-          : 'Sent for approval.',
-      );
+      const [fresh, state] = await Promise.all([
+        api.get<Voucher>(`/vouchers/${saved.id}`),
+        api.get<VoucherWorkflowState>(`/vouchers/${saved.id}/workflow`),
+      ]);
+      // Told at the moment it happens, not left to be noticed on the form. A
+      // voucher that has stopped dead looks exactly like one on its way, and
+      // the difference is a fortnight of everyone assuming somebody else has it.
+      if (state.state.stalled) {
+        toast.error(
+          `Sent, but it has stopped at level ${state.state.currentSequence} — nobody there can act on it.`,
+        );
+      } else {
+        toast.success(
+          fresh.status === 'POSTED'
+            ? `${fresh.voucherNo} posted.`
+            : 'Sent for approval.',
+        );
+      }
       open(fresh);
       await Promise.all([refetch(), refetchWorkflow()]);
     } catch (e) {
@@ -959,15 +971,27 @@ export function VoucherEntryScreen({
       const res = await api.patch<Voucher>(`/vouchers/${editing!.id}/act`, {
         action,
       });
-      toast.success(
-        res.status === 'POSTED'
-          ? `${res.voucherNo} approved and posted.`
-          : action === 'CANCEL'
-            ? `${res.voucherNo} withdrawn — it is yours to correct again.`
-            : action === 'REJECT'
-              ? `${res.voucherNo} sent back to its writer.`
-              : 'Done.',
+      // Passing it on can be what stalls it — the level below may have nobody
+      // who can act. Whoever just acted is the one person in a position to
+      // chase it, so they are the one told.
+      const after = await api.get<VoucherWorkflowState>(
+        `/vouchers/${editing!.id}/workflow`,
       );
+      if (after.state.stalled) {
+        toast.error(
+          `Done, but it has stopped at level ${after.state.currentSequence} — nobody there can act on it.`,
+        );
+      } else {
+        toast.success(
+          res.status === 'POSTED'
+            ? `${res.voucherNo} approved and posted.`
+            : action === 'CANCEL'
+              ? `${res.voucherNo} withdrawn — it is yours to correct again.`
+              : action === 'REJECT'
+                ? `${res.voucherNo} sent back to its writer.`
+                : 'Done.',
+        );
+      }
       await Promise.all([refetch(), refetchWorkflow()]);
       open(res);
     } catch (e) {
@@ -2555,7 +2579,20 @@ export function VoucherEntryScreen({
                   </li>
                 ))}
             </ol>
-            {inApproval && !myTask && (
+            {/* Waiting on nobody is not the same as waiting on somebody, and
+                saying the second when the first is true is how a voucher sits
+                for a fortnight while everyone assumes it is with the next
+                level. */}
+            {inApproval && !myTask && wf?.state.stalled && (
+              <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">
+                Stopped at level {wf.state.currentSequence}: nobody there can act
+                on it. Give an approver access to this company, or put one on
+                that level, and it carries on by itself — see the trail above for
+                which it is.
+                {wf.canWithdraw && ' You may also withdraw it.'}
+              </p>
+            )}
+            {inApproval && !myTask && !wf?.state.stalled && (
               <p className="mt-3 text-xs text-slate-400">
                 Waiting on the next level. It reaches the books when the last
                 approver has signed, not before.

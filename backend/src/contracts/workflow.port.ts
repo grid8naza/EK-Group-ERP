@@ -66,6 +66,13 @@ export interface WorkflowDocState {
   status: WorkflowStatus | null; // null when no workflow has started (draft)
   currentSequence: number;
   myTask: WorkflowViewerTask | null;
+  /**
+   * Still going, and waiting on nobody: the level it has reached has no one who
+   * can act — an empty group, or approvers who can no longer reach the company.
+   * The document goes no further until the workflow or that access is put right,
+   * at which point it resumes by itself. Absent where no workflow has started.
+   */
+  stalled?: boolean;
   timeline: WorkflowTimelineEntry[];
 }
 
