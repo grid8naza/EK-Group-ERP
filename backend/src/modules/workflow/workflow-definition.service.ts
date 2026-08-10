@@ -226,6 +226,17 @@ export class WorkflowDefinitionService {
     for (const step of steps ?? []) {
       const acting = step.targetCompanyId ?? definitionCompanyId;
       const needed = [...new Set([acting, definitionCompanyId])];
+
+      // A group's COMPANY is a property of the group, not of who happens to be
+      // in it today, so unlike membership it can be settled here — and must be:
+      // a group of another company's people is a level that can never act, and
+      // it saves perfectly happily before stalling the first document to reach
+      // it. The setup screen already narrows the list; this is what holds when
+      // the definition is written any other way.
+      if (step.userGroupId) {
+        await this.assertGroupCanAct(step.userGroupId, step.sequence, needed);
+      }
+
       for (const userId of step.userIds ?? []) {
         for (const companyId of needed) {
           if (await this.users.canAccessCompany(userId, companyId)) continue;
@@ -242,6 +253,46 @@ export class WorkflowDefinitionService {
           );
         }
       }
+    }
+  }
+
+  /**
+   * A group named on a step has to be able to act for the companies involved.
+   *
+   * Two things are checked, and they fail for different reasons. The group's own
+   * company is fixed, so a group from elsewhere is simply the wrong group and is
+   * refused outright. Emptiness is not fixed — a group loses its last member
+   * long after any workflow was saved — so this only catches one that is empty
+   * ALREADY. The runtime catches the rest; see resolveAssignees.
+   */
+  private async assertGroupCanAct(
+    userGroupId: number,
+    sequence: number,
+    neededCompanyIds: number[],
+  ) {
+    const group = await this.prisma.userGroup.findUnique({
+      where: { id: userGroupId },
+      select: { id: true, name: true, companyId: true, company: { select: { name: true } } },
+    });
+    if (!group) {
+      throw new BadRequestException(`Step ${sequence}: that user group no longer exists.`);
+    }
+    if (!neededCompanyIds.includes(group.companyId)) {
+      const needed = await this.prisma.company.findMany({
+        where: { id: { in: neededCompanyIds } },
+        select: { name: true },
+      });
+      throw new BadRequestException(
+        `Step ${sequence}: “${group.name}” is a group of ${group.company.name}, so nobody in it can act for ` +
+          `${needed.map((c) => c.name).join(' or ')}. Choose a group of that company.`,
+      );
+    }
+    const members = await this.users.usersInGroup(userGroupId);
+    if (!members.length) {
+      throw new BadRequestException(
+        `Step ${sequence}: “${group.name}” has no active members, so nothing would ever reach it. ` +
+          `Put somebody in the group, or name the approvers on the step.`,
+      );
     }
   }
 

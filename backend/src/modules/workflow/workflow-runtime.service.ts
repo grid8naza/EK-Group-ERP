@@ -502,6 +502,31 @@ export class WorkflowRuntimeService {
   }
 
   /**
+   * Why this level has nobody, in the words of what actually happened.
+   *
+   * A group that has lost its last member and a group whose members cannot
+   * reach the company both leave the level empty, and they are put right in
+   * completely different ways — one by adding somebody to the group, the other
+   * by granting access. Saying "nobody can act for this company" for both sent
+   * whoever read the trail looking in the wrong place.
+   */
+  private async stallReason(step: {
+    userGroupId: number | null;
+    users: { userId: number }[];
+  }): Promise<string> {
+    if (step.users.length) {
+      return 'nobody named on this level can act for this company';
+    }
+    if (step.userGroupId) {
+      const members = await this.users.usersInGroup(step.userGroupId);
+      return members.length
+        ? 'nobody in the group on this level can act for this company'
+        : 'the group on this level has no active members';
+    }
+    return 'no approver is named on this level';
+  }
+
+  /**
    * Try a stalled level again, and say whether it is still stalled.
    *
    * An instance that is IN_PROGRESS with no pending task anywhere can only be
@@ -705,9 +730,7 @@ export class WorkflowRuntimeService {
           next.sequence,
           instance.startedByUserId,
           'STALLED',
-          next.users.length > 0 || next.userGroupId != null
-            ? 'nobody named on this level can act for this company'
-            : 'no approver is named on this level',
+          await this.stallReason(next),
         );
       }
       return;
