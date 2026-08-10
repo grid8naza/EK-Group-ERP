@@ -2420,11 +2420,46 @@ export interface Voucher {
   transactionSubtypeId: number | null;
   /** How the money moved. Only on the bank kinds. */
   instrument?: VoucherInstrument | null;
+  /**
+   * The approval it is going through, where a workflow governs its kind, and
+   * the label of the level it is waiting at. A voucher under approval stays
+   * DRAFT — these say it is waiting on somebody rather than unfinished.
+   */
+  workflowInstanceId?: number | null;
+  workflowStatus?: string | null;
   totalDebit: string | number;
   totalCredit: string | number;
   cancelReason: string | null;
   postedAt: string | null;
   lines: VoucherLine[];
+}
+
+/**
+ * Who signs for a voucher, and where it has got to.
+ *
+ * Fetched beside the voucher rather than carried on it: it is the VIEWER's
+ * state, not the document's — two people open the same voucher and only one of
+ * them has a task on it — and it changes when somebody else acts, not when the
+ * voucher is saved.
+ */
+export interface VoucherWorkflowState {
+  /** False = no workflow configured for this kind; Post writes to the books. */
+  governed: boolean;
+  firstStep: {
+    buttonText: string;
+    actionType: string;
+    canCancel: boolean;
+  } | null;
+  state: {
+    instanceId: number | null;
+    status: 'IN_PROGRESS' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | null;
+    currentSequence: number;
+    myTask: WorkflowViewerTask | null;
+    timeline: WorkflowTimelineEntry[];
+  };
+  /** Who wrote it — the one name in the trail the engine does not hold. */
+  preparedBy: string | null;
+  preparedOn: string | null;
 }
 
 export interface CostCentreCategory {

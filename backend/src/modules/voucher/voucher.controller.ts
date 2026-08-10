@@ -17,6 +17,7 @@ import { AuthUser, CurrentUser } from '../../auth/current-user.decorator';
 import { VoucherService } from './voucher.service';
 import {
   BankDateDto,
+  ActVoucherDto,
   CancelVoucherDto,
   CreateVoucherDto,
   PdcMoveDto,
@@ -180,6 +181,40 @@ export class VoucherController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.service.post(user.id, companyId, id);
+  }
+
+  /**
+   * Who signs for this voucher, and where it has got to — what the form needs
+   * to know whether to offer Post or Submit, and to draw the approval trail.
+   */
+  @Get(':id/workflow')
+  workflowState(
+    @CurrentUser() user: AuthUser,
+    @CompanyId() companyId: number | undefined,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.service.workflowState(user.id, companyId, id);
+  }
+
+  /** Send a draft for approval. Posts it where no workflow governs the kind. */
+  @Patch(':id/submit')
+  submit(
+    @CurrentUser() user: AuthUser,
+    @CompanyId() companyId: number | undefined,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.service.submit(user.id, companyId, id);
+  }
+
+  /** Approve, forward, reject or cancel — the last approval posts it. */
+  @Patch(':id/act')
+  act(
+    @CurrentUser() user: AuthUser,
+    @CompanyId() companyId: number | undefined,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ActVoucherDto,
+  ) {
+    return this.service.act(user.id, companyId, id, dto);
   }
 
   @Patch(':id/cancel')

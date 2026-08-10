@@ -1,7 +1,16 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Banknote, Check, FileText, Printer, Trash2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  Banknote,
+  Check,
+  FileText,
+  Printer,
+  Send,
+  Trash2,
+  X,
+} from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import {
@@ -43,6 +52,7 @@ import type {
   Voucher,
   VoucherLine,
   VoucherType,
+  VoucherWorkflowState,
 } from '@/lib/types';
 import {
   BILL_TYPES,
@@ -136,6 +146,27 @@ const ROW_INDENT = 'pl-[5rem]';
 
 const focusById = (id: string) =>
   requestAnimationFrame(() => document.getElementById(id)?.focus());
+
+/**
+ * The engine's verbs, as the foot of a voucher says them.
+ *
+ * A workflow logs what it did — CREATE, FORWARD, APPROVE — which is the right
+ * vocabulary for an engine and the wrong one for a signature block. Nobody
+ * writes "FORWARD" under a name on a voucher; they write who checked it.
+ *
+ * Unmapped verbs print as they come. A new action type should read oddly rather
+ * than disappear, since a name against a blank role is worse than an ugly one.
+ */
+const SIGNED_AS: Record<string, string> = {
+  CREATE: 'Prepared by',
+  FORWARD: 'Checked by',
+  REVIEW: 'Reviewed by',
+  APPROVE: 'Approved by',
+  REJECT: 'Rejected by',
+  REFERENCE: 'Seen by',
+  CANCEL: 'Cancelled by',
+};
+const signedAs = (action: string) => SIGNED_AS[action] ?? action;
 
 /** How a chosen bill reads back on the line. Null when none is chosen yet. */
 function billLabel(bills: OutstandingBill[], againstId: string): string | null {
@@ -569,7 +600,6 @@ export function VoucherEntryScreen({
   const canAdd = can(route, 'add');
   const canEdit = can(route, 'edit');
   const canDelete = can(route, 'delete');
-  const readOnly = mode === 'view';
 
   // ---- what each party still owes, per line -----------------------------------
   // Fetched when a party is named rather than up front: it is per party, and
@@ -708,6 +738,35 @@ export function VoucherEntryScreen({
   // already — the party masters and the account master, bank details included,
   // come with `masters`, and the bills came with the voucher.
 
+  // ---- who signs for it ----------------------------------------------------
+  //
+  // Fetched beside the voucher rather than carried on it, because it is the
+  // VIEWER's state and not the document's: two people open the same voucher and
+  // only one of them holds a task on it, and it changes when somebody else acts
+  // rather than when this form saves. Re-read after every action, which is what
+  // moves the buttons on without a reload.
+  const {
+    data: wf,
+    refetch: refetchWorkflow,
+  } = useFetch<VoucherWorkflowState>(
+    editing ? `/vouchers/${editing.id}/workflow` : null,
+    [editing?.id],
+  );
+  const governed = !!wf?.governed;
+  const myTask = wf?.state.myTask ?? null;
+  const trail = wf?.state.timeline ?? [];
+  /** Sent, and not yet through. Editing it now would change what people signed. */
+  const inApproval = wf?.state.status === 'IN_PROGRESS';
+
+  /**
+   * A posted voucher is read, not edited — and so is one under approval, unless
+   * the step the viewer holds says otherwise. Two people have signed a figure;
+   * changing it beneath them would leave their names against an entry they
+   * never saw. The engine's own `canEdit` is the exception, for the level whose
+   * job IS to correct the entry before passing it on.
+   */
+  const readOnly = mode === 'view' || (inApproval && !myTask?.canEdit);
+
   // Every kind prints the voucher itself, so these are fetched once a form is
   // open rather than by the kinds that print something extra — but not on the
   // register, which is most of the time this screen is on and needs neither.
@@ -828,6 +887,78 @@ export function VoucherEntryScreen({
   }, [companies, activeCompany]);
 
   /**
+   * Send it for approval. Saves first: what the approvers are being shown has
+   * to be what is on the screen, and a submit that quietly forwarded the last
+   * saved version would be the worst kind of surprise.
+   */
+  const submitForApproval = async () => {
+    if (!balanced) return toast.error('It does not balance yet.');
+    const saved = await save(false);
+    if (!saved) return;
+    setSaving(true);
+    try {
+      await api.patch(`/vouchers/${saved.id}/submit`, {});
+      const fresh = await api.get<Voucher>(`/vouchers/${saved.id}`);
+      toast.success(
+        fresh.status === 'POSTED'
+          ? `${fresh.voucherNo} posted.`
+          : 'Sent for approval.',
+      );
+      open(fresh);
+      await Promise.all([refetch(), refetchWorkflow()]);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Failed to submit.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /**
+   * Approve, forward, reject or cancel the viewer's own task.
+   *
+   * The engine decides what each of those means on the step it was configured
+   * on; this only reports which was taken and re-reads the result. The LAST
+   * approval is what writes the voucher to the books — the server does that,
+   * not this, because posting is what approval MEANS and it cannot be left to
+   * whether a screen remembered to ask.
+   */
+  const actOnTask = async (
+    action: 'APPROVE' | 'FORWARD' | 'REJECT' | 'CANCEL',
+  ) => {
+    const needsWhy = action === 'REJECT';
+    if (needsWhy) {
+      const ok = await confirm({
+        title: `Reject ${editing?.voucherNo}`,
+        message:
+          'It goes back to its writer as a draft they may correct and send ' +
+          'again. Nothing reaches the books.',
+        confirmText: 'Reject',
+        cancelText: 'Keep',
+        danger: true,
+        defaultCancel: true,
+      });
+      if (!ok) return;
+    }
+    setSaving(true);
+    try {
+      const res = await api.patch<Voucher>(`/vouchers/${editing!.id}/act`, {
+        action,
+      });
+      toast.success(
+        res.status === 'POSTED'
+          ? `${res.voucherNo} approved and posted.`
+          : 'Done.',
+      );
+      await Promise.all([refetch(), refetchWorkflow()]);
+      open(res);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Failed.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /**
    * The voucher itself — every kind, and the one document all ten share.
    *
    * The lines are read off the SAVED voucher and dressed with what only the
@@ -878,6 +1009,31 @@ export function VoucherEntryScreen({
       bankLedger: docBank ? `${docBank.code} — ${docBank.name}` : null,
       lines,
       currency: docCurrency,
+      // Who signed, where a workflow governs the kind. With none, this is empty
+      // and the sheet prints the blank ruled blocks for people to sign by hand.
+      // The writer, then everybody who acted after them. CREATE is dropped: it
+      // IS the writer, and a sheet naming the same person twice — once as
+      // preparer and once as creator — reads as two people.
+      signatories: governed
+        ? [
+            ...(wf?.preparedBy
+              ? [
+                  {
+                    role: 'Prepared by',
+                    name: wf.preparedBy,
+                    on: wf.preparedOn,
+                  },
+                ]
+              : []),
+            ...trail
+              .filter((t) => t.action !== 'CREATE')
+              .map((t) => ({
+                role: signedAs(t.action),
+                name: t.userName,
+                on: t.createdAt,
+              })),
+          ]
+        : [],
     });
     if (!openPrintWindow(html)) {
       toast.error('The browser blocked the print window. Allow pop-ups for this site.');
@@ -1289,45 +1445,57 @@ export function VoucherEntryScreen({
    * find it again to carry on. So the form re-opens on what the server actually
    * stored — which is also how the real voucher number replaces the preview.
    */
-  const save = async (post: boolean, andNew = false) => {
+  const save = async (
+    post: boolean,
+    andNew = false,
+  ): Promise<Voucher | null> => {
     const payload = body();
+    // Every one of these is checked on the server too. Here as well so the
+    // answer arrives while the field is still under the cursor rather than
+    // after a round trip — and, now that submitting saves first, so that a
+    // half-written entry never reaches an approver's inbox.
+    const reject = (message: string) => {
+      toast.error(message);
+      return null;
+    };
     if (!payload.voucherTypeId) {
-      return toast.error(`The ${noun} type is not set up yet.`);
+      return reject(`The ${noun} type is not set up yet.`);
     }
     if (payload.lines.length < 2) {
-      return toast.error(`A ${noun} needs at least two lines.`);
+      return reject(`A ${noun} needs at least two lines.`);
     }
     if (post && !balanced) {
-      return toast.error('Debits and credits must agree before posting.');
+      return reject('Debits and credits must agree before posting.');
     }
-    // Caught here as well as on the server, so the answer arrives while the
-    // field is still under the cursor rather than after a round trip.
     if (askInstrument) {
-      if (!instrument.modeValueId) return toast.error('Say how the money moved.');
+      if (!instrument.modeValueId) return reject('Say how the money moved.');
       if (!instrument.bankAccountId) {
-        return toast.error('Choose the bank account it goes through.');
+        return reject('Choose the bank account it goes through.');
       }
       if (isCheque) {
         if (!instrument.instrumentNo.trim()) {
-          return toast.error('Give the cheque number.');
+          return reject('Give the cheque number.');
         }
         if (!instrument.instrumentDate) {
-          return toast.error('Give the date written on the cheque.');
+          return reject('Give the date written on the cheque.');
         }
         if (!instrument.chequeKind) {
-          return toast.error(
+          return reject(
             'Say whether the cheque is current-dated or post-dated.',
           );
         }
         if (takesIssuer && !instrument.issuerBankValueId) {
-          return toast.error('Say which bank the cheque is drawn on.');
+          return reject('Say which bank the cheque is drawn on.');
         }
       }
     }
     setSaving(true);
     try {
       const saved = editing
-        ? await api.patch<Voucher>(`/vouchers/${editing.id}`, { ...payload, post })
+        ? await api.patch<Voucher>(`/vouchers/${editing.id}`, {
+            ...payload,
+            post,
+          })
         : await api.post<Voucher>('/vouchers', { ...payload, post });
       toast.success(post ? 'Voucher posted.' : 'Draft saved.');
       await Promise.all([refetch(), refetchNextNo()]);
@@ -1339,8 +1507,11 @@ export function VoucherEntryScreen({
         open(saved);
         if (!post) pendingFocus.current = DATE_FIELD;
       }
+      // Handed back so submitting can save and then forward the SAME voucher.
+      return saved;
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
+      return null;
     } finally {
       setSaving(false);
     }
@@ -1506,30 +1677,86 @@ export function VoucherEntryScreen({
                 >
                   Save &amp; New
                 </button>
+                {/* Where somebody has said who signs for this kind, the button
+                    that wrote straight to the ledger becomes the one that sends
+                    it to them — and Post & New goes with it, because there is
+                    no longer a posting to repeat. */}
+                {governed ? (
+                  <button
+                    className="btn-primary whitespace-nowrap"
+                    disabled={saving || !balanced}
+                    title={
+                      balanced
+                        ? `Send it to ${wf?.firstStep?.buttonText ?? 'the next level'} for approval`
+                        : 'It does not balance yet'
+                    }
+                    onClick={() => void submitForApproval()}
+                  >
+                    <Send className="mr-1 inline h-4 w-4" />
+                    {wf?.firstStep?.buttonText || 'Send for approval'}
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      className="btn-primary whitespace-nowrap"
+                      disabled={saving || !balanced}
+                      title={
+                        balanced
+                          ? 'Write it to the books (Ctrl+Enter)'
+                          : 'It does not balance yet'
+                      }
+                      onClick={() => void save(true)}
+                    >
+                      <Check className="mr-1 inline h-4 w-4" />
+                      Post
+                    </button>
+                    <button
+                      className="btn-secondary whitespace-nowrap"
+                      disabled={saving || !balanced}
+                      title={
+                        balanced
+                          ? 'Write it to the books and open a fresh voucher'
+                          : 'It does not balance yet'
+                      }
+                      onClick={() => void save(true, true)}
+                    >
+                      Post &amp; New
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+            {/* The approver's side of the same header. Shown on a voucher the
+                viewer holds a task on, whatever mode the form is in — a posted
+                voucher is read-only and an approver still has to be able to act
+                on the one in front of them. */}
+            {myTask && (
+              <>
+                {myTask.canReject && (
+                  <button
+                    className="btn-secondary whitespace-nowrap"
+                    disabled={saving}
+                    title="Send it back to its writer as a draft"
+                    onClick={() => void actOnTask('REJECT')}
+                  >
+                    <X className="mr-1 inline h-4 w-4" />
+                    Reject
+                  </button>
+                )}
                 <button
                   className="btn-primary whitespace-nowrap"
-                  disabled={saving || !balanced}
+                  disabled={saving}
                   title={
-                    balanced
-                      ? 'Write it to the books (Ctrl+Enter)'
-                      : 'It does not balance yet'
+                    myTask.canApprove
+                      ? 'Approve it — the last approval writes it to the books'
+                      : 'Beyond your limit: you may review it and pass it up'
                   }
-                  onClick={() => void save(true)}
+                  onClick={() =>
+                    void actOnTask(myTask.canApprove ? 'APPROVE' : 'FORWARD')
+                  }
                 >
                   <Check className="mr-1 inline h-4 w-4" />
-                  Post
-                </button>
-                <button
-                  className="btn-secondary whitespace-nowrap"
-                  disabled={saving || !balanced}
-                  title={
-                    balanced
-                      ? 'Write it to the books and open a fresh voucher'
-                      : 'It does not balance yet'
-                  }
-                  onClick={() => void save(true, true)}
-                >
-                  Post &amp; New
+                  {myTask.buttonText}
                 </button>
               </>
             )}
@@ -1551,10 +1778,13 @@ export function VoucherEntryScreen({
           }
           // Ctrl+Enter accepts the voucher from anywhere on the form — the one
           // shortcut worth knowing, and the only way to finish without the
-          // mouse once the narration has the caret.
+          // mouse once the narration has the caret. It does whatever the
+          // primary button does, so the shortcut does not quietly go on trying
+          // to post where posting is no longer how a voucher is finished.
           if (!(e.ctrlKey || e.metaKey) || saving || !balanced) return;
           e.preventDefault();
-          void save(true);
+          if (governed) void submitForApproval();
+          else void save(true);
         }}
       >
         <ReadOnlyFieldset readOnly={readOnly}>
@@ -2214,6 +2444,70 @@ export function VoucherEntryScreen({
           </div>
         </ReadOnlyFieldset>
 
+        {/* Who has signed, in the order they did. On the form rather than only
+            on the printed voucher, because the question "where has this got
+            to?" is asked far more often than the sheet is printed. */}
+        {(trail.length > 0 || inApproval) && (
+          <div className="card p-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Approval trail
+              </p>
+              {editing?.workflowStatus && (
+                <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">
+                  {editing.workflowStatus}
+                </span>
+              )}
+            </div>
+            <ol className="mt-3 space-y-2">
+              {/* The writer first. The engine's trail starts at the step they
+                  acted on, and on a workflow whose first level is somebody
+                  else it would otherwise begin with the reviewer — leaving the
+                  sheet with no answer to who prepared it. */}
+              {wf?.preparedBy && (
+                <li className="flex gap-3 text-sm">
+                  <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-slate-300" />
+                  <div>
+                    <span className="font-medium text-slate-800 dark:text-slate-100">
+                      Prepared
+                    </span>
+                    <span className="text-slate-500">
+                      {' '}
+                      — {wf.preparedBy}
+                      {wf.preparedOn ? ` · ${fmtDate(wf.preparedOn)}` : ''}
+                    </span>
+                  </div>
+                </li>
+              )}
+              {trail
+                .filter((t) => t.action !== 'CREATE')
+                .map((t) => (
+                  <li key={t.id} className="flex gap-3 text-sm">
+                    <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand-500" />
+                    <div>
+                      <span className="font-medium text-slate-800 dark:text-slate-100">
+                        {signedAs(t.action)}
+                      </span>
+                      <span className="text-slate-500">
+                        {' '}
+                        — {t.userName} · {fmtDate(t.createdAt)}
+                      </span>
+                      {t.comment && (
+                        <p className="text-slate-500">“{t.comment}”</p>
+                      )}
+                    </div>
+                  </li>
+                ))}
+            </ol>
+            {inApproval && !myTask && (
+              <p className="mt-3 text-xs text-slate-400">
+                Waiting on the next level. It reaches the books when the last
+                approver has signed, not before.
+              </p>
+            )}
+          </div>
+        )}
+
         {editing?.status === 'CANCELLED' && editing.cancelReason && (
           <p className="text-sm text-rose-600 dark:text-rose-400">
             Cancelled — {editing.cancelReason}
@@ -2221,8 +2515,8 @@ export function VoucherEntryScreen({
         )}
         <p className="text-xs text-slate-400">
           {activeCompany?.name ?? 'This company'} · Enter moves on · D and C set
-          the side · Alt+Enter adds a line · Ctrl+Delete drops one · Ctrl+Enter
-          posts.
+          the side · Alt+Enter adds a line · Ctrl+Delete drops one · Ctrl+Enter{' '}
+          {governed ? 'sends it for approval' : 'posts'}.
         </p>
       </div>
 

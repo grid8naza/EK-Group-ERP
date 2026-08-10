@@ -562,6 +562,17 @@ model Voucher {
   reversesVoucherId Int?
   cancelReason      String?
 
+  /// The approval this voucher is going through, where a workflow governs its
+  /// kind — and the label of the level it is sitting at ("With Accounts Head").
+  ///
+  /// A voucher under approval stays DRAFT, and deliberately so. DRAFT already
+  /// means the one thing that matters about it — it is not in the books — and a
+  /// fourth status would have to be taught to every query, report and total
+  /// that today reads three. These two say WHY it is still a draft: waiting on
+  /// somebody, rather than unfinished.
+  workflowInstanceId Int?
+  workflowStatus     String?
+
   createdByUserId Int?
   postedByUserId  Int?
   postedAt        DateTime?

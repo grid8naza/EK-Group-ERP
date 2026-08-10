@@ -32,6 +32,23 @@ export interface VoucherTypeSeed {
   isSystemOnly: boolean;
 }
 
+/**
+ * The screen a hand-written kind is entered on — and, because a workflow is
+ * configured against a FORM, the document type its approvals hang from.
+ *
+ * One route per kind is what lets a bank payment need three signatures while a
+ * journal needs one: they are ten forms in the Workflow setup, not one.
+ *
+ * Derived from the code by construction, and true of all ten. It has to agree
+ * with ACCOUNTS_VOUCHER_MENU, which is where these screens are registered as
+ * objects; the two cannot be one list because a module may not import another
+ * module (see src/contracts/README.md). Where they disagree the object lookup
+ * finds nothing and submitting says so, loudly, rather than approvals quietly
+ * never applying.
+ */
+export const voucherRoute = (code: string) =>
+  `/accounts/vouchers/${code.toLowerCase().replace(/_/g, '-')}`;
+
 export const VOUCHER_TYPES: VoucherTypeSeed[] = [
   // ---- written by hand, one screen each ----
   {

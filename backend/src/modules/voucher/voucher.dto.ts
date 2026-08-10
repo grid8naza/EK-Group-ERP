@@ -3,6 +3,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsEnum,
   IsIn,
   IsInt,
   IsISO8601,
@@ -299,6 +300,25 @@ export class CancelVoucherDto {
   @IsString()
   @MaxLength(300)
   reason!: string;
+}
+
+/**
+ * Acting on a voucher's approval task.
+ *
+ * The verbs are the engine's, not the books': what a step DOES on approval is
+ * configured on the step, and the caller says only which of the five it is
+ * taking. A comment is the reviewer's own words — worth having on a rejection
+ * above all, since the writer has to know what to correct.
+ */
+export class ActVoucherDto {
+  @IsString()
+  @IsEnum(['APPROVE', 'FORWARD', 'REJECT', 'CANCEL', 'REFERENCE'])
+  action!: 'APPROVE' | 'FORWARD' | 'REJECT' | 'CANCEL' | 'REFERENCE';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  comment?: string;
 }
 
 /** The day the bank saw a line — null takes it back off the statement. */

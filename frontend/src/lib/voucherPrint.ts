@@ -61,6 +61,23 @@ export interface VoucherDocInput {
   bankLedger?: string | null;
   lines: VoucherDocLine[];
   currency?: CurrencyWords;
+  /**
+   * Who signed, in the order they did — the workflow's answer to the three
+   * names at the foot of a voucher.
+   *
+   * Empty where no workflow governs the kind, and the sheet then prints the
+   * blank ruled blocks it always did, for people to sign by hand. The two are
+   * the same document; only one of them already knows the answer.
+   */
+  signatories?: VoucherSignatory[];
+}
+
+/** One name at the foot of the voucher, and what they did. */
+export interface VoucherSignatory {
+  /** Prepared / Checked / Approved — or whatever the step was called. */
+  role: string;
+  name: string;
+  on?: string | null;
 }
 
 /**
@@ -170,6 +187,9 @@ export function buildVoucherHtml(v: VoucherDocInput): string {
   .note { margin-top: 12px; font-size: 11px; color: #475569; }
   .sign { margin-top: 48px; display: flex; gap: 32px; }
   .sign div { flex: 1; border-top: 1px solid #94a3b8; padding-top: 4px; text-align: center; color: #64748b; font-size: 11px; }
+  /* A signed voucher names people, so the name is the line that reads first and
+     the role explains it — the reverse of a blank block waiting for a pen. */
+  .sign div b { display: block; color: #1e293b; font-size: 12px; }
   @media print { body { margin: 12mm; } }
 </style>
 </head>
@@ -244,11 +264,22 @@ export function buildVoucherHtml(v: VoucherDocInput): string {
   }
   ${v.narration ? `<p class="note"><b>Narration:</b> ${esc(v.narration)}</p>` : ''}
 
-  <div class="sign">
-    <div>Prepared by</div>
-    <div>Checked by</div>
-    <div>Authorised signatory</div>
-  </div>
+  ${
+    (v.signatories ?? []).length
+      ? `<div class="sign">${(v.signatories ?? [])
+          .map(
+            (s) => `<div>
+              <b>${esc(s.name)}</b>
+              ${esc(s.role)}${s.on ? ` · ${esc(fmtDate(s.on))}` : ''}
+            </div>`,
+          )
+          .join('')}</div>`
+      : `<div class="sign">
+           <div>Prepared by</div>
+           <div>Checked by</div>
+           <div>Authorised signatory</div>
+         </div>`
+  }
 
   <script>
     window.onload = function () { window.focus(); window.print(); };

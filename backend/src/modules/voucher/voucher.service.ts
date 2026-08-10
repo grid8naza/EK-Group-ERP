@@ -25,6 +25,16 @@ import {
   type CompanyEntrySetup,
 } from '../../common/entry-rules';
 import {
+  WORKFLOW,
+  type DocumentRef,
+  type WorkflowPort,
+} from '../../contracts/workflow.port';
+import {
+  USER_LOOKUP,
+  type UserLookupPort,
+} from '../../contracts/user-lookup.port';
+import {
+  ActVoucherDto,
   CancelVoucherDto,
   CreateVoucherDto,
   InstrumentInput,
@@ -38,7 +48,7 @@ import {
   ISSUER_BANK_LOOKUP,
   PAYMENT_MODE_LOOKUP,
 } from '../../common/instruments';
-import { VOUCHER_NUMBER_PREFIX } from './voucher-types';
+import { VOUCHER_NUMBER_PREFIX, voucherRoute } from './voucher-types';
 import { sideOf } from './bill-side';
 
 /** Money is compared in paise: two decimals held as an integer never drift. */
@@ -220,6 +230,8 @@ export class VoucherService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(NUMBERING) private readonly numbering: NumberingPort,
+    @Inject(WORKFLOW) private readonly workflow: WorkflowPort,
+    @Inject(USER_LOOKUP) private readonly users: UserLookupPort,
   ) {}
 
   /** The kinds a person may raise by hand. */
@@ -398,7 +410,10 @@ export class VoucherService {
       txn,
       date,
     );
-    if (dto.post) this.assertBalanced(lines);
+    if (dto.post) {
+      this.assertBalanced(lines);
+      await this.assertMayPostDirectly(companyId, branch, type);
+    }
     const instrument = await this.resolveInstrument(
       companyId,
       type.code,
@@ -535,7 +550,10 @@ export class VoucherService {
       date,
       existing.id,
     );
-    if (dto.post) this.assertBalanced(lines);
+    if (dto.post) {
+      this.assertBalanced(lines);
+      await this.assertMayPostDirectly(existing.companyId, branch, existing.type);
+    }
     // Re-checked whether or not the patch mentions it: the lines may have moved
     // under a cheque that was already there, and a post-dated one that now
     // names the bank has to be caught here as surely as on the first save.
@@ -616,10 +634,281 @@ export class VoucherService {
     });
   }
 
-  /** Write a draft to the books. */
-  async post(userId: number, companyId: number | undefined, id: number) {
+  // ---- approvals -----------------------------------------------------------
+  //
+  // A voucher is the last document in the ERP that anybody could write straight
+  // into the books alone. Where a workflow is configured for its KIND, the two
+  // signatures a printed voucher has always carried — checked, approved — stop
+  // being ink and become the engine's: it decides who may raise the entry, who
+  // reviews it and who lets it into the ledger, and posting happens at the end
+  // of that rather than at a button.
+  //
+  // Where no workflow is configured, nothing changes. Post still writes to the
+  // books there and then, which is what the eight kinds nobody sets up need to
+  // go on doing.
+
+  /**
+   * The workflow document type for a voucher's kind — a form, not the module.
+   * Ten screens means ten forms, which is what lets a bank payment need three
+   * levels while a journal needs one.
+   */
+  private async docType(
+    typeCode: string,
+  ): Promise<{ moduleId: number; objectId: number }> {
+    const [mod, obj] = await Promise.all([
+      this.prisma.module.findUnique({
+        where: { code: 'ACCOUNTS' },
+        select: { id: true },
+      }),
+      this.prisma.objectMaster.findFirst({
+        where: { route: voucherRoute(typeCode) },
+        select: { id: true },
+      }),
+    ]);
+    if (!mod || !obj) {
+      throw new BadRequestException(
+        `The ${typeCode} voucher is not registered as a document type, so it cannot be routed for approval.`,
+      );
+    }
+    return { moduleId: mod.id, objectId: obj.id };
+  }
+
+  private async docRef(voucher: {
+    id: number;
+    type: { code: string };
+  }): Promise<DocumentRef> {
+    const { moduleId, objectId } = await this.docType(voucher.type.code);
+    return { moduleId, objectId, documentId: voucher.id };
+  }
+
+  /**
+   * Whether an approval stands between this kind and the books.
+   *
+   * Asked of the engine rather than stored: a workflow may be configured, or
+   * switched off, at any time, and a voucher written this morning must obey
+   * what is configured when somebody posts it this afternoon.
+   */
+  private async isGoverned(voucher: {
+    companyId: number;
+    branchId: number | null;
+    type: { code: string };
+  }): Promise<boolean> {
+    const { moduleId, objectId } = await this.docType(voucher.type.code);
+    const first = await this.workflow.firstStep(
+      voucher.companyId,
+      voucher.branchId,
+      moduleId,
+      objectId,
+    );
+    return !!first;
+  }
+
+  /**
+   * What the screen needs to draw its buttons: whether this kind is governed at
+   * all, what the first step's button is called, the viewer's pending task and
+   * the trail so far — plus who prepared the voucher, which is the one name in
+   * the trail the engine does not hold.
+   */
+  async workflowState(
+    userId: number,
+    companyId: number | undefined,
+    id: number,
+  ) {
+    const voucher = await this.findOne(companyId, id);
+    const { moduleId, objectId } = await this.docType(voucher.type.code);
+    const [first, state, preparedBy] = await Promise.all([
+      this.workflow.firstStep(
+        voucher.companyId,
+        voucher.branchId,
+        moduleId,
+        objectId,
+      ),
+      this.workflow.docState(userId, { moduleId, objectId, documentId: id }),
+      voucher.createdByUserId
+        ? this.users.findById(voucher.createdByUserId)
+        : null,
+    ]);
+    return {
+      governed: !!first,
+      firstStep: first,
+      state,
+      preparedBy: preparedBy?.name ?? null,
+      preparedOn: voucher.createdAt,
+    };
+  }
+
+  /**
+   * Send a draft for approval.
+   *
+   * Acts as the creator's own level, so a voucher raised by somebody who is
+   * also the first approver lands at the SECOND level rather than waiting for
+   * them to approve their own entry.
+   *
+   * With no workflow configured this posts, which is what makes the button one
+   * button: the screen offers Submit where a workflow governs the kind and Post
+   * where none does, and neither the user nor this method has to hold two ideas
+   * about what finishing means.
+   */
+  async submit(userId: number, companyId: number | undefined, id: number) {
+    const voucher = await this.findOne(companyId, id);
+    this.assertDraft(voucher.status, 'submitted');
+    if (voucher.workflowInstanceId) {
+      throw new BadRequestException(
+        'This voucher has already been sent for approval.',
+      );
+    }
+    // Refused here rather than at the last approver: an entry that does not
+    // balance cannot be made to by approving it, and finding that out after
+    // three people have signed wastes all three.
+    this.assertBalanced(
+      voucher.lines.map((l) => ({
+        debit: Number(l.debit),
+        credit: Number(l.credit),
+      })),
+    );
+
+    const { moduleId, objectId } = await this.docType(voucher.type.code);
+    const res = await this.workflow.submitAsCreator({
+      startedByUserId: userId,
+      companyId: voucher.companyId,
+      branchId: voucher.branchId,
+      moduleId,
+      objectId,
+      documentId: voucher.id,
+      documentRef: voucher.voucherNo,
+      // What a FIELD-limit step tests. The value of the entry is the meaningful
+      // measure, so limits read as "anything over a lakh needs a Director".
+      amount: Number(voucher.totalDebit),
+    });
+    if (!res) return this.post(userId, companyId, id);
+    if (res.status === 'APPROVED') {
+      return this.postApproved(userId, id, res.instanceId, res.statusLabel);
+    }
+    await this.prisma.voucher.update({
+      where: { id },
+      data: {
+        workflowInstanceId: res.instanceId,
+        workflowStatus: res.statusLabel ?? null,
+      },
+    });
+    return this.findOne(companyId, id);
+  }
+
+  /**
+   * Act on the viewer's pending task — approve, forward, reject or cancel.
+   *
+   * The last approval is what writes the voucher to the books. Nothing else in
+   * this service posts on somebody's behalf, and nothing else should: the
+   * engine says APPROVED, and posting is what APPROVED means here.
+   */
+  async act(
+    userId: number,
+    companyId: number | undefined,
+    id: number,
+    dto: ActVoucherDto,
+  ) {
+    const voucher = await this.findOne(companyId, id);
+    const ref = await this.docRef(voucher);
+    const res = await this.workflow.actOnDocument(
+      userId,
+      ref,
+      dto.action,
+      dto.comment,
+    );
+
+    if (res.status === 'APPROVED') {
+      return this.postApproved(
+        userId,
+        id,
+        voucher.workflowInstanceId,
+        res.statusLabel,
+      );
+    }
+    if (res.status === 'CANCELLED') {
+      await this.prisma.voucher.update({
+        where: { id },
+        data: { status: 'CANCELLED', workflowStatus: null },
+      });
+      return this.findOne(companyId, id);
+    }
+    // Rejected or still going. A rejected voucher goes back to being a draft
+    // its writer may correct and send again — which is the point of rejecting
+    // rather than cancelling, and why the instance is let go of here.
+    await this.prisma.voucher.update({
+      where: { id },
+      data: {
+        workflowStatus: res.statusLabel ?? null,
+        ...(res.status === 'REJECTED' ? { workflowInstanceId: null } : {}),
+      },
+    });
+    return this.findOne(companyId, id);
+  }
+
+  /**
+   * Refuse a save that would post straight to the books on a kind somebody has
+   * put a workflow on.
+   *
+   * The same rule as `post`, but reached from Save-and-post, which is how nine
+   * out of ten vouchers are actually written. Guarding only the Post endpoint
+   * would leave the front door open.
+   */
+  private async assertMayPostDirectly(
+    companyId: number,
+    branchId: number | null,
+    type: { code: string; name: string },
+  ) {
+    if (await this.isGoverned({ companyId, branchId, type })) {
+      throw new BadRequestException(
+        `${type.name} needs approval before it reaches the books. Save it and send it for approval instead.`,
+      );
+    }
+  }
+
+  /**
+   * The books, once the last approver has said so.
+   *
+   * The label is written BEFORE posting, so that what posting hands back is the
+   * finished voucher rather than one still showing the level it was at a moment
+   * ago. The screen re-opens on this object; stamping it afterwards would leave
+   * "Checked" on a voucher the reader has just approved.
+   */
+  private async postApproved(
+    userId: number,
+    id: number,
+    instanceId: number | null,
+    statusLabel: string | null,
+  ) {
+    await this.prisma.voucher.update({
+      where: { id },
+      data: {
+        workflowInstanceId: instanceId ?? undefined,
+        workflowStatus: statusLabel ?? null,
+      },
+    });
+    return this.post(userId, undefined, id, true);
+  }
+
+  /**
+   * Write a draft to the books.
+   *
+   * `approved` is set only by the approval path. Without it, a voucher of a kind
+   * a workflow governs refuses to post: the button that used to write straight
+   * to the ledger has to stop doing so the moment somebody configures who signs
+   * for it, or the workflow would be advisory.
+   */
+  async post(
+    userId: number,
+    companyId: number | undefined,
+    id: number,
+    approved = false,
+  ) {
     const existing = await this.findOne(companyId, id);
     this.assertDraft(existing.status, 'posted');
+    if (!approved && (await this.isGoverned(existing))) {
+      throw new BadRequestException(
+        `${existing.type.name} needs approval before it reaches the books. Send it for approval instead.`,
+      );
+    }
 
     // Re-checked at the moment of posting, not merely when the draft was
     // written: an account may have been deactivated since, and the rules are
@@ -2023,7 +2312,10 @@ export class VoucherService {
   }
 
   /** A voucher cannot be posted unless it balances, and totals more than nil. */
-  private assertBalanced(lines: ResolvedLine[]) {
+  // Widened past ResolvedLine on purpose: the two columns are all this reads,
+  // and submitting checks them on the lines as stored rather than re-resolving
+  // an entry it is only sending to somebody.
+  private assertBalanced(lines: { debit: number; credit: number }[]) {
     const debit = lines.reduce((n, l) => n + paise(l.debit), 0);
     const credit = lines.reduce((n, l) => n + paise(l.credit), 0);
     if (!debit && !credit) {
