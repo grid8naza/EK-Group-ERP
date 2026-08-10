@@ -272,14 +272,33 @@ export class WorkflowRuntimeService {
   }
 
   async notifications(userId: number) {
-    return this.prisma.workflowNotification.findMany({
+    const rows = await this.prisma.workflowNotification.findMany({
       // Only surface alerts whose task is still awaiting this user — once the task
       // is DONE/SKIPPED (actioned, superseded, or the whole instance finished) the
       // alert is stale. Legacy rows with no linked task are treated as stale too.
       where: { userId, task: { is: { status: 'PENDING' } } },
       orderBy: { id: 'desc' },
       take: 50,
+      include: {
+        instance: { select: { objectId: true, documentId: true } },
+      },
     });
+
+    // Where the document is. An alert that knows which document it is about
+    // should land on it, not on a list the reader then has to search — the
+    // approvals inbox is the place you go when you have not been told which
+    // one, and the bell has just told you.
+    const objects = await this.prisma.objectMaster.findMany({
+      where: { id: { in: [...new Set(rows.map((r) => r.instance.objectId))] } },
+      select: { id: true, route: true },
+    });
+    const routeById = new Map(objects.map((o) => [o.id, o.route]));
+
+    return rows.map(({ instance, ...n }) => ({
+      ...n,
+      route: routeById.get(instance.objectId) ?? null,
+      documentId: instance.documentId,
+    }));
   }
 
   async markRead(userId: number, id: number) {
@@ -341,8 +360,20 @@ export class WorkflowRuntimeService {
       statusLabel = step?.statusLabel ?? null;
       // The creator immediately forwards their own first level, so drop the
       // self-notification raised when it activated — alerts are for receivers.
+      //
+      // By TASK, not by instance-and-user. Forwarding has already activated the
+      // next level and raised its alert, and where the same person sits at two
+      // consecutive levels — an accountant who prepares and also checks, or a
+      // small company where one person holds two roles — deleting every alert
+      // they held on this instance took the new one with it. The bell then said
+      // nothing about a document waiting on them.
+      //
+      // Belt and braces at that: `notifications` and `unreadCount` already show
+      // only alerts whose task is still PENDING, and this one's task is DONE the
+      // moment it is forwarded. The row is removed to keep the table tidy, not
+      // to keep the bell honest.
       await this.prisma.workflowNotification.deleteMany({
-        where: { instanceId: instance.id, userId: input.startedByUserId },
+        where: { taskId: myTask.id },
       });
     }
     return { instanceId: instance.id, status, statusLabel };
@@ -610,13 +641,23 @@ export class WorkflowRuntimeService {
         where: { instanceId: instance.id, stepId: next.id, sequence: next.sequence },
         select: { id: true, assignedUserId: true },
       });
+      // Named by KIND as well as by number. The bell serves every module at
+      // once, and "HOF/JV-00004 needs your action" asks the reader to know a
+      // numbering scheme; "Journal HOF/JV-00004" tells them what is waiting.
+      const form = await this.prisma.objectMaster.findUnique({
+        where: { id: instance.objectId },
+        select: { objectName: true },
+      });
+      const document = [form?.objectName, instance.documentRef]
+        .filter(Boolean)
+        .join(' ');
       await this.prisma.workflowNotification.createMany({
         data: tasks.map((t) => ({
           userId: t.assignedUserId,
           instanceId: instance.id,
           taskId: t.id,
           title: 'Approval required',
-          body: `${instance.documentRef ?? 'A document'} needs your action (${next.buttonText}).`,
+          body: `${document || 'A document'} needs your action (${next.buttonText}).`,
         })),
       });
     }

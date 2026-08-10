@@ -1626,6 +1626,9 @@ export interface WorkflowNotification {
   body: string;
   isRead: boolean;
   createdAt: string;
+  /** The screen the document is read and acted on, and which document. */
+  route?: string | null;
+  documentId?: number | null;
 }
 
 // ---- Backup & Restore ----

@@ -16,6 +16,7 @@ import {
   Bell,
 } from 'lucide-react';
 import { useAuth } from '@/providers/AuthProvider';
+import { DOC_PARAM } from '@/lib/hooks';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { resolveIcon } from '@/lib/icons';
 import { mediaUrl } from '@/lib/login-screen';
@@ -114,6 +115,13 @@ export function Topbar({
       } catch {
         // ignore
       }
+    }
+    // Straight to the document the alert is about. The approvals inbox is where
+    // you go when you have not been told which one — and the bell has just told
+    // you. Falls back to it for an alert with no screen behind it.
+    if (n.route && n.documentId) {
+      router.push(`${n.route}?${DOC_PARAM}=${n.documentId}`);
+      return;
     }
     router.push('/workflow/approvals');
   };
