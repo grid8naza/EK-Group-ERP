@@ -789,7 +789,13 @@ export class VoucherService {
       documentRef: voucher.voucherNo,
       // What a FIELD-limit step tests. The value of the entry is the meaningful
       // measure, so limits read as "anything over a lakh needs a Director".
+      //
+      // Given twice on purpose: `amount` is the headline the approver's inbox
+      // shows, and `fields` is the same figure BY NAME, which is what lets a
+      // step's limit say which value it is limiting rather than trusting that
+      // the engine was handed the right one.
       amount: Number(voucher.totalDebit),
+      fields: { amount: Number(voucher.totalDebit) },
     });
     if (!res) return this.post(userId, companyId, id);
     if (res.status === 'APPROVED') {

@@ -19,8 +19,17 @@ export interface StartWorkflowInput {
   objectId: number;
   documentId: number;
   documentRef?: string;
-  /** Value tested by FIELD-approval limits (e.g. an amount). */
+  /** The document's headline value — shown in the approver's inbox, and what a
+   *  limit tests unless a step names a different field. */
   amount?: number;
+  /**
+   * The document's numbers BY NAME, for a step whose limit names one of them.
+   * Keys come from the engine's small shared vocabulary (see LIMIT_FIELDS) —
+   * `amount` today — so that a limit set on a name is a limit on the value the
+   * module actually supplies under it, rather than on whatever single figure
+   * the engine happened to be given.
+   */
+  fields?: Record<string, number>;
 }
 
 /** Identifies one business document across a module + form. */

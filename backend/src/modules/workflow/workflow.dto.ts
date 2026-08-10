@@ -5,6 +5,7 @@ import {
   IsEnum,
   IsInt,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   MaxLength,
@@ -180,6 +181,14 @@ export class StartWorkflowDto {
   @IsOptional()
   @IsNumber()
   amount?: number;
+
+  /**
+   * The document's numbers by name, for a step whose limit names one of them.
+   * Keys are the engine's shared vocabulary — see LIMIT_FIELDS.
+   */
+  @IsOptional()
+  @IsObject()
+  fields?: Record<string, number>;
 }
 
 export type WorkflowActInput = 'APPROVE' | 'FORWARD' | 'REJECT' | 'CANCEL' | 'REFERENCE';

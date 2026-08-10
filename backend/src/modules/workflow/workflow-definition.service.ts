@@ -7,6 +7,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
+import { LIMIT_FIELDS, LIMIT_FIELD_NAMES } from './limit-fields';
 import {
   USER_LOOKUP,
   type UserLookupPort,
@@ -422,6 +423,16 @@ export class WorkflowDefinitionService {
         if (!s.fieldName?.trim()) {
           throw new BadRequestException(
             'Field approval steps require a field name.',
+          );
+        }
+        // Only what a module actually supplies. The field used to be free text
+        // and was never read, so a step could say it limited "grandTotal" while
+        // the engine tested the one figure it had — the limit looked specific
+        // and was not. A name nothing fills in is a limit that never applies.
+        if (!LIMIT_FIELD_NAMES.includes(s.fieldName.trim())) {
+          throw new BadRequestException(
+            `Step ${s.sequence}: “${s.fieldName.trim()}” is not a value a document reports. ` +
+              `Choose one of: ${LIMIT_FIELDS.map((f) => `${f.name} (${f.label})`).join(', ')}.`,
           );
         }
         if (

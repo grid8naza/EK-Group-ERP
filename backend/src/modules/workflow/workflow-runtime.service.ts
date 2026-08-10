@@ -20,6 +20,7 @@ import {
   WorkflowStatus,
   WorkflowViewerTask,
 } from '../../contracts/workflow.port';
+import { limitValue } from './limit-fields';
 import { ActOnTaskDto, StartWorkflowDto } from './workflow.dto';
 
 // Actions whose level ENDS the workflow when approved (no onward routing).
@@ -59,6 +60,8 @@ export class WorkflowRuntimeService {
         documentId: dto.documentId,
         documentRef: dto.documentRef?.trim() || null,
         amount: dto.amount ?? null,
+        // Stored so a step's limit tests the field it NAMES; see limitValue.
+        fields: dto.fields ?? undefined,
         currentSequence: 0,
         startedByUserId,
       },
@@ -387,6 +390,7 @@ export class WorkflowRuntimeService {
       documentId: input.documentId,
       documentRef: input.documentRef,
       amount: input.amount,
+      fields: input.fields,
     });
     if (!instance) return null;
 
@@ -827,12 +831,7 @@ export class WorkflowRuntimeService {
       return;
     }
 
-    const canApprove = this.withinLimit(
-      instance.amount,
-      next.approvalMode,
-      next.valueFrom,
-      next.valueTo,
-    );
+    const canApprove = this.withinLimit(instance, next);
     await this.prisma.$transaction([
       this.prisma.workflowInstance.update({
         where: { id: instance.id },
@@ -941,15 +940,39 @@ export class WorkflowRuntimeService {
     };
   }
 
+  /**
+   * Whether this step may approve the document itself, or must pass it up.
+   *
+   * The value tested is the one the step NAMES — limitValue resolves it out of
+   * what the module supplied, falling back to the headline amount. A step that
+   * is not limited at all approves anything.
+   *
+   * A named field with no value here cannot be tested, and that is NOT the same
+   * as being within the limit: somebody wrote down a ceiling, and the honest
+   * answer to "is this under it?" being unknown is to send it up rather than to
+   * wave it through. An unlimited document (`amount` null on a form that
+   * supplies none) is the one exception — there is no value in play at all.
+   */
   private withinLimit(
-    amount: number | null,
-    mode: string,
-    from: number | null,
-    to: number | null,
+    instance: { amount: number | null; fields?: unknown },
+    step: {
+      approvalMode: string;
+      fieldName: string | null;
+      valueFrom: number | null;
+      valueTo: number | null;
+    },
   ): boolean {
-    if (mode !== 'FIELD' || amount == null) return true;
-    if (from != null && amount < from) return false;
-    if (to != null && amount > to) return false;
+    if (step.approvalMode !== 'FIELD') return true;
+    const value = limitValue(instance.fields, instance.amount, step.fieldName);
+    if (value == null) {
+      // Nothing named, nothing supplied: no value is in play, so the limit has
+      // nothing to bite on. Anything else — a name the module did not fill in —
+      // has to escalate.
+      const named = step.fieldName?.trim() || 'amount';
+      return named === 'amount' && instance.amount == null;
+    }
+    if (step.valueFrom != null && value < step.valueFrom) return false;
+    if (step.valueTo != null && value > step.valueTo) return false;
     return true;
   }
 

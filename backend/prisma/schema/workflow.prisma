@@ -135,8 +135,15 @@ model WorkflowStepUser {
   @@map("workflow_step_users")
 }
 
-/// A running approval for one document. `amount` is the value a FIELD-approval step
-/// tests against its [valueFrom, valueTo] limit.
+/// A running approval for one document.
+///
+/// `amount` is the document's headline value — what a listing shows and what a
+/// limit tests unless a step names something else. `fields` is what makes
+/// WorkflowStep.fieldName mean anything: the module hands over its numbers BY
+/// NAME when it starts the approval, and a step's limit tests the one it names.
+/// Without it the engine had a single anonymous number, so a step could say it
+/// was limiting "grandTotal" while the engine went on testing the only figure
+/// it had.
 model WorkflowInstance {
   id           Int  @id @default(autoincrement())
   definitionId Int
@@ -147,7 +154,11 @@ model WorkflowInstance {
 
   documentId  Int // the business record id (plain, cross-domain)
   documentRef String? // human-readable snapshot (e.g. a code) for display
-  amount      Float? // value tested by FIELD-approval limits
+  amount      Float? // the headline value: shown in the inbox, and the default a limit tests
+  /// The document's numbers by name, as its module supplied them — what a
+  /// FIELD-approval step's `fieldName` selects from. Null on instances started
+  /// before this existed; those fall back to `amount`.
+  fields      Json?
 
   currentSequence Int                    @default(1)
   status          WorkflowInstanceStatus @default(IN_PROGRESS)

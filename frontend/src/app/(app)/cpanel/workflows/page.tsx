@@ -75,6 +75,16 @@ const actionsForForm = (route?: string) =>
     return !only || only === route;
   });
 
+/**
+ * The values a step's limit may be set on — the engine's shared vocabulary
+ * (backend: limit-fields.ts). Small on purpose: a workflow governs documents
+ * from every module, so this is what ANY document can be said to have, and a
+ * name no module supplies would be a limit that never applies.
+ */
+const LIMIT_FIELD_OPTIONS = [
+  { value: 'amount', label: 'Document value — a voucher’s total, an order’s value' },
+];
+
 const APPROVAL_MODE_OPTIONS: { value: WorkflowApprovalMode; label: string }[] = [
   { value: 'FORM', label: 'Whole form' },
   { value: 'FIELD', label: 'Field value (limit)' },
@@ -1095,12 +1105,17 @@ function StepCard({
         {/* FIELD mode reveals the value-limit inputs. */}
         {step.approvalMode === 'FIELD' && (
           <>
-            <Input
-              label="Field name"
+            {/* Chosen, not typed. It used to be free text and nothing read it,
+                so a step could say it limited "grandTotal" while the engine
+                tested the only figure it had — a limit that read as specific
+                and was not. The list is what a document actually reports. */}
+            <Select
+              label="Value to limit"
               wrapClassName="sm:col-span-2"
               value={step.fieldName}
               onChange={(e) => onChange({ fieldName: e.target.value })}
-              placeholder="e.g. grandTotal"
+              options={LIMIT_FIELD_OPTIONS}
+              placeholder="Choose the value"
             />
             <Input
               label="Value from"
