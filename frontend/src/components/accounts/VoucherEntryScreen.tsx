@@ -339,7 +339,7 @@ export function VoucherEntryScreen({
   askInstrument = false,
   documents,
 }: VoucherEntryScreenProps) {
-  const { can, activeCompany, activeBranch } = useAuth();
+  const { can, activeCompany, branches } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
   const Icon = resolveIcon(icon);
@@ -875,6 +875,27 @@ export function VoucherEntryScreen({
     !!documents?.includes('CHEQUE') && !!editing?.instrument && docMode === 'Cheque';
   const canPrintAdvice = !!documents?.includes('ADVICE') && !!editing;
 
+  /**
+   * The branch the voucher was RAISED in — not the one the reader happens to be
+   * switched to.
+   *
+   * They are routinely different. Approval is not branch-scoped: a director on a
+   * company-wide workflow signs for every branch, and reading a voucher never
+   * required switching to its branch. Taking the name from the active branch
+   * printed a Kadathy payment under Head Office, on the sheet that goes in the
+   * file as the record of it.
+   *
+   * Null where the reader cannot see that branch — a name we cannot vouch for is
+   * worse than none, and the voucher number already identifies the entry.
+   */
+  const docBranch = useMemo(
+    () =>
+      editing?.branchId
+        ? (branches.find((b) => b.id === editing.branchId)?.name ?? null)
+        : null,
+    [editing, branches],
+  );
+
   const docCompany = useMemo(() => {
     const c = (companies ?? []).find((x) => x.id === activeCompany?.id);
     return {
@@ -1033,7 +1054,7 @@ export function VoucherEntryScreen({
     });
     const html = buildVoucherHtml({
       company: docCompany,
-      branchName: activeBranch?.name ?? null,
+      branchName: docBranch,
       kind: title,
       voucherNo: editing.voucherNo,
       date: editing.date,
@@ -1097,7 +1118,7 @@ export function VoucherEntryScreen({
     const inst = editing.instrument;
     const html = buildPaymentAdviceHtml({
       company: docCompany,
-      branchName: activeBranch?.name ?? null,
+      branchName: docBranch,
       voucherNo: editing.voucherNo,
       date: editing.date,
       status: editing.status,
@@ -1675,8 +1696,19 @@ export function VoucherEntryScreen({
       <PageHeader
         title={editing ? `${editing.voucherNo} — ${title}` : `New ${title}`}
         description={
-          readOnly
-            ? 'Posted — a correction is a fresh voucher, never an edit to this one'
+          // Whose entry this is, said on a SAVED voucher. Approval is not
+          // branch-scoped — a director on a company-wide workflow is asked to
+          // sign for every branch, and the register lists them all together —
+          // so without this an approver is signing an amount and a number.
+          editing
+            ? [
+                docBranch,
+                readOnly
+                  ? 'Posted — a correction is a fresh voucher, never an edit to this one'
+                  : 'Enter moves to the next field. The lines close when the two columns agree.',
+              ]
+                .filter(Boolean)
+                .join(' · ')
             : 'Enter moves to the next field. The lines close when the two columns agree.'
         }
         icon={<Icon className="h-5 w-5" />}

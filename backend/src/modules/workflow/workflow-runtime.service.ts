@@ -118,6 +118,27 @@ export class WorkflowRuntimeService {
     });
     const objectById = new Map(objects.map((o) => [o.id, o]));
 
+    // WHOSE document it is. An approver on a company-wide workflow is asked to
+    // sign for every branch of the company, and one who works across companies
+    // for every one of those too — so a list of ten payments with nothing but a
+    // number and an amount asks them to approve what they cannot identify. The
+    // instance has carried both since it started; it was simply never returned.
+    const companies = await this.prisma.company.findMany({
+      where: { id: { in: [...new Set(tasks.map((t) => t.instance.companyId))] } },
+      select: { id: true, name: true },
+    });
+    const companyById = new Map(companies.map((c) => [c.id, c.name]));
+    const branchIds = tasks
+      .map((t) => t.instance.branchId)
+      .filter((b): b is number => b != null);
+    const branches = branchIds.length
+      ? await this.prisma.branch.findMany({
+          where: { id: { in: [...new Set(branchIds)] } },
+          select: { id: true, name: true },
+        })
+      : [];
+    const branchById = new Map(branches.map((b) => [b.id, b.name]));
+
     return tasks.map((t) => {
       const step = stepById.get(t.stepId);
       const flags = this.stepFlags(t.sequence, step);
@@ -137,6 +158,13 @@ export class WorkflowRuntimeService {
         route: object?.route ?? null,
         /** What that screen is called, for a row that says where it is going. */
         documentType: object?.objectName ?? null,
+        /** Whose books it belongs to, and which branch raised it. */
+        companyId: t.instance.companyId,
+        companyName: companyById.get(t.instance.companyId) ?? null,
+        branchId: t.instance.branchId,
+        branchName: t.instance.branchId
+          ? (branchById.get(t.instance.branchId) ?? null)
+          : null,
         amount: t.instance.amount,
         action: step?.action,
         buttonText: step?.buttonText ?? 'Approve',

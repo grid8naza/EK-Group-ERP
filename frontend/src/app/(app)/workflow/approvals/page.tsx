@@ -3,6 +3,8 @@
 import { useRouter } from 'next/navigation';
 import { ExternalLink, Inbox } from 'lucide-react';
 import { DOC_PARAM, useFetch } from '@/lib/hooks';
+import { useAuth } from '@/providers/AuthProvider';
+import { useConfirm } from '@/providers/ConfirmProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
@@ -53,11 +55,13 @@ const money = (n?: number | null) =>
 export default function MyApprovalsPage() {
   const router = useRouter();
   const toast = useToast();
+  const confirm = useConfirm();
+  const { activeCompanyId, switchCompany } = useAuth();
   const { data, loading, refetch } = useFetch<WorkflowTaskItem[]>(
     '/workflow/my-tasks',
   );
 
-  const openDocument = (t: WorkflowTaskItem) => {
+  const openDocument = async (t: WorkflowTaskItem) => {
     if (!t.route) {
       // A form with no route is a workflow bound to something that has no
       // screen. Better said plainly than by a button that does nothing.
@@ -66,6 +70,29 @@ export default function MyApprovalsPage() {
       );
       return;
     }
+    // A document is only readable in ITS company. An approver who works across
+    // two of them holds tasks for both here — the inbox is scoped to the person,
+    // not the company — so opening one from the wrong company would have gone
+    // to the screen and come back "not found", with nothing to explain it.
+    // Asked rather than switched silently: changing the active company changes
+    // the whole application around them.
+    if (t.companyId && t.companyId !== activeCompanyId) {
+      const ok = await confirm({
+        title: `Switch to ${t.companyName ?? 'that company'}?`,
+        message:
+          `${docLabel(t)} belongs to ${t.companyName ?? 'another company'}, and can only be opened there. ` +
+          `Switch to it and open the document?`,
+        confirmText: 'Switch and open',
+        cancelText: 'Stay here',
+      });
+      if (!ok) return;
+      try {
+        await switchCompany(t.companyId);
+      } catch {
+        toast.error('Could not switch company.');
+        return;
+      }
+    }
     router.push(`${t.route}?${DOC_PARAM}=${t.documentId}`);
   };
 
@@ -73,7 +100,8 @@ export default function MyApprovalsPage() {
     {
       key: 'document',
       header: 'Document',
-      accessor: (r) => `${docLabel(r)} ${r.documentType ?? ''}`,
+      accessor: (r) =>
+        `${docLabel(r)} ${r.documentType ?? ''} ${r.companyName ?? ''} ${r.branchName ?? ''}`,
       render: (r) => (
         <div>
           <div className="font-medium text-slate-800 dark:text-slate-100">
@@ -81,6 +109,19 @@ export default function MyApprovalsPage() {
           </div>
           {r.documentType && (
             <div className="text-xs text-slate-400">{r.documentType}</div>
+          )}
+          {/* Whose it is. On a company-wide workflow every branch's documents
+              land in the same list, and a row that says only "CPV-00007,
+              12,500.00" asks the reader to approve what they cannot place. */}
+          {(r.companyName || r.branchName) && (
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              {[r.companyName, r.branchName].filter(Boolean).join(' · ')}
+              {r.companyId && r.companyId !== activeCompanyId && (
+                <span className="ml-1 text-amber-600 dark:text-amber-400">
+                  (another company)
+                </span>
+              )}
+            </div>
           )}
         </div>
       ),

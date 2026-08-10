@@ -1606,6 +1606,15 @@ export interface WorkflowTaskItem {
   route?: string | null;
   /** What that screen is called — "Journal", "Local Purchase Order". */
   documentType?: string | null;
+  /**
+   * Whose books the document belongs to, and which branch raised it. An
+   * approver on a company-wide workflow signs for every branch, so a row
+   * without these asks them to approve what they cannot identify.
+   */
+  companyId?: number;
+  companyName?: string | null;
+  branchId?: number | null;
+  branchName?: string | null;
 }
 
 export interface WorkflowTimelineEntry {
