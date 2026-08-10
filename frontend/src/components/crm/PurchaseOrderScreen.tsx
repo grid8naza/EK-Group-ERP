@@ -16,7 +16,7 @@ import {
   Package,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
-import { useFetch, useUnsavedChangesGuard } from '@/lib/hooks';
+import { useDocumentLink, useFetch, useUnsavedChangesGuard } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
@@ -297,9 +297,9 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
     return full;
   };
 
-  const openView = async (row: PurchaseOrder) => {
+  const openById = async (id: number) => {
     try {
-      const full = await loadOrder(row.id);
+      const full = await loadOrder(id);
       // Always open on the document — it's what identifies the order. The
       // reviewer switches to Stock & acceptance when they're ready to answer.
       setTab('order');
@@ -309,6 +309,10 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
       toast.error('Failed to open the order.');
     }
   };
+  /** Opened straight from a link — the approvals inbox sends an id, not a row. */
+  useDocumentLink(openById);
+
+  const openView = async (row: PurchaseOrder) => openById(row.id);
 
   const backToList = () => {
     setMode('list');

@@ -1,10 +1,48 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { api, ApiError } from './api';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import type { Lookup, LookupValue } from './types';
+
+/**
+ * The query parameter that names one document on a listing screen.
+ *
+ * How the approvals inbox hands an approver over to the document they have to
+ * decide on: the inbox knows the screen (from the form the workflow is bound
+ * to) and the id, and the screen knows how to open it. One name, so a link
+ * built anywhere is understood everywhere.
+ */
+export const DOC_PARAM = 'doc';
+
+/**
+ * Open the document a link named — once, and then forget it.
+ *
+ * The parameter is stripped after opening, which matters more than it looks:
+ * left in the URL, going Back to the listing would re-open the document the
+ * user had just closed, and a refresh would fight anyone who had moved on.
+ *
+ * `open` is called with the id alone. Every screen that uses this already has a
+ * way to load one document by id — none of them needs the row it came from.
+ */
+export function useDocumentLink(open: (id: number) => void) {
+  const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const opened = useRef(false);
+
+  const id = Number(params.get(DOC_PARAM));
+
+  useEffect(() => {
+    if (opened.current || !Number.isInteger(id) || id <= 0) return;
+    // Guarded by a ref rather than by the deps: `open` is a fresh closure on
+    // every render, and a document must be opened once however often this runs.
+    opened.current = true;
+    open(id);
+    router.replace(pathname, { scroll: false });
+  }, [id, open, router, pathname]);
+}
 
 /**
  * Simple GET hook with manual refetch. Safe to use in client components.

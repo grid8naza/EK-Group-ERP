@@ -15,6 +15,7 @@ import {
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import {
+  useDocumentLink,
   useFetch,
   useLookupValues,
   useUnsavedChangesGuard,
@@ -1114,6 +1115,20 @@ export function VoucherEntryScreen({
       toast.error('The browser blocked the print window. Allow pop-ups for this site.');
     }
   };
+
+  /**
+   * Opened straight from a link — the approvals inbox sends an id, not a row.
+   *
+   * Read from the server rather than found in the register: an approver may
+   * hold a task on a voucher their listing filters out, and in any case the
+   * form wants the full voucher with its lines.
+   */
+  useDocumentLink((id) => {
+    void api
+      .get<Voucher>(`/vouchers/${id}`)
+      .then(open)
+      .catch(() => toast.error('That voucher could not be opened.'));
+  });
 
   // Back to the register. The one deliberate way out of the form, so it asks
   // before dropping an entry that has been written but not saved — the sidebar

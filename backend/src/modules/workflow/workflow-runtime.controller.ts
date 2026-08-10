@@ -39,7 +39,20 @@ export class WorkflowRuntimeController {
     return this.service.getInstance(id);
   }
 
-  /** Act on a pending task. */
+  /**
+   * Act on a pending task — the ENGINE's own view of it, and nothing else.
+   *
+   * Do not wire a screen to this. It advances the workflow and stops there,
+   * because the engine cannot reach a business module; what approval MEANS is
+   * the module's, and only the module's `act` knows it. Approving a voucher
+   * through here completed the workflow while the voucher stayed a draft — an
+   * entry approved by everybody, never posted, and past the point where it
+   * could be submitted, withdrawn or posted by hand.
+   *
+   * A person approves from the document's own screen; the approvals inbox
+   * takes them there. This stays for the engine's own use and for a caller
+   * that owns no document.
+   */
   @Post('tasks/:id/act')
   act(
     @CurrentUser() user: AuthUser,

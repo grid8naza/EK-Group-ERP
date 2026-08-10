@@ -106,9 +106,22 @@ export class WorkflowRuntimeService {
     });
     const defName = new Map(defs.map((d) => [d.id, d.name]));
 
+    // Where the document itself can be read. The inbox does not act on a
+    // document — it takes the approver TO it, because approving a thing you
+    // cannot see is approving a reference number, and because what approval
+    // MEANS is the owning module's business: posting a voucher to the books,
+    // turning an approved ICPO into a sales order. The engine cannot reach a
+    // module to do any of that, so it sends the approver where the module can.
+    const objects = await this.prisma.objectMaster.findMany({
+      where: { id: { in: [...new Set(tasks.map((t) => t.instance.objectId))] } },
+      select: { id: true, route: true, objectName: true },
+    });
+    const objectById = new Map(objects.map((o) => [o.id, o]));
+
     return tasks.map((t) => {
       const step = stepById.get(t.stepId);
       const flags = this.stepFlags(t.sequence, step);
+      const object = objectById.get(t.instance.objectId);
       return {
         taskId: t.id,
         instanceId: t.instanceId,
@@ -120,6 +133,10 @@ export class WorkflowRuntimeService {
         documentId: t.instance.documentId,
         moduleId: t.instance.moduleId,
         objectId: t.instance.objectId,
+        /** The screen this document is read and acted on. */
+        route: object?.route ?? null,
+        /** What that screen is called, for a row that says where it is going. */
+        documentType: object?.objectName ?? null,
         amount: t.instance.amount,
         action: step?.action,
         buttonText: step?.buttonText ?? 'Approve',

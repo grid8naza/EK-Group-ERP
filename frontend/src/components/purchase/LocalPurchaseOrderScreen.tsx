@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { dec2 } from '@/lib/utils';
-import { useFetch, useUnsavedChangesGuard } from '@/lib/hooks';
+import { useDocumentLink, useFetch, useUnsavedChangesGuard } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useAuth } from '@/providers/AuthProvider';
@@ -290,6 +290,17 @@ export function LocalPurchaseOrderScreen() {
     hydrate(draftOf(full));
     return full;
   };
+
+  /** Opened straight from a link — the approvals inbox sends an id, not a row. */
+  const openById = async (id: number) => {
+    try {
+      const full = await loadOrder(id);
+      setMode(full.status === 'DRAFT' ? 'edit' : 'view');
+    } catch {
+      toast.error('Failed to open the order.');
+    }
+  };
+  useDocumentLink(openById);
 
   const openView = async (row: LocalPurchaseOrder) => {
     try {

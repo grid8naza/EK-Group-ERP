@@ -1590,6 +1590,10 @@ export interface WorkflowTaskItem {
   canCancel: boolean;
   canReject: boolean;
   canEdit: boolean;
+  /** The screen the document is read and acted on. Null if the form has no route. */
+  route?: string | null;
+  /** What that screen is called — "Journal", "Local Purchase Order". */
+  documentType?: string | null;
 }
 
 export interface WorkflowTimelineEntry {
