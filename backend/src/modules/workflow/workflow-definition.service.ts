@@ -141,7 +141,27 @@ export class WorkflowDefinitionService {
     assertUnlocked(existing, 'workflow', 'editing');
     if (dto.steps !== undefined) this.assertStepsValid(dto.steps);
     if (dto.steps !== undefined) {
-      await this.assertApproversHaveAccess(existing.companyId, dto.steps);
+      // What was already on this workflow may be saved again. The rules below
+      // are there to stop somebody CONFIGURING a level that can never act; on a
+      // definition that already names one they would do the opposite, refusing
+      // every save until it is fixed — including the save that fixes it, since
+      // the whole chain goes up together and one bad step would hold the other
+      // four hostage. A group that has since been emptied, or an approver whose
+      // access has since gone, therefore passes if it was already there. What
+      // is NEWLY named is held to the rules in full.
+      //
+      // Nothing is lost by allowing it: such a level stalls the moment it is
+      // reached, says why, and starts again by itself once it is put right.
+      const prior = await this.prisma.workflowStep.findMany({
+        where: { definitionId: id },
+        select: { userGroupId: true, users: { select: { userId: true } } },
+      });
+      await this.assertApproversHaveAccess(existing.companyId, dto.steps, {
+        groupIds: new Set(
+          prior.map((s) => s.userGroupId).filter((g): g is number => g != null),
+        ),
+        userIds: new Set(prior.flatMap((s) => s.users.map((u) => u.userId))),
+      });
     }
 
     // Re-checked on the two edits that can create a clash: switching a
@@ -222,6 +242,11 @@ export class WorkflowDefinitionService {
   private async assertApproversHaveAccess(
     definitionCompanyId: number,
     steps: WorkflowStepInput[] | undefined,
+    /** Groups and users already on this workflow — see the caller in update. */
+    already: { groupIds: Set<number>; userIds: Set<number> } = {
+      groupIds: new Set(),
+      userIds: new Set(),
+    },
   ) {
     for (const step of steps ?? []) {
       const acting = step.targetCompanyId ?? definitionCompanyId;
@@ -233,11 +258,12 @@ export class WorkflowDefinitionService {
       // it saves perfectly happily before stalling the first document to reach
       // it. The setup screen already narrows the list; this is what holds when
       // the definition is written any other way.
-      if (step.userGroupId) {
+      if (step.userGroupId && !already.groupIds.has(step.userGroupId)) {
         await this.assertGroupCanAct(step.userGroupId, step.sequence, needed);
       }
 
       for (const userId of step.userIds ?? []) {
+        if (already.userIds.has(userId)) continue;
         for (const companyId of needed) {
           if (await this.users.canAccessCompany(userId, companyId)) continue;
           const [user, company] = await Promise.all([
