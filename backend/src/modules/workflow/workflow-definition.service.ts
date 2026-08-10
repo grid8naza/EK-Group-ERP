@@ -433,6 +433,19 @@ export class WorkflowDefinitionService {
             '"Value from" cannot be greater than "Value to".',
           );
         }
+        // A limit says "beyond this, somebody senior decides" — so there has to
+        // BE somebody senior. On the last level there is nowhere to send it, and
+        // what the reader configured as a ceiling would hold nothing back: the
+        // engine refuses the approval, forces a forward, finds no one above, and
+        // the document goes through anyway. A limit that only relabels the trail
+        // is worse than none, because it reads on screen as a control.
+        if (s.sequence === Math.max(...seqs)) {
+          throw new BadRequestException(
+            `Step ${s.sequence} is the last level, so a value limit on it would hold nothing back — ` +
+              `anything beyond it has nowhere to go and would be approved regardless. ` +
+              `Put the limit on an earlier level, or add the level that decides the larger amounts.`,
+          );
+        }
       }
       if (!s.userGroupId && !(s.userIds && s.userIds.length)) {
         throw new BadRequestException(

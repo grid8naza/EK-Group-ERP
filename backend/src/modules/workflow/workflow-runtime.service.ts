@@ -306,8 +306,12 @@ export class WorkflowRuntimeService {
     if (advance && !TERMINAL_ACTIONS.includes(step.action)) {
       await this.activateNext(instance, task.sequence);
     } else if (advance && mustForward) {
-      // Terminal step but value beyond limit → still forward for higher approval.
-      await this.activateNext(instance, task.sequence);
+      // Terminal step but value beyond limit → still forward for higher
+      // approval, and there had BETTER be one. `requireNext` is what stops the
+      // forward becoming an approval: the whole point of the limit is that this
+      // person may not approve this amount, so finishing the workflow because
+      // nobody is above them would grant exactly what it forbids.
+      await this.activateNext(instance, task.sequence, { requireNext: true });
     } else {
       await this.finish(instance.id, 'APPROVED');
     }
@@ -484,6 +488,14 @@ export class WorkflowRuntimeService {
     // an approver to a group — is all anyone has to do. Without this a stall
     // would need a button nobody would know to press.
     const stalled = await this.retryStalled(instance);
+    // Re-read: the retry may have moved the instance on, or finished it, and
+    // reporting the status captured before it would tell the screen the
+    // document is still going when it has just completed.
+    const current =
+      (await this.prisma.workflowInstance.findUnique({
+        where: { id: instance.id },
+        select: { status: true, currentSequence: true },
+      })) ?? instance;
 
     const full = await this.getInstance(instance.id);
     const pending = await this.prisma.workflowTask.findFirst({
@@ -512,8 +524,8 @@ export class WorkflowRuntimeService {
     }
     return {
       instanceId: instance.id,
-      status: instance.status as WorkflowStatus,
-      currentSequence: instance.currentSequence,
+      status: current.status as WorkflowStatus,
+      currentSequence: current.currentSequence,
       myTask,
       /** Waiting on nobody: the level it has reached has no one who can act. */
       stalled,
@@ -527,6 +539,40 @@ export class WorkflowRuntimeService {
         createdAt: t.createdAt,
       })),
     };
+  }
+
+  /**
+   * Stop the instance here, and say why once.
+   *
+   * The sequence is left ON the level that could not proceed, which is what
+   * retryStalled reads to know where to start again. The reason is written only
+   * the first time: every read of the document retries the stall, and a line per
+   * retry would bury the trail under the same sentence repeated as often as
+   * anybody looked at it.
+   */
+  private async stall(
+    instance: WorkflowInstance,
+    stepId: number | null,
+    sequence: number,
+    reason: string,
+  ): Promise<void> {
+    await this.prisma.workflowInstance.update({
+      where: { id: instance.id },
+      data: { currentSequence: sequence },
+    });
+    const alreadySaid = await this.prisma.workflowActionLog.findFirst({
+      where: { instanceId: instance.id, sequence, action: 'STALLED' },
+      select: { id: true },
+    });
+    if (alreadySaid) return;
+    await this.log(
+      instance.id,
+      stepId,
+      sequence,
+      instance.startedByUserId,
+      'STALLED',
+      reason,
+    );
   }
 
   /**
@@ -562,8 +608,13 @@ export class WorkflowRuntimeService {
    * stalls it deliberately. So this needs no flag of its own — the absence of
    * work IS the condition.
    *
-   * `currentSequence - 1` re-runs activation from the stalled level rather than
-   * the one after it, which is the whole point: the level was never acted on.
+   * WHERE to start again depends on which kind of stall it is, and the level's
+   * own tasks say which. A level that stopped because nobody could act on it
+   * has no completed task, so activation re-runs from that level. A level that
+   * stopped because a forced forward had nowhere to go HAS one — somebody
+   * acted — so activation must look past it, at whatever level has since been
+   * added above. Starting from the wrong one either skips a level or asks
+   * somebody to act twice.
    */
   private async retryStalled(instance: WorkflowInstance): Promise<boolean> {
     if (instance.status !== 'IN_PROGRESS') return false;
@@ -572,7 +623,23 @@ export class WorkflowRuntimeService {
     });
     if (pending) return false;
 
-    await this.activateNext(instance, instance.currentSequence - 1);
+    const acted = await this.prisma.workflowTask.count({
+      where: {
+        instanceId: instance.id,
+        sequence: instance.currentSequence,
+        status: 'DONE',
+      },
+    });
+    await this.activateNext(
+      instance,
+      acted ? instance.currentSequence : instance.currentSequence - 1,
+      // A level already acted on can only have stalled one way: a forced
+      // forward with nowhere to go. The retry has to carry the same condition,
+      // or it undoes the stall it is retrying — running out of steps would read
+      // as approved, and the amount the limit refused would be granted by the
+      // next person who merely LOOKED at the document.
+      { requireNext: !!acted },
+    );
 
     const nowPending = await this.prisma.workflowTask.count({
       where: { instanceId: instance.id, status: 'PENDING' },
@@ -707,6 +774,7 @@ export class WorkflowRuntimeService {
   private async activateNext(
     instance: WorkflowInstance,
     afterSequence: number | null,
+    opts: { requireNext?: boolean } = {},
   ): Promise<void> {
     const next = await this.prisma.workflowStep.findFirst({
       where: {
@@ -717,6 +785,20 @@ export class WorkflowRuntimeService {
       include: { users: { select: { userId: true } } },
     });
     if (!next) {
+      // Running out of steps normally MEANS approved — that is how a workflow
+      // ends. Not when the last act was a forced forward: somebody was told
+      // they may not approve this amount, and completing the workflow because
+      // there is nobody above them would grant precisely what the limit
+      // withheld. It stops instead, and says why.
+      if (opts.requireNext) {
+        await this.stall(
+          instance,
+          null,
+          afterSequence ?? 0,
+          'the value is beyond this level’s limit and there is no higher level to forward it to',
+        );
+        return;
+      }
       await this.finish(instance.id, 'APPROVED');
       return;
     }
@@ -736,31 +818,12 @@ export class WorkflowRuntimeService {
       //
       // The instance stays IN_PROGRESS and its sequence sits ON the stalled
       // level, so retryStalled can pick it up again the moment it can be filled.
-      await this.prisma.workflowInstance.update({
-        where: { id: instance.id },
-        data: { currentSequence: next.sequence },
-      });
-      // Said ONCE per level. Every read of the document retries the stall, and
-      // a line per retry would bury the trail under the same sentence repeated
-      // as often as anybody looked.
-      const alreadySaid = await this.prisma.workflowActionLog.findFirst({
-        where: {
-          instanceId: instance.id,
-          sequence: next.sequence,
-          action: 'STALLED',
-        },
-        select: { id: true },
-      });
-      if (!alreadySaid) {
-        await this.log(
-          instance.id,
-          next.id,
-          next.sequence,
-          instance.startedByUserId,
-          'STALLED',
-          await this.stallReason(next),
-        );
-      }
+      await this.stall(
+        instance,
+        next.id,
+        next.sequence,
+        await this.stallReason(next),
+      );
       return;
     }
 
