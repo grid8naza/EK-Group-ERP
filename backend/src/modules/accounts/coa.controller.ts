@@ -7,6 +7,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Put,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CompanyId } from '../../auth/company.decorator';
@@ -17,6 +18,7 @@ import {
   UpdateAccountDto,
   UpdateAdoptionDto,
   UpdateGroupDto,
+  UpsertBankDetailsDto,
 } from './coa.dto';
 
 /**
@@ -101,6 +103,35 @@ export class CoaController {
   @Delete('accounts/:id')
   removeAccount(@Param('id', ParseIntPipe) id: number) {
     return this.service.removeAccount(id);
+  }
+
+  /**
+   * The real bank account behind a ledger marked as a bank — for the ACTIVE
+   * company, since the ledger is shared and the bank account is not.
+   */
+  @Get('accounts/:id/bank-details')
+  bankDetails(
+    @CompanyId() companyId: number | undefined,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.service.bankDetails(companyId, id);
+  }
+
+  @Put('accounts/:id/bank-details')
+  saveBankDetails(
+    @CompanyId() companyId: number | undefined,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpsertBankDetailsDto,
+  ) {
+    return this.service.saveBankDetails(companyId, id, dto);
+  }
+
+  @Delete('accounts/:id/bank-details')
+  removeBankDetails(
+    @CompanyId() companyId: number | undefined,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.service.removeBankDetails(companyId, id);
   }
 
   @Patch('accounts/:id/adoption')

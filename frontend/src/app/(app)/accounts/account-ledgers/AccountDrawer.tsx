@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Wallet } from 'lucide-react';
+import { Landmark, Wallet } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
+import { useFetch, useLookupValues } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
 import { Checkbox, Input, Select, Textarea } from '@/components/ui/Field';
-import type { AccountGroup, CoaAccount } from '@/lib/types';
+import type { AccountGroup, CoaAccount, Currency } from '@/lib/types';
 
 const PARTY_OPTIONS = [
   { value: 'SUPPLIER', label: 'Supplier' },
@@ -93,6 +94,51 @@ type Form = {
   isActive: boolean;
 };
 
+/**
+ * The bank account behind the ledger — for the ACTIVE company, and only there.
+ *
+ * Kept apart from the master form above because it is a different record with a
+ * different owner: 14201 is one line in a chart all three companies share, and
+ * each of them banks somewhere different under it. Everything here stays
+ * editable on an existing account, unlike the master fields — a branch moves and
+ * a bank renames itself without any of it changing what a posting means.
+ */
+type BankForm = {
+  bankName: string;
+  accountNumber: string;
+  accountTypeValueId: string;
+  accountHolderName: string;
+  branchName: string;
+  branchAddress: string;
+  ifscCode: string;
+  micrCode: string;
+  swiftCode: string;
+  iban: string;
+  currencyId: string;
+  contactPerson: string;
+  contactPhone: string;
+  contactEmail: string;
+  notes: string;
+};
+
+const EMPTY_BANK: BankForm = {
+  bankName: '',
+  accountNumber: '',
+  accountTypeValueId: '',
+  accountHolderName: '',
+  branchName: '',
+  branchAddress: '',
+  ifscCode: '',
+  micrCode: '',
+  swiftCode: '',
+  iban: '',
+  currencyId: '',
+  contactPerson: '',
+  contactPhone: '',
+  contactEmail: '',
+  notes: '',
+};
+
 const EMPTY: Form = {
   groupId: '',
   code: '',
@@ -143,11 +189,48 @@ export function AccountDrawer({
 }) {
   const toast = useToast();
   const [form, setForm] = useState<Form>(EMPTY);
+  const [bank, setBank] = useState<BankForm>(EMPTY_BANK);
   const [saving, setSaving] = useState(false);
   const editing = !!account;
 
+  /**
+   * Only a bank ledger has a bank, so the two lists behind the section are
+   * fetched only once one is open — this drawer is mounted with the screen and
+   * would otherwise load them for all 253 accounts, none of which needs them.
+   */
+  const showBank = editing && form.isBank;
+  const accountTypes = useLookupValues(showBank ? 'BANK_ACCOUNT_TYPE' : '');
+  const { data: currencies } = useFetch<Currency[]>(
+    showBank ? '/currencies' : null,
+    [showBank],
+  );
+
   useEffect(() => {
     if (!open) return;
+    const d = account?.bankDetail ?? null;
+    setBank(
+      d
+        ? {
+            bankName: d.bankName,
+            accountNumber: d.accountNumber,
+            accountTypeValueId: d.accountTypeValueId
+              ? String(d.accountTypeValueId)
+              : '',
+            accountHolderName: d.accountHolderName ?? '',
+            branchName: d.branchName ?? '',
+            branchAddress: d.branchAddress ?? '',
+            ifscCode: d.ifscCode ?? '',
+            micrCode: d.micrCode ?? '',
+            swiftCode: d.swiftCode ?? '',
+            iban: d.iban ?? '',
+            currencyId: d.currencyId ? String(d.currencyId) : '',
+            contactPerson: d.contactPerson ?? '',
+            contactPhone: d.contactPhone ?? '',
+            contactEmail: d.contactEmail ?? '',
+            notes: d.notes ?? '',
+          }
+        : EMPTY_BANK,
+    );
     setForm(
       account
         ? {
@@ -197,11 +280,55 @@ export function AccountDrawer({
     }
   };
 
+  /** Blank throughout = no bank recorded, which is different from a bad one. */
+  const bankFilled = Object.values(bank).some((v) => v.trim());
+
+  /**
+   * Write the bank behind the ledger, for the active company. Emptying every
+   * box removes it rather than saving a blank record — the account was closed,
+   * or the details went against the wrong ledger and are being taken back off.
+   */
+  const saveBank = async () => {
+    if (!showBank) return;
+    const url = `/coa/accounts/${account!.id}/bank-details`;
+    if (!bankFilled) {
+      if (account!.bankDetail) await api.delete(url);
+      return;
+    }
+    await api.put(url, {
+      bankName: bank.bankName.trim(),
+      accountNumber: bank.accountNumber.trim(),
+      accountTypeValueId: bank.accountTypeValueId
+        ? Number(bank.accountTypeValueId)
+        : undefined,
+      accountHolderName: bank.accountHolderName.trim() || undefined,
+      branchName: bank.branchName.trim() || undefined,
+      branchAddress: bank.branchAddress.trim() || undefined,
+      ifscCode: bank.ifscCode.trim() || undefined,
+      micrCode: bank.micrCode.trim() || undefined,
+      swiftCode: bank.swiftCode.trim() || undefined,
+      iban: bank.iban.trim() || undefined,
+      currencyId: bank.currencyId ? Number(bank.currencyId) : undefined,
+      contactPerson: bank.contactPerson.trim() || undefined,
+      contactPhone: bank.contactPhone.trim() || undefined,
+      contactEmail: bank.contactEmail.trim() || undefined,
+      notes: bank.notes.trim() || undefined,
+    });
+  };
+
   const save = async () => {
     if (!form.name.trim()) return toast.error('Give the account a name.');
     if (!editing && !form.groupId) return toast.error('Choose a group.');
     if (form.isControl && !form.controlParty) {
       return toast.error('A control account must say which party ages it.');
+    }
+    // A bank without a name or a number identifies nothing: a payment advice
+    // could not be printed from it and a statement could not be matched to it.
+    if (showBank && bankFilled && !bank.bankName.trim()) {
+      return toast.error('Say which bank the account is with.');
+    }
+    if (showBank && bankFilled && !bank.accountNumber.trim()) {
+      return toast.error('Give the bank account number.');
     }
     setSaving(true);
     try {
@@ -212,6 +339,7 @@ export function AccountDrawer({
           name: form.name,
           isActive: form.isActive,
         });
+        await saveBank();
       } else {
         await api.post('/coa/accounts', {
           groupId: Number(form.groupId),
@@ -257,7 +385,7 @@ export function AccountDrawer({
           : 'The code, nature and statement follow the group'
       }
       icon={<Wallet className="h-5 w-5" />}
-      width="md"
+      width="lg"
       footer={<DrawerFooter onCancel={onClose} onSave={save} saving={saving} />}
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -495,8 +623,169 @@ export function AccountDrawer({
           value={form.notes}
           disabled={editing}
           onChange={(e) => setForm({ ...form, notes: e.target.value })}
-          className="sm:col-span-2"
+          wrapClassName="sm:col-span-2"
         />
+
+        {/* Which bank this ledger actually is. Only on a bank account, and only
+            once it exists — the details hang off the account, so there has to be
+            one to hang them on. */}
+        {!editing && form.isBank && (
+          <p className="sm:col-span-2 text-xs text-slate-400">
+            Save the account, then reopen it to record which bank it is with.
+          </p>
+        )}
+        {showBank && (
+          <div className="sm:col-span-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+            <div className="flex items-center gap-2">
+              <Landmark className="h-4 w-4 text-slate-400" />
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                Bank details — {companyName}
+              </p>
+            </div>
+            <p className="mt-1 text-xs text-slate-400">
+              The real account behind this ledger. Held per company: every
+              company draws on the same chart and banks somewhere different
+              under it, so what you enter here is {companyName}&apos;s alone.
+            </p>
+            {!account?.adopted && (
+              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                {companyName} has not adopted this account, so nothing is posted
+                to it here yet.
+              </p>
+            )}
+
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Input
+                label="Bank"
+                required
+                value={bank.bankName}
+                placeholder="e.g. Federal Bank"
+                onChange={(e) => setBank({ ...bank, bankName: e.target.value })}
+              />
+              <Input
+                label="Account number"
+                required
+                value={bank.accountNumber}
+                onChange={(e) =>
+                  setBank({ ...bank, accountNumber: e.target.value })
+                }
+              />
+              <Select
+                label="Account type"
+                value={bank.accountTypeValueId}
+                onChange={(e) =>
+                  setBank({ ...bank, accountTypeValueId: e.target.value })
+                }
+                options={accountTypes.map((v) => ({
+                  value: String(v.id),
+                  label: v.label,
+                }))}
+                placeholder="Not stated"
+              />
+              <Input
+                label="Held in the name of"
+                value={bank.accountHolderName}
+                placeholder={companyName}
+                onChange={(e) =>
+                  setBank({ ...bank, accountHolderName: e.target.value })
+                }
+              />
+              <Input
+                label="Branch"
+                value={bank.branchName}
+                onChange={(e) => setBank({ ...bank, branchName: e.target.value })}
+              />
+              <Select
+                label="Currency"
+                value={bank.currencyId}
+                onChange={(e) => setBank({ ...bank, currencyId: e.target.value })}
+                options={(currencies ?? [])
+                  .filter((c) => c.isActive)
+                  .map((c) => ({ value: String(c.id), label: c.code }))}
+                placeholder="The company's own"
+              />
+              <Textarea
+                label="Branch address"
+                rows={2}
+                value={bank.branchAddress}
+                onChange={(e) =>
+                  setBank({ ...bank, branchAddress: e.target.value })
+                }
+                wrapClassName="sm:col-span-2"
+              />
+
+              {/* How money is routed to it. The domestic pair and the
+                  international pair, since a company rarely has all four. */}
+              <Input
+                label="IFSC"
+                value={bank.ifscCode}
+                placeholder="SBIN0001234"
+                onChange={(e) =>
+                  setBank({ ...bank, ifscCode: e.target.value.toUpperCase() })
+                }
+              />
+              <Input
+                label="MICR"
+                value={bank.micrCode}
+                placeholder="682010012"
+                onChange={(e) => setBank({ ...bank, micrCode: e.target.value })}
+              />
+              <Input
+                label="SWIFT / BIC"
+                value={bank.swiftCode}
+                placeholder="HDFCINBB"
+                onChange={(e) =>
+                  setBank({ ...bank, swiftCode: e.target.value.toUpperCase() })
+                }
+              />
+              <Input
+                label="IBAN"
+                value={bank.iban}
+                onChange={(e) =>
+                  setBank({ ...bank, iban: e.target.value.toUpperCase() })
+                }
+              />
+
+              <Input
+                label="Branch contact"
+                value={bank.contactPerson}
+                onChange={(e) =>
+                  setBank({ ...bank, contactPerson: e.target.value })
+                }
+              />
+              <Input
+                label="Phone"
+                value={bank.contactPhone}
+                onChange={(e) =>
+                  setBank({ ...bank, contactPhone: e.target.value })
+                }
+              />
+              <Input
+                label="Email"
+                type="email"
+                value={bank.contactEmail}
+                onChange={(e) =>
+                  setBank({ ...bank, contactEmail: e.target.value })
+                }
+                wrapClassName="sm:col-span-2"
+              />
+              <Textarea
+                label="Remarks"
+                rows={2}
+                value={bank.notes}
+                onChange={(e) => setBank({ ...bank, notes: e.target.value })}
+                wrapClassName="sm:col-span-2"
+              />
+            </div>
+
+            {account?.bankDetail && !bankFilled && (
+              <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                Every box is empty, so saving removes the bank details recorded
+                here. The ledger and everything posted to it stay.
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </Drawer>
   );

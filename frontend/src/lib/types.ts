@@ -2160,6 +2160,36 @@ export interface CoaAccount {
    * rule. Null when no company is active.
    */
   entryRules: EntryRules | null;
+  /**
+   * The ACTIVE company's own bank account behind this ledger. Null unless the
+   * account is a bank and the details have been filled in — and per company by
+   * design: every company adopts the same 14201 and banks somewhere different
+   * under it.
+   */
+  bankDetail: BankAccountDetail | null;
+}
+
+/** Which bank a ledger marked `isBank` actually is, for one company. */
+export interface BankAccountDetail {
+  id: number;
+  companyId: number;
+  accountId: number;
+  bankName: string;
+  branchName: string | null;
+  branchAddress: string | null;
+  accountNumber: string;
+  /** A BANK_ACCOUNT_TYPE lookup value — current, savings, overdraft… */
+  accountTypeValueId: number | null;
+  accountHolderName: string | null;
+  ifscCode: string | null;
+  micrCode: string | null;
+  swiftCode: string | null;
+  iban: string | null;
+  currencyId: number | null;
+  contactPerson: string | null;
+  contactPhone: string | null;
+  contactEmail: string | null;
+  notes: string | null;
 }
 
 /** What a document asks for at data entry. */

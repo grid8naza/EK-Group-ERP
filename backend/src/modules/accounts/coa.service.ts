@@ -22,7 +22,9 @@ import {
   UpdateAccountDto,
   UpdateAdoptionDto,
   UpdateGroupDto,
+  UpsertBankDetailsDto,
 } from './coa.dto';
+import { CODE_FORMATS } from './bank-details';
 
 /**
  * Which statement a balance lands in follows from its nature and nothing else.
@@ -145,10 +147,14 @@ export class CoaService {
               },
             }
           : false,
+        // This company's own bank account behind the ledger, where it has one.
+        // Carried on the list rather than fetched per account: it is a handful
+        // of rows in 253, and the screen shows which bank a ledger is at.
+        bankDetails: companyId ? { where: { companyId } } : false,
       },
       orderBy: [{ code: 'asc' }],
     });
-    return rows.map(({ companies, ...a }) => {
+    return rows.map(({ companies, bankDetails, ...a }) => {
       // A deactivated row is a dropped adoption, not an adoption.
       const mine = companies?.find((c) => c.isActive);
       const rules = setup ? resolveEntryRules(setup, a) : null;
@@ -161,6 +167,8 @@ export class CoaService {
         adoptionActive: mine?.isActive ?? null,
         /** Both checkpoints together — what an entry here is actually asked for. */
         entryRules: rules,
+        /** Null on anything that is not a bank, and on a bank not filled in yet. */
+        bankDetail: bankDetails?.[0] ?? null,
       };
     });
   }
@@ -260,6 +268,107 @@ export class CoaService {
       },
     });
     return { adopted: true };
+  }
+
+  // ---- the bank behind a bank ledger ----------------------------------------
+
+  /** This company's bank account behind a ledger, or null if none is recorded. */
+  async bankDetails(companyId: number | undefined, accountId: number) {
+    if (!companyId) throw new NotFoundException('Select a company first.');
+    return this.prisma.bankAccountDetail.findUnique({
+      where: { companyId_accountId: { companyId, accountId } },
+    });
+  }
+
+  /**
+   * Record — or correct — which bank account a ledger actually is, for the
+   * ACTIVE company.
+   *
+   * Company-scoped throughout, because the ledger is shared and the bank account
+   * is not: all three companies post to 14201 and each of them banks somewhere
+   * different under it.
+   *
+   * Only on an account marked `isBank`. A cash box has no IFSC, and a ledger
+   * that carried a number and then stopped being a bank would leave a routing
+   * code on something no payment can be made from.
+   */
+  async saveBankDetails(
+    companyId: number | undefined,
+    accountId: number,
+    dto: UpsertBankDetailsDto,
+  ) {
+    if (!companyId) throw new NotFoundException('Select a company first.');
+    const account = await this.prisma.account.findUnique({
+      where: { id: accountId },
+      select: { id: true, code: true, name: true, isBank: true },
+    });
+    if (!account) throw new NotFoundException('Account not found');
+    if (!account.isBank) {
+      throw new BadRequestException(
+        `${account.code} ${account.name} is not marked as a bank account, so it has no bank to record.`,
+      );
+    }
+
+    const data = {
+      bankName: dto.bankName.trim(),
+      branchName: dto.branchName?.trim() || null,
+      branchAddress: dto.branchAddress?.trim() || null,
+      accountNumber: dto.accountNumber.trim(),
+      accountTypeValueId: dto.accountTypeValueId ?? null,
+      accountHolderName: dto.accountHolderName?.trim() || null,
+      ...this.checkedCodes(dto),
+      currencyId: dto.currencyId ?? null,
+      contactPerson: dto.contactPerson?.trim() || null,
+      contactPhone: dto.contactPhone?.trim() || null,
+      contactEmail: dto.contactEmail?.trim() || null,
+      notes: dto.notes?.trim() || null,
+    };
+
+    return this.prisma.bankAccountDetail.upsert({
+      where: { companyId_accountId: { companyId, accountId } },
+      create: { companyId, accountId, ...data },
+      update: data,
+    });
+  }
+
+  /**
+   * The routing codes, upper-cased and checked against their formats.
+   *
+   * Upper-cased rather than rejected for case: every one of these is written in
+   * capitals and nobody means a different code by typing it in lower case.
+   * Spaces go the same way — an IBAN is quoted in groups of four and is one
+   * string.
+   */
+  private checkedCodes(dto: UpsertBankDetailsDto) {
+    const out: Record<keyof typeof CODE_FORMATS, string | null> = {
+      ifscCode: null,
+      micrCode: null,
+      swiftCode: null,
+      iban: null,
+    };
+    for (const [field, { pattern, message }] of Object.entries(CODE_FORMATS) as [
+      keyof typeof CODE_FORMATS,
+      (typeof CODE_FORMATS)[keyof typeof CODE_FORMATS],
+    ][]) {
+      const raw = dto[field]?.replace(/[\s-]/g, '').toUpperCase() ?? '';
+      if (!raw) continue;
+      if (!pattern.test(raw)) throw new BadRequestException(message);
+      out[field] = raw;
+    }
+    return out;
+  }
+
+  /**
+   * Forget the bank behind a ledger — the account was closed, or the details
+   * were entered against the wrong ledger. The ledger and everything posted to
+   * it stay; only the description of where the money sits goes.
+   */
+  async removeBankDetails(companyId: number | undefined, accountId: number) {
+    if (!companyId) throw new NotFoundException('Select a company first.');
+    await this.prisma.bankAccountDetail.deleteMany({
+      where: { companyId, accountId },
+    });
+    return { deleted: true };
   }
 
   // ---- codes ----------------------------------------------------------------

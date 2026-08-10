@@ -357,6 +357,8 @@ model Account {
   customers    Customer[]       @relation("CustomerControlAccount")
   /// Cheques and transfers drawn on this account, where it is a bank.
   instruments  VoucherInstrument[] @relation("InstrumentBank")
+  /// Whose bank it is, per company — see BankAccountDetail.
+  bankDetails  BankAccountDetail[]
 
   @@index([groupId])
   @@index([isActive])
@@ -381,6 +383,66 @@ model AccountCompany {
   @@unique([companyId, accountId])
   @@index([companyId, isActive])
   @@map("account_companies")
+}
+
+/// The real bank account behind a ledger marked `isBank` — who it is with, its
+/// number, the branch it is held at and the codes money is sent to it by.
+///
+/// PER COMPANY, not on the master account, and that is the whole point: 14201
+/// "Bank - Current Account (Primary)" is one line in a shared chart that all
+/// three companies adopt, and each of them banks somewhere different under it. A
+/// number stored on the master would be one company's account shown to the other
+/// two, and a payment advice printed from it would send money to the wrong bank.
+///
+/// One row per company per account, because a ledger IS a bank account: two
+/// accounts at the same bank are two ledgers, which is what makes a statement
+/// reconcilable against a balance at all.
+model BankAccountDetail {
+  id        Int @id @default(autoincrement())
+  companyId Int // -> Cpanel Company (plain id)
+  accountId Int
+
+  bankName      String
+  branchName    String?
+  /// The branch's postal address, as it should print on an advice or a mandate.
+  branchAddress String?
+
+  accountNumber      String
+  /// Current, savings, overdraft… — a BANK_ACCOUNT_TYPE lookup value, since the
+  /// list is the company's and a new kind of facility is reference data, not a
+  /// code change. -> Cpanel LookupValue (plain cross-domain id).
+  accountTypeValueId Int?
+  /// The name the account is held in, where it differs from the company's own —
+  /// a trade name on the mandate, for instance. Blank means it is the company.
+  accountHolderName  String?
+
+  /// How money is routed to it. IFSC and MICR are the domestic pair (transfer
+  /// and cheque clearing); SWIFT/BIC and IBAN are what a remittance from
+  /// outside the country needs. Kept apart rather than as one "code" field:
+  /// they are validated differently and printed in different places.
+  ifscCode  String?
+  micrCode  String?
+  swiftCode String?
+  iban      String?
+
+  /// The currency the account is held in, where it is not the company's own.
+  /// -> Cpanel Currency (plain cross-domain id).
+  currencyId Int?
+
+  /// Who to ring at the branch, for a stopped cheque or a mandate.
+  contactPerson String?
+  contactPhone  String?
+  contactEmail  String?
+
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, accountId])
+  @@index([companyId])
+  @@map("bank_account_details")
 }
 
 /// The kinds of thing the annexure analyses cost by — branch, department,

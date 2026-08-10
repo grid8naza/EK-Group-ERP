@@ -58,6 +58,103 @@ export class UpdateAccountDto {
   isActive?: boolean;
 }
 
+/**
+ * The real bank account behind a ledger marked `isBank`, for the ACTIVE company.
+ *
+ * Unlike the master account this hangs from, all of it stays editable: a branch
+ * moves, a bank merges and renames itself, a mandate is reissued in a different
+ * name. None of that changes what a posting to the ledger means, which is what
+ * fixes the master's fields at creation.
+ *
+ * Everything but the bank and the number is optional — a company that banks
+ * domestically has no IBAN, and one holding a foreign account has no IFSC.
+ * Blank clears a code rather than being ignored, so a wrong one can be removed.
+ */
+export class UpsertBankDetailsDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(160)
+  bankName!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  branchName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  branchAddress?: string;
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(60)
+  accountNumber!: string;
+
+  /** A BANK_ACCOUNT_TYPE lookup value — current, savings, overdraft… */
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  accountTypeValueId?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  accountHolderName?: string;
+
+  /**
+   * The routing codes. Their formats are checked in CoaService rather than here,
+   * so the same rule holds whichever way a row is written and the message can
+   * name the code that is wrong.
+   */
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  ifscCode?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  micrCode?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  swiftCode?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  iban?: string;
+
+  /** Set only where the account is held in something other than the company's
+   *  own currency. */
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  currencyId?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  contactPerson?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(60)
+  contactPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  contactEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notes?: string;
+}
+
 /** Where a new account belongs — the shared master, or one company's own books. */
 export enum AccountScope {
   GROUP = 'GROUP',

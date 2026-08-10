@@ -7,6 +7,10 @@ import {
   PAYMENT_MODE_LOOKUP,
 } from '../../common/instruments';
 import {
+  BANK_ACCOUNT_TYPES,
+  BANK_ACCOUNT_TYPE_LOOKUP,
+} from './bank-details';
+import {
   COA_MAIN_GROUPS,
   COA_MAIN_GROUP_CORRECTIONS,
 } from './main-groups';
@@ -106,6 +110,7 @@ export class CoaSeedService implements OnApplicationBootstrap {
       const categories = await this.seedCategories();
       await this.seedPaymentModes();
       await this.seedIssuerBanks();
+      await this.seedBankAccountTypes();
       await this.backfillPdcLedgers();
       await this.markShipped();
       await this.backfillCostFlags();
@@ -193,6 +198,42 @@ export class CoaSeedService implements OnApplicationBootstrap {
     if (has) return;
     await this.prisma.lookupValue.createMany({
       data: ISSUER_BANKS.map((value, i) => ({
+        lookupId: lookup.id,
+        value,
+        label: value,
+        sortOrder: i,
+      })),
+    });
+  }
+
+  /**
+   * What kind of account each of OUR bank ledgers is — see BankAccountDetail.
+   *
+   * Seeded once and then the company's, like the issuer banks: a group that
+   * opens a facility nobody thought of adds the kind on the Lookups screen.
+   */
+  private async seedBankAccountTypes(): Promise<void> {
+    const module = await this.prisma.module.findUnique({
+      where: { code: 'ACCOUNTS' },
+      select: { id: true },
+    });
+    const lookup = await this.prisma.lookup.upsert({
+      where: { code: BANK_ACCOUNT_TYPE_LOOKUP },
+      create: {
+        code: BANK_ACCOUNT_TYPE_LOOKUP,
+        name: 'Bank Account Type',
+        moduleId: module?.id ?? null,
+        isSystem: true,
+        description: "What kind of account the company's own bank ledger is.",
+      },
+      update: { isSystem: true },
+    });
+    const has = await this.prisma.lookupValue.count({
+      where: { lookupId: lookup.id },
+    });
+    if (has) return;
+    await this.prisma.lookupValue.createMany({
+      data: BANK_ACCOUNT_TYPES.map((value, i) => ({
         lookupId: lookup.id,
         value,
         label: value,

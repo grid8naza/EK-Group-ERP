@@ -88,6 +88,15 @@ const flagsOf = (a: CoaAccount) => {
   return out;
 };
 
+/**
+ * A bank account number, last four digits only. Enough to tell one of the
+ * company's banks from another on a list anyone with the screen can open,
+ * without printing the whole number where it need not be; the drawer has it in
+ * full for the people who maintain it.
+ */
+const maskAccountNo = (no: string) =>
+  no.length <= 4 ? no : `••••${no.slice(-4)}`;
+
 export default function AccountLedgersPage() {
   const { can, activeCompany } = useAuth();
   const toast = useToast();
@@ -186,7 +195,9 @@ export default function AccountLedgersPage() {
     {
       key: 'name',
       header: 'Account',
-      accessor: (a) => `${a.name} ${a.localName ?? ''} ${a.group.name}`,
+      accessor: (a) =>
+        `${a.name} ${a.localName ?? ''} ${a.group.name} ` +
+        `${a.bankDetail?.bankName ?? ''} ${a.bankDetail?.accountNumber ?? ''}`,
       render: (a) => (
         <div>
           <div className="font-medium text-slate-800 dark:text-slate-100">
@@ -200,6 +211,18 @@ export default function AccountLedgersPage() {
           <div className="text-xs text-slate-400">
             {a.group.code} · {a.group.name}
           </div>
+          {/* Which bank a bank ledger actually is, for THIS company — the one
+              thing about it that differs company by company, and the thing
+              somebody opening this screen for a bank row wants to see. */}
+          {a.bankDetail && (
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              {a.bankDetail.bankName}
+              {a.bankDetail.branchName && `, ${a.bankDetail.branchName}`} ·{' '}
+              <span className="tabular-nums">
+                A/c {maskAccountNo(a.bankDetail.accountNumber)}
+              </span>
+            </div>
+          )}
           {flagsOf(a).length > 0 && (
             <div className="mt-1 flex flex-wrap gap-1">
               {flagsOf(a).map((f) => (
