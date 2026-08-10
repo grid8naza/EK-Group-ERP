@@ -434,6 +434,18 @@ model BankAccountDetail {
   contactPhone  String?
   contactEmail  String?
 
+  /// How far to shift everything printed on this bank's cheque leaves, in
+  /// millimetres, right and down (negative goes the other way).
+  ///
+  /// Cheque printing writes onto paper somebody else designed. CTS-2010 fixes
+  /// the size and roughly where each field sits, but no two banks' leaves line
+  /// up exactly, and no two printers feed them the same way either. One nudge
+  /// per bank account is what turns a layout that is nearly right into one that
+  /// is right — and it belongs here, with the chequebook it corrects, rather
+  /// than as a setting somebody re-enters every time they change banks.
+  chequeOffsetX Float @default(0)
+  chequeOffsetY Float @default(0)
+
   notes     String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

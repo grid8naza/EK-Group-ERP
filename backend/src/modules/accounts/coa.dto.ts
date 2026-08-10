@@ -2,11 +2,14 @@ import {
   IsBoolean,
   IsEnum,
   IsInt,
+  IsNumber,
   IsOptional,
   IsPositive,
   IsString,
   Matches,
+  Max,
   MaxLength,
+  Min,
   MinLength,
 } from 'class-validator';
 import {
@@ -148,6 +151,23 @@ export class UpsertBankDetailsDto {
   @IsString()
   @MaxLength(160)
   contactEmail?: string;
+
+  /**
+   * The cheque-print nudge, in millimetres. Bounded rather than free: a leaf is
+   * 200mm by 92mm, so anything past a couple of centimetres is a typo, not an
+   * alignment, and would print the payee off the paper.
+   */
+  @IsOptional()
+  @IsNumber()
+  @Min(-25)
+  @Max(25)
+  chequeOffsetX?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(-25)
+  @Max(25)
+  chequeOffsetY?: number;
 
   @IsOptional()
   @IsString()

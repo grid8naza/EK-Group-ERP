@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, Trash2 } from 'lucide-react';
+import { ArrowLeft, Check, FileText, Printer, Trash2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import {
@@ -24,10 +24,19 @@ import {
 } from '@/components/ui/Field';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { BillPicker, type BillPick } from './BillPicker';
+import { RUPEES, type CurrencyWords } from '@/lib/amountWords';
+import {
+  buildChequeHtml,
+  buildPaymentAdviceHtml,
+  openPrintWindow,
+  type DocBill,
+} from '@/lib/paymentDocs';
 import type {
   BalanceSide,
   BillRefType,
   CoaAccount,
+  Company,
+  Currency,
   OutstandingBill,
   PartyKind,
   Voucher,
@@ -246,6 +255,17 @@ export interface VoucherEntryScreenProps {
    * means, on whose cheque. See {@link InstrumentFields}.
    */
   askInstrument?: boolean;
+  /**
+   * The paper this kind produces, offered on a voucher once it is saved.
+   *
+   * 'ADVICE' is the sheet the payee is sent — who paid, how much, out of which
+   * bank, against which bills. 'CHEQUE' prints onto a pre-printed leaf, and is
+   * offered only where the instrument actually is a cheque.
+   *
+   * Both read the company's own bank details from the ledger the money left, so
+   * they belong to the kinds that name a bank. See src/lib/paymentDocs.ts.
+   */
+  documents?: ('ADVICE' | 'CHEQUE')[];
 }
 
 /**
@@ -281,8 +301,9 @@ export function VoucherEntryScreen({
   firstLine,
   lines: lineScope,
   askInstrument = false,
+  documents,
 }: VoucherEntryScreenProps) {
-  const { can, activeCompany } = useAuth();
+  const { can, activeCompany, activeBranch } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
   const Icon = resolveIcon(icon);
@@ -675,6 +696,177 @@ export function VoucherEntryScreen({
     // rows read as bills rather than ids.
     for (const l of v.lines) {
       if (l.partyKind && l.partyId) void loadBills(l.partyKind, String(l.partyId));
+    }
+  };
+
+  // ---- the paper this kind produces ---------------------------------------------
+  //
+  // Built from the SAVED voucher rather than from the form: a document says what
+  // the books say, and half an edit is not a payment. Everything is on hand
+  // already — the party masters and the account master, bank details included,
+  // come with `masters`, and the bills came with the voucher.
+
+  const wantsDocs = !!documents?.length;
+  // Fetched only by the kinds that print. The letterhead needs more of the
+  // company than the profile carries, and the words on a cheque need the
+  // currency's own name for its units.
+  const { data: companies } = useFetch<Company[]>(
+    wantsDocs ? '/companies' : null,
+    [wantsDocs],
+  );
+  const { data: currencies } = useFetch<Currency[]>(
+    wantsDocs ? '/currencies' : null,
+    [wantsDocs],
+  );
+
+  /** The bank the money left, and this company's own account behind it. */
+  const docBank = useMemo(() => {
+    const id = editing?.instrument?.bankAccountId;
+    return id ? (masters.accountById.get(id) ?? null) : null;
+  }, [editing, masters.accountById]);
+
+  /**
+   * What to call the units on a document — Rupees and Paise unless the account
+   * is held in something else. Never guessed from the company: an account in
+   * dirhams pays in dirhams whoever holds it.
+   */
+  const docCurrency = useMemo((): CurrencyWords => {
+    const id = docBank?.bankDetail?.currencyId;
+    const c = id ? (currencies ?? []).find((x) => x.id === id) : null;
+    if (!c || c.code === 'INR') return RUPEES;
+    // "Indian Rupee" → "Rupees": the master names one unit, a cheque writes
+    // several. Crude, and right for every currency whose plural is an s.
+    return { major: `${c.name}s`, minor: `${c.fractionalUnit}s` };
+  }, [docBank, currencies]);
+
+  /** Who is being paid — the party the lines name, or the ledger they name. */
+  const docPayee = useMemo(() => {
+    if (!editing) return '';
+    for (const l of editing.lines) {
+      const named = masters.partyName(l.partyKind, l.partyId);
+      if (named) return named;
+    }
+    // No party: a payment to a ledger rather than to somebody with a
+    // sub-ledger — bank charges, a tax payment. The ledger IS the payee.
+    //
+    // Read off the DEBIT side rather than "whichever line is not the bank": on
+    // a post-dated cheque no line is the bank at all — the credit goes to the
+    // holding ledger — and that test would name Post-dated Cheques Issued as
+    // the payee. What is being paid for is always the debit.
+    const paid = editing.lines.find((l) => num(l.debit) > 0);
+    return paid?.account?.name ?? '';
+  }, [editing, masters]);
+
+  /**
+   * Which of the payee's bills this settles.
+   *
+   * An allocation points at the bill it pays by id rather than by number, so
+   * the number is read back from the outstanding list the form already loaded.
+   * A bill this payment CLEARED is no longer outstanding and will not be found
+   * there — it is still shown, by amount, rather than dropped: the payee has to
+   * be able to add the lines up to the total whatever we can name.
+   */
+  const docBills = useMemo((): DocBill[] => {
+    if (!editing) return [];
+    const out: DocBill[] = [];
+    for (const l of editing.lines) {
+      const bills = openBills[billsKey(l.partyKind, String(l.partyId ?? ''))] ?? [];
+      for (const b of l.billRefs ?? []) {
+        const against = b.againstId
+          ? bills.find((x) => x.id === b.againstId)
+          : null;
+        out.push({
+          billRef:
+            b.billRef ??
+            against?.billRef ??
+            b.refNote ??
+            (b.refType === 'ADVANCE'
+              ? 'Advance'
+              : b.refType === 'ON_ACCOUNT'
+                ? 'On account'
+                : '—'),
+          date: against?.date ?? null,
+          dueDate: b.dueDate ?? against?.dueDate ?? null,
+          amount: num(b.amount),
+        });
+      }
+    }
+    return out;
+  }, [editing, openBills]);
+
+  /** How the money moved, by the label the company gave the mode. */
+  const docMode = useMemo(
+    () =>
+      paymentModes.find((m) => m.id === editing?.instrument?.modeValueId)
+        ?.label ?? null,
+    [paymentModes, editing],
+  );
+
+  /** A cheque is printable only where the instrument actually is one. */
+  const canPrintCheque =
+    !!documents?.includes('CHEQUE') && !!editing?.instrument && docMode === 'Cheque';
+  const canPrintAdvice = !!documents?.includes('ADVICE') && !!editing;
+
+  const docCompany = useMemo(() => {
+    const c = (companies ?? []).find((x) => x.id === activeCompany?.id);
+    return {
+      name: c?.name ?? activeCompany?.name ?? '',
+      legalName: c?.legalName,
+      address: c?.address,
+      city: c?.city,
+      state: c?.state,
+      phone: c?.phone,
+      email: c?.email,
+      gstin: c?.gstin,
+    };
+  }, [companies, activeCompany]);
+
+  const printAdvice = () => {
+    if (!editing) return;
+    const inst = editing.instrument;
+    const html = buildPaymentAdviceHtml({
+      company: docCompany,
+      branchName: activeBranch?.name ?? null,
+      voucherNo: editing.voucherNo,
+      date: editing.date,
+      status: editing.status,
+      payee: docPayee,
+      // The two columns agree on a voucher that has been checked, so either
+      // says what was paid.
+      amount: num(editing.totalDebit),
+      currency: docCurrency,
+      mode: docMode,
+      instrumentNo: inst?.instrumentNo ?? null,
+      instrumentDate: inst?.instrumentDate ?? null,
+      postDated: inst?.chequeKind === 'PDC',
+      bankLedger: docBank ? `${docBank.code} — ${docBank.name}` : null,
+      bank: docBank?.bankDetail ?? null,
+      bills: docBills,
+      reference: editing.reference,
+      narration: editing.narration,
+    });
+    if (!openPrintWindow(html)) {
+      toast.error('The browser blocked the print window. Allow pop-ups for this site.');
+    }
+  };
+
+  const printCheque = () => {
+    if (!editing?.instrument) return;
+    const inst = editing.instrument;
+    const html = buildChequeHtml({
+      payee: docPayee,
+      amount: num(editing.totalDebit),
+      // The date ON the cheque, which on a post-dated one is the day it may be
+      // presented rather than the day the voucher was written.
+      date: (inst.instrumentDate ?? editing.date).slice(0, 10),
+      currency: docCurrency,
+      bank: docBank?.bankDetail ?? null,
+      bankLedger: docBank ? `${docBank.code} — ${docBank.name}` : null,
+      chequeNo: inst.instrumentNo,
+      postDated: inst.chequeKind === 'PDC',
+    });
+    if (!openPrintWindow(html, 980, 560)) {
+      toast.error('The browser blocked the print window. Allow pop-ups for this site.');
     }
   };
 
@@ -1197,6 +1389,29 @@ export function VoucherEntryScreen({
               <ArrowLeft className="mr-1 inline h-4 w-4" />
               Back
             </button>
+            {/* The paper, on a voucher that exists. Both print what was SAVED,
+                so they sit apart from the ways of finishing rather than among
+                them — and a draft prints marked as one. */}
+            {canPrintAdvice && (
+              <button
+                className="btn-secondary whitespace-nowrap"
+                title="The advice for the payee — amount, bank and bills settled"
+                onClick={printAdvice}
+              >
+                <FileText className="mr-1 inline h-4 w-4" />
+                Advice
+              </button>
+            )}
+            {canPrintCheque && (
+              <button
+                className="btn-secondary whitespace-nowrap"
+                title="Print onto a pre-printed cheque leaf from this bank's book"
+                onClick={printCheque}
+              >
+                <Printer className="mr-1 inline h-4 w-4" />
+                Cheque
+              </button>
+            )}
             {!readOnly && (
               <>
                 {/* Two ways to finish, each with a "and start the next one"

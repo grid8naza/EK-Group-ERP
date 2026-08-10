@@ -224,6 +224,21 @@ export function useVoucherMasters() {
       .map((p) => ({ value: String(p.id), label: p.name }));
   };
 
+  /**
+   * What a party is called, given the kind and the id a line carries.
+   *
+   * Read from the same two masters the picker offers, and unfiltered by control
+   * account: this answers a question about a line already written, where the
+   * narrowing has done its work — a document printed from the voucher must name
+   * the payee even if that party has since been moved under another ledger.
+   */
+  const partyName = (kind: PartyKind | null, id: number | null) => {
+    if (!id) return null;
+    const list =
+      kind === 'SUPPLIER' ? suppliers : kind === 'CUSTOMER' ? customers : null;
+    return (list ?? []).find((p) => p.id === id)?.name ?? null;
+  };
+
   const asksFor = (accountId: string | number): LineAsks => {
     const account = accountById.get(Number(accountId));
     if (!account) return ASKS_NOTHING;
@@ -242,6 +257,7 @@ export function useVoucherMasters() {
     centreOptions,
     objectOptions,
     partyOptions,
+    partyName,
     asksFor,
   };
 }

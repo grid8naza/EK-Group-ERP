@@ -32,6 +32,10 @@ export default function BankPaymentPage() {
       // Mode, bank, number and date — and, on a cheque, whether it is due now
       // or later.
       askInstrument
+      // The two pieces of paper a payment out of the bank produces: the advice
+      // the payee is sent, and — where it went by cheque — the leaf itself.
+      // Both take the bank's own details from the ledger the money left.
+      documents={['ADVICE', 'CHEQUE']}
     />
   );
 }

@@ -321,6 +321,8 @@ export class CoaService {
       contactPerson: dto.contactPerson?.trim() || null,
       contactPhone: dto.contactPhone?.trim() || null,
       contactEmail: dto.contactEmail?.trim() || null,
+      chequeOffsetX: dto.chequeOffsetX ?? 0,
+      chequeOffsetY: dto.chequeOffsetY ?? 0,
       notes: dto.notes?.trim() || null,
     };
 

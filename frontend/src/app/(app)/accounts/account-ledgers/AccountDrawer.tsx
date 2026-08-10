@@ -118,6 +118,8 @@ type BankForm = {
   contactPerson: string;
   contactPhone: string;
   contactEmail: string;
+  chequeOffsetX: string;
+  chequeOffsetY: string;
   notes: string;
 };
 
@@ -136,6 +138,8 @@ const EMPTY_BANK: BankForm = {
   contactPerson: '',
   contactPhone: '',
   contactEmail: '',
+  chequeOffsetX: '',
+  chequeOffsetY: '',
   notes: '',
 };
 
@@ -227,6 +231,10 @@ export function AccountDrawer({
             contactPerson: d.contactPerson ?? '',
             contactPhone: d.contactPhone ?? '',
             contactEmail: d.contactEmail ?? '',
+            // Zero is "no nudge", which is what a blank box means here — so it
+            // shows blank rather than a 0 the user has to read past.
+            chequeOffsetX: d.chequeOffsetX ? String(d.chequeOffsetX) : '',
+            chequeOffsetY: d.chequeOffsetY ? String(d.chequeOffsetY) : '',
             notes: d.notes ?? '',
           }
         : EMPTY_BANK,
@@ -312,6 +320,12 @@ export function AccountDrawer({
       contactPerson: bank.contactPerson.trim() || undefined,
       contactPhone: bank.contactPhone.trim() || undefined,
       contactEmail: bank.contactEmail.trim() || undefined,
+      chequeOffsetX: bank.chequeOffsetX.trim()
+        ? Number(bank.chequeOffsetX)
+        : undefined,
+      chequeOffsetY: bank.chequeOffsetY.trim()
+        ? Number(bank.chequeOffsetY)
+        : undefined,
       notes: bank.notes.trim() || undefined,
     });
   };
@@ -769,6 +783,44 @@ export function AccountDrawer({
                 }
                 wrapClassName="sm:col-span-2"
               />
+              {/* Cheque printing writes onto paper the bank designed. CTS-2010
+                  fixes the leaf's size and roughly where each field goes, but
+                  not to the millimetre, so each chequebook carries its own
+                  correction. */}
+              <div className="sm:col-span-2 rounded-md bg-slate-50 p-3 dark:bg-slate-900/60">
+                <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                  Cheque print alignment
+                </p>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  Print one cheque on plain paper, hold it against a leaf from
+                  this book, and shift it here until it lands. Millimetres;
+                  negative moves left and up. Every cheque drawn on this account
+                  follows.
+                </p>
+                <div className="mt-2 grid grid-cols-2 gap-3">
+                  <Input
+                    label="Shift right (mm)"
+                    type="number"
+                    step="0.5"
+                    value={bank.chequeOffsetX}
+                    placeholder="0"
+                    onChange={(e) =>
+                      setBank({ ...bank, chequeOffsetX: e.target.value })
+                    }
+                  />
+                  <Input
+                    label="Shift down (mm)"
+                    type="number"
+                    step="0.5"
+                    value={bank.chequeOffsetY}
+                    placeholder="0"
+                    onChange={(e) =>
+                      setBank({ ...bank, chequeOffsetY: e.target.value })
+                    }
+                  />
+                </div>
+              </div>
+
               <Textarea
                 label="Remarks"
                 rows={2}

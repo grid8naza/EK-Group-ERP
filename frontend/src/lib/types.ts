@@ -2189,6 +2189,9 @@ export interface BankAccountDetail {
   contactPerson: string | null;
   contactPhone: string | null;
   contactEmail: string | null;
+  /** How far to shift what is printed on this bank's cheque leaves, in mm. */
+  chequeOffsetX: number;
+  chequeOffsetY: number;
   notes: string | null;
 }
 
