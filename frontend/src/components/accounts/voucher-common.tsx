@@ -1,8 +1,9 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Ban, Plus, Trash2 } from 'lucide-react';
 import { useFetch } from '@/lib/hooks';
+import { resolveIcon } from '@/lib/icons';
 import { isoDate } from '@/lib/utils';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
@@ -19,6 +20,7 @@ import type {
   Supplier,
   Voucher,
   VoucherStatus,
+  WorkflowStatus,
 } from '@/lib/types';
 
 /**
@@ -335,6 +337,34 @@ export function VoucherList({
   subLabel,
   extraColumns = [],
 }: VoucherListProps) {
+  /**
+   * The approval vocabulary — only for the icon and colour a stage is shown
+   * with. The stage itself is on the voucher; this says what it looks like.
+   */
+  const { data: approvalStatuses } = useFetch<WorkflowStatus[]>(
+    '/workflow-statuses',
+  );
+  const styleOf = useMemo(
+    () => new Map((approvalStatuses ?? []).map((s) => [s.name, s])),
+    [approvalStatuses],
+  );
+
+  /**
+   * The stages actually present in this register, for a filter that offers only
+   * what is there. Absent entirely on a kind nobody has put a workflow on —
+   * which is nine of the ten, and none of them should grow a filter for it.
+   */
+  const stages = useMemo(
+    () =>
+      [...new Set(rows.map((v) => v.workflowStatus).filter(Boolean))].sort() as string[],
+    [rows],
+  );
+  const [stage, setStage] = useState('');
+  const shown = useMemo(
+    () => (stage ? rows.filter((v) => v.workflowStatus === stage) : rows),
+    [rows, stage],
+  );
+
   // No Type column: every row on this screen is the same kind.
   const columns: Column<Voucher>[] = [
     {
@@ -382,16 +412,36 @@ export function VoucherList({
       header: 'Status',
       headerClassName: 'text-center',
       className: 'text-center',
-      accessor: (v) => v.status,
-      render: (v) => (
-        <Badge color={statusColor(v.status)}>
-          {v.status === 'DRAFT'
-            ? 'Draft'
-            : v.status === 'POSTED'
-              ? 'Posted'
-              : 'Cancelled'}
-        </Badge>
-      ),
+      accessor: (v) => `${v.status} ${v.workflowStatus ?? ''}`,
+      render: (v) => {
+        const style = v.workflowStatus ? styleOf.get(v.workflowStatus) : null;
+        const Icon = style?.icon ? resolveIcon(style.icon) : null;
+        return (
+          <div className="flex flex-col items-center gap-1">
+            <Badge color={statusColor(v.status)}>
+              {v.status === 'DRAFT'
+                ? 'Draft'
+                : v.status === 'POSTED'
+                  ? 'Posted'
+                  : 'Cancelled'}
+            </Badge>
+            {/* Beside the books status rather than instead of it. "Draft" and
+                "with the Accounts Head" are two different facts, and an
+                accountant reading a register needs both — a draft nobody has
+                finished and one waiting on a signature look identical
+                otherwise, which is what this column used to show. */}
+            {v.workflowStatus && (
+              <span
+                className="inline-flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400"
+                style={style?.color ? { color: style.color } : undefined}
+              >
+                {Icon && <Icon className="h-3 w-3" />}
+                {v.workflowStatus}
+              </span>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: 'actions',
@@ -459,7 +509,7 @@ export function VoucherList({
       <div className="min-h-0 flex-1">
         <DataTable
           columns={columns}
-          rows={rows}
+          rows={shown}
           rowKey={(v) => v.id}
           loading={loading}
           search={search}
@@ -469,17 +519,33 @@ export function VoucherList({
           onRowClick={(v) => onOpen(v)}
           emptyMessage={`No ${noun}s yet.`}
           toolbar={
-            <Select
-              value={statusFilter}
-              onChange={(e) => onStatusFilterChange(e.target.value)}
-              options={[
-                { value: 'DRAFT', label: 'Draft' },
-                { value: 'POSTED', label: 'Posted' },
-                { value: 'CANCELLED', label: 'Cancelled' },
-              ]}
-              placeholder="Any status"
-              className="w-40"
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                value={statusFilter}
+                onChange={(e) => onStatusFilterChange(e.target.value)}
+                options={[
+                  { value: 'DRAFT', label: 'Draft' },
+                  { value: 'POSTED', label: 'Posted' },
+                  { value: 'CANCELLED', label: 'Cancelled' },
+                ]}
+                placeholder="Any status"
+                className="w-40"
+              />
+              {/* Kept apart from the status filter, and only where there is
+                  something to filter. Where a voucher stands in the BOOKS and
+                  where it stands in its approval are different questions —
+                  every stage below is a draft, so folding them into one list
+                  would offer three ways to ask for the same rows. */}
+              {stages.length > 0 && (
+                <Select
+                  value={stage}
+                  onChange={(e) => setStage(e.target.value)}
+                  options={stages.map((s) => ({ value: s, label: s }))}
+                  placeholder="Any approval stage"
+                  className="w-48"
+                />
+              )}
+            </div>
           }
         />
       </div>
