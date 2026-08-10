@@ -43,6 +43,7 @@ import {
   type DocBill,
 } from '@/lib/paymentDocs';
 import { buildVoucherHtml, type VoucherDocLine } from '@/lib/voucherPrint';
+import { WorkflowStallNotice } from '@/components/workflow/StallNotice';
 import type {
   BalanceSide,
   BillRefType,
@@ -2584,13 +2585,12 @@ export function VoucherEntryScreen({
                 for a fortnight while everyone assumes it is with the next
                 level. */}
             {inApproval && !myTask && wf?.state.stalled && (
-              <p className="mt-3 text-xs text-amber-600 dark:text-amber-400">
-                Stopped at level {wf.state.currentSequence}: nobody there can act
-                on it. Give an approver access to this company, or put one on
-                that level, and it carries on by itself — see the trail above for
-                which it is.
-                {wf.canWithdraw && ' You may also withdraw it.'}
-              </p>
+              <WorkflowStallNotice
+                className="mt-3"
+                sequence={wf.state.currentSequence}
+              >
+                {wf.canWithdraw && 'You may also withdraw it.'}
+              </WorkflowStallNotice>
             )}
             {inApproval && !myTask && !wf?.state.stalled && (
               <p className="mt-3 text-xs text-slate-400">

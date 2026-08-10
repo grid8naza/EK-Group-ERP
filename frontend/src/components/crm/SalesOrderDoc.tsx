@@ -1,6 +1,7 @@
 'use client';
 
 import { Badge } from '@/components/ui/Badge';
+import { WorkflowStallNotice } from '@/components/workflow/StallNotice';
 import type { SalesOrder, SalesOrderStatus } from '@/lib/types';
 
 const statusColor = (s: SalesOrderStatus) =>
@@ -177,6 +178,14 @@ export function SalesOrderDoc({
             {order.notes}
           </p>
         </div>
+      )}
+
+      {/* Stopped, not merely waiting — see WorkflowStallNotice. */}
+      {order.workflow?.stalled && (
+        <WorkflowStallNotice
+          className="mt-6"
+          sequence={order.workflow.currentSequence}
+        />
       )}
 
       {/* Approval trail */}

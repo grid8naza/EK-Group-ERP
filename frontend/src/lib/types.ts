@@ -1005,6 +1005,12 @@ export interface PurchaseOrderWorkflow {
   instanceId: number | null;
   status: 'IN_PROGRESS' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | null;
   currentSequence: number;
+  /**
+   * Still going, and waiting on nobody — the level it has reached has no one
+   * who can act. Resumes by itself once the workflow or that access is put
+   * right. Shared by the LPO and both CRM orders; see WorkflowStallNotice.
+   */
+  stalled?: boolean;
   myTask: WorkflowViewerTask | null;
   timeline: WorkflowTimelineEntry[];
 }
