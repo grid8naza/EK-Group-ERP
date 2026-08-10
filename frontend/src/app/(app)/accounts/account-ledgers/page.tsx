@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { BookOpen, Check, Minus, Pencil, Plus, Trash2 } from 'lucide-react';
+import { BookOpen, Check, Minus, Plus } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { useFetch } from '@/lib/hooks';
@@ -9,6 +9,7 @@ import { useToast } from '@/providers/ToastProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
+import { RowActions } from '@/components/ui/RowActions';
 import { Select } from '@/components/ui/Field';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { AccountDrawer } from './AccountDrawer';
@@ -113,8 +114,11 @@ export default function AccountLedgersPage() {
   const [attrs, setAttrs] = useState<AttributeFilters>({});
   const [busy, setBusy] = useState<number | null>(null);
   const [editing, setEditing] = useState<CoaAccount | null>(null);
+  /** The same drawer, opened to be read rather than changed. */
+  const [viewing, setViewing] = useState(false);
   const [addingAccount, setAddingAccount] = useState(false);
 
+  const canView = can(ROUTE, 'view');
   const canEdit = can(ROUTE, 'edit');
   const canAdd = can(ROUTE, 'add');
   const canDelete = can(ROUTE, 'delete');
@@ -309,35 +313,26 @@ export default function AccountLedgersPage() {
       key: 'actions',
       header: '',
       sortable: false,
-      className: 'w-20',
+      className: 'w-28',
+      // Its own column rather than DataTable's built-in actions, because delete
+      // is decided per ROW here: an account the annexure shipped has no delete
+      // at all, rather than one that always fails.
       render: (a) => (
-        <div className="flex items-center gap-0.5">
-          {canEdit && (
-            <button
-              title="Edit name, notes and posting rules"
-              className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-brand-600 dark:hover:bg-slate-800"
-              onClick={(e) => {
-                e.stopPropagation();
-                setEditing(a);
-              }}
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-          )}
-          {/* Shipped accounts have no delete at all, rather than one that
-              always fails — the master is the signed-off baseline. */}
-          {canDelete && !a.isSystem && (
-            <button
-              title="Delete this account"
-              className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-rose-600 dark:hover:bg-slate-800"
-              onClick={(e) => {
-                e.stopPropagation();
-                void remove(a);
-              }}
-            >
-              <Trash2 className="h-4 w-4" />
-            </button>
-          )}
+        <div className="flex items-center justify-end gap-0.5">
+          <RowActions
+            onView={() => {
+              setViewing(true);
+              setEditing(a);
+            }}
+            onEdit={() => {
+              setViewing(false);
+              setEditing(a);
+            }}
+            onDelete={() => void remove(a)}
+            canView={canView}
+            canEdit={canEdit}
+            canDelete={canDelete && !a.isSystem}
+          />
         </div>
       ),
     },
@@ -351,7 +346,13 @@ export default function AccountLedgersPage() {
         icon={<BookOpen className="h-5 w-5" />}
         actions={
           canAdd ? (
-            <button className="btn-primary" onClick={() => setAddingAccount(true)}>
+            <button
+              className="btn-primary"
+              onClick={() => {
+                setViewing(false);
+                setAddingAccount(true);
+              }}
+            >
               <Plus className="mr-1 inline h-4 w-4" />
               New Account
             </button>
@@ -427,11 +428,13 @@ export default function AccountLedgersPage() {
       <AccountDrawer
         open={addingAccount || !!editing}
         account={editing}
+        readOnly={viewing}
         groups={groups ?? []}
         companyName={activeCompanyName}
         onClose={() => {
           setAddingAccount(false);
           setEditing(null);
+          setViewing(false);
         }}
         onSaved={refetch}
       />

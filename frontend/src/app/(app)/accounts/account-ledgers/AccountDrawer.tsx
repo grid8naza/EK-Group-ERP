@@ -5,8 +5,9 @@ import { Landmark, Wallet } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch, useLookupValues } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
-import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
+import { CloseFooter, Drawer, DrawerFooter } from '@/components/ui/Drawer';
 import { Checkbox, Input, Select, Textarea } from '@/components/ui/Field';
+import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import type { AccountGroup, CoaAccount, Currency } from '@/lib/types';
 
 const PARTY_OPTIONS = [
@@ -178,6 +179,7 @@ const EMPTY: Form = {
 export function AccountDrawer({
   open,
   account,
+  readOnly = false,
   groups,
   companyName,
   onClose,
@@ -186,6 +188,8 @@ export function AccountDrawer({
   open: boolean;
   /** null = creating. */
   account: CoaAccount | null;
+  /** Opened to be read: every field disabled, and nothing to save. */
+  readOnly?: boolean;
   groups: AccountGroup[];
   companyName: string;
   onClose: () => void;
@@ -392,453 +396,466 @@ export function AccountDrawer({
       onClose={onClose}
       title={editing ? `${account!.code} — ${account!.name}` : 'New Account'}
       subtitle={
-        editing
-          ? account!.isSystem
-            ? 'Part of the Annexure D master — name, notes and rules only'
-            : 'Added here'
-          : 'The code, nature and statement follow the group'
+        readOnly && account
+          ? // What it IS, since nothing here is being decided. The editing
+            // subtitle says what may be changed, which reads as an offer.
+            `${account.group.code} · ${account.group.name} — read only`
+          : editing
+            ? account!.isSystem
+              ? 'Part of the Annexure D master — name, notes and rules only'
+              : 'Added here'
+            : 'The code, nature and statement follow the group'
       }
       icon={<Wallet className="h-5 w-5" />}
       width="lg"
-      footer={<DrawerFooter onCancel={onClose} onSave={save} saving={saving} />}
+      footer={
+        readOnly ? (
+          <CloseFooter onClose={onClose} />
+        ) : (
+          <DrawerFooter onCancel={onClose} onSave={save} saving={saving} />
+        )
+      }
     >
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {!editing && (
-          <>
-            <Select
-              label="Scope"
-              required
-              value={form.scope}
-              onChange={(e) =>
-                setForm({ ...form, scope: e.target.value as Form['scope'] })
-              }
-              options={[
-                { value: 'GROUP', label: 'Group master — every company may adopt it' },
-                { value: 'PRIVATE', label: `Private to ${companyName}` },
-              ]}
-              className="sm:col-span-2"
-            />
-            <Select
-              label="Group"
-              required
-              openOnFocus
-              value={form.groupId}
-              onChange={(e) => void onGroupChange(e.target.value)}
-              options={groups.map((g) => ({
-                value: String(g.id),
-                label: `${g.code} — ${g.name}`,
-              }))}
-              placeholder="Choose a group"
-              className="sm:col-span-2"
-            />
-          </>
-        )}
+      <ReadOnlyFieldset readOnly={readOnly}>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {!editing && (
+            <>
+              <Select
+                label="Scope"
+                required
+                value={form.scope}
+                onChange={(e) =>
+                  setForm({ ...form, scope: e.target.value as Form['scope'] })
+                }
+                options={[
+                  { value: 'GROUP', label: 'Group master — every company may adopt it' },
+                  { value: 'PRIVATE', label: `Private to ${companyName}` },
+                ]}
+                className="sm:col-span-2"
+              />
+              <Select
+                label="Group"
+                required
+                openOnFocus
+                value={form.groupId}
+                onChange={(e) => void onGroupChange(e.target.value)}
+                options={groups.map((g) => ({
+                  value: String(g.id),
+                  label: `${g.code} — ${g.name}`,
+                }))}
+                placeholder="Choose a group"
+                className="sm:col-span-2"
+              />
+            </>
+          )}
 
-        <Input
-          label="Code"
-          value={form.code}
-          disabled={editing}
-          onChange={(e) => setForm({ ...form, code: e.target.value })}
-          placeholder={group ? `${group.code.slice(0, 3)}01 – ${group.code.slice(0, 3)}99` : '—'}
-        />
-        <Input
-          label="Name"
-          required
-          value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-        />
+          <Input
+            label="Code"
+            value={form.code}
+            disabled={editing}
+            onChange={(e) => setForm({ ...form, code: e.target.value })}
+            placeholder={group ? `${group.code.slice(0, 3)}01 – ${group.code.slice(0, 3)}99` : '—'}
+          />
+          <Input
+            label="Name"
+            required
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+          />
 
-        {/* Fixed by the group — shown so the consequence of the choice is
-            visible, never editable. */}
-        {group && (
-          <div className="sm:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-900">
-            <span className="text-slate-500">From the group: </span>
-            <span className="font-medium text-slate-700 dark:text-slate-200">
-              {group.nature}
-            </span>
-            <span className="text-slate-400">
-              {' '}
-              · {group.statement === 'BS' ? 'Balance Sheet' : 'Profit & Loss'}
-            </span>
-            {group.tallyGroup && (
-              <span className="text-slate-400"> · Tally: {group.tallyGroup}</span>
-            )}
-          </div>
-        )}
+          {/* Fixed by the group — shown so the consequence of the choice is
+              visible, never editable. */}
+          {group && (
+            <div className="sm:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-900">
+              <span className="text-slate-500">From the group: </span>
+              <span className="font-medium text-slate-700 dark:text-slate-200">
+                {group.nature}
+              </span>
+              <span className="text-slate-400">
+                {' '}
+                · {group.statement === 'BS' ? 'Balance Sheet' : 'Profit & Loss'}
+              </span>
+              {group.tallyGroup && (
+                <span className="text-slate-400"> · Tally: {group.tallyGroup}</span>
+              )}
+            </div>
+          )}
 
-        {!editing && (
-          <div>
-            <Select
-              label="Normal side"
-              value={form.normalSide}
-              onChange={(e) => setForm({ ...form, normalSide: e.target.value })}
-              options={SIDE_OPTIONS}
-              placeholder="Follow the group"
-            />
-            <p className="mt-1 text-xs text-slate-400">
-              Flip it only for a contra account, e.g. Purchase Returns.
+          {!editing && (
+            <div>
+              <Select
+                label="Normal side"
+                value={form.normalSide}
+                onChange={(e) => setForm({ ...form, normalSide: e.target.value })}
+                options={SIDE_OPTIONS}
+                placeholder="Follow the group"
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                Flip it only for a contra account, e.g. Purchase Returns.
+              </p>
+            </div>
+          )}
+          {/* What an entry to this account is asked for. Company and branch are
+              asked for on every entry and are not settable here. */}
+          <div className="sm:col-span-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+              Asked for at data entry
             </p>
+            <div className="mt-2 flex flex-wrap gap-x-6 gap-y-2">
+              <Checkbox
+                label="Cost centre (division)"
+                help={HELP.hasCostCenter}
+                checked={form.hasCostCenter}
+                disabled={editing}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    hasCostCenter: e.target.checked,
+                    // A department has no division to sit in once the centre is
+                    // no longer asked for.
+                    hasCostObject: e.target.checked ? form.hasCostObject : false,
+                  })
+                }
+              />
+              <Checkbox
+                label="Cost object (department)"
+                help={HELP.hasCostObject}
+                checked={form.hasCostObject}
+                disabled={editing}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    hasCostObject: e.target.checked,
+                    hasCostCenter: e.target.checked || form.hasCostCenter,
+                  })
+                }
+              />
+            </div>
+            <p className="mt-2 text-xs text-slate-400">
+              Unticked, the entry screen does not ask and the field stays blank on
+              the line. Company and branch are asked for on every entry.
+            </p>
+            {/* Level 1 overrides level 2, so say so where it bites rather than
+                leaving a ticked box that nothing acts on. */}
+            {account?.entryRules && form.hasCostCenter &&
+              account.entryRules.costCenter === 'OFF' && (
+                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                  {companyName} is not set up for cost centres, so nothing is asked
+                  for here until that is turned on in the company master.
+                </p>
+              )}
+            {account?.entryRules && form.hasCostObject &&
+              account.entryRules.costObject === 'OFF' &&
+              account.entryRules.costCenter !== 'OFF' && (
+                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                  {companyName} is not set up for cost objects, so only the cost
+                  centre is asked for here.
+                </p>
+              )}
           </div>
-        )}
-        {/* What an entry to this account is asked for. Company and branch are
-            asked for on every entry and are not settable here. */}
-        <div className="sm:col-span-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-          <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
-            Asked for at data entry
-          </p>
-          <div className="mt-2 flex flex-wrap gap-x-6 gap-y-2">
-            <Checkbox
-              label="Cost centre (division)"
-              help={HELP.hasCostCenter}
-              checked={form.hasCostCenter}
-              disabled={editing}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  hasCostCenter: e.target.checked,
-                  // A department has no division to sit in once the centre is
-                  // no longer asked for.
-                  hasCostObject: e.target.checked ? form.hasCostObject : false,
-                })
-              }
-            />
-            <Checkbox
-              label="Cost object (department)"
-              help={HELP.hasCostObject}
-              checked={form.hasCostObject}
-              disabled={editing}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  hasCostObject: e.target.checked,
-                  hasCostCenter: e.target.checked || form.hasCostCenter,
-                })
-              }
-            />
-          </div>
-          <p className="mt-2 text-xs text-slate-400">
-            Unticked, the entry screen does not ask and the field stays blank on
-            the line. Company and branch are asked for on every entry.
-          </p>
-          {/* Level 1 overrides level 2, so say so where it bites rather than
-              leaving a ticked box that nothing acts on. */}
-          {account?.entryRules && form.hasCostCenter &&
-            account.entryRules.costCenter === 'OFF' && (
-              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-                {companyName} is not set up for cost centres, so nothing is asked
-                for here until that is turned on in the company master.
-              </p>
-            )}
-          {account?.entryRules && form.hasCostObject &&
-            account.entryRules.costObject === 'OFF' &&
-            account.entryRules.costCenter !== 'OFF' && (
-              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-                {companyName} is not set up for cost objects, so only the cost
-                centre is asked for here.
-              </p>
-            )}
-        </div>
 
-        <div className="sm:col-span-2 flex flex-wrap gap-x-6 gap-y-2 border-t border-slate-200 pt-3 dark:border-slate-700">
-          <Checkbox
-            label="Contra — offsets its own group"
-            help={HELP.isContra}
-            checked={form.isContra}
-            disabled={editing}
-            onChange={(e) => setForm({ ...form, isContra: e.target.checked })}
-          />
-          <Checkbox
-            label="Control — aged by a party"
-            help={HELP.isControl}
-            checked={form.isControl}
-            disabled={editing}
-            onChange={(e) => setForm({ ...form, isControl: e.target.checked })}
-          />
-          <Checkbox
-            label="GST relevant"
-            help={HELP.isGstRelevant}
-            checked={form.isGstRelevant}
-            disabled={editing}
-            onChange={(e) => setForm({ ...form, isGstRelevant: e.target.checked })}
-          />
-          {/* One or the other: ticking one clears the other rather than
-              refusing the pair, since choosing "bank" over "cash" is a
-              correction, not a mistake to be argued with. */}
-          <Checkbox
-            label="Cash"
-            help={HELP.isCash}
-            checked={form.isCash}
-            disabled={editing}
-            onChange={(e) => setForm({ ...form, ...money('isCash', e.target.checked) })}
-          />
-          <Checkbox
-            label="Bank"
-            help={HELP.isBank}
-            checked={form.isBank}
-            disabled={editing}
-            onChange={(e) => setForm({ ...form, ...money('isBank', e.target.checked) })}
-          />
-          <Checkbox
-            label="PDC issued"
-            help={HELP.isPdcIssued}
-            checked={form.isPdcIssued}
-            disabled={editing}
-            onChange={(e) =>
-              setForm({ ...form, ...money('isPdcIssued', e.target.checked) })
-            }
-          />
-          <Checkbox
-            label="PDC received"
-            help={HELP.isPdcReceived}
-            checked={form.isPdcReceived}
-            disabled={editing}
-            onChange={(e) =>
-              setForm({ ...form, ...money('isPdcReceived', e.target.checked) })
-            }
-          />
-          <Checkbox
-            label="Reconcilable"
-            help={HELP.isReconcilable}
-            checked={form.isReconcilable}
-            disabled={editing}
-            onChange={(e) => setForm({ ...form, isReconcilable: e.target.checked })}
-          />
-          <Checkbox
-            label="Allow manual journal"
-            help={HELP.allowManualJe}
-            checked={form.allowManualJe}
-            disabled={editing}
-            onChange={(e) => setForm({ ...form, allowManualJe: e.target.checked })}
-          />
-          {editing && (
+          <div className="sm:col-span-2 flex flex-wrap gap-x-6 gap-y-2 border-t border-slate-200 pt-3 dark:border-slate-700">
             <Checkbox
-              label="Active"
-              help={HELP.isActive}
-              checked={form.isActive}
-              onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+              label="Contra — offsets its own group"
+              help={HELP.isContra}
+              checked={form.isContra}
+              disabled={editing}
+              onChange={(e) => setForm({ ...form, isContra: e.target.checked })}
+            />
+            <Checkbox
+              label="Control — aged by a party"
+              help={HELP.isControl}
+              checked={form.isControl}
+              disabled={editing}
+              onChange={(e) => setForm({ ...form, isControl: e.target.checked })}
+            />
+            <Checkbox
+              label="GST relevant"
+              help={HELP.isGstRelevant}
+              checked={form.isGstRelevant}
+              disabled={editing}
+              onChange={(e) => setForm({ ...form, isGstRelevant: e.target.checked })}
+            />
+            {/* One or the other: ticking one clears the other rather than
+                refusing the pair, since choosing "bank" over "cash" is a
+                correction, not a mistake to be argued with. */}
+            <Checkbox
+              label="Cash"
+              help={HELP.isCash}
+              checked={form.isCash}
+              disabled={editing}
+              onChange={(e) => setForm({ ...form, ...money('isCash', e.target.checked) })}
+            />
+            <Checkbox
+              label="Bank"
+              help={HELP.isBank}
+              checked={form.isBank}
+              disabled={editing}
+              onChange={(e) => setForm({ ...form, ...money('isBank', e.target.checked) })}
+            />
+            <Checkbox
+              label="PDC issued"
+              help={HELP.isPdcIssued}
+              checked={form.isPdcIssued}
+              disabled={editing}
+              onChange={(e) =>
+                setForm({ ...form, ...money('isPdcIssued', e.target.checked) })
+              }
+            />
+            <Checkbox
+              label="PDC received"
+              help={HELP.isPdcReceived}
+              checked={form.isPdcReceived}
+              disabled={editing}
+              onChange={(e) =>
+                setForm({ ...form, ...money('isPdcReceived', e.target.checked) })
+              }
+            />
+            <Checkbox
+              label="Reconcilable"
+              help={HELP.isReconcilable}
+              checked={form.isReconcilable}
+              disabled={editing}
+              onChange={(e) => setForm({ ...form, isReconcilable: e.target.checked })}
+            />
+            <Checkbox
+              label="Allow manual journal"
+              help={HELP.allowManualJe}
+              checked={form.allowManualJe}
+              disabled={editing}
+              onChange={(e) => setForm({ ...form, allowManualJe: e.target.checked })}
+            />
+            {editing && (
+              <Checkbox
+                label="Active"
+                help={HELP.isActive}
+                checked={form.isActive}
+                onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+              />
+            )}
+          </div>
+
+          {form.isControl && !editing && (
+            <Select
+              label="Aged by"
+              required
+              value={form.controlParty}
+              onChange={(e) => setForm({ ...form, controlParty: e.target.value })}
+              options={PARTY_OPTIONS}
+              placeholder="Which party"
             />
           )}
-        </div>
 
-        {form.isControl && !editing && (
-          <Select
-            label="Aged by"
-            required
-            value={form.controlParty}
-            onChange={(e) => setForm({ ...form, controlParty: e.target.value })}
-            options={PARTY_OPTIONS}
-            placeholder="Which party"
+          <Textarea
+            label="Notes"
+            rows={2}
+            value={form.notes}
+            disabled={editing}
+            onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            wrapClassName="sm:col-span-2"
           />
-        )}
 
-        <Textarea
-          label="Notes"
-          rows={2}
-          value={form.notes}
-          disabled={editing}
-          onChange={(e) => setForm({ ...form, notes: e.target.value })}
-          wrapClassName="sm:col-span-2"
-        />
-
-        {/* Which bank this ledger actually is. Only on a bank account, and only
-            once it exists — the details hang off the account, so there has to be
-            one to hang them on. */}
-        {!editing && form.isBank && (
-          <p className="sm:col-span-2 text-xs text-slate-400">
-            Save the account, then reopen it to record which bank it is with.
-          </p>
-        )}
-        {showBank && (
-          <div className="sm:col-span-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-            <div className="flex items-center gap-2">
-              <Landmark className="h-4 w-4 text-slate-400" />
-              <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                Bank details — {companyName}
-              </p>
-            </div>
-            <p className="mt-1 text-xs text-slate-400">
-              The real account behind this ledger. Held per company: every
-              company draws on the same chart and banks somewhere different
-              under it, so what you enter here is {companyName}&apos;s alone.
+          {/* Which bank this ledger actually is. Only on a bank account, and only
+              once it exists — the details hang off the account, so there has to be
+              one to hang them on. */}
+          {!editing && form.isBank && (
+            <p className="sm:col-span-2 text-xs text-slate-400">
+              Save the account, then reopen it to record which bank it is with.
             </p>
-            {!account?.adopted && (
-              <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-                {companyName} has not adopted this account, so nothing is posted
-                to it here yet.
+          )}
+          {showBank && (
+            <div className="sm:col-span-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+              <div className="flex items-center gap-2">
+                <Landmark className="h-4 w-4 text-slate-400" />
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                  Bank details — {companyName}
+                </p>
+              </div>
+              <p className="mt-1 text-xs text-slate-400">
+                The real account behind this ledger. Held per company: every
+                company draws on the same chart and banks somewhere different
+                under it, so what you enter here is {companyName}&apos;s alone.
               </p>
-            )}
-
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <Input
-                label="Bank"
-                required
-                value={bank.bankName}
-                placeholder="e.g. Federal Bank"
-                onChange={(e) => setBank({ ...bank, bankName: e.target.value })}
-              />
-              <Input
-                label="Account number"
-                required
-                value={bank.accountNumber}
-                onChange={(e) =>
-                  setBank({ ...bank, accountNumber: e.target.value })
-                }
-              />
-              <Select
-                label="Account type"
-                value={bank.accountTypeValueId}
-                onChange={(e) =>
-                  setBank({ ...bank, accountTypeValueId: e.target.value })
-                }
-                options={accountTypes.map((v) => ({
-                  value: String(v.id),
-                  label: v.label,
-                }))}
-                placeholder="Not stated"
-              />
-              <Input
-                label="Held in the name of"
-                value={bank.accountHolderName}
-                placeholder={companyName}
-                onChange={(e) =>
-                  setBank({ ...bank, accountHolderName: e.target.value })
-                }
-              />
-              <Input
-                label="Branch"
-                value={bank.branchName}
-                onChange={(e) => setBank({ ...bank, branchName: e.target.value })}
-              />
-              <Select
-                label="Currency"
-                value={bank.currencyId}
-                onChange={(e) => setBank({ ...bank, currencyId: e.target.value })}
-                options={(currencies ?? [])
-                  .filter((c) => c.isActive)
-                  .map((c) => ({ value: String(c.id), label: c.code }))}
-                placeholder="The company's own"
-              />
-              <Textarea
-                label="Branch address"
-                rows={2}
-                value={bank.branchAddress}
-                onChange={(e) =>
-                  setBank({ ...bank, branchAddress: e.target.value })
-                }
-                wrapClassName="sm:col-span-2"
-              />
-
-              {/* How money is routed to it. The domestic pair and the
-                  international pair, since a company rarely has all four. */}
-              <Input
-                label="IFSC"
-                value={bank.ifscCode}
-                placeholder="SBIN0001234"
-                onChange={(e) =>
-                  setBank({ ...bank, ifscCode: e.target.value.toUpperCase() })
-                }
-              />
-              <Input
-                label="MICR"
-                value={bank.micrCode}
-                placeholder="682010012"
-                onChange={(e) => setBank({ ...bank, micrCode: e.target.value })}
-              />
-              <Input
-                label="SWIFT / BIC"
-                value={bank.swiftCode}
-                placeholder="HDFCINBB"
-                onChange={(e) =>
-                  setBank({ ...bank, swiftCode: e.target.value.toUpperCase() })
-                }
-              />
-              <Input
-                label="IBAN"
-                value={bank.iban}
-                onChange={(e) =>
-                  setBank({ ...bank, iban: e.target.value.toUpperCase() })
-                }
-              />
-
-              <Input
-                label="Branch contact"
-                value={bank.contactPerson}
-                onChange={(e) =>
-                  setBank({ ...bank, contactPerson: e.target.value })
-                }
-              />
-              <Input
-                label="Phone"
-                value={bank.contactPhone}
-                onChange={(e) =>
-                  setBank({ ...bank, contactPhone: e.target.value })
-                }
-              />
-              <Input
-                label="Email"
-                type="email"
-                value={bank.contactEmail}
-                onChange={(e) =>
-                  setBank({ ...bank, contactEmail: e.target.value })
-                }
-                wrapClassName="sm:col-span-2"
-              />
-              {/* Cheque printing writes onto paper the bank designed. CTS-2010
-                  fixes the leaf's size and roughly where each field goes, but
-                  not to the millimetre, so each chequebook carries its own
-                  correction. */}
-              <div className="sm:col-span-2 rounded-md bg-slate-50 p-3 dark:bg-slate-900/60">
-                <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
-                  Cheque print alignment
+              {!account?.adopted && (
+                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                  {companyName} has not adopted this account, so nothing is posted
+                  to it here yet.
                 </p>
-                <p className="mt-0.5 text-xs text-slate-400">
-                  Print one cheque on plain paper, hold it against a leaf from
-                  this book, and shift it here until it lands. Millimetres;
-                  negative moves left and up. Every cheque drawn on this account
-                  follows.
-                </p>
-                <div className="mt-2 grid grid-cols-2 gap-3">
-                  <Input
-                    label="Shift right (mm)"
-                    type="number"
-                    step="0.5"
-                    value={bank.chequeOffsetX}
-                    placeholder="0"
-                    onChange={(e) =>
-                      setBank({ ...bank, chequeOffsetX: e.target.value })
-                    }
-                  />
-                  <Input
-                    label="Shift down (mm)"
-                    type="number"
-                    step="0.5"
-                    value={bank.chequeOffsetY}
-                    placeholder="0"
-                    onChange={(e) =>
-                      setBank({ ...bank, chequeOffsetY: e.target.value })
-                    }
-                  />
+              )}
+
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Input
+                  label="Bank"
+                  required
+                  value={bank.bankName}
+                  placeholder="e.g. Federal Bank"
+                  onChange={(e) => setBank({ ...bank, bankName: e.target.value })}
+                />
+                <Input
+                  label="Account number"
+                  required
+                  value={bank.accountNumber}
+                  onChange={(e) =>
+                    setBank({ ...bank, accountNumber: e.target.value })
+                  }
+                />
+                <Select
+                  label="Account type"
+                  value={bank.accountTypeValueId}
+                  onChange={(e) =>
+                    setBank({ ...bank, accountTypeValueId: e.target.value })
+                  }
+                  options={accountTypes.map((v) => ({
+                    value: String(v.id),
+                    label: v.label,
+                  }))}
+                  placeholder="Not stated"
+                />
+                <Input
+                  label="Held in the name of"
+                  value={bank.accountHolderName}
+                  placeholder={companyName}
+                  onChange={(e) =>
+                    setBank({ ...bank, accountHolderName: e.target.value })
+                  }
+                />
+                <Input
+                  label="Branch"
+                  value={bank.branchName}
+                  onChange={(e) => setBank({ ...bank, branchName: e.target.value })}
+                />
+                <Select
+                  label="Currency"
+                  value={bank.currencyId}
+                  onChange={(e) => setBank({ ...bank, currencyId: e.target.value })}
+                  options={(currencies ?? [])
+                    .filter((c) => c.isActive)
+                    .map((c) => ({ value: String(c.id), label: c.code }))}
+                  placeholder="The company's own"
+                />
+                <Textarea
+                  label="Branch address"
+                  rows={2}
+                  value={bank.branchAddress}
+                  onChange={(e) =>
+                    setBank({ ...bank, branchAddress: e.target.value })
+                  }
+                  wrapClassName="sm:col-span-2"
+                />
+
+                {/* How money is routed to it. The domestic pair and the
+                    international pair, since a company rarely has all four. */}
+                <Input
+                  label="IFSC"
+                  value={bank.ifscCode}
+                  placeholder="SBIN0001234"
+                  onChange={(e) =>
+                    setBank({ ...bank, ifscCode: e.target.value.toUpperCase() })
+                  }
+                />
+                <Input
+                  label="MICR"
+                  value={bank.micrCode}
+                  placeholder="682010012"
+                  onChange={(e) => setBank({ ...bank, micrCode: e.target.value })}
+                />
+                <Input
+                  label="SWIFT / BIC"
+                  value={bank.swiftCode}
+                  placeholder="HDFCINBB"
+                  onChange={(e) =>
+                    setBank({ ...bank, swiftCode: e.target.value.toUpperCase() })
+                  }
+                />
+                <Input
+                  label="IBAN"
+                  value={bank.iban}
+                  onChange={(e) =>
+                    setBank({ ...bank, iban: e.target.value.toUpperCase() })
+                  }
+                />
+
+                <Input
+                  label="Branch contact"
+                  value={bank.contactPerson}
+                  onChange={(e) =>
+                    setBank({ ...bank, contactPerson: e.target.value })
+                  }
+                />
+                <Input
+                  label="Phone"
+                  value={bank.contactPhone}
+                  onChange={(e) =>
+                    setBank({ ...bank, contactPhone: e.target.value })
+                  }
+                />
+                <Input
+                  label="Email"
+                  type="email"
+                  value={bank.contactEmail}
+                  onChange={(e) =>
+                    setBank({ ...bank, contactEmail: e.target.value })
+                  }
+                  wrapClassName="sm:col-span-2"
+                />
+                {/* Cheque printing writes onto paper the bank designed. CTS-2010
+                    fixes the leaf's size and roughly where each field goes, but
+                    not to the millimetre, so each chequebook carries its own
+                    correction. */}
+                <div className="sm:col-span-2 rounded-md bg-slate-50 p-3 dark:bg-slate-900/60">
+                  <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                    Cheque print alignment
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-400">
+                    Print one cheque on plain paper, hold it against a leaf from
+                    this book, and shift it here until it lands. Millimetres;
+                    negative moves left and up. Every cheque drawn on this account
+                    follows.
+                  </p>
+                  <div className="mt-2 grid grid-cols-2 gap-3">
+                    <Input
+                      label="Shift right (mm)"
+                      type="number"
+                      step="0.5"
+                      value={bank.chequeOffsetX}
+                      placeholder="0"
+                      onChange={(e) =>
+                        setBank({ ...bank, chequeOffsetX: e.target.value })
+                      }
+                    />
+                    <Input
+                      label="Shift down (mm)"
+                      type="number"
+                      step="0.5"
+                      value={bank.chequeOffsetY}
+                      placeholder="0"
+                      onChange={(e) =>
+                        setBank({ ...bank, chequeOffsetY: e.target.value })
+                      }
+                    />
+                  </div>
                 </div>
+
+                <Textarea
+                  label="Remarks"
+                  rows={2}
+                  value={bank.notes}
+                  onChange={(e) => setBank({ ...bank, notes: e.target.value })}
+                  wrapClassName="sm:col-span-2"
+                />
               </div>
 
-              <Textarea
-                label="Remarks"
-                rows={2}
-                value={bank.notes}
-                onChange={(e) => setBank({ ...bank, notes: e.target.value })}
-                wrapClassName="sm:col-span-2"
-              />
+              {/* Nothing is being saved in view mode, so nothing is at risk. */}
+              {!readOnly && account?.bankDetail && !bankFilled && (
+                <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+                  Every box is empty, so saving removes the bank details recorded
+                  here. The ledger and everything posted to it stay.
+                </p>
+              )}
             </div>
-
-            {account?.bankDetail && !bankFilled && (
-              <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                Every box is empty, so saving removes the bank details recorded
-                here. The ledger and everything posted to it stay.
-              </p>
-            )}
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      </ReadOnlyFieldset>
     </Drawer>
   );
 }
