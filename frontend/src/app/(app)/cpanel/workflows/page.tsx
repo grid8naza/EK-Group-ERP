@@ -243,6 +243,8 @@ export default function WorkflowsPage() {
     (modules ?? []).find((m) => m.id === id)?.name ?? '—';
   const formName = (id?: number | null) =>
     forms.find((o) => o.id === id)?.objectName ?? '—';
+  const formRoute = (id?: number | null) =>
+    forms.find((o) => o.id === id)?.route ?? null;
   const branchName = (id?: number | null) =>
     id == null ? 'All branches' : (branches ?? []).find((b) => b.id === id)?.name ?? '—';
   const groupName = (id?: number | null) =>
@@ -524,7 +526,20 @@ export default function WorkflowsPage() {
     {
       key: 'form',
       header: 'Form',
-      accessor: (r) => formName(r.objectId),
+      // Searched on both, so a row can be found by the screen it governs as
+      // well as by what that screen is called.
+      accessor: (r) => `${formName(r.objectId)} ${formRoute(r.objectId) ?? ''}`,
+      render: (r) => (
+        <div>
+          <div>{formName(r.objectId)}</div>
+          {/* The same disambiguation the picker makes, kept where the bindings
+              are read back: two forms called Purchase are told apart by where
+              they are, not by what they are called. */}
+          {formRoute(r.objectId) && (
+            <div className="text-xs text-slate-400">{formRoute(r.objectId)}</div>
+          )}
+        </div>
+      ),
     },
     {
       key: 'branch',
