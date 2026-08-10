@@ -42,7 +42,47 @@ export class WorkflowDefinitionService {
       include: withSteps,
       orderBy: { name: 'asc' },
     });
-    return rows.map((r) => this.flatten(r));
+    const shadows = await this.shadowedDefinitions(companyId);
+    return rows.map((r) => ({
+      ...this.flatten(r),
+      /** Set on an active definition another one is already governing its form. */
+      shadowedBy: shadows.get(r.id) ?? null,
+    }));
+  }
+
+  /**
+   * Which active definitions are being governed by another — and by which.
+   *
+   * New ones are refused (see assertOnlyActiveFor), but a database written
+   * before that rule may hold a pair, and a pair is invisible: both read as
+   * active, and only the one the runtime picks does anything. So the listing
+   * has to say which is which, or somebody edits the wrong one and watches
+   * their changes have no effect.
+   *
+   * The rule is the runtime's own, kept in step with matchDefinition: within a
+   * level — company-wide, or one branch — the lowest id wins. Across levels
+   * nothing is shadowed, because a company-wide workflow still governs every
+   * branch that has none of its own.
+   *
+   * Computed over ALL of the company's active definitions rather than over the
+   * rows being returned: a filtered listing would otherwise report a row as
+   * fine simply because the one shadowing it was filtered out.
+   */
+  private async shadowedDefinitions(companyId: number) {
+    const active = await this.prisma.workflowDefinition.findMany({
+      where: { companyId, isActive: true },
+      select: { id: true, name: true, branchId: true, moduleId: true, objectId: true },
+      orderBy: { id: 'asc' },
+    });
+    const governing = new Map<string, { id: number; name: string }>();
+    const shadowed = new Map<number, { id: number; name: string }>();
+    for (const d of active) {
+      const level = `${d.branchId ?? 'company'}:${d.moduleId}:${d.objectId}`;
+      const holder = governing.get(level);
+      if (holder) shadowed.set(d.id, holder);
+      else governing.set(level, { id: d.id, name: d.name });
+    }
+    return shadowed;
   }
 
   async findOne(companyId: number | undefined, id: number) {

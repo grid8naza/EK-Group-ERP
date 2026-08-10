@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   Plus,
   Workflow as WorkflowIcon,
   Trash2,
@@ -513,9 +514,23 @@ export default function WorkflowsPage() {
       header: 'Name',
       accessor: (r) => r.name,
       render: (r) => (
-        <span className="font-medium text-slate-800 dark:text-slate-100">
-          {r.name}
-        </span>
+        <div>
+          <span className="font-medium text-slate-800 dark:text-slate-100">
+            {r.name}
+          </span>
+          {/* Both read as active and only one of them does anything. Said on
+              the row rather than left to be discovered, which otherwise
+              happens by editing this one and watching nothing change. */}
+          {r.shadowedBy && (
+            <div className="mt-0.5 flex items-start gap-1 text-xs text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="mt-0.5 h-3 w-3 flex-none" />
+              <span>
+                Never fires — “{r.shadowedBy.name}” already governs this form.
+                Switch that one off, or this one.
+              </span>
+            </div>
+          )}
+        </div>
       ),
     },
     {

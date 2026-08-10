@@ -1570,6 +1570,12 @@ export interface WorkflowDefinition {
   isActive: boolean;
   isLocked?: boolean;
   steps: WorkflowStep[];
+  /**
+   * Set where another active workflow is already governing this form at this
+   * level — the runtime picks that one, and this one never fires. Only ever
+   * seen on a pair written before a second active one was refused.
+   */
+  shadowedBy?: { id: number; name: string } | null;
 }
 
 /** A pending approval in the current user's inbox (My Approvals). */
