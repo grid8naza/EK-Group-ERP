@@ -87,19 +87,60 @@ function shape(user: RawUser) {
 }
 
 // The default module for a company is honoured only when it is one of the
-// modules actually assigned to the user in that company; otherwise null.
+// modules actually assigned to the user in that company; otherwise the caller's
+// fallback (Workplace — see WORKPLACE_CODE below).
 function resolveDefaultModule(
   companyId: number,
-  assignments?: { companyId: number; moduleIds: number[]; defaultModuleId?: number | null }[],
+  assignments?: {
+    companyId: number;
+    moduleIds: number[];
+    defaultModuleId?: number | null;
+  }[],
+  fallbackModuleId?: number | null,
 ): number | null {
+  const fallback = fallbackModuleId ?? null;
   const a = assignments?.find((x) => x.companyId === companyId);
-  if (!a || a.defaultModuleId == null) return null;
-  return a.moduleIds.includes(a.defaultModuleId) ? a.defaultModuleId : null;
+  if (!a || a.defaultModuleId == null) return fallback;
+  return a.moduleIds.includes(a.defaultModuleId) ? a.defaultModuleId : fallback;
 }
+
+// Workplace is universal: it holds what is addressed to the PERSON rather than
+// owned by a business domain (approvals, internal mail, chat, tasks), so every
+// user carries it and lands on it when no other default is named. The scaffold
+// sync asserts the same for every existing group and user; enforcing it here is
+// what keeps it true for users created or edited afterwards. The module code is
+// still WORKFLOW — only the label changed.
+const WORKPLACE_CODE = 'WORKFLOW';
 
 @Injectable()
 export class UserService {
   constructor(private prisma: PrismaService) {}
+
+  /** The Workplace module's id, or null on a database that predates it. */
+  private async workplaceModuleId(): Promise<number | null> {
+    const mod = await this.prisma.module.findUnique({
+      where: { code: WORKPLACE_CODE },
+      select: { id: true },
+    });
+    return mod?.id ?? null;
+  }
+
+  /**
+   * Add Workplace to every company in a module assignment. Pinning a user to a
+   * module list is what hides the rest, so leaving it out of the list would take
+   * the module away from that user however widely it is granted elsewhere.
+   */
+  private withWorkplace<T extends { companyId: number; moduleIds: number[] }>(
+    assignments: T[],
+    workplaceId: number | null,
+  ): T[] {
+    if (workplaceId == null) return assignments;
+    return assignments.map((a) =>
+      a.moduleIds.includes(workplaceId)
+        ? a
+        : { ...a, moduleIds: [...a.moduleIds, workplaceId] },
+    );
+  }
 
   async findAll(search?: string) {
     const users = await this.prisma.user.findMany({
@@ -140,8 +181,15 @@ export class UserService {
     } = dto;
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Flatten per-company module assignments into UserModule rows.
-    const moduleRows = (moduleAssignments ?? []).flatMap((a) =>
+    // Flatten per-company module assignments into UserModule rows — Workplace
+    // always among them, and the module the user lands on unless the form named
+    // another.
+    const workplaceId = await this.workplaceModuleId();
+    const assignments = this.withWorkplace(
+      moduleAssignments ?? [],
+      workplaceId,
+    );
+    const moduleRows = assignments.flatMap((a) =>
       a.moduleIds.map((moduleId) => ({ companyId: a.companyId, moduleId })),
     );
 
@@ -152,6 +200,7 @@ export class UserService {
       const user = await tx.user.create({
         data: {
           ...rest,
+          defaultModuleId: rest.defaultModuleId ?? workplaceId ?? undefined,
           passwordHash,
           groupAssignments: groupIds?.length
             ? { create: groupIds.map((userGroupId) => ({ userGroupId })) }
@@ -163,7 +212,8 @@ export class UserService {
                   isDefault: companyId === defaultCompanyId,
                   defaultModuleId: resolveDefaultModule(
                     companyId,
-                    moduleAssignments,
+                    assignments,
+                    workplaceId,
                   ),
                 })),
               }
@@ -203,6 +253,15 @@ export class UserService {
       data.passwordHash = await bcrypt.hash(password, 10);
     }
 
+    // Workplace survives an edit: the assignment rows are replaced wholesale
+    // below, so it has to be put back into the incoming list rather than
+    // assumed to still be there.
+    const workplaceId = await this.workplaceModuleId();
+    const assignments =
+      moduleAssignments === undefined
+        ? undefined
+        : this.withWorkplace(moduleAssignments, workplaceId);
+
     return this.prisma.$transaction(async (tx) => {
       if (groupIds !== undefined) {
         await tx.userGroupAssignment.deleteMany({ where: { userId: id } });
@@ -234,17 +293,17 @@ export class UserService {
               companyId,
               isDefault: companyId === defaultCompanyId,
               defaultModuleId:
-                moduleAssignments !== undefined
-                  ? resolveDefaultModule(companyId, moduleAssignments)
-                  : (existingDefaults.get(companyId) ?? null),
+                assignments !== undefined
+                  ? resolveDefaultModule(companyId, assignments, workplaceId)
+                  : (existingDefaults.get(companyId) ?? workplaceId ?? null),
             })),
           });
         }
       }
 
-      if (moduleAssignments !== undefined) {
+      if (assignments !== undefined) {
         await tx.userModule.deleteMany({ where: { userId: id } });
-        const moduleRows = moduleAssignments.flatMap((a) =>
+        const moduleRows = assignments.flatMap((a) =>
           a.moduleIds.map((moduleId) => ({
             userId: id,
             companyId: a.companyId,
@@ -262,8 +321,12 @@ export class UserService {
           where: { userId: id },
           data: { defaultModuleId: null },
         });
-        for (const a of moduleAssignments) {
-          const def = resolveDefaultModule(a.companyId, moduleAssignments);
+        for (const a of assignments) {
+          const def = resolveDefaultModule(
+            a.companyId,
+            assignments,
+            workplaceId,
+          );
           if (def != null) {
             await tx.userCompany.updateMany({
               where: { userId: id, companyId: a.companyId },

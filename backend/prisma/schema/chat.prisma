@@ -1,0 +1,152 @@
+// Chat domain — internal instant messaging (SRS §8.11, FR-COM-02).
+//
+// One-to-one and group conversations in the style of a common messenger:
+// threaded messages, attachments, quoted replies, edit/delete, read receipts and
+// unread counts. Lives in the Workplace module (module code WORKFLOW) beside the
+// approver inbox — both are addressed to a PERSON rather than owned by a
+// business domain, which is why a conversation's company/branch is a stamp of
+// where it started and never a partition of who can read it.
+//
+// Cross-domain rule: every reference to a Cpanel row (user, company, branch) is
+// a plain `Int` id with NO @relation — real relations stay inside this domain
+// file. (Enforced by npm run lint:boundaries.)
+
+/// One-to-one, or a named group.
+enum ConversationKind {
+  DIRECT
+  GROUP
+}
+
+/// A group member's standing. DIRECT conversations have no admin — neither
+/// person owns it, so both are plain members.
+enum ChatParticipantRole {
+  MEMBER
+  ADMIN
+}
+
+/// What a message carries. SYSTEM is the engine's own narration ("X added Y"),
+/// written by the service and never by a person.
+enum ChatMessageKind {
+  TEXT
+  FILE
+  IMAGE
+  SYSTEM
+}
+
+/// A conversation: two people, or a named group of them.
+model Conversation {
+  id    Int              @id @default(autoincrement())
+  kind  ConversationKind
+  /// Group name. Null for DIRECT — those are titled by whoever you are talking
+  /// to, which differs per viewer and so cannot be stored on the row.
+  title String?
+
+  /// Where the conversation was STARTED. A stamp for reporting and for the
+  /// group-wide reach the SRS asks for (§8.11: "across the group, its companies
+  /// and branches") — deliberately NOT a filter on who may read it, or a
+  /// director in two companies would lose half their conversations on switching.
+  companyId   Int?
+  branchId    Int?
+  createdById Int
+
+  /// Identifies a DIRECT pair as "<lowerUserId>:<higherUserId>", so opening a
+  /// chat with the same person twice finds the existing thread instead of
+  /// forking it. Unique rather than checked in code: two devices pressing at
+  /// once is exactly the race a unique index is for. Null on groups.
+  directKey String? @unique
+
+  /// Denormalized from the newest message so the conversation LIST sorts and
+  /// previews without reading every thread. Written in the same transaction as
+  /// the message.
+  lastMessageAt   DateTime?
+  lastMessageText String?
+  lastMessageById Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  participants ConversationParticipant[]
+  messages     ChatMessage[]
+
+  @@index([lastMessageAt])
+  @@map("chat_conversations")
+}
+
+/// A person's membership of a conversation, and how far they have read.
+model ConversationParticipant {
+  id             Int          @id @default(autoincrement())
+  conversationId Int
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         Int
+
+  role   ChatParticipantRole @default(MEMBER)
+  isMuted Boolean            @default(false)
+
+  /// The read receipt, kept as a high-water mark rather than a row per message
+  /// per reader: unread count is `messages after this id, not mine`, and the
+  /// second tick is "every other participant is at or past this message". A
+  /// per-message receipt table would be the same answer at many times the cost.
+  lastReadMessageId Int?
+  lastReadAt        DateTime?
+
+  joinedAt DateTime  @default(now())
+  /// Set when someone leaves a group. The row is KEPT so their past messages
+  /// still resolve to a member, and so the thread can say they left.
+  leftAt   DateTime?
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+  @@map("chat_participants")
+}
+
+/// One message in a conversation.
+model ChatMessage {
+  id             Int          @id @default(autoincrement())
+  conversationId Int
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       Int
+  kind           ChatMessageKind @default(TEXT)
+
+  /// Null on an attachment-only message. Cleared on delete — see deletedAt.
+  body String?
+
+  /// Quoted reply. Self-relation, so it stays inside this domain file.
+  replyToId Int?
+  replyTo   ChatMessage?  @relation("ChatMessageReply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies   ChatMessage[] @relation("ChatMessageReply")
+
+  createdAt DateTime  @default(now())
+  editedAt  DateTime?
+  /// Soft delete — "this message was deleted" has to remain in the thread, or
+  /// the conversation above and below it stops making sense. The service clears
+  /// `body` and the attachment rows when setting this; the tombstone is the
+  /// whole record that is kept.
+  deletedAt DateTime?
+
+  attachments ChatAttachment[]
+
+  /// The thread reads newest-last and pages backwards from the end, and unread
+  /// counting asks for "id greater than my high-water mark" — both are this
+  /// index.
+  @@index([conversationId, id])
+  @@map("chat_messages")
+}
+
+/// A file sent with a message. Stored on disk like the login-screen assets; the
+/// row holds where it landed and what it was called when it arrived.
+model ChatAttachment {
+  id        Int         @id @default(autoincrement())
+  messageId Int
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  fileName String
+  /// Public URL under the /uploads static mount (see main.ts).
+  url      String
+  mimeType String
+  size     Int
+
+  createdAt DateTime @default(now())
+
+  @@index([messageId])
+  @@map("chat_attachments")
+}

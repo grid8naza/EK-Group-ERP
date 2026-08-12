@@ -26,6 +26,11 @@ async function main() {
     { code: 'INVENTORY', name: 'Inventory', icon: 'package', sortOrder: 4, isActive: true, description: 'Stock & inventory.' },
     { code: 'HR', name: 'Human Resources', icon: 'id-card', sortOrder: 5, isActive: true, description: 'HR & employees.' },
     { code: 'PRODUCTION', name: 'Production', icon: 'factory', sortOrder: 6, isActive: true, description: 'Manufacturing & production orders.' },
+    // Workplace — everything addressed to a PERSON rather than owned by a
+    // business domain (approvals, internal mail, chat, tasks). Seeded here, not
+    // left to the scaffold sync, because every company enables it and every
+    // group, user and login default below points at it. Code stays WORKFLOW.
+    { code: 'WORKFLOW', name: 'Workplace', icon: 'briefcase', sortOrder: 8, isActive: true, description: 'Everything addressed to a person rather than owned by a business domain — approvals, internal mail, chat and tasks.' },
   ];
   const modules: Record<string, number> = {};
   for (const m of moduleDefs) {
@@ -151,6 +156,9 @@ async function main() {
         data: { companyId: cid, name: 'CRM Team', description: 'CRM users.' },
       });
       await prisma.userGroupModule.create({ data: { userGroupId: crmGroup.id, moduleId: modules['CRM'] } });
+      // Workplace as well — it belongs to every group, whatever the group's
+      // business scope (the scaffold sync asserts the same on every boot).
+      await prisma.userGroupModule.create({ data: { userGroupId: crmGroup.id, moduleId: modules['WORKFLOW'] } });
     }
 
     return { company, adminGroup, crmGroup };
@@ -172,7 +180,7 @@ async function main() {
     name: 'EK Food Products',
     legalName: 'Edakkattukudiyil Regency Food Products Private Limited',
     city: 'Kochi',
-    enabledModules: ['CPANEL', 'CRM', 'ACCOUNTS', 'INVENTORY', 'HR', 'PRODUCTION'],
+    enabledModules: ['CPANEL', 'CRM', 'ACCOUNTS', 'INVENTORY', 'HR', 'PRODUCTION', 'WORKFLOW'],
     author: 'Pavani',
   });
   const ek002 = await seedCompany({
@@ -180,7 +188,7 @@ async function main() {
     name: 'EK Bake House',
     legalName: 'Edakkattukudiyil Regency Bake House Private Limited',
     city: 'Muvattupuzha',
-    enabledModules: ['CPANEL', 'CRM', 'ACCOUNTS', 'INVENTORY', 'HR', 'PRODUCTION'],
+    enabledModules: ['CPANEL', 'CRM', 'ACCOUNTS', 'INVENTORY', 'HR', 'PRODUCTION', 'WORKFLOW'],
     author: 'Vismaya',
   });
   // The trading company: it buys and resells rather than manufacturing, which
@@ -191,7 +199,7 @@ async function main() {
     name: 'Regency Bakers',
     legalName: 'Regency Bakers & Confectionaries',
     city: 'Kochi',
-    enabledModules: ['CPANEL', 'CRM', 'ACCOUNTS', 'INVENTORY', 'HR'],
+    enabledModules: ['CPANEL', 'CRM', 'ACCOUNTS', 'INVENTORY', 'HR', 'WORKFLOW'],
     author: 'Pavani',
   });
 
@@ -213,7 +221,9 @@ async function main() {
       securityType: 'PASSWORD',
       webEnabled: true,
       mobileEnabled: true, // super admin has both web + mobile access
-      defaultModuleId: modules['CPANEL'],
+      // Every login lands on Workplace — approvals, mail, chat and tasks are
+      // what a person opens the app for; the business modules are a switch away.
+      defaultModuleId: modules['WORKFLOW'],
       companies: {
         create: [
           { companyId: ek001.company.id, isDefault: true },
@@ -241,16 +251,17 @@ async function main() {
       securityType: 'PASSWORD',
       webEnabled: true,
       mobileEnabled: false, // John has web access only
-      defaultModuleId: modules['CPANEL'],
+      defaultModuleId: modules['WORKFLOW'],
       companies: {
         create: [
-          // Per-company default module: Cpanel in EK001, CRM in EK002.
+          // Per-company default module: Workplace in both, the module every
+          // login lands on.
           {
             companyId: ek001.company.id,
             isDefault: true,
-            defaultModuleId: modules['CPANEL'],
+            defaultModuleId: modules['WORKFLOW'],
           },
-          { companyId: ek002.company.id, defaultModuleId: modules['CRM'] },
+          { companyId: ek002.company.id, defaultModuleId: modules['WORKFLOW'] },
         ],
       },
       groupAssignments: {
@@ -262,11 +273,15 @@ async function main() {
       // Per-company module assignment (always a subset of the modules the
       // user's groups manage). In EK001 (Administrators -> all modules) give
       // Cpanel + CRM but not Accounts. In EK002 (CRM Team -> CRM only) give CRM.
+      // Workplace is in both: an assignment NARROWS what the user sees, so
+      // leaving it out here would hide it however widely it is granted.
       modules: {
         create: [
           { companyId: ek001.company.id, moduleId: modules['CPANEL'] },
           { companyId: ek001.company.id, moduleId: modules['CRM'] },
+          { companyId: ek001.company.id, moduleId: modules['WORKFLOW'] },
           { companyId: ek002.company.id, moduleId: modules['CRM'] },
+          { companyId: ek002.company.id, moduleId: modules['WORKFLOW'] },
         ],
       },
     },

@@ -21,7 +21,10 @@ import {
   seedAssetDefaults,
 } from '../modules/asset-category/asset-provisioning';
 import { HR_SUBS } from '../modules/hr-category/hr-provisioning';
-import { WORKFLOW_SUBS } from '../modules/workflow/workflow-provisioning';
+import {
+  WORKFLOW_SUBS,
+  WORKFLOW_EXTRA_MENUS,
+} from '../modules/workflow/workflow-provisioning';
 import {
   CRM_SUBS,
   CRM_REPORT_MENUS,
@@ -198,14 +201,23 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     seedData: seedAssetDefaults,
   },
   {
+    // Code stays WORKFLOW: the module upsert keys on it, and
+    // WorkflowDefinition.moduleId / UserGroupModule hold plain Ints with no FK
+    // (the cross-domain rule), so a new code would mint a second module row and
+    // silently strand every configured workflow. Only the label changes.
     code: 'WORKFLOW',
-    name: 'Workflow',
-    icon: 'git-branch',
+    name: 'Workplace',
+    icon: 'briefcase',
     sortOrder: 8,
-    description: 'Document approval routing — the approver inbox (setup is in Cpanel).',
+    description:
+      'Everything addressed to a person rather than owned by a business domain — the approver inbox today; internal mail, chat, circulars and tasks to come.',
     autoEnable: true, // on for every company so approvers see their inbox
-    menu: { name: 'Workflow', icon: 'git-branch' },
+    // Documents is the PRIMARY menu (matched by module), so the module's
+    // existing main menu row is reused and relabelled rather than left behind
+    // beside a new one. The other four are extras, matched by name.
+    menu: { name: 'Documents', icon: 'file-text' },
     subs: WORKFLOW_SUBS,
+    extraMenus: WORKFLOW_EXTRA_MENUS,
   },
   {
     code: 'PURCHASE',

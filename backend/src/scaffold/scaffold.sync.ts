@@ -812,6 +812,163 @@ async function migrateAccountsReportMenu(
   for (const route of routes) await dedupeScreenRows(prisma, route);
 }
 
+/**
+ * One-time rename: the Workflow module is now "Workplace" — it grows from the
+ * approver inbox into everything addressed to a person rather than owned by a
+ * business domain (internal mail, chat, circulars, tasks; SRS §8.11 + §8.12).
+ *
+ * The module row itself needs nothing: the sync's upsert keys on `code` (still
+ * WORKFLOW) and rewrites name/icon on every boot. The main menu does — it is
+ * matched by moduleId, so the sync happily reuses an existing row and never
+ * renames it, leaving every existing database still saying "Workflow" in the
+ * sidebar. Renaming the row in place keeps its id, so the group visibility and
+ * the privileges granted on its screens all follow.
+ *
+ * Guarded on the old name so an admin's own rename is left alone. Idempotent —
+ * a no-op once renamed, and on a fresh DB where the sync creates it as
+ * Workplace to begin with.
+ */
+async function migrateWorkflowMenuName(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  const wf = await prisma.module.findUnique({
+    where: { code: 'WORKFLOW' },
+    select: { id: true },
+  });
+  if (!wf) return; // fresh DB: nothing to rename yet
+  await prisma.mainMenu.updateMany({
+    where: { moduleId: wf.id, menuName: 'Workflow' },
+    data: { menuName: 'Workplace', icon: 'briefcase' },
+  });
+}
+
+/**
+ * One-time migration: the Workplace module's single menu becomes five —
+ * Documents, Communication, Tasks, Circulars and Broadcast — grouped by the KIND
+ * of thing waiting for a person rather than by the subsystem that serves it.
+ *
+ * Two screens already exist and MOVE rather than being replaced, because their
+ * ids are load-bearing: GroupSubMenuPrivilege hangs off SubMenu.id, and
+ * WorkflowDefinition/WorkflowInstance point at ObjectMaster.id as plain Ints
+ * with no FK (the cross-domain rule), so a delete-and-recreate would strand both
+ * silently rather than failing loudly.
+ *
+ *  - "My Approvals" is relabelled "For Approval" and stays on the primary menu,
+ *    which is itself relabelled "Workplace" → "Documents". Its ROUTE is
+ *    deliberately untouched: the Topbar's notification bell links to it, and a
+ *    tidier path is not worth re-pointing privileges for.
+ *  - "Chat" moves onto the new Communication menu.
+ *
+ * Must run BEFORE the additive sync, so the sync finds both screens under their
+ * new menus and adds the unbuilt ones alongside instead of duplicating either.
+ * Guarded on the old names so an admin's own rename is left alone; idempotent —
+ * a no-op once migrated, and on a fresh DB where the sync builds this directly.
+ */
+async function migrateWorkplaceMenus(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  const wf = await prisma.module.findUnique({
+    where: { code: 'WORKFLOW' },
+    select: { id: true },
+  });
+  if (!wf) return; // fresh DB: the sync creates all five menus directly
+
+  // ---- the approval inbox is relabelled, in place ----
+  await prisma.subMenu.updateMany({
+    where: { route: '/workflow/approvals', subMenuName: 'My Approvals' },
+    data: { subMenuName: 'For Approval', sortOrder: 1 },
+  });
+  await prisma.objectMaster.updateMany({
+    where: { route: '/workflow/approvals', objectName: 'My Approvals' },
+    data: { objectName: 'For Approval', nameInMenu: 'For Approval' },
+  });
+
+  const menus = await prisma.mainMenu.findMany({
+    where: { moduleId: wf.id },
+    select: { id: true, companyId: true, menuName: true },
+    orderBy: { id: 'asc' },
+  });
+  const companyIds = [...new Set(menus.map((m) => m.companyId))];
+
+  for (const companyId of companyIds) {
+    const mine = menus.filter((m) => m.companyId === companyId);
+    // The primary is the oldest menu that is not one of the new extras (a menu
+    // an admin renamed themselves still qualifies).
+    const extraNames = new Set([
+      'Communication',
+      'Tasks',
+      'Circulars',
+      'Broadcast',
+    ]);
+    const primary = mine.find((m) => !extraNames.has(m.menuName));
+    if (!primary) continue;
+
+    // ---- the primary menu becomes Documents ----
+    if (primary.menuName === 'Workplace' || primary.menuName === 'Workflow') {
+      await prisma.mainMenu.update({
+        where: { id: primary.id },
+        data: { menuName: 'Documents', icon: 'file-text' },
+      });
+    }
+
+    // ---- Chat moves to its own Communication menu ----
+    const chat = await prisma.subMenu.findFirst({
+      where: { mainMenuId: primary.id, route: '/workplace/chat' },
+      select: { id: true },
+    });
+    if (!chat) continue; // already moved for this company
+
+    let communicationId = mine.find((m) => m.menuName === 'Communication')?.id;
+    if (!communicationId) {
+      const created = await prisma.mainMenu.create({
+        data: {
+          companyId,
+          moduleId: wf.id,
+          menuName: 'Communication',
+          sortOrder: 2, // after Documents
+          objectType: ObjectType.FORM,
+          isUserMenu: true,
+          icon: 'mail',
+        },
+        select: { id: true },
+      });
+      communicationId = created.id;
+    }
+
+    // Mirror the primary's group visibility so a group that could reach Chat
+    // still can — the sync only ever grants a NEW menu to Administrators, so
+    // without this every other group would silently lose it. Groups with no
+    // privilege on the screens just see the menu empty, and the nav hides an
+    // empty menu for non-super-admins.
+    const access = await prisma.groupMainMenuAccess.findMany({
+      where: { mainMenuId: primary.id },
+      select: { userGroupId: true, visible: true },
+    });
+    if (access.length) {
+      await prisma.groupMainMenuAccess.createMany({
+        data: access.map((a) => ({
+          userGroupId: a.userGroupId,
+          mainMenuId: communicationId!,
+          visible: a.visible,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    await prisma.subMenu.update({
+      where: { id: chat.id },
+      data: { mainMenuId: communicationId, sortOrder: 4 },
+    });
+  }
+
+  // A twin can only exist if an earlier boot created a screen under its new
+  // menu before this migration moved the original across.
+  await dedupeScreenRows(prisma, '/workflow/approvals', {
+    repointToModuleId: wf.id,
+  });
+  await dedupeScreenRows(prisma, '/workplace/chat');
+}
+
 /** Rename the Accounts module's primary main menu "Accounts" → "Accounts Setup". */
 async function migrateAccountsMenuName(
   prisma: Prisma.TransactionClient,
@@ -873,6 +1030,13 @@ export async function syncScaffold(
   // 0e2) Rename the product screens → Products - Semifinished / - Finished.
   await migrateProductScreenNames(prisma);
 
+  // 0e2b) Rename the Workflow module's main menu → "Workplace", then split that
+  //       one menu into the five the module now has. Both before the additive
+  //       sync, so the renamed/moved rows are the ones it reuses. Ordered:
+  //       the split expects to find the menu under its post-rename name.
+  await migrateWorkflowMenuName(prisma);
+  await migrateWorkplaceMenus(prisma);
+
   // 0e3) Move Price Review + Cost Review off the operational Production menu
   //      into their own "Costing Review" menu. Before the additive sync so the
   //      moved screens are matched under the new menu rather than duplicated.
@@ -921,6 +1085,174 @@ export async function syncScaffold(
     if (!hasMenu) continue;
     await syncModuleMenus(prisma, m, mod.id, mod.sortOrder ?? m.sortOrder);
   }
+
+  // 3) Workplace belongs to everyone. Runs LAST: it hands out the module row,
+  //    the per-company menus and the screens the steps above have just created.
+  await grantWorkplaceToEveryone(prisma);
+}
+
+/**
+ * Give every user group, and every user, the Workplace module — and make it the
+ * module a login lands on.
+ *
+ * Workplace carries what is addressed to a PERSON rather than owned by a
+ * business domain: the approval inbox, internal mail, chat, tasks (SRS §8.11 +
+ * §8.12). Unlike a domain module there is no role that should be without it, so
+ * granting it is not a decision the sync should wait on an admin to make — the
+ * way it waits for Inventory or Accounts.
+ *
+ * The grants are asserted on every boot, the same way `autoEnable` re-enables
+ * the module for every company above — and additively, so they undo nothing: a
+ * grant uses skipDuplicates, and the Privileges screen upserts (it clears a
+ * row's flags rather than deleting the row), so a privilege since switched off
+ * stays off.
+ *
+ * The landing module is different: which module a login opens on is a per-user
+ * setting the User form exists to edit, so it is switched over ONCE (recorded in
+ * ScaffoldMigration) rather than re-asserted every boot. Users created later
+ * start on Workplace via UserService, which defaults them to it.
+ */
+async function grantWorkplaceToEveryone(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  // Code stays WORKFLOW; only the label is Workplace (see module-scaffold).
+  const workplace = await prisma.module.findUnique({
+    where: { code: 'WORKFLOW' },
+    select: { id: true },
+  });
+  if (!workplace) return;
+  const moduleId = workplace.id;
+
+  const groups = await prisma.userGroup.findMany({
+    select: { id: true, companyId: true },
+  });
+
+  // ---- every user group manages the module ----
+  if (groups.length) {
+    await prisma.userGroupModule.createMany({
+      data: groups.map((g) => ({ userGroupId: g.id, moduleId })),
+      skipDuplicates: true,
+    });
+  }
+
+  // ---- ...and sees every screen in it ----
+  // Module access alone only puts Workplace in the module switcher: navigation
+  // is driven purely by the group's menu rows, so without these the group would
+  // land on an empty sidebar. Super-admin-only screens (the per-module Lookups)
+  // are skipped, exactly as in the Administrators grant.
+  const scaffold = MODULE_SCAFFOLDS.find((m) => m.code === 'WORKFLOW');
+  const superAdminRoutes = new Set(
+    [
+      ...(scaffold?.subs ?? []),
+      ...(scaffold?.extraMenus ?? []).flatMap((e) => e.subs),
+    ]
+      .filter((s) => s.superAdminOnly)
+      .map((s) => s.route),
+  );
+  const menus = await prisma.mainMenu.findMany({
+    where: { moduleId },
+    select: {
+      id: true,
+      companyId: true,
+      subMenus: { select: { id: true, route: true } },
+    },
+  });
+  const menuAccess: {
+    userGroupId: number;
+    mainMenuId: number;
+    visible: boolean;
+  }[] = [];
+  const subPrivileges: Prisma.GroupSubMenuPrivilegeCreateManyInput[] = [];
+  for (const menu of menus) {
+    for (const g of groups) {
+      if (g.companyId !== menu.companyId) continue;
+      menuAccess.push({
+        userGroupId: g.id,
+        mainMenuId: menu.id,
+        visible: true,
+      });
+      for (const sub of menu.subMenus) {
+        if (superAdminRoutes.has(sub.route ?? '')) continue;
+        subPrivileges.push({
+          userGroupId: g.id,
+          subMenuId: sub.id,
+          canMenu: true,
+          canView: true,
+          canAdd: true,
+          canEdit: true,
+          canDelete: true,
+          canLock: true,
+          canUnlock: true,
+          canPrint: true,
+          canDownloadPdf: true,
+          canDownloadExcel: true,
+        });
+      }
+    }
+  }
+  if (menuAccess.length) {
+    await prisma.groupMainMenuAccess.createMany({
+      data: menuAccess,
+      skipDuplicates: true,
+    });
+  }
+  if (subPrivileges.length) {
+    await prisma.groupSubMenuPrivilege.createMany({
+      data: subPrivileges,
+      skipDuplicates: true,
+    });
+  }
+
+  // ---- every user, wherever their access is pinned to a module list ----
+  // A UserModule row NARROWS what a user sees: with none, they get every module
+  // their groups grant (Workplace included, from above); with any, only the
+  // ones listed. So a row is added only where the user already has one for that
+  // company — handing a row to a user who has none would cut them down to
+  // Workplace alone, which is the opposite of granting it.
+  const pinned = await prisma.userModule.findMany({
+    select: { userId: true, companyId: true },
+    distinct: ['userId', 'companyId'],
+  });
+  if (pinned.length) {
+    await prisma.userModule.createMany({
+      data: pinned.map((p) => ({
+        userId: p.userId,
+        companyId: p.companyId,
+        moduleId,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  // ---- ...and lands there after login ----
+  // Both levels, because buildProfile reads the per-company default first and
+  // only falls back to the user's global one. Once, so that a landing module
+  // chosen afterwards in the User form survives the next restart.
+  await runOnce(prisma, 'workplace-is-the-default-module', async () => {
+    await prisma.user.updateMany({ data: { defaultModuleId: moduleId } });
+    await prisma.userCompany.updateMany({
+      data: { defaultModuleId: moduleId },
+    });
+  });
+}
+
+/**
+ * Run a step exactly once across every boot of every database, keyed by name.
+ *
+ * For the steps the additive sync cannot own: one that would overwrite data an
+ * admin can legitimately change afterwards is safe to apply once, and wrong to
+ * re-apply. The marker is written only after the step succeeds, so a failure
+ * part-way leaves it to be retried on the next boot.
+ */
+async function runOnce(
+  prisma: Prisma.TransactionClient,
+  key: string,
+  step: () => Promise<void>,
+): Promise<void> {
+  const applied = await prisma.scaffoldMigration.findUnique({ where: { key } });
+  if (applied) return;
+  await step();
+  await prisma.scaffoldMigration.create({ data: { key } });
 }
 
 /** A main menu and the screens it hosts, normalized from the scaffold. */
@@ -1148,19 +1480,19 @@ async function syncOneMenu(
       data: subs
         .filter((sub) => !superAdminRoutes.has(sub.route ?? ''))
         .map((sub) => ({
-        userGroupId: adminGroupId,
-        subMenuId: sub.id,
-        canMenu: true,
-        canView: true,
-        canAdd: true,
-        canEdit: true,
-        canDelete: true,
-        canLock: true,
-        canUnlock: true,
-        canPrint: true,
-        canDownloadPdf: true,
-        canDownloadExcel: true,
-      })),
+          userGroupId: adminGroupId,
+          subMenuId: sub.id,
+          canMenu: true,
+          canView: true,
+          canAdd: true,
+          canEdit: true,
+          canDelete: true,
+          canLock: true,
+          canUnlock: true,
+          canPrint: true,
+          canDownloadPdf: true,
+          canDownloadExcel: true,
+        })),
       skipDuplicates: true,
     });
   }

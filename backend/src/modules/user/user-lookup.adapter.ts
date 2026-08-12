@@ -52,6 +52,49 @@ export class UserLookupAdapter implements UserLookupPort {
     return rows.map((r) => r.userId);
   }
 
+  /**
+   * Everybody the user works alongside — active users sharing at least one of
+   * their companies, plus every super admin (who belong to no company in
+   * particular and must still be reachable).
+   *
+   * A super admin asking gets every active user back, for the same reason.
+   */
+  async findPeers(userId: number): Promise<UserSummary[]> {
+    const me = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { isSuperAdmin: true },
+    });
+    if (!me) return [];
+
+    if (me.isSuperAdmin) {
+      return this.prisma.user.findMany({
+        where: { isActive: true, id: { not: userId } },
+        select: this.summarySelect,
+        orderBy: { name: 'asc' },
+      });
+    }
+
+    const companyIds = (
+      await this.prisma.userCompany.findMany({
+        where: { userId },
+        select: { companyId: true },
+      })
+    ).map((c) => c.companyId);
+
+    return this.prisma.user.findMany({
+      where: {
+        isActive: true,
+        id: { not: userId },
+        OR: [
+          { isSuperAdmin: true },
+          { companies: { some: { companyId: { in: companyIds } } } },
+        ],
+      },
+      select: this.summarySelect,
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async canAccessCompany(userId: number, companyId: number): Promise<boolean> {
     const row = await this.prisma.userCompany.findUnique({
       where: { userId_companyId: { userId, companyId } },

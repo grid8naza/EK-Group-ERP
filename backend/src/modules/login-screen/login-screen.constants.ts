@@ -1,13 +1,11 @@
 import { mkdirSync } from 'fs';
 import { join } from 'path';
+import { UPLOAD_ROOT } from '../../common/uploads';
 
-/**
- * Where uploaded files live. In dev the backend source is bind-mounted
- * (./backend:/app), so this persists on the host; production should mount a
- * volume for UPLOAD_DIR.
- */
-export const UPLOAD_ROOT =
-  process.env.UPLOAD_DIR || join(process.cwd(), 'uploads');
+// Re-exported so main.ts (and anything else already importing it from here)
+// keeps working; the definition itself now lives in common/ because Chat stores
+// attachments under the same root.
+export { UPLOAD_ROOT };
 
 /** Login-screen assets (logo + background media library). */
 export const LOGIN_UPLOAD_DIR = join(UPLOAD_ROOT, 'login-screen');

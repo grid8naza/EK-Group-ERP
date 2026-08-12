@@ -2510,3 +2510,88 @@ export interface CostCentreCategory {
   sortOrder: number;
   isActive: boolean;
 }
+
+// ---- Chat (Workplace / Communication, SRS FR-COM-02) ----
+
+export type ConversationKind = 'DIRECT' | 'GROUP';
+export type ChatParticipantRole = 'MEMBER' | 'ADMIN';
+export type ChatMessageKind = 'TEXT' | 'FILE' | 'IMAGE' | 'SYSTEM';
+
+export interface ChatDirectoryUser {
+  id: number;
+  userCode: string;
+  username: string;
+  name: string;
+  email: string | null;
+  isActive: boolean;
+}
+
+export interface ChatParticipant {
+  id: number;
+  name: string;
+  username: string;
+  role: ChatParticipantRole;
+  isOnline: boolean;
+  hasLeft: boolean;
+  lastReadMessageId: number | null;
+}
+
+export interface ChatAttachment {
+  id: number;
+  fileName: string;
+  url: string;
+  mimeType: string;
+  size: number;
+}
+
+/** What an upload hands back, to be sent with the message that carries it. */
+export interface ChatAttachmentRef {
+  fileName: string;
+  url: string;
+  mimeType: string;
+  size: number;
+}
+
+export interface ChatMessage {
+  id: number;
+  conversationId: number;
+  senderId: number;
+  senderName: string;
+  kind: ChatMessageKind;
+  body: string | null;
+  createdAt: string;
+  editedAt: string | null;
+  deletedAt: string | null;
+  replyTo: {
+    id: number;
+    senderName: string;
+    body: string | null;
+    deleted: boolean;
+  } | null;
+  attachments: ChatAttachment[];
+}
+
+export interface Conversation {
+  id: number;
+  kind: ConversationKind;
+  /** Resolved per viewer: the other person's name on a DIRECT thread. */
+  title: string;
+  companyId: number | null;
+  branchId: number | null;
+  counterpartId: number | null;
+  isOnline: boolean;
+  participants: ChatParticipant[];
+  lastMessageAt: string | null;
+  lastMessageText: string | null;
+  lastMessageById: number | null;
+  createdAt: string;
+  unreadCount: number;
+  myLastReadMessageId: number | null;
+  /** Second tick: the least-caught-up other participant's read mark. */
+  readByOthersUpTo: number;
+}
+
+export interface ChatMessagePage {
+  hasMore: boolean;
+  messages: ChatMessage[];
+}

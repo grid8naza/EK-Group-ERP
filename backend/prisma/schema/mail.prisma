@@ -1,0 +1,91 @@
+// Mail domain — internal mail (SRS §8.11, FR-COM-01).
+//
+// Person-to-person and group messages inside the System: subject, body,
+// attachments, inbox and sent items, and read status per recipient. Part of the
+// Workplace module's surface beside Chat — the difference is deliberate and not
+// cosmetic: chat is a conversation you glance at, mail is a message you address,
+// and the SRS asks for both.
+//
+// Cross-domain rule: every reference to a Cpanel row (user, company, branch) is
+// a plain `Int` id with NO @relation — real relations stay inside this domain
+// file. (Enforced by npm run lint:boundaries.)
+
+/// Whether a recipient was addressed directly or copied.
+enum MailRecipientKind {
+  TO
+  CC
+}
+
+/// One message, as the SENDER wrote it. What each recipient does with it — read
+/// it, remove it — lives on their own MailRecipient row, so one person deleting
+/// a mail cannot alter what anyone else sees.
+model Mail {
+  id       Int    @id @default(autoincrement())
+  subject  String
+  /// Plain text. Kept plain on purpose for now: a rich-text body needs an editor
+  /// dependency and a sanitizer, and neither is worth carrying until somebody
+  /// actually asks for bold.
+  body     String
+  senderId Int
+
+  /// Where it was written. A stamp for reporting, NOT a filter on who may read
+  /// it — mail crosses companies exactly like the approvals inbox does, and a
+  /// director in two companies must not lose half their mail on switching.
+  companyId Int?
+  branchId  Int?
+
+  /// The mail this one answers, if any. Self-relation, so it stays in-domain.
+  parentId Int?
+  parent   Mail?  @relation("MailReply", fields: [parentId], references: [id], onDelete: SetNull)
+  replies  Mail[] @relation("MailReply")
+
+  sentAt    DateTime  @default(now())
+  createdAt DateTime  @default(now())
+
+  recipients  MailRecipient[]
+  attachments MailAttachment[]
+
+  @@index([senderId, sentAt])
+  @@map("mails")
+}
+
+/// One addressee of one mail, and what they have done with it.
+model MailRecipient {
+  id     Int               @id @default(autoincrement())
+  mailId Int
+  mail   Mail              @relation(fields: [mailId], references: [id], onDelete: Cascade)
+  userId Int
+  kind   MailRecipientKind @default(TO)
+
+  /// The read status the SRS asks for. Null until they open it; the sender's
+  /// Sent list reads these to show who has and has not.
+  readAt DateTime?
+
+  /// Removed from THIS person's inbox. The mail itself survives — the sender's
+  /// copy and the other recipients' are untouched.
+  deletedAt DateTime?
+
+  @@unique([mailId, userId])
+  // The inbox query is "mine, not deleted, newest first", which is this index.
+  @@index([userId, deletedAt])
+  @@map("mail_recipients")
+}
+
+/// A file sent with a mail. Stored on disk like the chat and login-screen
+/// assets; the row holds where it landed and what it was called on arrival.
+model MailAttachment {
+  id     Int  @id @default(autoincrement())
+  mailId Int
+  mail   Mail @relation(fields: [mailId], references: [id], onDelete: Cascade)
+
+  fileName String
+  /// Public URL under the /uploads static mount (see main.ts).
+  url      String
+  mimeType String
+  size     Int
+
+  createdAt DateTime @default(now())
+
+  @@index([mailId])
+  @@map("mail_attachments")
+}

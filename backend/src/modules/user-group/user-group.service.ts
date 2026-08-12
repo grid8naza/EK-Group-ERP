@@ -15,6 +15,13 @@ import {
 // granted new screens by the scaffold sync). Kept permanently locked.
 const ADMIN_GROUP_NAME = 'Administrators';
 
+// Workplace holds what is addressed to the PERSON rather than owned by a
+// business domain (approvals, internal mail, chat, tasks), so every group
+// manages it — there is no role that should be without it. The scaffold sync
+// asserts this for existing groups on boot; the same rule is applied here so a
+// group created or edited afterwards keeps it. Code is still WORKFLOW.
+const WORKPLACE_CODE = 'WORKFLOW';
+
 @Injectable()
 export class UserGroupService {
   constructor(private prisma: PrismaService) {}
@@ -62,9 +69,21 @@ export class UserGroupService {
     return moduleIds.filter((mId) => !coreSet.has(mId));
   }
 
+  /** Every group manages Workplace, whether or not the form ticked it. */
+  private async withWorkplace(moduleIds: number[]) {
+    const workplace = await this.prisma.module.findUnique({
+      where: { code: WORKPLACE_CODE },
+      select: { id: true },
+    });
+    if (!workplace || moduleIds.includes(workplace.id)) return moduleIds;
+    return [...moduleIds, workplace.id];
+  }
+
   async create(dto: CreateUserGroupDto, companyId: number) {
     const { moduleIds: rawIds, ...rest } = dto;
-    const moduleIds = await this.withoutCoreModules(rawIds);
+    const moduleIds = await this.withWorkplace(
+      await this.withoutCoreModules(rawIds),
+    );
     const group = await this.prisma.userGroup.create({
       data: {
         ...rest,
@@ -79,7 +98,9 @@ export class UserGroupService {
     const existing = await this.findOne(id);
     assertUnlocked(existing, 'user group', 'editing');
     const { moduleIds: rawIds, ...rest } = dto;
-    const moduleIds = rawIds ? await this.withoutCoreModules(rawIds) : rawIds;
+    const moduleIds = rawIds
+      ? await this.withWorkplace(await this.withoutCoreModules(rawIds))
+      : rawIds;
 
     const ops: any[] = [
       this.prisma.userGroup.update({ where: { id }, data: rest }),

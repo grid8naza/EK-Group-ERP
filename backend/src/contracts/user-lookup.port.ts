@@ -62,4 +62,19 @@ export interface UserLookupPort {
    * are company-scoped, so this is already limited to that group's company.)
    */
   usersInGroup(userGroupId: number): Promise<number[]>;
+
+  /**
+   * Active users who share at least one company with this one — everybody they
+   * work alongside, wherever in the group that is. Super admins see, and are
+   * seen by, everyone: they belong to no company in particular.
+   *
+   * Asked by Chat to populate its people-picker. Kept HERE rather than worked
+   * out by the caller because "who is a colleague" is a fact about company
+   * membership, and that is the user module's to answer — Chat cannot read
+   * UserCompany without importing it.
+   *
+   * Excludes the caller. Inactive users are left out: a chat cannot be started
+   * with somebody who can no longer sign in.
+   */
+  findPeers(userId: number): Promise<UserSummary[]>;
 }

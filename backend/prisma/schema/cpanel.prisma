@@ -679,6 +679,20 @@ model UserBranch {
 }
 
 // ---------------------------------------------------------------------------
+// One-time data migrations, by key. The scaffold sync is additive and runs on
+// every boot, so a step that must happen ONCE — because re-running it would
+// overwrite a choice an admin has made since (a user's landing module, say) —
+// records itself here and checks this table before running. Menus and grants
+// need no marker: they only ever add.
+// ---------------------------------------------------------------------------
+model ScaffoldMigration {
+  key       String   @id
+  appliedAt DateTime @default(now())
+
+  @@map("scaffold_migrations")
+}
+
+// ---------------------------------------------------------------------------
 // Security settings — a single global row (id = 1) holding the "high security
 // password". This is a second gate, separate from any user's login password,
 // that must be supplied before sensitive system operations (database backup /
