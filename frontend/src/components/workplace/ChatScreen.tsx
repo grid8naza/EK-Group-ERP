@@ -22,12 +22,20 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { API_URL, api } from '@/lib/api';
+import { api } from '@/lib/api';
 import { useChatStream } from '@/lib/useChatStream';
 import { useAuth } from '@/providers/AuthProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { Drawer } from '@/components/ui/Drawer';
+import {
+  Avatar,
+  clockOf,
+  dayLabel,
+  fileUrl,
+  humanSize,
+  listTime,
+} from '@/components/workplace/people';
 import { cn } from '@/lib/utils';
 import type {
   ChatAttachment,
@@ -43,96 +51,8 @@ const TYPING_TTL_MS = 4000;
 /** Don't tell the server about every keystroke — one ping per this window. */
 const TYPING_PING_MS = 2500;
 
-// ---------------------------------------------------------------- helpers --
-
-/** A file's URL is relative to the API host, not to the Next.js origin. */
-const fileUrl = (url: string) => `${API_URL.replace(/\/api$/, '')}${url}`;
-
-const initialsOf = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? '')
-    .join('') || '?';
-
-/**
- * A stable colour per person, so the same face is the same colour every time
- * without storing one. Hue off the id, fixed saturation/lightness so every
- * avatar carries white text legibly in both themes.
- */
-const avatarStyle = (id: number) => ({
-  backgroundColor: `hsl(${(id * 47) % 360} 55% 45%)`,
-});
-
-const clockOf = (iso: string) =>
-  new Date(iso).toLocaleTimeString(undefined, {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-
-/** Day heading above the first message of each day. */
-function dayLabel(iso: string): string {
-  const d = new Date(iso);
-  const today = new Date();
-  const yesterday = new Date();
-  yesterday.setDate(today.getDate() - 1);
-  const same = (a: Date, b: Date) => a.toDateString() === b.toDateString();
-  if (same(d, today)) return 'Today';
-  if (same(d, yesterday)) return 'Yesterday';
-  return d.toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    year: d.getFullYear() === today.getFullYear() ? undefined : 'numeric',
-  });
-}
-
-/** Compact time for the conversation list — clock today, date before that. */
-function listTime(iso: string | null): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (d.toDateString() === new Date().toDateString()) return clockOf(iso);
-  return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
-}
-
-const humanSize = (bytes: number) => {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-};
-
-function Avatar({
-  name,
-  id,
-  online,
-  size = 'md',
-}: {
-  name: string;
-  id: number;
-  online?: boolean;
-  size?: 'sm' | 'md';
-}) {
-  const dim = size === 'sm' ? 'h-8 w-8 text-[11px]' : 'h-10 w-10 text-xs';
-  return (
-    <div className="relative shrink-0">
-      <div
-        className={cn(
-          'flex items-center justify-center rounded-full font-semibold text-white',
-          dim,
-        )}
-        style={avatarStyle(id)}
-      >
-        {initialsOf(name)}
-      </div>
-      {online && (
-        <span
-          className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white bg-emerald-500 dark:border-slate-900"
-          title="Online"
-        />
-      )}
-    </div>
-  );
-}
+// Avatar, the date formatters and the file helpers are shared with mail —
+// see components/workplace/people.tsx.
 
 // ------------------------------------------------------------- attachments --
 
@@ -215,15 +135,25 @@ export function ChatScreen() {
     [conversations, activeId],
   );
 
+  /**
+   * The toast helpers, reachable from the loaders without being a dependency of
+   * them. ToastProvider builds its context value fresh on each of its renders,
+   * so `toast` gets a new identity every time a toast appears — and a loader
+   * that depended on it would raise an error toast, be re-created, re-fire the
+   * effect that calls it and fail again, turning one failure into a loop.
+   */
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
+
   // ------------------------------------------------------------ data loads --
 
   const loadConversations = useCallback(async () => {
     try {
       setConversations(await api.get<Conversation[]>('/chat/conversations'));
     } catch {
-      toast.error('Could not load your conversations.');
+      toastRef.current.error('Could not load your conversations.');
     }
-  }, [toast]);
+  }, []);
 
   const loadThread = useCallback(
     async (conversationId: number) => {
@@ -235,12 +165,12 @@ export function ChatScreen() {
         setMessages(page.messages);
         setHasMore(page.hasMore);
       } catch {
-        toast.error('Could not open that conversation.');
+        toastRef.current.error('Could not open that conversation.');
       } finally {
         setLoadingThread(false);
       }
     },
-    [toast],
+    [],
   );
 
   useEffect(() => {
@@ -1058,6 +988,11 @@ function PeoplePicker({
   const [title, setTitle] = useState('');
   const [busy, setBusy] = useState(false);
 
+  // See the note on toastRef above: depending on `toast` here would re-run this
+  // effect on the very toast its own failure raises.
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
+
   const open = mode !== 'none';
 
   useEffect(() => {
@@ -1068,8 +1003,8 @@ function PeoplePicker({
     api
       .get<ChatDirectoryUser[]>('/chat/directory')
       .then(setPeople)
-      .catch(() => toast.error('Could not load the people list.'));
-  }, [open, toast]);
+      .catch(() => toastRef.current.error('Could not load the people list.'));
+  }, [open]);
 
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();

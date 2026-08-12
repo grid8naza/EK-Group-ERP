@@ -2595,3 +2595,80 @@ export interface ChatMessagePage {
   hasMore: boolean;
   messages: ChatMessage[];
 }
+
+// ---- Mail (Workplace / Communication, SRS FR-COM-01) ----
+
+/** How somebody was addressed on a mail. */
+export type MailRecipientKind = 'TO' | 'CC';
+
+export interface MailAttachment {
+  id: number;
+  fileName: string;
+  url: string;
+  mimeType: string;
+  size: number;
+}
+
+/** What an upload hands back, to be sent with the mail that carries it. */
+export interface MailAttachmentRef {
+  fileName: string;
+  url: string;
+  mimeType: string;
+  size: number;
+}
+
+export interface MailPerson {
+  id: number;
+  name: string;
+  username: string;
+  /** Read receipts are the sender's to see — null for everybody else. */
+  readAt: string | null;
+}
+
+/** One mail, opened. */
+export interface Mail {
+  id: number;
+  subject: string;
+  body: string;
+  sentAt: string;
+  companyId: number | null;
+  branchId: number | null;
+  sender: { id: number; name: string; username: string };
+  isMine: boolean;
+  isRead: boolean;
+  to: MailPerson[];
+  cc: MailPerson[];
+  readCount: number;
+  recipientCount: number;
+  attachments: MailAttachment[];
+  replyTo: {
+    id: number;
+    subject: string;
+    senderName: string;
+    sentAt: string;
+  } | null;
+}
+
+/** One row of a mailbox — enough to decide whether to open it. */
+export interface MailListItem {
+  id: number;
+  subject: string;
+  preview: string;
+  sentAt: string;
+  senderId: number;
+  senderName: string;
+  isMine: boolean;
+  isRead: boolean;
+  myKind: MailRecipientKind | null;
+  to: { id: number; name: string }[];
+  cc: { id: number; name: string }[];
+  readCount: number;
+  recipientCount: number;
+  attachmentCount: number;
+  hasReply: boolean;
+}
+
+export interface MailPage {
+  hasMore: boolean;
+  items: MailListItem[];
+}

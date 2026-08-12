@@ -1,16 +1,31 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { PencilLine } from 'lucide-react';
-import { ComingSoon } from '@/components/workplace/ComingSoon';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { MailComposer } from '@/components/workplace/MailComposer';
 
-export default function Page() {
+/**
+ * New Mail — write one message to anyone in the group (SRS §8.11, FR-COM-01).
+ *
+ * Sending leaves for Sent rather than clearing the form in place: the mail has
+ * gone, and the useful next thing is seeing it sitting there with nobody having
+ * read it yet. Writing another is one click from that screen.
+ */
+export default function NewMailPage() {
+  const router = useRouter();
   return (
-    <ComingSoon
-      title="New Mail"
-      description="Write a message to someone in the group"
-      icon={<PencilLine className="h-5 w-5" />}
-      building="Composing internal mail: subject, body, attachments and a recipient picker across companies and branches."
-      requirement="FR-COM-01"
-    />
+    <div className="mx-auto flex h-full max-w-4xl flex-col">
+      <PageHeader
+        title="New Mail"
+        description="Write a message to someone in the group"
+        icon={<PencilLine className="h-5 w-5" />}
+      />
+      <div className="min-h-0 flex-1 pb-4">
+        <div className="flex h-full min-h-0 flex-col rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+          <MailComposer onSent={() => router.push('/workplace/mail/sent')} />
+        </div>
+      </div>
+    </div>
   );
 }
