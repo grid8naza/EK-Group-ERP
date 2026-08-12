@@ -1585,11 +1585,21 @@ export interface WorkflowDefinition {
 }
 
 /** A pending approval in the current user's inbox (My Approvals). */
+/**
+ * Which half of the inbox a task belongs in: something to decide (For
+ * Approval), or something to read (For Review). Decided by the engine, not by
+ * the screens — see WorkflowRuntimeService.reviewOnly.
+ */
+export type WorkflowTaskKind = 'APPROVAL' | 'REVIEW';
+
 export interface WorkflowTaskItem {
   taskId: number;
   instanceId: number;
   sequence: number;
   canApprove: boolean;
+  kind: WorkflowTaskKind;
+  /** Why it is only a review — null on a task that is a decision. */
+  reviewReason?: string | null;
   createdAt: string;
   workflowName: string;
   documentRef?: string | null;

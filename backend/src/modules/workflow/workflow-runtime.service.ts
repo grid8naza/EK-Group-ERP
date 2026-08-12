@@ -33,6 +33,14 @@ const TERMINAL_ACTIONS: WorkflowActionType[] = [
   'CONVERT_ICSO',
 ];
 
+// Steps that put a document in front of somebody WITHOUT asking them to decide
+// on it: sent for information, or to be looked at and passed on.
+const REVIEW_ONLY_ACTIONS: WorkflowActionType[] = [
+  'REFERENCE',
+  'CREATE_REFERENCE',
+  'REVIEW_FORWARD',
+];
+
 @Injectable()
 export class WorkflowRuntimeService {
   constructor(
@@ -146,11 +154,20 @@ export class WorkflowRuntimeService {
       const step = stepById.get(t.stepId);
       const flags = this.stepFlags(t.sequence, step);
       const object = objectById.get(t.instance.objectId);
+      const review = WorkflowRuntimeService.reviewOnly(t.canApprove, step);
       return {
         taskId: t.id,
         instanceId: t.instanceId,
         sequence: t.sequence,
         canApprove: t.canApprove,
+        /**
+         * Which half of the inbox this belongs in — decided here rather than by
+         * each screen, so "For Approval" and "For Review" can never disagree
+         * about a task and leave one sitting in both lists or in neither.
+         */
+        kind: review.kind,
+        /** Why it is only a review, in the words the row shows. */
+        reviewReason: review.reason,
         createdAt: t.createdAt,
         workflowName: defName.get(t.instance.definitionId) ?? '',
         documentRef: t.instance.documentRef,
@@ -952,6 +969,38 @@ export class WorkflowRuntimeService {
    * approvers (step 2+). Enforced at runtime so the rule holds even for
    * workflows saved before the step editor hid the invalid checkboxes.
    */
+  /**
+   * Is this task a decision, or only something to look at?
+   *
+   * Two different ways a document lands in front of somebody who cannot approve
+   * it, and the difference matters to the person reading the list:
+   *
+   *  - the STEP never asked them to decide — it was sent for reference, or to be
+   *    reviewed and passed on. Nothing is expected beyond reading it;
+   *  - the step did ask, but the VALUE is beyond the limit set for them, so the
+   *    most they can do is look at it and send it up. That one is not an
+   *    oversight to be fixed by an admin; it is the limit doing its job, and
+   *    saying so on the row is what stops it reading as a bug.
+   */
+  private static reviewOnly(
+    canApprove: boolean,
+    step: { action?: WorkflowActionType } | null | undefined,
+  ): { kind: 'APPROVAL' | 'REVIEW'; reason: string | null } {
+    if (step?.action && REVIEW_ONLY_ACTIONS.includes(step.action)) {
+      return {
+        kind: 'REVIEW',
+        reason:
+          step.action === 'REVIEW_FORWARD'
+            ? 'To review and pass on'
+            : 'Sent to you for reference',
+      };
+    }
+    if (!canApprove) {
+      return { kind: 'REVIEW', reason: 'Beyond your limit — review and pass up' };
+    }
+    return { kind: 'APPROVAL', reason: null };
+  }
+
   private stepFlags(
     sequence: number,
     step: { canCancel?: boolean; canReject?: boolean } | null | undefined,
