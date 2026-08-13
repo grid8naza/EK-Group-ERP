@@ -130,7 +130,10 @@ export class CircularController {
 
   /** The issuer withdraws it to the archive. Nothing is destroyed. */
   @Post(':id/archive')
-  archive(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
+  archive(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.service.setArchived(user.id, id, true);
   }
 

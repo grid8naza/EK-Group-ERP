@@ -24,7 +24,8 @@ import {
 } from './task.dto';
 
 /** "to-me" (assigned to me) or "by-me" (raised by me); anything else is to-me. */
-const scopeOf = (raw?: string): TaskScope => (raw === 'by-me' ? 'by-me' : 'to-me');
+const scopeOf = (raw?: string): TaskScope =>
+  raw === 'by-me' ? 'by-me' : 'to-me';
 
 /**
  * Task management (SRS §8.12).

@@ -155,10 +155,7 @@ export class UserLookupAdapter implements UserLookupPort {
    * the rest of the app answers — so no audience can be assembled that reaches
    * further than naming everybody by hand would.
    */
-  async resolveAudience(
-    userId: number,
-    spec: AudienceSpec,
-  ): Promise<number[]> {
+  async resolveAudience(userId: number, spec: AudienceSpec): Promise<number[]> {
     const peers = await this.findPeers(userId);
     const reach = new Set(peers.map((p) => p.id));
     if (spec.everyone) return [...reach];
@@ -180,7 +177,10 @@ export class UserLookupAdapter implements UserLookupPort {
       ]);
 
       // What was picked under each company's heading.
-      const picked = new Map<number, { branches: Set<number>; roles: Set<number> }>();
+      const picked = new Map<
+        number,
+        { branches: Set<number>; roles: Set<number> }
+      >();
       const under = (companyId: number) => {
         const found = picked.get(companyId);
         if (found) return found;

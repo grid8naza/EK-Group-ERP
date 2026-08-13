@@ -281,7 +281,12 @@ export interface ObjectListResponse {
   total: number;
   page: number;
   pageSize: number;
-  counts: { forms: number; reports: number; tables: number; dashboards?: number };
+  counts: {
+    forms: number;
+    reports: number;
+    tables: number;
+    dashboards?: number;
+  };
 }
 
 // ---- Widgets ----
@@ -291,7 +296,8 @@ export type MetricFormat = 'number' | 'percent' | 'currency';
 
 // Per-widget appearance — colours, fonts, shape. All optional; sensible
 // defaults preserve the standard card look.
-export type WidgetAccent = 'blue' | 'emerald' | 'violet' | 'amber' | 'rose' | 'slate';
+export type WidgetAccent =
+  'blue' | 'emerald' | 'violet' | 'amber' | 'rose' | 'slate';
 
 export interface WidgetStyle {
   accent?: WidgetAccent; // icon-chip colour
@@ -350,13 +356,7 @@ export interface WidgetCatalogItem {
 // Header banner appearance. All optional; unset fields fall back to the
 // default brand-blue gradient and the standard subtitle.
 export type DashboardHeaderTheme =
-  | 'blue'
-  | 'emerald'
-  | 'violet'
-  | 'amber'
-  | 'rose'
-  | 'slate'
-  | 'custom';
+  'blue' | 'emerald' | 'violet' | 'amber' | 'rose' | 'slate' | 'custom';
 
 export interface DashboardHeaderStyle {
   theme?: DashboardHeaderTheme;
@@ -555,7 +555,12 @@ export interface UnitChainLink {
   sequence: number;
   quantity: number;
   linkUnitId: number;
-  linkUnit?: { id: number; code: string; name: string; symbol?: string | null } | null;
+  linkUnit?: {
+    id: number;
+    code: string;
+    name: string;
+    symbol?: string | null;
+  } | null;
 }
 
 export interface Unit {
@@ -570,7 +575,12 @@ export interface Unit {
    * (product of all rung quantities).
    */
   baseUnitId?: number | null;
-  baseUnit?: { id: number; code: string; name: string; symbol?: string | null } | null;
+  baseUnit?: {
+    id: number;
+    code: string;
+    name: string;
+    symbol?: string | null;
+  } | null;
   conversionFactor?: number | null;
   /** CHAINING only: the ordered ladder of rungs. */
   chainLinks?: UnitChainLink[];
@@ -586,10 +596,7 @@ export interface Unit {
  * safe. Exactly one kind per category.
  */
 export type CategoryKind =
-  | 'INGREDIENT'
-  | 'PACKING_MATERIAL'
-  | 'SEMI_FINISHED'
-  | 'FINISHED';
+  'INGREDIENT' | 'PACKING_MATERIAL' | 'SEMI_FINISHED' | 'FINISHED';
 
 export const CATEGORY_KIND_LABEL: Record<CategoryKind, string> = {
   INGREDIENT: 'Ingredients',
@@ -960,11 +967,7 @@ export interface Product {
 
 // ---- CRM: Purchase Orders - IC (inter-company) ----
 export type PurchaseOrderStatus =
-  | 'DRAFT'
-  | 'PLACED'
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'CANCELLED';
+  'DRAFT' | 'PLACED' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 export interface PurchaseOrderLine {
   id: number;
   sequence: number;
@@ -1055,11 +1058,7 @@ export interface PurchaseOrder {
 
 // ---- CRM: Sales Orders (ICSO today; LSO joins once Customers exist) ----
 export type SalesOrderStatus =
-  | 'DRAFT'
-  | 'PLACED'
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'CANCELLED';
+  'DRAFT' | 'PLACED' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 
 export interface SalesOrderLine {
   id: number;
@@ -1330,10 +1329,7 @@ export interface CostObjectPerformance {
 
 // ---- Production: Work Orders ----
 export type WorkOrderStatus =
-  | 'PENDING'
-  | 'IN_PROGRESS'
-  | 'COMPLETED'
-  | 'CANCELLED';
+  'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 
 export interface WorkOrderLine {
   id: number;
@@ -1364,11 +1360,7 @@ export interface WorkOrder {
 
 // ---- Purchase: Local Purchase Orders (external suppliers) ----
 export type LocalPurchaseOrderStatus =
-  | 'DRAFT'
-  | 'PLACED'
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'CANCELLED';
+  'DRAFT' | 'PLACED' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 
 /** Exactly one of itemId / productId is set. */
 export interface LocalPurchaseOrderLine {
@@ -1418,7 +1410,7 @@ export interface Asset {
   category?: MasterRef | null;
   groupId: number;
   group?: MasterRef | null;
-  name: string;            // Machine Name
+  name: string; // Machine Name
   minCapacity: number;
   maxCapacity: number;
   capacityUnitId?: number | null;
@@ -1428,7 +1420,7 @@ export interface Asset {
   serialNumber?: string | null;
   lifeSpanYears: number;
   purchasedFrom?: string | null;
-  purchaseDate?: string | null;   // ISO date
+  purchaseDate?: string | null; // ISO date
   purchasePrice: number;
   warrantyPeriod?: string | null;
   allCompanies: boolean;
@@ -1443,10 +1435,7 @@ export interface Asset {
 export type AssetStatus = 'ACTIVE' | 'INACTIVE' | 'UNDER_REPAIR';
 
 export type AssetBookingStatus =
-  | 'PLANNED'
-  | 'CONFIRMED'
-  | 'COMPLETED'
-  | 'CANCELLED';
+  'PLANNED' | 'CONFIRMED' | 'COMPLETED' | 'CANCELLED';
 
 /// A production-line booking: a machine reserved for a product/batch over a time
 /// slot on a day. Created/updated from the Production module.
@@ -1527,10 +1516,7 @@ export type WorkflowActionType =
   | 'CONVERT_ICSO';
 export type WorkflowApprovalMode = 'FORM' | 'FIELD';
 export type WorkflowInstanceStatus =
-  | 'IN_PROGRESS'
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'CANCELLED';
+  'IN_PROGRESS' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 
 /** One approval level of a workflow definition (Tab 2). */
 /** A reusable document status (name + icon + colour), managed by super admins. */
@@ -1845,11 +1831,7 @@ export type Customer = PartyMaster;
 
 // ---- Inventory Transactions (Goods Receipt / Delivery / Return / Issue) ----
 export type StockTxnKind =
-  | 'PURCHASE'
-  | 'SALE'
-  | 'SALES_RETURN'
-  | 'PURCHASE_RETURN'
-  | 'CONSUMPTION';
+  'PURCHASE' | 'SALE' | 'SALES_RETURN' | 'PURCHASE_RETURN' | 'CONSUMPTION';
 
 export interface StockTransaction {
   id: number;
@@ -1938,10 +1920,7 @@ export interface IncomingDispatch {
 }
 
 export type OpeningStockType =
-  | 'ITEM_RAW'
-  | 'ITEM_PACKING'
-  | 'PRODUCT_PACKED'
-  | 'PRODUCT_UNPACKED';
+  'ITEM_RAW' | 'ITEM_PACKING' | 'PRODUCT_PACKED' | 'PRODUCT_UNPACKED';
 
 // ---- Document master & numbering ----
 export interface DocumentMaster {
@@ -2046,7 +2025,6 @@ export interface PriceVariance {
   priceAtTarget: number | null;
 }
 
-
 export interface ProductCostVariance {
   productId: number;
   code: string;
@@ -2103,19 +2081,11 @@ export interface RevisePricesResult {
 
 // ---- Accounts: Chart of Accounts (SRS Annexure D) ----
 export type AccountNature =
-  | 'ASSET'
-  | 'LIABILITY'
-  | 'EQUITY'
-  | 'INCOME'
-  | 'EXPENSE';
+  'ASSET' | 'LIABILITY' | 'EQUITY' | 'INCOME' | 'EXPENSE';
 export type BalanceSide = 'DR' | 'CR';
 export type StatementType = 'BS' | 'PL';
 export type PartyKind =
-  | 'SUPPLIER'
-  | 'CUSTOMER'
-  | 'EMPLOYEE'
-  | 'COMPANY'
-  | 'OTHER';
+  'SUPPLIER' | 'CUSTOMER' | 'EMPLOYEE' | 'COMPANY' | 'OTHER';
 
 /** A heading in the account hierarchy. Never posted to. */
 /** The schedule a block of accounts reports under — the chart's second tier. */

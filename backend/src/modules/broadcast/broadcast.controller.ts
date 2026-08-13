@@ -13,10 +13,7 @@ import { AuthUser, CurrentUser } from '../../auth/current-user.decorator';
 import { CompanyId } from '../../auth/company.decorator';
 import { BranchId } from '../../auth/branch.decorator';
 import { BroadcastService } from './broadcast.service';
-import {
-  PreviewBroadcastAudienceDto,
-  SendBroadcastDto,
-} from './broadcast.dto';
+import { PreviewBroadcastAudienceDto, SendBroadcastDto } from './broadcast.dto';
 
 /**
  * Broadcasts (SRS §8.11, FR-COM-03).

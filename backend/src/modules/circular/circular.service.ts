@@ -645,7 +645,8 @@ export class CircularService {
       archivedAt: this.iso(circular.archivedAt),
       issuer: {
         id: circular.issuerId,
-        name: names.get(circular.issuerId)?.name ?? `User #${circular.issuerId}`,
+        name:
+          names.get(circular.issuerId)?.name ?? `User #${circular.issuerId}`,
         username: names.get(circular.issuerId)?.username ?? '',
       },
       isMine,

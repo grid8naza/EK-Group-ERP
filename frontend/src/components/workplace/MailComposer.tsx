@@ -31,11 +31,7 @@ export const emptyDraft = (): MailDraft => ({
  * Reply all keeps everyone who was on it — minus yourself, because a copy of
  * your own reply in your own inbox is noise, not a record (Sent already has it).
  */
-export function replyDraft(
-  mail: Mail,
-  myId: number,
-  all: boolean,
-): MailDraft {
+export function replyDraft(mail: Mail, myId: number, all: boolean): MailDraft {
   const others = all
     ? [...mail.to, ...mail.cc]
         .filter((p) => p.id !== myId && p.id !== mail.sender.id)

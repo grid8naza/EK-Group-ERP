@@ -186,7 +186,10 @@ export class TaskService {
     const title = dto.title.trim();
     if (!title) throw new BadRequestException('Give the task a title.');
 
-    const assignees = await this.resolveAssignees(userId, dto.assigneeIds ?? []);
+    const assignees = await this.resolveAssignees(
+      userId,
+      dto.assigneeIds ?? [],
+    );
     const checklist = (dto.checklist ?? [])
       .map((t) => t.trim())
       .filter(Boolean);
