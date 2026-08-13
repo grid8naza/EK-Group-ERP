@@ -128,7 +128,11 @@ export class MailService {
   ) {
     const subject = dto.subject.trim();
     const body = dto.body.trim();
+    // Checked HERE rather than on the DTO alone, because a saved draft is sent
+    // through this method too — a draft is allowed to be half written, a mail
+    // is not.
     if (!subject) throw new BadRequestException('Give the mail a subject.');
+    if (!body) throw new BadRequestException('Write a message.');
 
     const to = await this.resolveRecipients(userId, dto.to);
     const ccIds = (dto.cc ?? []).filter((id) => !to.has(id));

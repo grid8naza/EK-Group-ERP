@@ -174,7 +174,12 @@ export class CircularService {
     // careful with it.
     const body = sanitizeRichText(dto.body);
     const bodyText = richTextToPlain(body);
+    // Both checked here rather than on the DTO alone: a saved draft is issued
+    // through this method, and a draft may be half written where a notice may
+    // not. sanitizeRichText already reduces empty formatting to '', so a body
+    // of `<p><br></p>` fails this as it should.
     if (!title) throw new BadRequestException('Give the circular a title.');
+    if (!body) throw new BadRequestException('Write the notice.');
 
     const spec = CircularService.toSpec(dto.audience);
     if (!CircularService.hasAudience(spec)) {

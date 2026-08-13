@@ -292,6 +292,10 @@ export function MailComposer({
       toast.error('Give the mail a subject.');
       return;
     }
+    if (!draft.body.trim()) {
+      toast.error('Write a message before sending it.');
+      return;
+    }
     setSending(true);
     try {
       // A saved draft is sent through its own route, which sends and deletes it

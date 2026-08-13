@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 import { useChoice } from '@/providers/ConfirmProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { DateInput } from '@/components/ui/Field';
-import { RichTextEditor } from '@/components/ui/RichText';
+import { RichTextEditor, richTextIsEmpty } from '@/components/ui/RichText';
 import { humanSize } from '@/components/workplace/people';
 import { AudienceField } from '@/components/workplace/AudienceField';
 import type {
@@ -210,6 +210,10 @@ export function CircularComposer({
     if (issuing) return;
     if (!title.trim()) {
       toast.error('Give the circular a title.');
+      return;
+    }
+    if (richTextIsEmpty(body)) {
+      toast.error('Write the notice before issuing it.');
       return;
     }
     try {

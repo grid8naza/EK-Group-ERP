@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 import { useChoice } from '@/providers/ConfirmProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { DateInput } from '@/components/ui/Field';
-import { RichTextEditor } from '@/components/ui/RichText';
+import { RichTextEditor, richTextIsEmpty } from '@/components/ui/RichText';
 import { AudienceField } from '@/components/workplace/AudienceField';
 import { PRIORITIES } from '@/components/workplace/broadcast-ui';
 import { cn } from '@/lib/utils';
@@ -183,6 +183,10 @@ export function BroadcastComposer({
     if (sending) return;
     if (!title.trim()) {
       toast.error('Give the broadcast a title.');
+      return;
+    }
+    if (richTextIsEmpty(body)) {
+      toast.error('Write the announcement before sending it.');
       return;
     }
     try {

@@ -205,6 +205,25 @@ function isBlank(el: HTMLElement): boolean {
   return (el.textContent ?? '').trim() === '';
 }
 
+/**
+ * Does this formatted body say anything?
+ *
+ * The same question isBlank asks, for callers holding the HTML rather than the
+ * element — "may this be sent". Tags out, entities that render as nothing but
+ * space out, then look for a character. The server decides the same thing its
+ * own way (sanitizeRichText reduces empty formatting to ''), so a body that
+ * passes here passes there.
+ */
+export function richTextIsEmpty(html: string): boolean {
+  if (!html) return true;
+  return (
+    html
+      .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/gi, ' ')
+      .trim() === ''
+  );
+}
+
 function Tool({
   label,
   hint,

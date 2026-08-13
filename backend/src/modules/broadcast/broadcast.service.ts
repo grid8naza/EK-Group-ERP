@@ -133,7 +133,11 @@ export class BroadcastService {
     const title = dto.title.trim();
     // Sanitised on the way in, once — see common/rich-text.ts.
     const body = sanitizeRichText(dto.body);
+    // Both checked here rather than on the DTO alone — a saved draft is sent
+    // through this method, and a draft may be half written where an
+    // announcement may not. See CircularService.issue.
     if (!title) throw new BadRequestException('Give the broadcast a title.');
+    if (!body) throw new BadRequestException('Write the announcement.');
 
     const spec = BroadcastService.toSpec(dto.audience);
     if (!BroadcastService.hasAudience(spec)) {
