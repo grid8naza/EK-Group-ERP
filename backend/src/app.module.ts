@@ -42,6 +42,7 @@ import { HrDesignationModule } from './modules/hr-designation/hr-designation.mod
 import { WorkflowModule } from './modules/workflow/workflow.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { MailModule } from './modules/mail/mail.module';
+import { TaskModule } from './modules/task/task.module';
 import { CircularModule } from './modules/circular/circular.module';
 import { BroadcastModule } from './modules/broadcast/broadcast.module';
 import { CrmModule } from './modules/crm/crm.module';
@@ -98,6 +99,7 @@ import { MasterDataModule } from './master-data/master-data.module';
     WorkflowModule,
     ChatModule,
     MailModule,
+    TaskModule,
     CircularModule,
     BroadcastModule,
     CrmModule,

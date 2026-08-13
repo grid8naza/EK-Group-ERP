@@ -2682,6 +2682,67 @@ export interface MailPage {
   hasMore: boolean;
   items: MailListItem[];
 }
+// ---- Tasks (Workplace / Task Management, SRS §8.12) ----
+
+/** The board's columns, in this order. CANCELLED has none — see task.prisma. */
+export type TaskStatus =
+  'TODO' | 'IN_PROGRESS' | 'BLOCKED' | 'DONE' | 'CANCELLED';
+
+export type TaskPriority = 'LOW' | 'NORMAL' | 'HIGH' | 'URGENT';
+
+export interface TaskChecklistItem {
+  id: number;
+  text: string;
+  isDone: boolean;
+  doneByName: string | null;
+  doneAt: string | null;
+}
+
+export interface TaskComment {
+  id: number;
+  userId: number;
+  userName: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface Task {
+  id: number;
+  title: string;
+  description: string | null;
+  companyId: number;
+  /** Null = company-wide: it shows on every branch's board. */
+  branchId: number | null;
+  status: TaskStatus;
+  priority: TaskPriority;
+  dueAt: string | null;
+  /** Past due and not finished — worked out by the server so screens agree. */
+  isOverdue: boolean;
+  createdById: number;
+  createdByName: string;
+  /** I raised it (so I own what it says). */
+  isMine: boolean;
+  /** It is for me (so I own how it is going). */
+  isForMe: boolean;
+  assignees: { id: number; name: string }[];
+  checklist: TaskChecklistItem[];
+  checklistDone: number;
+  checklistTotal: number;
+  comments: TaskComment[];
+  commentCount: number;
+  completedAt: string | null;
+  completedByName: string | null;
+  sortOrder: number;
+  createdAt: string;
+}
+
+/** Open work of this kind sitting in a company the user is not looking at. */
+export interface TasksElsewhere {
+  companyId: number;
+  companyName: string;
+  count: number;
+}
+
 // ---- Audiences (Workplace / Communication — circulars and broadcasts) ----
 //
 // Shared by both, because both address a body of people rather than a list of

@@ -1,0 +1,129 @@
+// Task domain — operational task boards and shared checklists (SRS §8.12).
+//
+// Work one person hands to another: a title, who it is for, when it is due, what
+// state it is in, and the checklist that says what "done" means. Part of the
+// Workplace module's surface beside mail and chat — the difference being that a
+// task is owed rather than said, so it carries a due date and a state and
+// somebody is answerable for it.
+//
+// Cross-domain rule: every reference to a Cpanel row (user, company, branch) is
+// a plain `Int` id with NO @relation — real relations stay inside this domain
+// file. (Enforced by npm run lint:boundaries.)
+
+/// Where a task has got to. These are the board's columns, in this order —
+/// CANCELLED has none: a task called off is out of the way, not parked in a
+/// lane people have to look past every morning.
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  BLOCKED
+  DONE
+  CANCELLED
+}
+
+/// How urgent it is. NORMAL is the default because a board where everything is
+/// High says nothing about anything.
+enum TaskPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+/// One piece of work.
+///
+/// Scoped to company and branch (FR-TSK-01): the board a branch works from is
+/// the branch's, and a task raised for the factory has no business showing on
+/// the counter's list. `branchId` null means company-wide — those show on every
+/// branch's board, because that is what "for the company" means.
+model Task {
+  id          Int     @id @default(autoincrement())
+  title       String
+  description String?
+
+  companyId Int
+  branchId  Int? // null = company-wide
+
+  createdById Int
+
+  status   TaskStatus   @default(TODO)
+  priority TaskPriority @default(NORMAL)
+
+  /// When it is due. Null is allowed on purpose — plenty of real work is "when
+  /// you can", and forcing a date on it would only produce fictional ones.
+  dueAt DateTime?
+
+  completedAt   DateTime?
+  completedById Int?
+
+  /// Position within its board column, so a board can be ordered by hand.
+  /// Ties break on id, which keeps the order stable rather than arbitrary.
+  sortOrder Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignees TaskAssignee[]
+  checklist TaskChecklistItem[]
+  comments  TaskComment[]
+
+  @@index([companyId, status])
+  @@index([createdById])
+  @@map("tasks")
+}
+
+/// Who a task is for. Several people can share one (SRS: "multi-user
+/// collaborative assignments"), and the task carries ONE state between them —
+/// splitting the state per person would turn one job into several that can
+/// disagree about whether it is finished.
+model TaskAssignee {
+  id     Int  @id @default(autoincrement())
+  taskId Int
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  userId Int
+
+  createdAt DateTime @default(now())
+
+  @@unique([taskId, userId])
+  // "My tasks" is this index.
+  @@index([userId])
+  @@map("task_assignees")
+}
+
+/// One line of a task's checklist — what has to be true for it to be done
+/// (SRS §8.12: opening/closing, hygiene and production checklists; §8.13 hangs
+/// the mess hygiene checks off the same thing).
+model TaskChecklistItem {
+  id     Int  @id @default(autoincrement())
+  taskId Int
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  text      String
+  sortOrder Int     @default(0)
+  isDone    Boolean @default(false)
+  /// Who ticked it, and when. Kept because a hygiene check nobody can be named
+  /// for is not a record of anything.
+  doneById  Int?
+  doneAt    DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+  @@map("task_checklist_items")
+}
+
+/// A note on a task — the back-and-forth that would otherwise happen in chat,
+/// where it would be lost to the task it was about.
+model TaskComment {
+  id     Int  @id @default(autoincrement())
+  taskId Int
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  userId Int
+  body   String
+
+  createdAt DateTime @default(now())
+
+  @@index([taskId])
+  @@map("task_comments")
+}
