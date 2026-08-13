@@ -1,14 +1,20 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { Megaphone, Paperclip, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Megaphone, Paperclip, Save, Trash2, X } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useChoice } from '@/providers/ConfirmProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { DateInput } from '@/components/ui/Field';
 import { RichTextEditor } from '@/components/ui/RichText';
 import { humanSize } from '@/components/workplace/people';
 import { AudienceField } from '@/components/workplace/AudienceField';
-import type { Circular, CircularAttachmentRef, Audience } from '@/lib/types';
+import type {
+  Audience,
+  Circular,
+  CircularAttachmentRef,
+  SavedCircularDraft,
+} from '@/lib/types';
 
 /**
  * Issue one circular — the Send Circular screen's whole body.
@@ -19,11 +25,21 @@ import type { Circular, CircularAttachmentRef, Audience } from '@/lib/types';
  * has gone, and there is no unsending a formal notice.
  */
 export function CircularComposer({
+  draftId,
   onIssued,
+  onCancel,
+  onDraftGone,
 }: {
+  /** Carry on with a saved draft, loaded on mount. */
+  draftId?: number;
   onIssued: (circular: Circular) => void;
+  /** Leave without issuing or saving. */
+  onCancel?: () => void;
+  /** The saved draft was issued or deleted. */
+  onDraftGone?: () => void;
 }) {
   const toast = useToast();
+  const choose = useChoice();
 
   const [audience, setAudience] = useState<Audience>({});
   const [title, setTitle] = useState('');
@@ -33,7 +49,140 @@ export function CircularComposer({
   const [attachments, setAttachments] = useState<CircularAttachmentRef[]>([]);
   const [uploading, setUploading] = useState(false);
   const [issuing, setIssuing] = useState(false);
+  /** The saved draft this is, once there is one — see MailComposer.savedId. */
+  const [savedId, setSavedId] = useState<number | undefined>(draftId);
+  const [savingDraft, setSavingDraft] = useState(false);
+  /** A loaded draft has just reached the form — re-mark the baseline after it. */
+  const [justLoaded, setJustLoaded] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
+  useEffect(() => {
+    if (!draftId) return;
+    let alive = true;
+    api
+      .get<SavedCircularDraft>(`/circulars/drafts/${draftId}`)
+      .then((d) => {
+        if (!alive) return;
+        setTitle(d.title);
+        setBody(d.body);
+        setAudience(d.audience ?? {});
+        setRequiresAck(d.requiresAck);
+        setAckDueAt(d.ackDueAt ? d.ackDueAt.slice(0, 10) : '');
+        setAttachments(d.attachments);
+        // The baseline is marked by the effect below, once these have landed.
+        setJustLoaded(true);
+      })
+      .catch((e) =>
+        toastRef.current.error(
+          e instanceof Error ? e.message : 'That draft could not be opened.',
+        ),
+      );
+    return () => {
+      alive = false;
+    };
+  }, [draftId]);
+
+  /** The form as a string, for comparing against the last saved state. */
+  const snapshot = () => JSON.stringify(contents());
+
+  /** What it said when last saved, loaded, or opened blank — see MailComposer. */
+  const baseline = useRef<string>('');
+  const isDirty = () => snapshot() !== baseline.current;
+
+  useEffect(() => {
+    if (!draftId) baseline.current = snapshot();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!justLoaded) return;
+    baseline.current = snapshot();
+    setJustLoaded(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [justLoaded]);
+
+  const cancel = async () => {
+    if (!onCancel) return;
+    if (!isDirty()) {
+      onCancel();
+      return;
+    }
+    const picked = await choose({
+      title: 'Leave this circular?',
+      message: savedId
+        ? 'It has changed since you last saved it.'
+        : 'It has not been issued or saved yet.',
+      dismissKey: 'keep',
+      actions: [
+        {
+          key: 'keep',
+          label: 'Keep writing',
+          tone: 'secondary',
+          autoFocus: true,
+        },
+        { key: 'save', label: 'Save draft', tone: 'secondary' },
+        { key: 'discard', label: 'Discard changes', tone: 'danger' },
+      ],
+    });
+    if (picked === 'keep') return;
+    // A save that failed must not then throw the work away by navigating off.
+    if (picked === 'save' && !(await saveDraft())) return;
+    onCancel();
+  };
+
+  /** What is on the form right now, for saving and for issuing alike. */
+  const contents = () => ({
+    title: title.trim(),
+    body,
+    audience,
+    requiresAck,
+    // A date is only meaningful when an acknowledgement is asked for.
+    ackDueAt: requiresAck && ackDueAt ? ackDueAt : undefined,
+    attachments,
+  });
+
+  /** Keep it without issuing it. Nothing is required — that is a draft. */
+  const saveDraft = async (): Promise<boolean> => {
+    if (savingDraft) return false;
+    setSavingDraft(true);
+    try {
+      const saved = savedId
+        ? await api.patch<SavedCircularDraft>(
+            `/circulars/drafts/${savedId}`,
+            contents(),
+          )
+        : await api.post<SavedCircularDraft>('/circulars/drafts', contents());
+      setSavedId(saved.id);
+      // What was just kept is the new mark to measure changes against.
+      baseline.current = snapshot();
+      toast.success('Draft saved.');
+      return true;
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : 'The draft could not be saved.',
+      );
+      return false;
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
+  /** Throw the saved draft away. Nothing was issued, so nothing is withdrawn. */
+  const deleteDraft = async () => {
+    if (!savedId) return;
+    try {
+      await api.delete(`/circulars/drafts/${savedId}`);
+      setSavedId(undefined);
+      toast.success('Draft deleted.');
+      onDraftGone?.();
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : 'The draft could not be deleted.',
+      );
+    }
+  };
 
   const uploadFiles = async (files: FileList) => {
     setUploading(true);
@@ -65,16 +214,20 @@ export function CircularComposer({
     }
     try {
       setIssuing(true);
-      const circular = await api.post<Circular>('/circulars', {
-        title: title.trim(),
-        body,
-        audience,
-        requiresAck,
-        // A date is only meaningful when an acknowledgement is asked for.
-        ackDueAt: requiresAck && ackDueAt ? ackDueAt : undefined,
-        attachments,
-      });
+      // A saved draft is issued through its own route, which issues and deletes
+      // it together — two calls could leave the circular out and the draft behind.
+      const circular = savedId
+        ? await api
+            .patch<SavedCircularDraft>(
+              `/circulars/drafts/${savedId}`,
+              contents(),
+            )
+            .then(() =>
+              api.post<Circular>(`/circulars/drafts/${savedId}/issue`),
+            )
+        : await api.post<Circular>('/circulars', contents());
       toast.success(`Circular ${circular.reference} issued.`);
+      if (savedId) onDraftGone?.();
       onIssued(circular);
     } catch (e) {
       toast.error(
@@ -199,15 +352,47 @@ export function CircularComposer({
           </button>
           <span className="text-xs text-slate-400">Up to 25 MB per file</span>
         </div>
-        <button
-          type="button"
-          className="btn-primary"
-          disabled={issuing || uploading}
-          onClick={() => void issue()}
-        >
-          <Megaphone className="mr-1.5 inline h-4 w-4" />
-          {issuing ? 'Issuing…' : 'Issue circular'}
-        </button>
+        <div className="flex items-center gap-2">
+          {onCancel && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => void cancel()}
+            >
+              Cancel
+            </button>
+          )}
+          {savedId && (
+            <button
+              type="button"
+              className="btn-secondary text-rose-600 dark:text-rose-400"
+              onClick={() => void deleteDraft()}
+              title="Throw this draft away"
+            >
+              <Trash2 className="mr-1.5 inline h-4 w-4" />
+              Delete draft
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={savingDraft || uploading}
+            onClick={() => void saveDraft()}
+            title="Keep it without issuing"
+          >
+            <Save className="mr-1.5 inline h-4 w-4" />
+            {savingDraft ? 'Saving…' : savedId ? 'Save draft' : 'Save as draft'}
+          </button>
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={issuing || uploading}
+            onClick={() => void issue()}
+          >
+            <Megaphone className="mr-1.5 inline h-4 w-4" />
+            {issuing ? 'Issuing…' : 'Issue circular'}
+          </button>
+        </div>
       </div>
     </div>
   );

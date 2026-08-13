@@ -71,6 +71,35 @@ export class SendBroadcastDto {
   expiresAt?: string;
 }
 
+/**
+ * An announcement being saved rather than sent. Everything optional — what it
+ * must have to GO is checked when it goes, through SendBroadcastDto.
+ */
+export class SaveBroadcastDraftDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_BODY)
+  body?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BroadcastAudienceDto)
+  audience?: BroadcastAudienceDto;
+
+  @IsOptional()
+  @IsEnum(BroadcastPriority)
+  priority?: BroadcastPriority;
+
+  @IsOptional()
+  @IsDateString()
+  expiresAt?: string;
+}
+
 /** Ask who an audience would reach, before announcing to it. */
 export class PreviewBroadcastAudienceDto {
   @ValidateNested()

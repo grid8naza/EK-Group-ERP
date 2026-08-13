@@ -11,10 +11,12 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { RichText } from '@/components/ui/RichText';
+import { DraftList } from '@/components/workplace/DraftList';
 import { Avatar, fullTime, listTime } from '@/components/workplace/people';
 import {
   PRIORITY_CARD,
@@ -22,10 +24,14 @@ import {
   expiryLabel,
 } from '@/components/workplace/broadcast-ui';
 import { cn } from '@/lib/utils';
-import type { BroadcastCard, BroadcastPage } from '@/lib/types';
+import type {
+  BroadcastCard,
+  BroadcastPage,
+  SavedBroadcastDraft,
+} from '@/lib/types';
 
 /** Which end of an announcement a person is looking at. */
-type Side = 'to-me' | 'by-me';
+type Side = 'to-me' | 'by-me' | 'drafts';
 
 /**
  * The broadcast feed — announcements as cards, newest first.
@@ -37,6 +43,7 @@ type Side = 'to-me' | 'by-me';
  * taking one down (the sender).
  */
 export function BroadcastScreen() {
+  const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -47,6 +54,7 @@ export function BroadcastScreen() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [past, setPast] = useState(false);
+  const [drafts, setDrafts] = useState<SavedBroadcastDraft[]>([]);
 
   /**
    * The toast helpers, reachable from `load` without being a dependency of it —
@@ -60,6 +68,13 @@ export function BroadcastScreen() {
     async (opts: { page: number; append: boolean }) => {
       setLoading(true);
       try {
+        // Drafts are not announcements yet — nothing to search or page through.
+        if (side === 'drafts') {
+          setDrafts(await api.get<SavedBroadcastDraft[]>('/broadcasts/drafts'));
+          setItems([]);
+          setHasMore(false);
+          return;
+        }
         const qs = new URLSearchParams();
         if (search.trim()) qs.set('q', search.trim());
         if (opts.page > 1) qs.set('page', String(opts.page));
@@ -137,7 +152,21 @@ export function BroadcastScreen() {
     setItems([]);
   };
 
+  /** Throw an unsent announcement away. Nothing went out, so nothing is withdrawn. */
+  const deleteDraft = async (id: number) => {
+    try {
+      await api.delete(`/broadcasts/drafts/${id}`);
+      setDrafts((list) => list.filter((d) => d.id !== id));
+      toast.success('Draft deleted.');
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : 'The draft could not be deleted.',
+      );
+    }
+  };
+
   const isMineSide = side === 'by-me';
+  const isDraftSide = side === 'drafts';
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -148,6 +177,7 @@ export function BroadcastScreen() {
             [
               { key: 'to-me', label: 'To me' },
               { key: 'by-me', label: 'Sent by me' },
+              { key: 'drafts', label: 'Drafts' },
             ] as const
           ).map((tab) => (
             <button
@@ -165,31 +195,60 @@ export function BroadcastScreen() {
           ))}
         </div>
 
-        <div className="relative min-w-[220px] flex-1">
-          <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search announcements…"
-            className="input-base w-full pl-8"
-          />
-        </div>
+        {/* Nothing to search or filter on a list of unfinished things. */}
+        {!isDraftSide && (
+          <>
+            <div className="relative min-w-[220px] flex-1">
+              <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search announcements…"
+                className="input-base w-full pl-8"
+              />
+            </div>
 
-        <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-          <input
-            type="checkbox"
-            checked={past}
-            onChange={(e) => setPast(e.target.checked)}
-            className="h-3.5 w-3.5 rounded border-slate-300 text-brand-600"
-          />
-          {isMineSide ? 'Finished ones' : 'Dismissed and expired'}
-        </label>
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <input
+                type="checkbox"
+                checked={past}
+                onChange={(e) => setPast(e.target.checked)}
+                className="h-3.5 w-3.5 rounded border-slate-300 text-brand-600"
+              />
+              {isMineSide ? 'Finished ones' : 'Dismissed and expired'}
+            </label>
+          </>
+        )}
       </div>
 
       {/* ------------------------------------------------------------- feed */}
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         <div className="mx-auto max-w-3xl space-y-3">
-          {!loading && items.length === 0 && (
+          {isDraftSide && (
+            <div className="rounded-xl border border-slate-200 dark:border-slate-800">
+              <DraftList
+                drafts={drafts.map((d) => ({
+                  id: d.id,
+                  title: d.title,
+                  subline:
+                    d.priority === 'NORMAL'
+                      ? 'Normal'
+                      : d.priority === 'URGENT'
+                        ? 'Urgent'
+                        : 'Important',
+                  updatedAt: d.updatedAt,
+                }))}
+                loading={loading}
+                emptyMessage="Nothing half-written. Save an announcement while composing and it lands here."
+                onOpen={(id) =>
+                  router.push(`/workplace/broadcast/send?draft=${id}`)
+                }
+                onDelete={(id) => void deleteDraft(id)}
+              />
+            </div>
+          )}
+
+          {!isDraftSide && !loading && items.length === 0 && (
             <div className="flex flex-col items-center gap-2 py-16 text-slate-400">
               <Megaphone className="h-10 w-10" />
               <p className="text-sm">
@@ -204,17 +263,18 @@ export function BroadcastScreen() {
             </div>
           )}
 
-          {items.map((card) => (
-            <Card
-              key={card.id}
-              card={card}
-              isMineSide={isMineSide}
-              onSeen={markSeen}
-              onDismiss={() => void setDismissed(card, true)}
-              onRestore={() => void setDismissed(card, false)}
-              onWithdraw={() => void withdraw(card)}
-            />
-          ))}
+          {!isDraftSide &&
+            items.map((card) => (
+              <Card
+                key={card.id}
+                card={card}
+                isMineSide={isMineSide}
+                onSeen={markSeen}
+                onDismiss={() => void setDismissed(card, true)}
+                onRestore={() => void setDismissed(card, false)}
+                onWithdraw={() => void withdraw(card)}
+              />
+            ))}
 
           {hasMore && (
             <button

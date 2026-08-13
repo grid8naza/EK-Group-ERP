@@ -38,6 +38,49 @@ export class MailAttachmentRefDto {
   size!: number;
 }
 
+/**
+ * A mail being saved rather than sent.
+ *
+ * Every field is optional, which is the whole point of a draft: it is saved
+ * half-written, with no subject yet and nobody addressed. What a mail must have
+ * to GO is checked when it goes — by the same rules, through the same DTO, so a
+ * draft can never be a way round them.
+ */
+export class SaveMailDraftDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  subject?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_BODY)
+  body?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsInt({ each: true })
+  to?: number[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsInt({ each: true })
+  cc?: number[];
+
+  @IsOptional()
+  @IsInt()
+  replyToId?: number;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => MailAttachmentRefDto)
+  attachments?: MailAttachmentRefDto[];
+}
+
 export class SendMailDto {
   @IsString()
   @MinLength(1)

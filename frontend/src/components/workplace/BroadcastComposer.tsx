@@ -1,15 +1,21 @@
 'use client';
 
-import { useState } from 'react';
-import { Megaphone } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Megaphone, Save, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useChoice } from '@/providers/ConfirmProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { DateInput } from '@/components/ui/Field';
 import { RichTextEditor } from '@/components/ui/RichText';
 import { AudienceField } from '@/components/workplace/AudienceField';
 import { PRIORITIES } from '@/components/workplace/broadcast-ui';
 import { cn } from '@/lib/utils';
-import type { Audience, Broadcast, BroadcastPriority } from '@/lib/types';
+import type {
+  Audience,
+  Broadcast,
+  BroadcastPriority,
+  SavedBroadcastDraft,
+} from '@/lib/types';
 
 /**
  * Send one announcement — the Send Broadcast screen's whole body.
@@ -20,11 +26,21 @@ import type { Audience, Broadcast, BroadcastPriority } from '@/lib/types';
  * never goes away is how a feed of them stops being read.
  */
 export function BroadcastComposer({
+  draftId,
   onSent,
+  onCancel,
+  onDraftGone,
 }: {
+  /** Carry on with a saved draft, loaded on mount. */
+  draftId?: number;
   onSent: (broadcast: Broadcast) => void;
+  /** Leave without sending or saving. */
+  onCancel?: () => void;
+  /** The saved draft was sent or deleted. */
+  onDraftGone?: () => void;
 }) {
   const toast = useToast();
+  const choose = useChoice();
 
   const [audience, setAudience] = useState<Audience>({});
   const [title, setTitle] = useState('');
@@ -32,6 +48,136 @@ export function BroadcastComposer({
   const [priority, setPriority] = useState<BroadcastPriority>('NORMAL');
   const [expiresAt, setExpiresAt] = useState('');
   const [sending, setSending] = useState(false);
+  /** The saved draft this is, once there is one — see MailComposer.savedId. */
+  const [savedId, setSavedId] = useState<number | undefined>(draftId);
+  const [savingDraft, setSavingDraft] = useState(false);
+  /** A loaded draft has just reached the form — re-mark the baseline after it. */
+  const [justLoaded, setJustLoaded] = useState(false);
+
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
+  useEffect(() => {
+    if (!draftId) return;
+    let alive = true;
+    api
+      .get<SavedBroadcastDraft>(`/broadcasts/drafts/${draftId}`)
+      .then((d) => {
+        if (!alive) return;
+        setTitle(d.title);
+        setBody(d.body);
+        setAudience(d.audience ?? {});
+        setPriority(d.priority);
+        setExpiresAt(d.expiresAt ? d.expiresAt.slice(0, 10) : '');
+        // The baseline is marked by the effect below, once these have landed.
+        setJustLoaded(true);
+      })
+      .catch((e) =>
+        toastRef.current.error(
+          e instanceof Error ? e.message : 'That draft could not be opened.',
+        ),
+      );
+    return () => {
+      alive = false;
+    };
+  }, [draftId]);
+
+  /** The form as a string, for comparing against the last saved state. */
+  const snapshot = () => JSON.stringify(contents());
+
+  /** What it said when last saved, loaded, or opened blank — see MailComposer. */
+  const baseline = useRef<string>('');
+  const isDirty = () => snapshot() !== baseline.current;
+
+  useEffect(() => {
+    if (!draftId) baseline.current = snapshot();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!justLoaded) return;
+    baseline.current = snapshot();
+    setJustLoaded(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [justLoaded]);
+
+  const cancel = async () => {
+    if (!onCancel) return;
+    if (!isDirty()) {
+      onCancel();
+      return;
+    }
+    const picked = await choose({
+      title: 'Leave this broadcast?',
+      message: savedId
+        ? 'It has changed since you last saved it.'
+        : 'It has not been sent or saved yet.',
+      dismissKey: 'keep',
+      actions: [
+        {
+          key: 'keep',
+          label: 'Keep writing',
+          tone: 'secondary',
+          autoFocus: true,
+        },
+        { key: 'save', label: 'Save draft', tone: 'secondary' },
+        { key: 'discard', label: 'Discard changes', tone: 'danger' },
+      ],
+    });
+    if (picked === 'keep') return;
+    // A save that failed must not then throw the work away by navigating off.
+    if (picked === 'save' && !(await saveDraft())) return;
+    onCancel();
+  };
+
+  /** What is on the form right now, for saving and for sending alike. */
+  const contents = () => ({
+    title: title.trim(),
+    body,
+    audience,
+    priority,
+    expiresAt: expiresAt || undefined,
+  });
+
+  /** Keep it without sending it. */
+  const saveDraft = async (): Promise<boolean> => {
+    if (savingDraft) return false;
+    setSavingDraft(true);
+    try {
+      const saved = savedId
+        ? await api.patch<SavedBroadcastDraft>(
+            `/broadcasts/drafts/${savedId}`,
+            contents(),
+          )
+        : await api.post<SavedBroadcastDraft>('/broadcasts/drafts', contents());
+      setSavedId(saved.id);
+      // What was just kept is the new mark to measure changes against.
+      baseline.current = snapshot();
+      toast.success('Draft saved.');
+      return true;
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : 'The draft could not be saved.',
+      );
+      return false;
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
+  /** Throw the saved draft away. Nothing was sent, so nothing is withdrawn. */
+  const deleteDraft = async () => {
+    if (!savedId) return;
+    try {
+      await api.delete(`/broadcasts/drafts/${savedId}`);
+      setSavedId(undefined);
+      toast.success('Draft deleted.');
+      onDraftGone?.();
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : 'The draft could not be deleted.',
+      );
+    }
+  };
 
   const send = async () => {
     if (sending) return;
@@ -41,13 +187,19 @@ export function BroadcastComposer({
     }
     try {
       setSending(true);
-      const broadcast = await api.post<Broadcast>('/broadcasts', {
-        title: title.trim(),
-        body,
-        audience,
-        priority,
-        expiresAt: expiresAt || undefined,
-      });
+      // A saved draft is sent through its own route, which sends and deletes it
+      // together — two calls could leave it sent and the draft behind.
+      const broadcast = savedId
+        ? await api
+            .patch<SavedBroadcastDraft>(
+              `/broadcasts/drafts/${savedId}`,
+              contents(),
+            )
+            .then(() =>
+              api.post<Broadcast>(`/broadcasts/drafts/${savedId}/send`),
+            )
+        : await api.post<Broadcast>('/broadcasts', contents());
+      if (savedId) onDraftGone?.();
       toast.success(
         `Broadcast sent to ${broadcast.recipientCount} ${
           broadcast.recipientCount === 1 ? 'person' : 'people'
@@ -142,6 +294,36 @@ export function BroadcastComposer({
       </div>
 
       <div className="mt-3 flex items-center justify-end gap-2 border-t border-slate-200 pt-3 dark:border-slate-800">
+        {onCancel && (
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={() => void cancel()}
+          >
+            Cancel
+          </button>
+        )}
+        {savedId && (
+          <button
+            type="button"
+            className="btn-secondary text-rose-600 dark:text-rose-400"
+            onClick={() => void deleteDraft()}
+            title="Throw this draft away"
+          >
+            <Trash2 className="mr-1.5 inline h-4 w-4" />
+            Delete draft
+          </button>
+        )}
+        <button
+          type="button"
+          className="btn-secondary"
+          disabled={savingDraft}
+          onClick={() => void saveDraft()}
+          title="Keep it without sending"
+        >
+          <Save className="mr-1.5 inline h-4 w-4" />
+          {savingDraft ? 'Saving…' : savedId ? 'Save draft' : 'Save as draft'}
+        </button>
         <button
           type="button"
           className="btn-primary"

@@ -1236,6 +1236,28 @@ async function grantWorkplaceToEveryone(
       data: { defaultModuleId: moduleId },
     });
   });
+
+  // ---- Drafts goes between Inbox and Sent ----
+  // The sync only ever ADDS menus, so Drafts arrived after Chat and shared its
+  // sort order, leaving the Communication menu reading New Mail, Inbox, Sent,
+  // Chat, Drafts. Reordering existing rows is exactly what runOnce is for: the
+  // registry's order is applied to what is already there, once, so that an
+  // admin who rearranges the menu afterwards keeps their arrangement.
+  await runOnce(prisma, 'workplace-mail-drafts-above-sent', async () => {
+    const order: Record<string, number> = {
+      '/workplace/mail/new': 1,
+      '/workplace/mail/inbox': 2,
+      '/workplace/mail/drafts': 3,
+      '/workplace/mail/sent': 4,
+      '/workplace/chat': 5,
+    };
+    for (const [route, sortOrder] of Object.entries(order)) {
+      await prisma.subMenu.updateMany({
+        where: { route },
+        data: { sortOrder },
+      });
+    }
+  });
 }
 
 /**

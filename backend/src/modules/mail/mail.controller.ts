@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Query,
   UploadedFile,
@@ -17,7 +18,7 @@ import { CompanyId } from '../../auth/company.decorator';
 import { BranchId } from '../../auth/branch.decorator';
 import { MailService, UploadedMailFile } from './mail.service';
 import { MAIL_MAX_FILE_BYTES, MAIL_UPLOAD_DIR } from './mail.constants';
-import { SendMailDto } from './mail.dto';
+import { SaveMailDraftDto, SendMailDto } from './mail.dto';
 
 /**
  * Internal mail (SRS §8.11, FR-COM-01).
@@ -69,6 +70,61 @@ export class MailController {
   @Get('unread-count')
   unread(@CurrentUser() user: AuthUser) {
     return this.service.unreadTotal(user.id);
+  }
+
+  // ---------------------------------------------------------------- drafts --
+  // Declared before the `:id` routes below, or "drafts" is read as a mail id.
+
+  @Get('drafts')
+  drafts(@CurrentUser() user: AuthUser) {
+    return this.service.drafts(user.id);
+  }
+
+  @Get('drafts/:id')
+  draft(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
+    return this.service.draft(user.id, id);
+  }
+
+  /** Save a new draft. */
+  @Post('drafts')
+  saveDraft(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: SaveMailDraftDto,
+    @CompanyId() companyId?: number,
+    @BranchId() branchId?: number,
+  ) {
+    return this.service.saveDraft(user.id, dto, undefined, companyId, branchId);
+  }
+
+  /** Update the draft being written. */
+  @Patch('drafts/:id')
+  updateDraft(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SaveMailDraftDto,
+    @CompanyId() companyId?: number,
+    @BranchId() branchId?: number,
+  ) {
+    return this.service.saveDraft(user.id, dto, id, companyId, branchId);
+  }
+
+  @Delete('drafts/:id')
+  deleteDraft(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.service.deleteDraft(user.id, id);
+  }
+
+  /** Send what the draft says, and throw the draft away. */
+  @Post('drafts/:id/send')
+  sendDraft(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseIntPipe) id: number,
+    @CompanyId() companyId?: number,
+    @BranchId() branchId?: number,
+  ) {
+    return this.service.sendDraft(user.id, id, companyId, branchId);
   }
 
   // -------------------------------------------------------------- one mail --

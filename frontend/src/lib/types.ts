@@ -2648,6 +2648,24 @@ export interface MailListItem {
   hasReply: boolean;
 }
 
+/**
+ * A mail saved and not sent.
+ *
+ * "Saved" in the name because the composer already has a `MailDraft` — the form
+ * being filled in, which exists whether or not anything was ever saved. This is
+ * the row on the server.
+ */
+export interface SavedMailDraft {
+  id: number;
+  subject: string;
+  body: string;
+  to: { id: number; name: string }[];
+  cc: { id: number; name: string }[];
+  replyToId: number | null;
+  attachments: MailAttachmentRef[];
+  updatedAt: string;
+}
+
 export interface MailPage {
   hasMore: boolean;
   items: MailListItem[];
@@ -2830,6 +2848,24 @@ export interface CircularListItem {
   acknowledgedAt: string | null;
 }
 
+/**
+ * A circular saved and not issued.
+ *
+ * It carries the audience as CHOSEN rather than the people it came to, because
+ * nobody has been chosen yet — the audience is resolved on the day it is
+ * issued. No reference either: a number belongs to a notice that went out.
+ */
+export interface SavedCircularDraft {
+  id: number;
+  title: string;
+  body: string;
+  requiresAck: boolean;
+  ackDueAt: string | null;
+  audience: Audience;
+  attachments: CircularAttachmentRef[];
+  updatedAt: string;
+}
+
 export interface CircularPage {
   hasMore: boolean;
   items: CircularListItem[];
@@ -2873,6 +2909,17 @@ export interface Broadcast extends BroadcastCard {
   companyId: number | null;
   branchId: number | null;
   audience: { kind: AudienceKind; refId: number | null; label: string }[];
+}
+
+/** An announcement saved and not sent — see SavedCircularDraft. */
+export interface SavedBroadcastDraft {
+  id: number;
+  title: string;
+  body: string;
+  priority: BroadcastPriority;
+  expiresAt: string | null;
+  audience: Audience;
+  updatedAt: string;
 }
 
 export interface BroadcastPage {

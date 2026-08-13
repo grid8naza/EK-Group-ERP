@@ -96,6 +96,35 @@ model BroadcastTarget {
   @@map("broadcast_targets")
 }
 
+/// An announcement somebody has started and not sent.
+///
+/// Same reasoning as CircularDraft: it keeps the audience as CHOSEN rather than
+/// as resolved, so the people are worked out when it actually goes out. An
+/// announcement drafted for a delivery that has since been rescheduled should
+/// reach the staff on duty the day it is sent.
+model BroadcastDraft {
+  id       Int @id @default(autoincrement())
+  authorId Int
+
+  title String @default("")
+  body  String @default("")
+
+  priority  BroadcastPriority @default(NORMAL)
+  expiresAt DateTime?
+
+  /// The audience spec as the picker produced it — see CircularDraft.audience.
+  audience Json @default("{}")
+
+  companyId Int?
+  branchId  Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([authorId, updatedAt])
+  @@map("broadcast_drafts")
+}
+
 /// One person an announcement reached, and what they did about it.
 model BroadcastRecipient {
   id          Int       @id @default(autoincrement())

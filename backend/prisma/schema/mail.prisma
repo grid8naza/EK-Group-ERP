@@ -71,6 +71,47 @@ model MailRecipient {
   @@map("mail_recipients")
 }
 
+/// A mail somebody has started and not sent.
+///
+/// Its own table rather than an unsent Mail row, because a draft is a different
+/// thing from a message: it has no recipients yet — only people it is ADDRESSED
+/// to, which is a list somebody is still editing — and no read state for anyone
+/// to have. Reusing the Mail row would mean every inbox query in this module
+/// carrying a "and not still being written" clause, and one that forgot it
+/// would show somebody a letter that was never sent them.
+///
+/// It is only ever the author's: nobody else may read, change or delete it.
+model MailDraft {
+  id       Int @id @default(autoincrement())
+  authorId Int
+
+  subject String @default("")
+  body    String @default("")
+
+  /// Addressed to / copied, as user ids, and the files attached — held as Json
+  /// because a draft is a saved FORM rather than a record. Nothing joins on it,
+  /// nothing counts it, and the shape belongs to the composer: give these child
+  /// tables of their own and every change to the compose screen becomes a
+  /// migration.
+  to          Json @default("[]")
+  cc          Json @default("[]")
+  attachments Json @default("[]")
+
+  /// The mail being answered, if this draft is a reply.
+  replyToId Int?
+
+  /// Where it was written, carried through to the sent mail.
+  companyId Int?
+  branchId  Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // "My drafts, most recently touched first" is this index.
+  @@index([authorId, updatedAt])
+  @@map("mail_drafts")
+}
+
 /// A file sent with a mail. Stored on disk like the chat and login-screen
 /// assets; the row holds where it landed and what it was called on arrival.
 model MailAttachment {

@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Paperclip, Send, X } from 'lucide-react';
+import { Paperclip, Save, Send, Trash2, X } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useChoice } from '@/providers/ConfirmProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { humanSize, PeopleField } from '@/components/workplace/people';
-import type { Mail, MailAttachmentRef } from '@/lib/types';
+import type { Mail, MailAttachmentRef, SavedMailDraft } from '@/lib/types';
 
 /** What the composer opens with — a blank sheet, or a reply to something. */
 export interface MailDraft {
@@ -61,23 +62,41 @@ export function replyDraft(mail: Mail, myId: number, all: boolean): MailDraft {
  */
 export function MailComposer({
   initial,
+  draftId,
   onSent,
   onCancel,
+  onDraftGone,
   autoFocus = 'to',
 }: {
   initial?: MailDraft;
+  /** Carry on with a saved draft, loaded on mount. */
+  draftId?: number;
   onSent: (mail: Mail) => void;
   onCancel?: () => void;
+  /** The saved draft was sent or deleted — the screen showing it is now stale. */
+  onDraftGone?: () => void;
   /** Which field starts focused — the body, when the recipients are settled. */
   autoFocus?: 'to' | 'body';
 }) {
   const toast = useToast();
+  const choose = useChoice();
 
   const [draft, setDraft] = useState<MailDraft>(initial ?? emptyDraft());
   const [showCc, setShowCc] = useState((initial?.cc.length ?? 0) > 0);
   const [attachments, setAttachments] = useState<MailAttachmentRef[]>([]);
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
+  /**
+   * The saved draft this is, once there is one.
+   *
+   * Held in state rather than taken from the prop alone, because saving turns
+   * an unsaved composer into a saved one: the first Save creates the row, and
+   * every Save after it updates that row instead of leaving a trail of them.
+   */
+  const [savedId, setSavedId] = useState<number | undefined>(draftId);
+  const [savingDraft, setSavingDraft] = useState(false);
+  /** A loaded draft has just reached the form — re-mark the baseline after it. */
+  const [justLoaded, setJustLoaded] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
 
@@ -89,6 +108,40 @@ export function MailComposer({
       bodyRef.current.setSelectionRange(0, 0);
     }
   }, [autoFocus]);
+
+  // Load the draft being carried on with.
+  const toastRef = useRef(toast);
+  toastRef.current = toast;
+  useEffect(() => {
+    if (!draftId) return;
+    let alive = true;
+    api
+      .get<SavedMailDraft>(`/mail/drafts/${draftId}`)
+      .then((d) => {
+        if (!alive) return;
+        setDraft({
+          to: d.to,
+          cc: d.cc,
+          subject: d.subject,
+          body: d.body,
+          replyToId: d.replyToId ?? undefined,
+        });
+        setAttachments(d.attachments);
+        setShowCc(d.cc.length > 0);
+        // Not baseline.current = snapshot() here: these setStates have not
+        // landed yet, so it would mark the EMPTY form and call the loaded draft
+        // dirty the moment it appeared. The effect below runs after they do.
+        setJustLoaded(true);
+      })
+      .catch((e) =>
+        toastRef.current.error(
+          e instanceof Error ? e.message : 'That draft could not be opened.',
+        ),
+      );
+    return () => {
+      alive = false;
+    };
+  }, [draftId]);
 
   const patch = (change: Partial<MailDraft>) =>
     setDraft((d) => ({ ...d, ...change }));
@@ -115,6 +168,120 @@ export function MailComposer({
     }
   };
 
+  /**
+   * What the form said when it was last saved, loaded, or opened blank.
+   *
+   * Cancel asks about UNSAVED work, not about work: a draft opened and closed
+   * again untouched, or a blank form, has nothing to lose and must not stop to
+   * ask. So the question is "has this changed since it was last kept", which
+   * needs a mark to measure against rather than a count of what is on screen.
+   */
+  const baseline = useRef<string>('');
+  const isDirty = () => snapshot() !== baseline.current;
+
+  useEffect(() => {
+    // The blank form, or the reply this opened with — either way, the mark.
+    if (!draftId) baseline.current = snapshot();
+    // Once, at mount: everything after is a change somebody made.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!justLoaded) return;
+    baseline.current = snapshot();
+    setJustLoaded(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [justLoaded]);
+
+  const cancel = async () => {
+    if (!onCancel) return;
+    if (!isDirty()) {
+      onCancel();
+      return;
+    }
+    const picked = await choose({
+      title: 'Leave this mail?',
+      message: savedId
+        ? 'It has changed since you last saved it.'
+        : 'It has not been sent or saved yet.',
+      dismissKey: 'keep',
+      actions: [
+        {
+          key: 'keep',
+          label: 'Keep writing',
+          tone: 'secondary',
+          autoFocus: true,
+        },
+        { key: 'save', label: 'Save draft', tone: 'secondary' },
+        { key: 'discard', label: 'Discard changes', tone: 'danger' },
+      ],
+    });
+    if (picked === 'keep') return;
+    // A save that failed must not then throw the work away by navigating off.
+    if (picked === 'save' && !(await saveDraft())) return;
+    onCancel();
+  };
+
+  /** The form as a string, for comparing against the last saved state. */
+  const snapshot = () => JSON.stringify(contents());
+
+  /** What is on the form right now, in the shape both saving and sending take. */
+  const contents = () => ({
+    subject: draft.subject.trim(),
+    body: draft.body,
+    to: draft.to.map((p) => p.id),
+    cc: draft.cc.map((p) => p.id),
+    replyToId: draft.replyToId,
+    attachments,
+  });
+
+  /**
+   * Keep it without sending it.
+   *
+   * Nothing is required — that is what a draft is for. The first save creates
+   * the row and every one after it updates the same row, so a mail written over
+   * three sittings is one draft rather than three.
+   */
+  const saveDraft = async (): Promise<boolean> => {
+    if (savingDraft) return false;
+    setSavingDraft(true);
+    try {
+      const saved = savedId
+        ? await api.patch<SavedMailDraft>(`/mail/drafts/${savedId}`, contents())
+        : await api.post<SavedMailDraft>('/mail/drafts', contents());
+      setSavedId(saved.id);
+      // What was just kept is the new mark to measure changes against.
+      baseline.current = snapshot();
+      toast.success('Draft saved.');
+      return true;
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : 'The draft could not be saved.',
+      );
+      return false;
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
+  /** Throw the saved draft away. Nothing was sent, so nothing is withdrawn. */
+  const deleteDraft = async () => {
+    if (!savedId) return;
+    try {
+      await api.delete(`/mail/drafts/${savedId}`);
+      setSavedId(undefined);
+      setDraft(emptyDraft());
+      setAttachments([]);
+      setShowCc(false);
+      toast.success('Draft deleted.');
+      onDraftGone?.();
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : 'The draft could not be deleted.',
+      );
+    }
+  };
+
   const send = async () => {
     if (sending) return;
     if (draft.to.length === 0) {
@@ -127,18 +294,19 @@ export function MailComposer({
     }
     setSending(true);
     try {
-      const mail = await api.post<Mail>('/mail', {
-        subject: draft.subject.trim(),
-        body: draft.body,
-        to: draft.to.map((p) => p.id),
-        cc: draft.cc.map((p) => p.id),
-        replyToId: draft.replyToId,
-        attachments,
-      });
+      // A saved draft is sent through its own route, which sends and deletes it
+      // together — two calls could leave the mail sent and the draft behind.
+      const mail = savedId
+        ? await api
+            .patch<SavedMailDraft>(`/mail/drafts/${savedId}`, contents())
+            .then(() => api.post<Mail>(`/mail/drafts/${savedId}/send`))
+        : await api.post<Mail>('/mail', contents());
       toast.success('Mail sent.');
+      setSavedId(undefined);
       setDraft(emptyDraft());
       setAttachments([]);
       setShowCc(false);
+      if (savedId) onDraftGone?.();
       onSent(mail);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'The mail was not sent.');
@@ -155,7 +323,10 @@ export function MailComposer({
         chosen={draft.to}
         exclude={draft.cc.map((p) => p.id)}
         onChange={(to) => patch({ to })}
-        autoFocus={autoFocus === 'to'}
+        // Not on a draft. Focusing the To line opens the directory under it,
+        // which is what you want on a blank mail and noise on one whose
+        // recipients were settled days ago.
+        autoFocus={autoFocus === 'to' && !draftId}
         action={
           !showCc ? (
             <button
@@ -251,8 +422,33 @@ export function MailComposer({
           <span className="text-xs text-slate-400">Up to 25 MB per file</span>
         </div>
         <div className="flex items-center gap-2">
+          {savedId && (
+            <button
+              type="button"
+              className="btn-secondary text-rose-600 dark:text-rose-400"
+              onClick={() => void deleteDraft()}
+              title="Throw this draft away"
+            >
+              <Trash2 className="mr-1.5 inline h-4 w-4" />
+              Delete draft
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn-secondary"
+            disabled={savingDraft || uploading}
+            onClick={() => void saveDraft()}
+            title="Keep it without sending"
+          >
+            <Save className="mr-1.5 inline h-4 w-4" />
+            {savingDraft ? 'Saving…' : savedId ? 'Save draft' : 'Save as draft'}
+          </button>
           {onCancel && (
-            <button type="button" className="btn-secondary" onClick={onCancel}>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => void cancel()}
+            >
               Cancel
             </button>
           )}

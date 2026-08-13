@@ -13,6 +13,7 @@ import {
   Search,
   Send as SendIcon,
   Trash2,
+  X,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/providers/AuthProvider';
@@ -126,6 +127,13 @@ export function MailboxScreen({ box }: { box: 'inbox' | 'sent' }) {
       );
       setOpenId(null);
     }
+  };
+
+  /** Put the open mail down — nothing changes, the pane just empties. */
+  const close = () => {
+    setMail(null);
+    setOpenId(null);
+    setReply(null);
   };
 
   const markUnread = async () => {
@@ -345,6 +353,17 @@ export function MailboxScreen({ box }: { box: 'inbox' | 'sent' }) {
                       </button>
                     </>
                   )}
+                  {/* Put it down. Last in the row and set apart, because it is
+                      the one action here that changes nothing — it closes the
+                      mail rather than doing something to it. */}
+                  <button
+                    className="ml-1 rounded p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                    onClick={close}
+                    title="Close"
+                    aria-label="Close this mail"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
               </div>
 

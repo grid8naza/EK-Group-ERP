@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Query,
 } from '@nestjs/common';
@@ -13,7 +14,11 @@ import { AuthUser, CurrentUser } from '../../auth/current-user.decorator';
 import { CompanyId } from '../../auth/company.decorator';
 import { BranchId } from '../../auth/branch.decorator';
 import { BroadcastService } from './broadcast.service';
-import { PreviewBroadcastAudienceDto, SendBroadcastDto } from './broadcast.dto';
+import {
+  PreviewBroadcastAudienceDto,
+  SaveBroadcastDraftDto,
+  SendBroadcastDto,
+} from './broadcast.dto';
 
 /**
  * Broadcasts (SRS §8.11, FR-COM-03).
@@ -85,6 +90,59 @@ export class BroadcastController {
   @Get('unread-count')
   unread(@CurrentUser() user: AuthUser) {
     return this.service.unreadCount(user.id);
+  }
+
+  // ---------------------------------------------------------------- drafts --
+  // Declared before the  routes below, or drafts is read as an id.
+
+  @Get('drafts')
+  drafts(@CurrentUser() user: AuthUser) {
+    return this.service.drafts(user.id);
+  }
+
+  @Get('drafts/:id')
+  draft(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
+    return this.service.draft(user.id, id);
+  }
+
+  @Post('drafts')
+  saveDraft(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: SaveBroadcastDraftDto,
+    @CompanyId() companyId?: number,
+    @BranchId() branchId?: number,
+  ) {
+    return this.service.saveDraft(user.id, dto, undefined, companyId, branchId);
+  }
+
+  @Patch('drafts/:id')
+  updateDraft(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SaveBroadcastDraftDto,
+    @CompanyId() companyId?: number,
+    @BranchId() branchId?: number,
+  ) {
+    return this.service.saveDraft(user.id, dto, id, companyId, branchId);
+  }
+
+  @Delete('drafts/:id')
+  deleteDraft(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.service.deleteDraft(user.id, id);
+  }
+
+  /** Send what the draft says, and throw the draft away. */
+  @Post('drafts/:id/send')
+  sendDraft(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseIntPipe) id: number,
+    @CompanyId() companyId?: number,
+    @BranchId() branchId?: number,
+  ) {
+    return this.service.sendDraft(user.id, id, companyId, branchId);
   }
 
   // --------------------------------------------------------- one broadcast --

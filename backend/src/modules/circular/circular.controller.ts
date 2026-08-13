@@ -1,9 +1,11 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseIntPipe,
+  Patch,
   Post,
   Query,
   UploadedFile,
@@ -23,6 +25,7 @@ import {
   AcknowledgeCircularDto,
   IssueCircularDto,
   PreviewAudienceDto,
+  SaveCircularDraftDto,
 } from './circular.dto';
 
 /**
@@ -98,6 +101,59 @@ export class CircularController {
   @Get('pending-count')
   pendingCount(@CurrentUser() user: AuthUser) {
     return this.service.pendingCount(user.id);
+  }
+
+  // ---------------------------------------------------------------- drafts --
+  // Declared before the `:id` routes below, or "drafts" is read as a circular id.
+
+  @Get('drafts')
+  drafts(@CurrentUser() user: AuthUser) {
+    return this.service.drafts(user.id);
+  }
+
+  @Get('drafts/:id')
+  draft(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
+    return this.service.draft(user.id, id);
+  }
+
+  @Post('drafts')
+  saveDraft(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: SaveCircularDraftDto,
+    @CompanyId() companyId?: number,
+    @BranchId() branchId?: number,
+  ) {
+    return this.service.saveDraft(user.id, dto, undefined, companyId, branchId);
+  }
+
+  @Patch('drafts/:id')
+  updateDraft(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: SaveCircularDraftDto,
+    @CompanyId() companyId?: number,
+    @BranchId() branchId?: number,
+  ) {
+    return this.service.saveDraft(user.id, dto, id, companyId, branchId);
+  }
+
+  @Delete('drafts/:id')
+  deleteDraft(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.service.deleteDraft(user.id, id);
+  }
+
+  /** Issue what the draft says, and throw the draft away. */
+  @Post('drafts/:id/issue')
+  issueDraft(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseIntPipe) id: number,
+    @CompanyId() companyId?: number,
+    @BranchId() branchId?: number,
+  ) {
+    return this.service.sendDraft(user.id, id, companyId, branchId);
   }
 
   // ------------------------------------------------------------ one notice --

@@ -21,7 +21,35 @@ import {
   MAIL_UPLOAD_DIR,
   MAIL_URL_PREFIX,
 } from './mail.constants';
-import { MailAttachmentRefDto, SendMailDto } from './mail.dto';
+import { validateAs } from '../../common/validate-dto';
+import {
+  MailAttachmentRefDto,
+  SaveMailDraftDto,
+  SendMailDto,
+} from './mail.dto';
+
+/**
+ * A Json column holding a list of user ids, read back as numbers.
+ *
+ * Prisma hands Json back as `JsonValue`, which is "anything" — so the shape is
+ * checked here rather than asserted. A draft edited by hand in the database
+ * cannot make the composer blow up on somebody's screen.
+ */
+const idList = (value: unknown): number[] =>
+  Array.isArray(value)
+    ? value.filter((v): v is number => Number.isSafeInteger(v))
+    : [];
+
+/** The same, for a draft's attachment list. */
+const attachmentList = (value: unknown): MailAttachmentRefDto[] =>
+  Array.isArray(value)
+    ? (value.filter(
+        (a) =>
+          a &&
+          typeof a === 'object' &&
+          typeof (a as { url?: unknown }).url === 'string',
+      ) as MailAttachmentRefDto[])
+    : [];
 
 /** Minimal multer file shape (avoids needing @types/multer). */
 export interface UploadedMailFile {
@@ -299,6 +327,152 @@ export class MailService {
       where: { userId, deletedAt: null, readAt: null },
     });
     return { count };
+  }
+
+  // --------------------------------------------------------------- drafts --
+
+  /**
+   * This person's unsent mail, most recently touched first.
+   *
+   * A draft is the author's alone — not addressed to anybody yet, whatever the
+   * To line says, because nothing has been sent. Every method below resolves it
+   * by (id, authorId) so there is no route to somebody else's half-written
+   * letter.
+   */
+  async drafts(userId: number) {
+    const rows = await this.prisma.mailDraft.findMany({
+      where: { authorId: userId },
+      orderBy: { updatedAt: 'desc' },
+    });
+    const names = await this.namesFor(
+      rows.flatMap((d) => [...idList(d.to), ...idList(d.cc)]),
+    );
+    return rows.map((d) => this.draftView(d, names));
+  }
+
+  async draft(userId: number, id: number) {
+    const row = await this.ownDraft(userId, id);
+    const names = await this.namesFor([...idList(row.to), ...idList(row.cc)]);
+    return this.draftView(row, names);
+  }
+
+  /**
+   * Save a half-written mail, or update the one being written.
+   *
+   * Nothing here is required and nothing is resolved: the recipients are kept
+   * as the ids they were picked as, and whether they can still be written to is
+   * settled when the mail is sent. Somebody who has left the company between
+   * Monday and Friday should fail on Friday, loudly, not have been quietly
+   * dropped from a draft on Monday.
+   */
+  async saveDraft(
+    userId: number,
+    dto: SaveMailDraftDto,
+    id?: number,
+    companyId?: number,
+    branchId?: number,
+  ) {
+    const data = {
+      subject: (dto.subject ?? '').slice(0, 200),
+      body: dto.body ?? '',
+      to: dto.to ?? [],
+      cc: dto.cc ?? [],
+      replyToId: dto.replyToId ?? null,
+      // Validated on the way in as well as on the way out: an attachment url is
+      // a claim whenever it arrives, and a draft is a request like any other.
+      attachments: (dto.attachments ?? []).map((a) =>
+        MailService.validateAttachment(a),
+      ) as unknown as Prisma.InputJsonValue,
+      companyId: companyId ?? null,
+      branchId: branchId ?? null,
+    };
+
+    const row = id
+      ? await this.prisma.mailDraft.update({
+          // Scoped by author as well as id, so an id from somewhere else
+          // updates nothing rather than somebody else's draft.
+          where: { id: (await this.ownDraft(userId, id)).id },
+          data,
+        })
+      : await this.prisma.mailDraft.create({
+          data: { ...data, authorId: userId },
+        });
+
+    const names = await this.namesFor([...idList(row.to), ...idList(row.cc)]);
+    return this.draftView(row, names);
+  }
+
+  /** Throw a draft away. Nothing was sent, so nothing survives it. */
+  async deleteDraft(userId: number, id: number) {
+    const row = await this.ownDraft(userId, id);
+    await this.prisma.mailDraft.delete({ where: { id: row.id } });
+    return { ok: true };
+  }
+
+  /**
+   * Send what a draft says, then throw the draft away.
+   *
+   * The content goes through the strict SendMailDto by hand (see
+   * common/validate-dto.ts) and then through the ordinary send path — the same
+   * checks on the same rules. A draft is a place to keep a mail, never a way to
+   * send one that could not have been sent directly.
+   */
+  async sendDraft(
+    userId: number,
+    id: number,
+    companyId?: number,
+    branchId?: number,
+  ) {
+    const row = await this.ownDraft(userId, id);
+    const dto = validateAs(SendMailDto, {
+      subject: row.subject,
+      body: row.body,
+      to: idList(row.to),
+      cc: idList(row.cc),
+      replyToId: row.replyToId ?? undefined,
+      attachments: row.attachments ?? [],
+    });
+
+    const sent = await this.send(
+      userId,
+      dto,
+      companyId ?? row.companyId ?? undefined,
+      branchId ?? row.branchId ?? undefined,
+    );
+    // Only once it has actually gone: a send that threw must leave the draft
+    // exactly where its author left it.
+    await this.prisma.mailDraft.delete({ where: { id: row.id } });
+    return sent;
+  }
+
+  /** The caller's own draft, or nothing. 404 either way — see assertVisible. */
+  private async ownDraft(userId: number, id: number) {
+    const row = await this.prisma.mailDraft.findFirst({
+      where: { id, authorId: userId },
+    });
+    if (!row) throw new NotFoundException('No such draft.');
+    return row;
+  }
+
+  /** One draft, as the composer needs it back — ids resolved to names. */
+  private draftView(
+    draft: Prisma.MailDraftGetPayload<object>,
+    names: Map<number, UserSummary>,
+  ) {
+    const person = (id: number) => ({
+      id,
+      name: names.get(id)?.name ?? `User #${id}`,
+    });
+    return {
+      id: draft.id,
+      subject: draft.subject,
+      body: draft.body,
+      to: idList(draft.to).map(person),
+      cc: idList(draft.cc).map(person),
+      replyToId: draft.replyToId,
+      attachments: attachmentList(draft.attachments),
+      updatedAt: draft.updatedAt.toISOString(),
+    };
   }
 
   // ----------------------------------------------------------- attachments --

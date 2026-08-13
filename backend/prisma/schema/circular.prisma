@@ -144,6 +144,44 @@ model CircularRecipient {
   @@map("circular_recipients")
 }
 
+/// A circular somebody has started and not issued.
+///
+/// It holds the INTENT where an issued circular holds the SNAPSHOT, and that is
+/// why it cannot be an unissued Circular row. A draft keeps the audience as it
+/// was chosen — these branches, these roles — because the people it comes to
+/// must be worked out when it goes out, not when it was last edited; a draft
+/// written on Monday and issued on Friday belongs to Friday's staff list. It
+/// also holds no reference: CIR/YYYY/NNNN is the number of a notice that was
+/// actually issued, and a draft abandoned in a folder must not have burnt one.
+///
+/// Only ever the author's, like a mail draft.
+model CircularDraft {
+  id       Int @id @default(autoincrement())
+  authorId Int
+
+  title String @default("")
+  body  String @default("")
+
+  requiresAck Boolean   @default(true)
+  ackDueAt    DateTime?
+
+  /// The audience spec as the picker produced it — everyone / branches / roles
+  /// / named people. Json because it is a saved form, and because this shape
+  /// belongs to the USER_LOOKUP port: it has already changed once, and a draft
+  /// storing it as columns would have had to be migrated with it.
+  audience    Json @default("{}")
+  attachments Json @default("[]")
+
+  companyId Int?
+  branchId  Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([authorId, updatedAt])
+  @@map("circular_drafts")
+}
+
 /// A file issued with a circular — the policy PDF the notice is about. Stored on
 /// disk like the mail and chat attachments; the row holds where it landed.
 model CircularAttachment {

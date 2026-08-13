@@ -11,6 +11,7 @@ import { randomBytes } from 'crypto';
 import { CircularAudienceKind, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { richTextToPlain, sanitizeRichText } from '../../common/rich-text';
+import { validateAs } from '../../common/validate-dto';
 import {
   AudienceSpec,
   USER_LOOKUP,
@@ -28,6 +29,7 @@ import {
   CircularAttachmentRefDto,
   CircularAudienceDto,
   IssueCircularDto,
+  SaveCircularDraftDto,
 } from './circular.dto';
 
 /** Minimal multer file shape (avoids needing @types/multer). */
@@ -37,6 +39,17 @@ export interface UploadedCircularFile {
   mimetype: string;
   size: number;
 }
+
+/** A draft's attachment list, shape-checked on the way out of its Json column. */
+const attachmentList = (value: unknown): CircularAttachmentRefDto[] =>
+  Array.isArray(value)
+    ? (value.filter(
+        (a) =>
+          a &&
+          typeof a === 'object' &&
+          typeof (a as { url?: unknown }).url === 'string',
+      ) as CircularAttachmentRefDto[])
+    : [];
 
 /** What a list row shows under the title. */
 const PREVIEW_CHARS = 200;
@@ -389,6 +402,135 @@ export class CircularService {
       include: circularInclude,
     });
     return this.view(updated, userId);
+  }
+
+  // --------------------------------------------------------------- drafts --
+
+  /**
+   * Circulars this person has started and not issued.
+   *
+   * The author's alone, resolved by (id, authorId) throughout: an unissued
+   * notice is nobody else's business, least of all the audience's.
+   */
+  async drafts(userId: number) {
+    const rows = await this.prisma.circularDraft.findMany({
+      where: { authorId: userId },
+      orderBy: { updatedAt: 'desc' },
+    });
+    return rows.map((d) => this.draftView(d));
+  }
+
+  async draft(userId: number, id: number) {
+    return this.draftView(await this.ownDraft(userId, id));
+  }
+
+  /**
+   * Save a half-written circular, or update the one being written.
+   *
+   * The audience is stored as CHOSEN, never resolved: who "the Kadathy branch"
+   * comes to is a question for the day it is issued, and a draft that had
+   * frozen the answer would issue on Friday to Monday's staff list.
+   */
+  async saveDraft(
+    userId: number,
+    dto: SaveCircularDraftDto,
+    id?: number,
+    companyId?: number,
+    branchId?: number,
+  ) {
+    const ackDueAt = dto.ackDueAt ? new Date(dto.ackDueAt) : null;
+    if (ackDueAt && Number.isNaN(ackDueAt.getTime())) {
+      throw new BadRequestException('That acknowledgement date is not a date.');
+    }
+
+    const data = {
+      title: (dto.title ?? '').slice(0, 200),
+      body: dto.body ?? '',
+      requiresAck: dto.requiresAck ?? true,
+      ackDueAt,
+      audience: (dto.audience ?? {}) as unknown as Prisma.InputJsonValue,
+      attachments: (dto.attachments ?? []).map((a) =>
+        CircularService.validateAttachment(a),
+      ) as unknown as Prisma.InputJsonValue,
+      companyId: companyId ?? null,
+      branchId: branchId ?? null,
+    };
+
+    const row = id
+      ? await this.prisma.circularDraft.update({
+          where: { id: (await this.ownDraft(userId, id)).id },
+          data,
+        })
+      : await this.prisma.circularDraft.create({
+          data: { ...data, authorId: userId },
+        });
+
+    return this.draftView(row);
+  }
+
+  /** Throw a draft away. Nothing was issued, so nothing survives it. */
+  async deleteDraft(userId: number, id: number) {
+    const row = await this.ownDraft(userId, id);
+    await this.prisma.circularDraft.delete({ where: { id: row.id } });
+    return { ok: true };
+  }
+
+  /**
+   * Issue what a draft says, then throw the draft away.
+   *
+   * Through the strict IssueCircularDto by hand (see common/validate-dto.ts)
+   * and then the ordinary issue path — which is where the reference is
+   * allocated, the audience resolved and the recipients written. A draft is a
+   * place to keep a notice, never a way to issue one that could not have been
+   * issued directly.
+   */
+  async sendDraft(
+    userId: number,
+    id: number,
+    companyId?: number,
+    branchId?: number,
+  ) {
+    const row = await this.ownDraft(userId, id);
+    const dto = validateAs(IssueCircularDto, {
+      title: row.title,
+      body: row.body,
+      audience: row.audience ?? {},
+      requiresAck: row.requiresAck,
+      ackDueAt: row.ackDueAt ? row.ackDueAt.toISOString() : undefined,
+      attachments: row.attachments ?? [],
+    });
+
+    const issued = await this.issue(
+      userId,
+      dto,
+      companyId ?? row.companyId ?? undefined,
+      branchId ?? row.branchId ?? undefined,
+    );
+    // Only once it has actually gone out.
+    await this.prisma.circularDraft.delete({ where: { id: row.id } });
+    return issued;
+  }
+
+  private async ownDraft(userId: number, id: number) {
+    const row = await this.prisma.circularDraft.findFirst({
+      where: { id, authorId: userId },
+    });
+    if (!row) throw new NotFoundException('No such draft.');
+    return row;
+  }
+
+  /** One draft, as the composer needs it back. */
+  private draftView(draft: Prisma.CircularDraftGetPayload<object>) {
+    return {
+      id: draft.id,
+      title: draft.title,
+      body: draft.body,
+      requiresAck: draft.requiresAck,
+      ackDueAt: this.iso(draft.ackDueAt),
+      audience: (draft.audience ?? {}) as Record<string, unknown>,
+      attachments: attachmentList(draft.attachments),
+      updatedAt: draft.updatedAt.toISOString(),
+    };
   }
 
   // ----------------------------------------------------------- attachments --

@@ -12,11 +12,14 @@ import {
   Paperclip,
   Search,
   Users,
+  X,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { RichText } from '@/components/ui/RichText';
+import { DraftList } from '@/components/workplace/DraftList';
 import {
   Avatar,
   fileUrl,
@@ -25,10 +28,15 @@ import {
   listTime,
 } from '@/components/workplace/people';
 import { cn } from '@/lib/utils';
-import type { Circular, CircularListItem, CircularPage } from '@/lib/types';
+import type {
+  Circular,
+  CircularListItem,
+  CircularPage,
+  SavedCircularDraft,
+} from '@/lib/types';
 
 /** Which end of a circular a person is looking at. */
-type Side = 'to-me' | 'by-me';
+type Side = 'to-me' | 'by-me' | 'drafts';
 
 /**
  * The circular archive — the list on the left, the notice you picked on the
@@ -40,6 +48,7 @@ type Side = 'to-me' | 'by-me';
  * and it is the issuer's alone.
  */
 export function CircularScreen() {
+  const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -52,6 +61,7 @@ export function CircularScreen() {
   const [pendingOnly, setPendingOnly] = useState(false);
   const [archived, setArchived] = useState(false);
 
+  const [drafts, setDrafts] = useState<SavedCircularDraft[]>([]);
   const [openId, setOpenId] = useState<number | null>(null);
   const [circular, setCircular] = useState<Circular | null>(null);
   const [note, setNote] = useState('');
@@ -71,6 +81,13 @@ export function CircularScreen() {
     async (opts: { page: number; append: boolean }) => {
       setLoading(true);
       try {
+        // Drafts are not circulars yet — no search, no paging, no archive.
+        if (side === 'drafts') {
+          setDrafts(await api.get<SavedCircularDraft[]>('/circulars/drafts'));
+          setItems([]);
+          setHasMore(false);
+          return;
+        }
         const qs = new URLSearchParams();
         if (search.trim()) qs.set('q', search.trim());
         if (opts.page > 1) qs.set('page', String(opts.page));
@@ -123,6 +140,13 @@ export function CircularScreen() {
       );
       setOpenId(null);
     }
+  };
+
+  /** Put the open notice down — nothing changes, the pane just empties. */
+  const closeOpen = () => {
+    setCircular(null);
+    setOpenId(null);
+    setNote('');
   };
 
   /** Replace the open notice and its row, after an action changed both. */
@@ -202,12 +226,26 @@ export function CircularScreen() {
     setItems([]);
     setCircular(null);
     setOpenId(null);
-    if (next === 'by-me') setPendingOnly(false);
+    if (next !== 'to-me') setPendingOnly(false);
+  };
+
+  /** Throw an unissued circular away. Nothing went out, so nothing is withdrawn. */
+  const deleteDraft = async (id: number) => {
+    try {
+      await api.delete(`/circulars/drafts/${id}`);
+      setDrafts((list) => list.filter((d) => d.id !== id));
+      toast.success('Draft deleted.');
+    } catch (e) {
+      toast.error(
+        e instanceof Error ? e.message : 'The draft could not be deleted.',
+      );
+    }
   };
 
   // -------------------------------------------------------------- render --
 
   const isMineSide = side === 'by-me';
+  const isDraftSide = side === 'drafts';
 
   return (
     <div className="flex h-full min-h-0 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -218,13 +256,14 @@ export function CircularScreen() {
             [
               { key: 'to-me', label: 'To me' },
               { key: 'by-me', label: 'Issued by me' },
+              { key: 'drafts', label: 'Drafts' },
             ] as const
           ).map((tab) => (
             <button
               key={tab.key}
               onClick={() => switchSide(tab.key)}
               className={cn(
-                'flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition',
+                'flex-1 border-b-2 px-2 py-2.5 text-sm font-medium transition',
                 side === tab.key
                   ? 'border-brand-600 text-brand-700 dark:text-brand-300'
                   : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300',
@@ -235,42 +274,64 @@ export function CircularScreen() {
           ))}
         </div>
 
-        <div className="space-y-2 border-b border-slate-200 p-3 dark:border-slate-800">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by reference, title or words…"
-              className="input-base w-full pl-8"
-            />
-          </div>
-          <div className="flex items-center gap-4">
-            {!isMineSide && (
+        {/* Nothing to search or filter on a list of unfinished things. */}
+        {!isDraftSide && (
+          <div className="space-y-2 border-b border-slate-200 p-3 dark:border-slate-800">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by reference, title or words…"
+                className="input-base w-full pl-8"
+              />
+            </div>
+            <div className="flex items-center gap-4">
+              {!isMineSide && (
+                <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                  <input
+                    type="checkbox"
+                    checked={pendingOnly}
+                    onChange={(e) => setPendingOnly(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-slate-300 text-brand-600"
+                  />
+                  Awaiting my acknowledgement
+                </label>
+              )}
               <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                 <input
                   type="checkbox"
-                  checked={pendingOnly}
-                  onChange={(e) => setPendingOnly(e.target.checked)}
+                  checked={archived}
+                  onChange={(e) => setArchived(e.target.checked)}
                   className="h-3.5 w-3.5 rounded border-slate-300 text-brand-600"
                 />
-                Awaiting my acknowledgement
+                Archived
               </label>
-            )}
-            <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-              <input
-                type="checkbox"
-                checked={archived}
-                onChange={(e) => setArchived(e.target.checked)}
-                className="h-3.5 w-3.5 rounded border-slate-300 text-brand-600"
-              />
-              Archived
-            </label>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {!loading && items.length === 0 && (
+          {isDraftSide && (
+            <DraftList
+              drafts={drafts.map((d) => ({
+                id: d.id,
+                title: d.title,
+                subline: d.requiresAck
+                  ? 'Asks for acknowledgement'
+                  : 'For information',
+                updatedAt: d.updatedAt,
+              }))}
+              loading={loading}
+              emptyMessage="Nothing half-written. Save a circular while composing and it lands here."
+              onOpen={(id) =>
+                router.push(`/workplace/circulars/send?draft=${id}`)
+              }
+              onDelete={(id) => void deleteDraft(id)}
+            />
+          )}
+
+          {!isDraftSide && !loading && items.length === 0 && (
             <p className="px-4 py-10 text-center text-sm text-slate-400">
               {search
                 ? 'No circular matches that.'
@@ -284,96 +345,97 @@ export function CircularScreen() {
             </p>
           )}
 
-          {items.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => void open(c)}
-              className={cn(
-                'flex w-full items-start gap-3 border-b border-slate-100 px-3 py-2.5 text-left transition dark:border-slate-800/60',
-                c.id === openId
-                  ? 'bg-brand-50 dark:bg-brand-950/40'
-                  : 'hover:bg-slate-50 dark:hover:bg-slate-800/50',
-              )}
-            >
-              <Avatar name={c.issuerName} id={c.issuerId} size="sm" />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="truncate font-mono text-[11px] text-slate-400">
-                    {c.reference}
-                  </span>
-                  <span className="shrink-0 text-[11px] text-slate-400">
-                    {listTime(c.issuedAt)}
-                  </span>
-                </div>
-                <div
-                  className={cn(
-                    'truncate text-sm',
-                    !c.isRead
-                      ? 'font-bold text-slate-800 dark:text-slate-100'
-                      : 'font-medium text-slate-700 dark:text-slate-200',
-                  )}
-                >
-                  {c.title}
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-xs text-slate-400">
-                    {isMineSide
-                      ? c.audience.join(', ') || 'No audience'
-                      : c.issuerName}
-                  </span>
-                  {c.attachmentCount > 0 && (
-                    <Paperclip className="h-3 w-3 shrink-0 text-slate-400" />
-                  )}
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
-                  {isMineSide ? (
-                    c.requiresAck ? (
-                      <>
-                        <Tag
-                          tone={
-                            c.ackCount === c.recipientCount
-                              ? 'good'
-                              : c.isOverdue
-                                ? 'bad'
-                                : 'neutral'
-                          }
-                        >
-                          <BadgeCheck className="h-3 w-3" />
-                          {c.ackCount} of {c.recipientCount} acknowledged
-                        </Tag>
-                        {c.isOverdue && (
-                          <Tag tone="bad">
-                            <Clock className="h-3 w-3" />
-                            Past due
+          {!isDraftSide &&
+            items.map((c) => (
+              <button
+                key={c.id}
+                onClick={() => void open(c)}
+                className={cn(
+                  'flex w-full items-start gap-3 border-b border-slate-100 px-3 py-2.5 text-left transition dark:border-slate-800/60',
+                  c.id === openId
+                    ? 'bg-brand-50 dark:bg-brand-950/40'
+                    : 'hover:bg-slate-50 dark:hover:bg-slate-800/50',
+                )}
+              >
+                <Avatar name={c.issuerName} id={c.issuerId} size="sm" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="truncate font-mono text-[11px] text-slate-400">
+                      {c.reference}
+                    </span>
+                    <span className="shrink-0 text-[11px] text-slate-400">
+                      {listTime(c.issuedAt)}
+                    </span>
+                  </div>
+                  <div
+                    className={cn(
+                      'truncate text-sm',
+                      !c.isRead
+                        ? 'font-bold text-slate-800 dark:text-slate-100'
+                        : 'font-medium text-slate-700 dark:text-slate-200',
+                    )}
+                  >
+                    {c.title}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-xs text-slate-400">
+                      {isMineSide
+                        ? c.audience.join(', ') || 'No audience'
+                        : c.issuerName}
+                    </span>
+                    {c.attachmentCount > 0 && (
+                      <Paperclip className="h-3 w-3 shrink-0 text-slate-400" />
+                    )}
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+                    {isMineSide ? (
+                      c.requiresAck ? (
+                        <>
+                          <Tag
+                            tone={
+                              c.ackCount === c.recipientCount
+                                ? 'good'
+                                : c.isOverdue
+                                  ? 'bad'
+                                  : 'neutral'
+                            }
+                          >
+                            <BadgeCheck className="h-3 w-3" />
+                            {c.ackCount} of {c.recipientCount} acknowledged
                           </Tag>
-                        )}
-                      </>
-                    ) : (
-                      <Tag tone="neutral">
-                        <BookOpen className="h-3 w-3" />
-                        Read by {c.readCount} of {c.recipientCount}
+                          {c.isOverdue && (
+                            <Tag tone="bad">
+                              <Clock className="h-3 w-3" />
+                              Past due
+                            </Tag>
+                          )}
+                        </>
+                      ) : (
+                        <Tag tone="neutral">
+                          <BookOpen className="h-3 w-3" />
+                          Read by {c.readCount} of {c.recipientCount}
+                        </Tag>
+                      )
+                    ) : c.acknowledgedAt ? (
+                      <Tag tone="good">
+                        <CheckCircle2 className="h-3 w-3" />
+                        Acknowledged
                       </Tag>
-                    )
-                  ) : c.acknowledgedAt ? (
-                    <Tag tone="good">
-                      <CheckCircle2 className="h-3 w-3" />
-                      Acknowledged
-                    </Tag>
-                  ) : c.requiresAck ? (
-                    <Tag tone={c.isOverdue ? 'bad' : 'warn'}>
-                      <Clock className="h-3 w-3" />
-                      {c.ackDueAt
-                        ? `Acknowledge by ${listTime(c.ackDueAt)}`
-                        : 'Acknowledgement due'}
-                    </Tag>
-                  ) : (
-                    <Tag tone="neutral">For information</Tag>
-                  )}
-                  {c.archivedAt && <Tag tone="neutral">Archived</Tag>}
+                    ) : c.requiresAck ? (
+                      <Tag tone={c.isOverdue ? 'bad' : 'warn'}>
+                        <Clock className="h-3 w-3" />
+                        {c.ackDueAt
+                          ? `Acknowledge by ${listTime(c.ackDueAt)}`
+                          : 'Acknowledgement due'}
+                      </Tag>
+                    ) : (
+                      <Tag tone="neutral">For information</Tag>
+                    )}
+                    {c.archivedAt && <Tag tone="neutral">Archived</Tag>}
+                  </div>
                 </div>
-              </div>
-            </button>
-          ))}
+              </button>
+            ))}
 
           {hasMore && (
             <button
@@ -416,31 +478,43 @@ export function CircularScreen() {
                     {circular.title}
                   </h2>
                 </div>
-                {circular.isMine && (
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {circular.isMine && (
+                    <button
+                      className="btn-secondary px-2.5 py-1.5 text-xs"
+                      onClick={() =>
+                        void setArchivedState(circular.archivedAt === null)
+                      }
+                      title={
+                        circular.archivedAt
+                          ? 'Put it back on the live list'
+                          : 'Withdraw it to the archive'
+                      }
+                    >
+                      {circular.archivedAt ? (
+                        <>
+                          <ArchiveRestore className="mr-1 inline h-3.5 w-3.5" />
+                          Restore
+                        </>
+                      ) : (
+                        <>
+                          <Archive className="mr-1 inline h-3.5 w-3.5" />
+                          Archive
+                        </>
+                      )}
+                    </button>
+                  )}
+                  {/* Put it down. It changes nothing — the notice stays exactly
+                      as it is, the pane just empties. */}
                   <button
-                    className="btn-secondary shrink-0 px-2.5 py-1.5 text-xs"
-                    onClick={() =>
-                      void setArchivedState(circular.archivedAt === null)
-                    }
-                    title={
-                      circular.archivedAt
-                        ? 'Put it back on the live list'
-                        : 'Withdraw it to the archive'
-                    }
+                    className="rounded p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                    onClick={closeOpen}
+                    title="Close"
+                    aria-label="Close this circular"
                   >
-                    {circular.archivedAt ? (
-                      <>
-                        <ArchiveRestore className="mr-1 inline h-3.5 w-3.5" />
-                        Restore
-                      </>
-                    ) : (
-                      <>
-                        <Archive className="mr-1 inline h-3.5 w-3.5" />
-                        Archive
-                      </>
-                    )}
+                    <X className="h-4 w-4" />
                   </button>
-                )}
+                </div>
               </div>
 
               <div className="flex items-start gap-3">

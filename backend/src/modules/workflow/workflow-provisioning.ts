@@ -63,13 +63,25 @@ export const WORKFLOW_EXTRA_MENUS = [
         icon: 'inbox',
         order: 2,
       },
-      { name: 'Sent', route: '/workplace/mail/sent', icon: 'send', order: 3 },
+      {
+        // Mail started and not sent. Sits between Inbox and Sent, where every
+        // mail client has put it: a draft is on its way OUT, and the eye goes
+        // down the list in the order a letter travels. Circulars and broadcasts
+        // keep their drafts on a tab of their own view screen instead; mail gets
+        // a menu entry, because a mailbox is where somebody looks for an
+        // unfinished letter.
+        name: 'Drafts',
+        route: '/workplace/mail/drafts',
+        icon: 'file-minus',
+        order: 3,
+      },
+      { name: 'Sent', route: '/workplace/mail/sent', icon: 'send', order: 4 },
       {
         // Built. Moved here from the old Workplace menu by the migration.
         name: 'Chat',
         route: '/workplace/chat',
         icon: 'message-circle',
-        order: 4,
+        order: 5,
       },
     ],
   },

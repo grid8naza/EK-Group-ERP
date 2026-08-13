@@ -12,13 +12,18 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { richTextToPlain, sanitizeRichText } from '../../common/rich-text';
+import { validateAs } from '../../common/validate-dto';
 import {
   AudienceSpec,
   USER_LOOKUP,
   UserLookupPort,
   UserSummary,
 } from '../../contracts/user-lookup.port';
-import { BroadcastAudienceDto, SendBroadcastDto } from './broadcast.dto';
+import {
+  BroadcastAudienceDto,
+  SaveBroadcastDraftDto,
+  SendBroadcastDto,
+} from './broadcast.dto';
 
 /** How many announcements a feed page holds. */
 const PAGE_SIZE = 25;
@@ -375,6 +380,118 @@ export class BroadcastService {
       include: broadcastInclude,
     });
     return this.view(updated, userId);
+  }
+
+  // --------------------------------------------------------------- drafts --
+
+  /** Announcements this person has started and not sent. Theirs alone. */
+  async drafts(userId: number) {
+    const rows = await this.prisma.broadcastDraft.findMany({
+      where: { authorId: userId },
+      orderBy: { updatedAt: 'desc' },
+    });
+    return rows.map((d) => this.draftView(d));
+  }
+
+  async draft(userId: number, id: number) {
+    return this.draftView(await this.ownDraft(userId, id));
+  }
+
+  /**
+   * Save a half-written announcement, or update the one being written. The
+   * audience is stored as CHOSEN, resolved only when it is sent — see
+   * CircularService.saveDraft.
+   */
+  async saveDraft(
+    userId: number,
+    dto: SaveBroadcastDraftDto,
+    id?: number,
+    companyId?: number,
+    branchId?: number,
+  ) {
+    const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
+    if (expiresAt && Number.isNaN(expiresAt.getTime())) {
+      throw new BadRequestException('That show-until date is not a date.');
+    }
+
+    const data = {
+      title: (dto.title ?? '').slice(0, 160),
+      body: dto.body ?? '',
+      priority: dto.priority ?? BroadcastPriority.NORMAL,
+      expiresAt,
+      audience: (dto.audience ?? {}) as unknown as Prisma.InputJsonValue,
+      companyId: companyId ?? null,
+      branchId: branchId ?? null,
+    };
+
+    const row = id
+      ? await this.prisma.broadcastDraft.update({
+          where: { id: (await this.ownDraft(userId, id)).id },
+          data,
+        })
+      : await this.prisma.broadcastDraft.create({
+          data: { ...data, authorId: userId },
+        });
+
+    return this.draftView(row);
+  }
+
+  /** Throw a draft away. Nothing was sent, so nothing survives it. */
+  async deleteDraft(userId: number, id: number) {
+    const row = await this.ownDraft(userId, id);
+    await this.prisma.broadcastDraft.delete({ where: { id: row.id } });
+    return { ok: true };
+  }
+
+  /**
+   * Send what a draft says, then throw the draft away — through the strict
+   * SendBroadcastDto by hand (see common/validate-dto.ts) and then the ordinary
+   * send path, so the draft route is held to the same rules as the direct one.
+   */
+  async sendDraft(
+    userId: number,
+    id: number,
+    companyId?: number,
+    branchId?: number,
+  ) {
+    const row = await this.ownDraft(userId, id);
+    const dto = validateAs(SendBroadcastDto, {
+      title: row.title,
+      body: row.body,
+      audience: row.audience ?? {},
+      priority: row.priority,
+      expiresAt: row.expiresAt ? row.expiresAt.toISOString() : undefined,
+    });
+
+    const sent = await this.send(
+      userId,
+      dto,
+      companyId ?? row.companyId ?? undefined,
+      branchId ?? row.branchId ?? undefined,
+    );
+    await this.prisma.broadcastDraft.delete({ where: { id: row.id } });
+    return sent;
+  }
+
+  private async ownDraft(userId: number, id: number) {
+    const row = await this.prisma.broadcastDraft.findFirst({
+      where: { id, authorId: userId },
+    });
+    if (!row) throw new NotFoundException('No such draft.');
+    return row;
+  }
+
+  /** One draft, as the composer needs it back. */
+  private draftView(draft: Prisma.BroadcastDraftGetPayload<object>) {
+    return {
+      id: draft.id,
+      title: draft.title,
+      body: draft.body,
+      priority: draft.priority,
+      expiresAt: this.iso(draft.expiresAt),
+      audience: (draft.audience ?? {}) as Record<string, unknown>,
+      updatedAt: draft.updatedAt.toISOString(),
+    };
   }
 
   // ---------------------------------------------------------------- guards --

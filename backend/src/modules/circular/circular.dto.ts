@@ -104,6 +104,45 @@ export class IssueCircularDto {
   attachments?: CircularAttachmentRefDto[];
 }
 
+/**
+ * A circular being saved rather than issued.
+ *
+ * Everything optional — that is what a draft is. What a circular must have to
+ * GO is checked when it goes, through the strict DTO above, so a draft can
+ * never be a way round the rules.
+ */
+export class SaveCircularDraftDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_BODY)
+  body?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => CircularAudienceDto)
+  audience?: CircularAudienceDto;
+
+  @IsOptional()
+  @IsBoolean()
+  requiresAck?: boolean;
+
+  @IsOptional()
+  @IsDateString()
+  ackDueAt?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => CircularAttachmentRefDto)
+  attachments?: CircularAttachmentRefDto[];
+}
+
 /** What a reader says when acknowledging, if anything. */
 export class AcknowledgeCircularDto {
   @IsOptional()
