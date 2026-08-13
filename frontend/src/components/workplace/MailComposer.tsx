@@ -1,16 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Paperclip, Search, Send, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Paperclip, Send, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useToast } from '@/providers/ToastProvider';
-import { Avatar, humanSize } from '@/components/workplace/people';
-import { cn } from '@/lib/utils';
-import type {
-  ChatDirectoryUser,
-  Mail,
-  MailAttachmentRef,
-} from '@/lib/types';
+import { humanSize, PeopleField } from '@/components/workplace/people';
+import type { Mail, MailAttachmentRef } from '@/lib/types';
 
 /** What the composer opens with — a blank sheet, or a reply to something. */
 export interface MailDraft {
@@ -158,8 +153,9 @@ export function MailComposer({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <RecipientField
+      <PeopleField
         label="To"
+        endpoint="/mail/directory"
         chosen={draft.to}
         exclude={draft.cc.map((p) => p.id)}
         onChange={(to) => patch({ to })}
@@ -178,8 +174,9 @@ export function MailComposer({
       />
 
       {showCc && (
-        <RecipientField
+        <PeopleField
           label="Cc"
+          endpoint="/mail/directory"
           chosen={draft.cc}
           exclude={draft.to.map((p) => p.id)}
           onChange={(cc) => patch({ cc })}
@@ -274,175 +271,6 @@ export function MailComposer({
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-// ------------------------------------------------------------- recipients --
-
-/**
- * One address line: the people already on it as chips, and a search that offers
- * the rest of the directory.
- *
- * The directory is fetched once and filtered here rather than per keystroke —
- * it is everybody you work with, which is a list of tens, and a round trip per
- * letter would be slower than the typing.
- */
-function RecipientField({
-  label,
-  chosen,
-  exclude,
-  onChange,
-  action,
-  autoFocus,
-}: {
-  label: string;
-  chosen: { id: number; name: string }[];
-  /** Ids already on the OTHER line — nobody is addressed twice. */
-  exclude: number[];
-  onChange: (people: { id: number; name: string }[]) => void;
-  action?: React.ReactNode;
-  autoFocus?: boolean;
-}) {
-  const [directory, setDirectory] = useState<ChatDirectoryUser[]>([]);
-  const [q, setQ] = useState('');
-  const [open, setOpen] = useState(false);
-  const boxRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    let alive = true;
-    api
-      .get<ChatDirectoryUser[]>('/mail/directory')
-      .then((people) => alive && setDirectory(people))
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  // Clicking anywhere else closes the suggestions — they sit over the form.
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [open]);
-
-  const taken = useMemo(
-    () => new Set([...chosen.map((p) => p.id), ...exclude]),
-    [chosen, exclude],
-  );
-
-  const matches = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return directory
-      .filter((p) => !taken.has(p.id))
-      .filter(
-        (p) =>
-          !needle ||
-          [p.name, p.username, p.userCode, p.email]
-            .filter(Boolean)
-            .some((v) => String(v).toLowerCase().includes(needle)),
-      )
-      .slice(0, 40);
-  }, [directory, q, taken]);
-
-  const add = (p: ChatDirectoryUser) => {
-    onChange([...chosen, { id: p.id, name: p.name }]);
-    setQ('');
-  };
-
-  return (
-    <div ref={boxRef} className="relative">
-      <div className="mb-1 flex items-center justify-between">
-        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">
-          {label}
-        </label>
-        {action}
-      </div>
-      <div
-        className="flex min-h-[38px] flex-wrap items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2 py-1.5 focus-within:border-brand-500 dark:border-slate-700 dark:bg-slate-900"
-        onClick={() => setOpen(true)}
-      >
-        {chosen.map((p) => (
-          <span
-            key={p.id}
-            className="flex items-center gap-1.5 rounded-full bg-brand-50 py-0.5 pl-0.5 pr-2 text-xs font-medium text-brand-800 dark:bg-brand-950/60 dark:text-brand-200"
-          >
-            <Avatar name={p.name} id={p.id} size="sm" />
-            {p.name}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onChange(chosen.filter((x) => x.id !== p.id));
-              }}
-              className="text-brand-400 hover:text-rose-500"
-              title={`Remove ${p.name}`}
-            >
-              <X className="h-3 w-3" />
-            </button>
-          </span>
-        ))}
-        <input
-          value={q}
-          autoFocus={autoFocus}
-          onChange={(e) => {
-            setQ(e.target.value);
-            setOpen(true);
-          }}
-          onFocus={() => setOpen(true)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && matches[0]) {
-              e.preventDefault();
-              add(matches[0]);
-            }
-            // Backspace on an empty box takes the last chip off, as every
-            // address line has done since the first one.
-            if (e.key === 'Backspace' && !q && chosen.length) {
-              onChange(chosen.slice(0, -1));
-            }
-          }}
-          placeholder={chosen.length ? '' : 'Search people…'}
-          className="min-w-[140px] flex-1 border-0 bg-transparent p-1 text-sm outline-none placeholder:text-slate-400"
-        />
-      </div>
-
-      {open && (
-        <div className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
-          {matches.length === 0 && (
-            <p className="px-3 py-4 text-center text-xs text-slate-400">
-              {directory.length === 0
-                ? 'Loading people…'
-                : 'Nobody else matches that.'}
-            </p>
-          )}
-          {matches.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => add(p)}
-              className={cn(
-                'flex w-full items-center gap-2.5 px-3 py-2 text-left transition',
-                'hover:bg-slate-50 dark:hover:bg-slate-800/60',
-              )}
-            >
-              <Avatar name={p.name} id={p.id} size="sm" />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm text-slate-800 dark:text-slate-100">
-                  {p.name}
-                </div>
-                <div className="truncate text-xs text-slate-400">
-                  {p.username}
-                </div>
-              </div>
-              <Search className="h-3.5 w-3.5 text-slate-300" />
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
