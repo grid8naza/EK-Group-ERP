@@ -39,7 +39,17 @@ trailingComma: all
 arrowParens: always
 bracketSpacing: true
 
-# LF in the repository, whatever the checkout does locally. Half the team is on
-# Windows with core.autocrlf, and a formatter that rewrote line endings would
-# turn every touched file into a whole-file diff.
-endOfLine: lf
+# Leave line endings exactly as found.
+#
+# NOT `lf`, though the repository stores LF. This project has no .gitattributes
+# and `core.autocrlf=true`, so a Windows checkout writes CRLF into the working
+# tree — and `endOfLine: lf` then reports EVERY file as needing a rewrite on a
+# fresh clone, which is the "everything is dirty" problem this config exists to
+# prevent, merely moved to the next machine. (Measured: a CRLF copy of one
+# committed file fails --check under `lf` and passes under `auto`.)
+#
+# Git still normalises to LF on commit, so the repository stays LF either way.
+# The alternative — a .gitattributes with `* text=auto eol=lf` — would force LF
+# into everyone's working tree and let this be `lf`; worth doing one day, but it
+# changes every checkout on the team and belongs in its own decision.
+endOfLine: auto
