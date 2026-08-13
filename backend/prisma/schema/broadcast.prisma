@@ -1,0 +1,119 @@
+// Broadcast domain — announcements to a targeted audience (SRS §8.11,
+// FR-COM-03).
+//
+// The third way this system talks to people, and it is deliberately not the
+// other two. Mail is addressed to names and answered. A circular is a formal
+// notice, numbered, acknowledged and kept for ever. A broadcast is an
+// announcement — "the Kadathy counter opens at 7 tomorrow" — aimed at a body of
+// people, read once and then out of the way. So it carries an urgency and a
+// show-until date, the reader can dismiss it, and nothing about it is a record:
+// no reference number, no acknowledgement, no register to answer for.
+//
+// Cross-domain rule: every reference to a Cpanel row (user, company, branch,
+// user group) is a plain `Int` id with NO @relation — real relations stay inside
+// this domain file. (Enforced by npm run lint:boundaries.)
+
+/// How loudly an announcement is shown. Its own enum rather than the circular's
+/// audience kinds shared across domains — two domains sharing one type is a
+/// coupling the boundary rule exists to prevent.
+enum BroadcastPriority {
+  /// Ordinary news.
+  NORMAL
+  /// Worth stopping for.
+  IMPORTANT
+  /// Now, and it says so.
+  URGENT
+}
+
+/// The kinds of target a broadcast records — the same shapes the circular uses
+/// and read the same way (branches AND roles, per company; see
+/// circular.prisma), declared here because this domain owns its own types.
+enum BroadcastAudienceKind {
+  EVERYONE
+  COMPANY
+  BRANCH
+  GROUP
+  PERSON
+}
+
+/// One announcement.
+model Broadcast {
+  id    Int    @id @default(autoincrement())
+  title String
+
+  /// Formatting HTML, cut to an inert allowlist by common/rich-text.ts on the
+  /// way in — the same treatment as a circular's body, so an announcement can
+  /// carry a bulleted list without carrying a script.
+  body String
+
+  /// The same body as plain text, for searching (see circular.prisma).
+  bodyText String @default("")
+
+  senderId Int
+
+
+  /// Where it was sent FROM. A stamp, not a filter on who may read it: the
+  /// audience decides that, and an announcement crosses companies by design.
+  /// Same rule as mail, chat and circulars.
+  companyId Int?
+  branchId  Int?
+
+  priority BroadcastPriority @default(NORMAL)
+
+  sentAt DateTime @default(now())
+
+  /// Show until. Null = until it is dismissed. A date is what keeps a feed of
+  /// announcements from silting up with last month's news — an announcement
+  /// about tomorrow's delivery is not worth reading the week after, and asking
+  /// people to tidy that away by hand is asking them to do the system's job.
+  expiresAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  targets    BroadcastTarget[]
+  recipients BroadcastRecipient[]
+
+  @@index([senderId, sentAt])
+  @@map("broadcasts")
+}
+
+/// One audience the broadcast was aimed at, and what it was called at the time
+/// — the sender's own record of who they meant, beside the resolved people.
+/// Same reasoning as CircularTarget: a list of 200 names does not tell anybody
+/// that this went to "all of Bake House".
+model BroadcastTarget {
+  id          Int       @id @default(autoincrement())
+  broadcastId Int
+  broadcast   Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+
+  kind  BroadcastAudienceKind
+  /// The company / branch / group / person aimed at. Null for EVERYONE.
+  refId Int?
+  label String
+
+  @@index([broadcastId])
+  @@map("broadcast_targets")
+}
+
+/// One person an announcement reached, and what they did about it.
+model BroadcastRecipient {
+  id          Int       @id @default(autoincrement())
+  broadcastId Int
+  broadcast   Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  userId      Int
+
+  readAt DateTime?
+
+  /// Waved away by this reader. Only theirs — everybody else's feed is
+  /// untouched, and the sender's count of who saw it is unaffected, because
+  /// putting a notice down is not the same as never having seen it.
+  dismissedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([broadcastId, userId])
+  // "My feed, newest first" is this index.
+  @@index([userId, dismissedAt])
+  @@map("broadcast_recipients")
+}

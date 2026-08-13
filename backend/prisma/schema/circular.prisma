@@ -1,0 +1,164 @@
+// Circular domain — formal notices to a target audience (SRS §8.11, FR-COM-04).
+//
+// A circular is not a mail. Mail is addressed to the people you name; a circular
+// is issued to an AUDIENCE — a company, a branch, a role group — and the people
+// are worked out from it. And where a mail is read, a circular is acknowledged:
+// the point of issuing one is being able to say afterwards who has confirmed
+// they saw it, and who still has not. That register is the whole feature.
+//
+// Cross-domain rule: every reference to a Cpanel row (user, company, branch,
+// user group) is a plain `Int` id with NO @relation — real relations stay inside
+// this domain file. (Enforced by npm run lint:boundaries.)
+
+/// The kinds of target a circular records.
+///
+/// An audience is chosen as branches AND roles, per company: whoever is in one
+/// of the chosen branches and holds one of the chosen roles. So BRANCH and
+/// GROUP narrow each other rather than adding up, while COMPANY is written down
+/// only to say which heading they were picked under.
+enum CircularAudienceKind {
+  /// Everybody the issuer can reach across the group.
+  EVERYONE
+  /// The company a set of branches and roles was chosen under — context for the
+  /// archive, never a selection of its own.
+  COMPANY
+  /// A branch whose people were in scope.
+  BRANCH
+  /// A role group (Cpanel user group) whose members were in scope.
+  GROUP
+  /// One named person, added outright — the only kind that does not have to
+  /// pass the branch-and-role test.
+  PERSON
+}
+
+/// One notice, as it was issued.
+model Circular {
+  id Int @id @default(autoincrement())
+
+  /// What the notice is known by — CIR/YYYY/NNNN. A formal notice gets quoted
+  /// ("as per circular CIR/2026/0014"), so it needs a name that is not its row
+  /// id. Derived MAX+1 from the references already issued that year, like every
+  /// other number in the system; unique across the group because a circular is
+  /// not a company's document — it may be issued to several at once.
+  reference String @unique
+
+  title String
+
+  /// The notice as written: formatting HTML, cut to an inert allowlist by
+  /// common/rich-text.ts on the way in. A circular is a formal document — it
+  /// needs headings and numbered clauses to be readable — which is the ask
+  /// mail.prisma anticipated when it kept mail bodies plain.
+  body String
+
+  /// The same body as plain text, kept beside it rather than derived per query:
+  /// searching HTML matches every bulleted notice in the group on "li", and a
+  /// list preview built from markup shows people their own tags back.
+  bodyText String @default("")
+
+  issuerId Int
+
+
+  /// Where it was issued FROM. A stamp for the archive, not a filter on who may
+  /// read it: the audience decides that, and a circular routinely crosses
+  /// companies. Same rule as mail and chat.
+  companyId Int?
+  branchId  Int?
+
+  /// Whether the audience must acknowledge it. Most circulars ask for it — that
+  /// is what separates a circular from a broadcast — but a "canteen closes at
+  /// 3pm today" notice asking 200 people to click Acknowledge is noise, so it
+  /// can be turned off, and the register then shows only who has read it.
+  requiresAck Boolean @default(true)
+
+  /// Acknowledge by when. Null = no deadline; a date makes the outstanding list
+  /// on the issuer's screen mean something.
+  ackDueAt DateTime?
+
+  issuedAt DateTime @default(now())
+
+  /// Withdrawn from the live list by its issuer — superseded, or done with. It
+  /// stays readable in the archive and keeps its register: a circular that could
+  /// be deleted would be worth nothing as a record of what people were told.
+  archivedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  targets     CircularTarget[]
+  recipients  CircularRecipient[]
+  attachments CircularAttachment[]
+
+  @@index([issuerId, issuedAt])
+  @@map("circulars")
+}
+
+/// One audience the circular was aimed at — kept beside the resolved recipients
+/// rather than instead of them.
+///
+/// Both are needed, and they answer different questions. The recipients say who
+/// owes an acknowledgement, fixed at the moment of issue so that somebody who
+/// joins the branch next week is not retrospectively in breach. The targets say
+/// what was INTENDED — "all of Bake House, and the packing supervisors" — which
+/// is what a reader of the archive wants to know, and what no list of 200 names
+/// tells them.
+model CircularTarget {
+  id         Int      @id @default(autoincrement())
+  circularId Int
+  circular   Circular @relation(fields: [circularId], references: [id], onDelete: Cascade)
+
+  kind CircularAudienceKind
+  /// The company / branch / group / person aimed at. Null for EVERYONE.
+  refId Int?
+
+  /// What it was called when the circular went out. Copied on purpose: a group
+  /// renamed or deleted two years later must not turn the archive's audience
+  /// into "Group #14".
+  label String
+
+  @@index([circularId])
+  @@map("circular_targets")
+}
+
+/// One person the circular reached, and what they have done about it.
+model CircularRecipient {
+  id         Int      @id @default(autoincrement())
+  circularId Int
+  circular   Circular @relation(fields: [circularId], references: [id], onDelete: Cascade)
+  userId     Int
+
+  /// Opened it. Set by opening it, like mail's read mark.
+  readAt DateTime?
+
+  /// Confirmed they have seen and understood it — the deliberate act the SRS
+  /// asks for, kept separate from readAt because clicking into something is not
+  /// the same as accepting it.
+  acknowledgedAt DateTime?
+  /// What they said when acknowledging, if anything.
+  ackNote        String?
+
+  createdAt DateTime @default(now())
+
+  @@unique([circularId, userId])
+  // "My circulars, the unacknowledged first" is this index.
+  @@index([userId, acknowledgedAt])
+  @@map("circular_recipients")
+}
+
+/// A file issued with a circular — the policy PDF the notice is about. Stored on
+/// disk like the mail and chat attachments; the row holds where it landed.
+model CircularAttachment {
+  id         Int      @id @default(autoincrement())
+  circularId Int
+  circular   Circular @relation(fields: [circularId], references: [id], onDelete: Cascade)
+
+  fileName String
+  /// Public URL under the /uploads static mount (see main.ts).
+  url      String
+  mimeType String
+  size     Int
+
+  createdAt DateTime @default(now())
+
+  @@index([circularId])
+  @@map("circular_attachments")
+}

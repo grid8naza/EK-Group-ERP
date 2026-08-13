@@ -2682,3 +2682,169 @@ export interface MailPage {
   hasMore: boolean;
   items: MailListItem[];
 }
+// ---- Audiences (Workplace / Communication — circulars and broadcasts) ----
+//
+// Shared by both, because both address a body of people rather than a list of
+// names, and they are answered by the same backend port. Two copies of these
+// would be two answers to "who is Bake House".
+
+/** The shapes an audience can take. */
+export type AudienceKind =
+  'EVERYONE' | 'COMPANY' | 'BRANCH' | 'GROUP' | 'PERSON';
+
+/** Who something is for. */
+export interface Audience {
+  everyone?: boolean;
+  companyIds?: number[];
+  branchIds?: number[];
+  userGroupIds?: number[];
+  userIds?: number[];
+}
+
+/** What the audience picker offers — what this person may send to. */
+export interface AudienceOptions {
+  companies: { id: number; name: string }[];
+  branches: { id: number; name: string; companyId: number }[];
+  groups: { id: number; name: string; companyId: number }[];
+  everyoneCount: number;
+}
+
+/** How many people a chosen audience comes to, before sending to it. */
+export interface AudiencePreview {
+  count: number;
+  /** A few of them by name, so the number is recognisable. */
+  names: string[];
+  overLimit: boolean;
+}
+
+// ---- Circulars (Workplace / Communication, SRS FR-COM-04) ----
+
+export interface CircularAttachment {
+  id: number;
+  fileName: string;
+  url: string;
+  mimeType: string;
+  size: number;
+}
+
+/** What an upload hands back, to be issued with the circular carrying it. */
+export interface CircularAttachmentRef {
+  fileName: string;
+  url: string;
+  mimeType: string;
+  size: number;
+}
+
+/** One line of the register — the issuer's view of who has done what. */
+export interface CircularRegisterEntry {
+  id: number;
+  name: string;
+  readAt: string | null;
+  acknowledgedAt: string | null;
+  ackNote: string | null;
+}
+
+/** One circular, opened. */
+export interface Circular {
+  id: number;
+  /** CIR/YYYY/NNNN — what the notice is quoted by. */
+  reference: string;
+  title: string;
+  body: string;
+  issuedAt: string;
+  companyId: number | null;
+  branchId: number | null;
+  requiresAck: boolean;
+  ackDueAt: string | null;
+  archivedAt: string | null;
+  issuer: { id: number; name: string; username: string };
+  isMine: boolean;
+  /** Who it was aimed at, as it was named at the time. */
+  audience: { kind: AudienceKind; refId: number | null; label: string }[];
+  recipientCount: number;
+  readCount: number;
+  ackCount: number;
+  /** What I have done about it — null when I only issued it. */
+  me: {
+    readAt: string | null;
+    acknowledgedAt: string | null;
+    ackNote: string | null;
+  } | null;
+  /** The issuer's register. Empty for everybody else. */
+  register: CircularRegisterEntry[];
+  attachments: CircularAttachment[];
+}
+
+/** One row of a circular list — enough to decide whether to open it. */
+export interface CircularListItem {
+  id: number;
+  reference: string;
+  title: string;
+  preview: string;
+  issuedAt: string;
+  issuerId: number;
+  issuerName: string;
+  isMine: boolean;
+  requiresAck: boolean;
+  ackDueAt: string | null;
+  /** Past due and not yet acknowledged by me. */
+  isOverdue: boolean;
+  archivedAt: string | null;
+  audience: string[];
+  recipientCount: number;
+  readCount: number;
+  ackCount: number;
+  attachmentCount: number;
+  isRead: boolean;
+  acknowledgedAt: string | null;
+}
+
+export interface CircularPage {
+  hasMore: boolean;
+  items: CircularListItem[];
+}
+
+// ---- Broadcasts (Workplace / Communication, SRS FR-COM-03) ----
+
+/** How loudly an announcement is shown. */
+export type BroadcastPriority = 'NORMAL' | 'IMPORTANT' | 'URGENT';
+
+/**
+ * One announcement, as it appears in a feed.
+ *
+ * The body is the whole text, not a preview: an announcement is short, and a
+ * feed that made you open each card to find out it said "closed on Monday"
+ * would be a worse version of mail.
+ */
+export interface BroadcastCard {
+  id: number;
+  title: string;
+  body: string;
+  priority: BroadcastPriority;
+  sentAt: string;
+  /** Show until. Null = until the reader dismisses it. */
+  expiresAt: string | null;
+  hasExpired: boolean;
+  senderId: number;
+  senderName: string;
+  isMine: boolean;
+  /** Who it was aimed at, as they were named at the time. */
+  audienceLabels: string[];
+  recipientCount: number;
+  readCount: number;
+  dismissedCount: number;
+  isRead: boolean;
+  dismissedAt: string | null;
+}
+
+/** One broadcast opened on its own — the card, plus where it came from. */
+export interface Broadcast extends BroadcastCard {
+  companyId: number | null;
+  branchId: number | null;
+  audience: { kind: AudienceKind; refId: number | null; label: string }[];
+}
+
+export interface BroadcastPage {
+  hasMore: boolean;
+  items: BroadcastCard[];
+}

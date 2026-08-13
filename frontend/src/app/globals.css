@@ -94,6 +94,54 @@ body {
   .label {
     @apply mb-1.5 block text-sm font-medium text-slate-600 dark:text-slate-300;
   }
+
+  /* Formatted bodies — circulars and broadcasts. The same class dresses the
+     editor and the reader, so a notice looks while it is being written exactly
+     as it will look when it is read. Only the tags the server's allowlist keeps
+     are styled (backend common/rich-text.ts); Tailwind's reset would otherwise
+     leave a bulleted list with no bullets and a heading no larger than the
+     text around it. */
+  .rich-text {
+    @apply leading-relaxed;
+  }
+  .rich-text p {
+    @apply my-1;
+  }
+  .rich-text ul {
+    @apply my-1 list-disc pl-5;
+  }
+  .rich-text ol {
+    @apply my-1 list-decimal pl-5;
+  }
+  .rich-text li {
+    @apply my-0.5;
+  }
+  .rich-text h3 {
+    @apply mb-1 mt-3 text-base font-semibold first:mt-0;
+  }
+  .rich-text h4 {
+    @apply mb-1 mt-2 font-semibold first:mt-0;
+  }
+  .rich-text blockquote {
+    @apply my-2 border-l-2 border-slate-300 pl-3 italic dark:border-slate-600;
+  }
+  .rich-text b,
+  .rich-text strong {
+    @apply font-semibold;
+  }
+  .rich-text u {
+    @apply underline;
+  }
+  .rich-text s,
+  .rich-text strike {
+    @apply line-through;
+  }
+  .rich-text code {
+    @apply rounded bg-slate-100 px-1 py-0.5 font-mono text-[0.9em] dark:bg-slate-800;
+  }
+  .rich-text pre {
+    @apply my-2 overflow-x-auto rounded bg-slate-100 p-2 font-mono text-xs dark:bg-slate-800;
+  }
 }
 
 /* ---------------------------------------------------------------------------

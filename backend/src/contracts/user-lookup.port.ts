@@ -28,6 +28,65 @@ export interface UserSummary {
   isActive: boolean;
 }
 
+/**
+ * An audience, named the way the person choosing it thinks of it: "everybody",
+ * "the Bake House", "the Kochi branch", "the packing supervisors", "and also
+ * Anita". The union of whatever is set is who it reaches.
+ *
+ * Asked by Circulars (SRS FR-COM-04) and, later, Broadcast (FR-COM-03) — both
+ * address a body of people rather than a list of names.
+ */
+export interface AudienceSpec {
+  /** Everybody the asker can reach. Set on its own; the rest are then ignored. */
+  everyone?: boolean;
+
+  /**
+   * WHERE they work and WHAT they do, and an audience is always both:
+   * `(any of these branches) AND (any of these roles)`, worked out per company
+   * and then added together.
+   *
+   * One sentence covers every case, which is the point of having no options:
+   *   · every branch + every role  → everybody in the company
+   *   · every branch + Branch Manager → every branch manager in the company
+   *   · Kadathy + every role       → everybody at Kadathy
+   *
+   * Widening within a kind and narrowing across them is what makes that work:
+   * two branches has to mean EITHER branch (nobody is assigned to all of them),
+   * while a branch and a role has to mean BOTH, or "the managers at Kadathy"
+   * could not be said at all.
+   *
+   * A company is never chosen directly — it is only the heading its branches
+   * and roles sit under, and picking all of both is what "the whole company"
+   * means. Where a company has no branches at all, its roles stand alone;
+   * requiring a branch that cannot exist would put that company out of reach.
+   */
+  branchIds?: number[];
+  userGroupIds?: number[];
+
+  /**
+   * Named individuals. Always added on top, never filtered by the above — the
+   * picker offers them as "and also, by name", and a name that had to survive
+   * the branch-and-role test as well would not be an addition at all. This is
+   * also the way to reach somebody who holds no role, such as a super admin.
+   */
+  userIds?: number[];
+}
+
+/**
+ * What a person may aim an audience at — the choices their picker offers.
+ *
+ * Companies are headings, not choices: branches and roles are listed under the
+ * one they belong to, and picking every branch and every role under a heading
+ * is what selecting that company would have meant.
+ */
+export interface AudienceOptions {
+  companies: { id: number; name: string }[];
+  branches: { id: number; name: string; companyId: number }[];
+  groups: { id: number; name: string; companyId: number }[];
+  /** How many people "everyone" is, so the picker can say so. */
+  everyoneCount: number;
+}
+
 export interface UserLookupPort {
   /** Minimal user record by id, or null if no such user. */
   findById(id: number): Promise<UserSummary | null>;
@@ -77,4 +136,31 @@ export interface UserLookupPort {
    * with somebody who can no longer sign in.
    */
   findPeers(userId: number): Promise<UserSummary[]>;
+
+  /**
+   * The companies, branches and role groups this user may aim an audience at.
+   *
+   * Kept HERE for the same reason findPeers is: "which company is mine, which
+   * branch is under it, which group belongs to it" are facts about Cpanel
+   * membership, and a communication module cannot read UserCompany, Branch or
+   * UserGroup without importing them.
+   */
+  audienceOptions(userId: number): Promise<AudienceOptions>;
+
+  /**
+   * Turn an audience into the people it reaches — active user ids, the asker
+   * excluded (you do not circulate a notice to yourself).
+   *
+   * Always intersected with findPeers, so an audience can never reach further
+   * than the person choosing it could reach by name. That means a target the
+   * asker may not aim at contributes nobody rather than raising an error: which
+   * of "no such group", "empty group" and "not your group" it was would itself
+   * say something about a company they have no business seeing.
+   *
+   * A company with branches picked but no role — or the other way about — is
+   * incomplete, and contributes nobody rather than everybody. Half a rule is
+   * the one case where guessing would send a notice to people who were never
+   * chosen.
+   */
+  resolveAudience(userId: number, spec: AudienceSpec): Promise<number[]>;
 }

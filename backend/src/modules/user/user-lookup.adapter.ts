@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
+  AudienceOptions,
+  AudienceSpec,
   UserLookupPort,
   UserSummary,
 } from '../../contracts/user-lookup.port';
@@ -93,6 +95,153 @@ export class UserLookupAdapter implements UserLookupPort {
       select: this.summarySelect,
       orderBy: { name: 'asc' },
     });
+  }
+
+  // ------------------------------------------------------------- audiences --
+
+  /**
+   * What this user may aim a circular or a broadcast at: their own companies
+   * (every active one, for a super admin), the branches under those, and the
+   * role groups belonging to them.
+   */
+  async audienceOptions(userId: number): Promise<AudienceOptions> {
+    const me = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { isSuperAdmin: true },
+    });
+    if (!me) {
+      return { companies: [], branches: [], groups: [], everyoneCount: 0 };
+    }
+
+    const companies = await this.prisma.company.findMany({
+      where: {
+        isActive: true,
+        ...(me.isSuperAdmin ? {} : { users: { some: { userId } } }),
+      },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    });
+    const companyIds = companies.map((c) => c.id);
+
+    const [branches, groups, peers] = await Promise.all([
+      this.prisma.branch.findMany({
+        where: { isActive: true, companyId: { in: companyIds } },
+        select: { id: true, name: true, companyId: true },
+        orderBy: [{ companyId: 'asc' }, { name: 'asc' }],
+      }),
+      this.prisma.userGroup.findMany({
+        where: { companyId: { in: companyIds } },
+        select: { id: true, name: true, companyId: true },
+        orderBy: [{ companyId: 'asc' }, { name: 'asc' }],
+      }),
+      this.findPeers(userId),
+    ]);
+
+    return { companies, branches, groups, everyoneCount: peers.length };
+  }
+
+  /**
+   * Who an audience actually reaches: for each company, whoever is in one of
+   * its chosen branches AND in one of its chosen roles, all of them added
+   * together, plus anybody named outright.
+   *
+   * Worked out per company rather than over the whole selection, because the
+   * picker asks the question per company and the answer has to mean what the
+   * screen said. Pooling them would let a branch ticked under Bake House pair
+   * with a role ticked under Regency Bakers and reach somebody neither list
+   * chose.
+   *
+   * The reachable set is findPeers throughout — the same "who can I write to"
+   * the rest of the app answers — so no audience can be assembled that reaches
+   * further than naming everybody by hand would.
+   */
+  async resolveAudience(
+    userId: number,
+    spec: AudienceSpec,
+  ): Promise<number[]> {
+    const peers = await this.findPeers(userId);
+    const reach = new Set(peers.map((p) => p.id));
+    if (spec.everyone) return [...reach];
+
+    const branchIds = [...new Set(spec.branchIds ?? [])];
+    const groupIds = [...new Set(spec.userGroupIds ?? [])];
+    const hit = new Set<number>();
+
+    if (branchIds.length > 0 || groupIds.length > 0) {
+      const [branches, groups] = await Promise.all([
+        this.prisma.branch.findMany({
+          where: { id: { in: branchIds } },
+          select: { id: true, companyId: true },
+        }),
+        this.prisma.userGroup.findMany({
+          where: { id: { in: groupIds } },
+          select: { id: true, companyId: true },
+        }),
+      ]);
+
+      // What was picked under each company's heading.
+      const picked = new Map<number, { branches: Set<number>; roles: Set<number> }>();
+      const under = (companyId: number) => {
+        const found = picked.get(companyId);
+        if (found) return found;
+        const fresh = { branches: new Set<number>(), roles: new Set<number>() };
+        picked.set(companyId, fresh);
+        return fresh;
+      };
+      for (const b of branches) under(b.companyId).branches.add(b.id);
+      for (const g of groups) under(g.companyId).roles.add(g.id);
+
+      // A company with no branches at all cannot be asked for one — its roles
+      // stand alone, or it could never be written to.
+      const branched = new Set(
+        (
+          await this.prisma.branch.findMany({
+            where: { companyId: { in: [...picked.keys()] }, isActive: true },
+            select: { companyId: true },
+          })
+        ).map((b) => b.companyId),
+      );
+
+      const [branchRows, roleRows] = await Promise.all([
+        branchIds.length
+          ? this.prisma.userBranch.findMany({
+              where: { branchId: { in: branchIds } },
+              select: { userId: true, branchId: true },
+            })
+          : Promise.resolve([] as { userId: number; branchId: number }[]),
+        groupIds.length
+          ? this.prisma.userGroupAssignment.findMany({
+              where: { userGroupId: { in: groupIds } },
+              select: { userId: true, userGroupId: true },
+            })
+          : Promise.resolve([] as { userId: number; userGroupId: number }[]),
+      ]);
+
+      for (const [companyId, choice] of picked) {
+        const needsBranch = branched.has(companyId);
+        // Half a rule reaches nobody — see the port's resolveAudience note.
+        if (choice.roles.size === 0) continue;
+        if (needsBranch && choice.branches.size === 0) continue;
+
+        const inBranch = new Set(
+          branchRows
+            .filter((r) => choice.branches.has(r.branchId))
+            .map((r) => r.userId),
+        );
+        for (const row of roleRows) {
+          if (!choice.roles.has(row.userGroupId)) continue;
+          if (!reach.has(row.userId)) continue;
+          if (needsBranch && !inBranch.has(row.userId)) continue;
+          hit.add(row.userId);
+        }
+      }
+    }
+
+    // Named people are an addition, never filtered — see AudienceSpec.userIds.
+    for (const id of spec.userIds ?? []) {
+      if (reach.has(id)) hit.add(id);
+    }
+    return [...hit];
   }
 
   async canAccessCompany(userId: number, companyId: number): Promise<boolean> {
