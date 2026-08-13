@@ -4,7 +4,12 @@ import Link from 'next/link';
 import { BarChart3, ArrowUpRight, LayoutDashboard } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { resolveWidgetStyle } from '@/lib/widget-style';
-import type { NavModule, WidgetType, WidgetConfig, MetricValue } from '@/lib/types';
+import type {
+  NavModule,
+  WidgetType,
+  WidgetConfig,
+  MetricValue,
+} from '@/lib/types';
 
 // True when a widget should occupy a single (stat-sized) cell.
 export function isStatWidget(type?: WidgetType) {
@@ -45,7 +50,9 @@ export function WidgetView({
   );
 
   if (type === 'METRIC') {
-    const m = config?.metric ? metrics?.[config.metric] ?? undefined : undefined;
+    const m = config?.metric
+      ? (metrics?.[config.metric] ?? undefined)
+      : undefined;
     return (
       <Shell>
         <div className="flex items-center justify-between gap-3">
@@ -54,7 +61,10 @@ export function WidgetView({
               {name}
             </p>
             <p
-              className={cn('mt-1 text-slate-900 dark:text-white', r.valueClass)}
+              className={cn(
+                'mt-1 text-slate-900 dark:text-white',
+                r.valueClass,
+              )}
               style={r.valueStyle}
             >
               {formatMetric(m, loading)}
@@ -113,7 +123,11 @@ export function WidgetView({
   if (type === 'LINKS') {
     return (
       <Shell>
-        <QuickLinks name={name} description={description} activeModule={activeModule} />
+        <QuickLinks
+          name={name}
+          description={description}
+          activeModule={activeModule}
+        />
       </Shell>
     );
   }
@@ -166,7 +180,13 @@ function QuickLinks({
   );
 }
 
-function Heading({ title, subtitle }: { title: string; subtitle?: string | null }) {
+function Heading({
+  title,
+  subtitle,
+}: {
+  title: string;
+  subtitle?: string | null;
+}) {
   return (
     <>
       <h2 className="text-lg font-semibold text-slate-900 dark:text-white">

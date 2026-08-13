@@ -20,9 +20,12 @@ const ROUTE = '/accounts/account-groups';
 
 const NATURE_TONE: Record<AccountNature, string> = {
   ASSET: 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300',
-  LIABILITY: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',
-  EQUITY: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300',
-  INCOME: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
+  LIABILITY:
+    'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',
+  EQUITY:
+    'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300',
+  INCOME:
+    'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
   EXPENSE: 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300',
 };
 
@@ -38,7 +41,11 @@ export default function AccountGroupsPage() {
   const { can } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
-  const { data: groups, loading, refetch } = useFetch<AccountGroup[]>('/coa/groups');
+  const {
+    data: groups,
+    loading,
+    refetch,
+  } = useFetch<AccountGroup[]>('/coa/groups');
 
   const [search, setSearch] = useState('');
   const [primary, setPrimary] = useState(''); // '' = all four
@@ -52,13 +59,12 @@ export default function AccountGroupsPage() {
   const canDelete = can(ROUTE, 'delete');
 
   const all = useMemo(() => groups ?? [], [groups]);
-  const byId = useMemo(
-    () => new Map(all.map((g) => [g.id, g])),
-    [all],
-  );
+  const byId = useMemo(() => new Map(all.map((g) => [g.id, g])), [all]);
   /** A sub-group reports under its parent's schedule; only blocks carry one. */
   const effectiveMain = (g: AccountGroup) =>
-    g.parentGroupId ? (byId.get(g.parentGroupId)?.mainGroup ?? null) : g.mainGroup;
+    g.parentGroupId
+      ? (byId.get(g.parentGroupId)?.mainGroup ?? null)
+      : g.mainGroup;
 
   // The main groups on offer are those of the chosen primary — the two filters
   // are one drill-down, not two independent lists.
@@ -139,7 +145,9 @@ export default function AccountGroupsPage() {
               {g.name}
             </div>
             <div className={cn('text-xs text-slate-400', parent && 'pl-4')}>
-              {parent ? `under ${parent.code} · ${parent.name}` : 'Top-level block'}
+              {parent
+                ? `under ${parent.code} · ${parent.name}`
+                : 'Top-level block'}
             </div>
           </div>
         );
@@ -174,7 +182,10 @@ export default function AccountGroupsPage() {
       accessor: (g) => g.nature,
       render: (g) => (
         <span
-          className={cn('rounded px-2 py-0.5 text-xs font-medium', NATURE_TONE[g.nature])}
+          className={cn(
+            'rounded px-2 py-0.5 text-xs font-medium',
+            NATURE_TONE[g.nature],
+          )}
         >
           {g.nature}
         </span>
@@ -186,7 +197,8 @@ export default function AccountGroupsPage() {
       accessor: (g) => g.statement,
       render: (g) => (
         <span className="text-xs text-slate-500">
-          {g.statement === 'BS' ? 'Balance Sheet' : 'Profit & Loss'} · {g.normalSide}
+          {g.statement === 'BS' ? 'Balance Sheet' : 'Profit & Loss'} ·{' '}
+          {g.normalSide}
         </span>
       ),
     },
@@ -206,9 +218,13 @@ export default function AccountGroupsPage() {
       sortAccessor: (g) => (g.accountCount ?? 0) + (g.childCount ?? 0),
       render: (g) => (
         <span className="text-xs text-slate-500">
-          {g.childCount ? `${g.childCount} sub-group${g.childCount === 1 ? '' : 's'}` : ''}
+          {g.childCount
+            ? `${g.childCount} sub-group${g.childCount === 1 ? '' : 's'}`
+            : ''}
           {g.childCount && g.accountCount ? ' · ' : ''}
-          {g.accountCount ? `${g.accountCount} account${g.accountCount === 1 ? '' : 's'}` : ''}
+          {g.accountCount
+            ? `${g.accountCount} account${g.accountCount === 1 ? '' : 's'}`
+            : ''}
           {!g.childCount && !g.accountCount ? 'Empty' : ''}
         </span>
       ),
@@ -290,9 +306,9 @@ export default function AccountGroupsPage() {
           {topLevel} top-level blocks
         </span>
         <p className="basis-full pt-1 text-xs">
-          A code ending in 00 is a heading; a child shares its parent&apos;s first
-          two digits and inherits its nature, so a balance can never land in a
-          different statement from the group it rolls up into.
+          A code ending in 00 is a heading; a child shares its parent&apos;s
+          first two digits and inherits its nature, so a balance can never land
+          in a different statement from the group it rolls up into.
         </p>
       </div>
 

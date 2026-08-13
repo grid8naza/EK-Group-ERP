@@ -366,7 +366,8 @@ export class MaterialRequestService {
         where: { id: storeId, companyId },
         select: { id: true, name: true },
       });
-      if (!s) throw new BadRequestException('That store is not in this company.');
+      if (!s)
+        throw new BadRequestException('That store is not in this company.');
       return s;
     }
     // Prefer the active branch's default store, then any company default.

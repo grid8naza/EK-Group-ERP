@@ -31,7 +31,10 @@ const statusLabel = (s: DispatchStatus) =>
 const fmtDate = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleDateString() : '—';
 const money = (n: number) =>
-  n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 export default function DispatchPage() {
   const { can } = useAuth();
@@ -52,16 +55,20 @@ export default function DispatchPage() {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'view' | 'new'>('view');
   const [current, setCurrent] = useState<Dispatch | null>(null);
-  const [form, setForm] = useState({ salesOrderId: '', driverName: '', vehicleNo: '' });
+  const [form, setForm] = useState({
+    salesOrderId: '',
+    driverName: '',
+    vehicleNo: '',
+  });
   const [saving, setSaving] = useState(false);
 
   const canAdd = can(ROUTE, 'add');
   const canView = can(ROUTE, 'view');
 
   const companyName = (id?: number | null) =>
-    id ? (companies ?? []).find((c) => c.id === id)?.name ?? `#${id}` : '—';
+    id ? ((companies ?? []).find((c) => c.id === id)?.name ?? `#${id}`) : '—';
   const branchName = (id?: number | null) =>
-    id ? (branches ?? []).find((b) => b.id === id)?.name ?? `#${id}` : '';
+    id ? ((branches ?? []).find((b) => b.id === id)?.name ?? `#${id}`) : '';
   const unitById = useMemo(
     () => new Map((units ?? []).map((u) => [u.id, u])),
     [units],
@@ -121,14 +128,22 @@ export default function DispatchPage() {
 
   const columns: Column<Dispatch>[] = [
     { key: 'dispatchNo', header: 'Dispatch', accessor: (r) => r.dispatchNo },
-    { key: 'soNumber', header: 'Sales Order', accessor: (r) => r.soNumber ?? '—' },
+    {
+      key: 'soNumber',
+      header: 'Sales Order',
+      accessor: (r) => r.soNumber ?? '—',
+    },
     {
       key: 'buyer',
       header: 'Buyer',
       accessor: (r) => companyName(r.buyerCompanyId),
     },
     { key: 'invoice', header: 'Invoice', accessor: (r) => r.invoiceNo ?? '—' },
-    { key: 'date', header: 'Dispatched', accessor: (r) => fmtDate(r.dispatchDate) },
+    {
+      key: 'date',
+      header: 'Dispatched',
+      accessor: (r) => fmtDate(r.dispatchDate),
+    },
     {
       key: 'status',
       header: 'Status',
@@ -178,7 +193,13 @@ export default function DispatchPage() {
       <Drawer
         open={open}
         onClose={() => setOpen(false)}
-        title={mode === 'new' ? 'New Dispatch' : current ? current.dispatchNo : 'Dispatch'}
+        title={
+          mode === 'new'
+            ? 'New Dispatch'
+            : current
+              ? current.dispatchNo
+              : 'Dispatch'
+        }
         subtitle="Goods dispatch"
         icon={<Truck className="h-5 w-5" />}
         footer={
@@ -204,7 +225,9 @@ export default function DispatchPage() {
               label="Sales order"
               required
               value={form.salesOrderId}
-              onChange={(e) => setForm({ ...form, salesOrderId: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, salesOrderId: e.target.value })
+              }
               placeholder="Select an approved sales order"
               options={approvedOrders.map((o) => ({
                 value: String(o.id),
@@ -225,7 +248,14 @@ export default function DispatchPage() {
             />
           </div>
         ) : (
-          current && <DispatchDoc d={current} companyName={companyName} branchName={branchName} unitLabel={unitLabel} />
+          current && (
+            <DispatchDoc
+              d={current}
+              companyName={companyName}
+              branchName={branchName}
+              unitLabel={unitLabel}
+            />
+          )
         )}
       </Drawer>
     </div>
@@ -279,7 +309,9 @@ export default function DispatchPage() {
               {companyName(d.buyerCompanyId)}
             </p>
             {branchName(d.buyerBranchId) && (
-              <p className="text-sm text-slate-500">{branchName(d.buyerBranchId)}</p>
+              <p className="text-sm text-slate-500">
+                {branchName(d.buyerBranchId)}
+              </p>
             )}
           </div>
           <Field label="Driver" value={d.driverName ?? '—'} />
@@ -311,12 +343,18 @@ export default function DispatchPage() {
                   <td className="py-1.5 text-right tabular-nums">
                     {l.quantity.toLocaleString()}
                   </td>
-                  <td className="py-1.5 pl-2 text-slate-500">{unitLabel(l.unitId)}</td>
+                  <td className="py-1.5 pl-2 text-slate-500">
+                    {unitLabel(l.unitId)}
+                  </td>
                   <td className="py-1.5 pl-2 font-mono text-xs text-slate-600 dark:text-slate-300">
                     {l.batchNo ?? '—'}
                   </td>
-                  <td className="py-1.5 text-right tabular-nums">{money(l.rate)}</td>
-                  <td className="py-1.5 text-right tabular-nums">{money(l.amount)}</td>
+                  <td className="py-1.5 text-right tabular-nums">
+                    {money(l.rate)}
+                  </td>
+                  <td className="py-1.5 text-right tabular-nums">
+                    {money(l.amount)}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -325,7 +363,9 @@ export default function DispatchPage() {
                 <td className="py-2" colSpan={5}>
                   Total
                 </td>
-                <td className="py-2 text-right tabular-nums">{money(d.subtotal)}</td>
+                <td className="py-2 text-right tabular-nums">
+                  {money(d.subtotal)}
+                </td>
               </tr>
             </tfoot>
           </table>
@@ -355,7 +395,8 @@ function Field({
       </p>
       <p
         className={
-          'mt-1 text-slate-700 dark:text-slate-300' + (mono ? ' font-mono text-sm' : '')
+          'mt-1 text-slate-700 dark:text-slate-300' +
+          (mono ? ' font-mono text-sm' : '')
         }
       >
         {value}

@@ -90,15 +90,9 @@ export function PurchaseOrderDoc({
           name={companyName(order.orderingCompanyId)}
           sub={branchName(order.orderingBranchId)}
         />
-        <Party
-          heading="To (Supplier)"
-          name={companyName(order.companyId)}
-        />
+        <Party heading="To (Supplier)" name={companyName(order.companyId)} />
         <Field label="Delivery date & time" value={fmt(order.deliveryAt)} />
-        <Field
-          label="Created"
-          value={fmt(order.createdAt)}
-        />
+        <Field label="Created" value={fmt(order.createdAt)} />
       </div>
 
       {/* Line items */}
@@ -215,9 +209,7 @@ export function PurchaseOrderDoc({
                     {' '}
                     — {t.userName} · {fmt(t.createdAt)}
                   </span>
-                  {t.comment && (
-                    <p className="text-slate-500">“{t.comment}”</p>
-                  )}
+                  {t.comment && <p className="text-slate-500">“{t.comment}”</p>}
                 </div>
               </li>
             ))}

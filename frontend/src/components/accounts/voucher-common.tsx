@@ -36,7 +36,8 @@ import type {
 
 // ---- money and dates --------------------------------------------------------
 
-export const num = (v: string | number | null | undefined) => Number(v ?? 0) || 0;
+export const num = (v: string | number | null | undefined) =>
+  Number(v ?? 0) || 0;
 
 export const money = (v: string | number) =>
   num(v).toLocaleString(undefined, {
@@ -167,7 +168,11 @@ export function useVoucherMasters() {
   const postable = useMemo(
     () =>
       (accounts ?? []).filter(
-        (a) => a.adopted && a.isActive && a.allowManualJe && a.allowPosting !== false,
+        (a) =>
+          a.adopted &&
+          a.isActive &&
+          a.allowManualJe &&
+          a.allowPosting !== false,
       ),
     [accounts],
   );
@@ -177,10 +182,7 @@ export function useVoucherMasters() {
     [postable],
   );
 
-  const accountOptions = useMemo(
-    () => postable.map(accountOption),
-    [postable],
-  );
+  const accountOptions = useMemo(() => postable.map(accountOption), [postable]);
 
   const centreOptions = useMemo(
     () =>
@@ -213,12 +215,15 @@ export function useVoucherMasters() {
    * a bill with SUP-0007; the code belongs on the master and the register, not
    * in front of every option in a list being searched by name.
    */
-  const partyOptions = (kind: PartyKind | null, accountId?: string | number) => {
+  const partyOptions = (
+    kind: PartyKind | null,
+    accountId?: string | number,
+  ) => {
     const list =
       kind === 'SUPPLIER'
-        ? suppliers ?? []
+        ? (suppliers ?? [])
         : kind === 'CUSTOMER'
-          ? customers ?? []
+          ? (customers ?? [])
           : [];
     const account = accountId != null ? Number(accountId) : null;
     return list
@@ -341,9 +346,8 @@ export function VoucherList({
    * The approval vocabulary — only for the icon and colour a stage is shown
    * with. The stage itself is on the voucher; this says what it looks like.
    */
-  const { data: approvalStatuses } = useFetch<WorkflowStatus[]>(
-    '/workflow-statuses',
-  );
+  const { data: approvalStatuses } =
+    useFetch<WorkflowStatus[]>('/workflow-statuses');
   const styleOf = useMemo(
     () => new Map((approvalStatuses ?? []).map((s) => [s.name, s])),
     [approvalStatuses],
@@ -356,7 +360,9 @@ export function VoucherList({
    */
   const stages = useMemo(
     () =>
-      [...new Set(rows.map((v) => v.workflowStatus).filter(Boolean))].sort() as string[],
+      [
+        ...new Set(rows.map((v) => v.workflowStatus).filter(Boolean)),
+      ].sort() as string[],
     [rows],
   );
   const [stage, setStage] = useState('');

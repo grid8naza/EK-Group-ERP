@@ -324,7 +324,10 @@ export default function PurchaseRegisterPage() {
         // reader adding up a column wants the answer at the foot of it.
         if (totalled.length) {
           const sums = new Map(
-            totalled.map((t) => [t.header, list.reduce((n, r) => n + t.of(r), 0)]),
+            totalled.map((t) => [
+              t.header,
+              list.reduce((n, r) => n + t.of(r), 0),
+            ]),
           );
           body.push(
             selected.columns.map((header, i) => {
@@ -340,7 +343,10 @@ export default function PurchaseRegisterPage() {
               subheading: `${label} — ${money(spend)}`,
               subcount: list.length,
               rows: body,
-              shade: [...list.map(() => false), ...(totalled.length ? [true] : [])],
+              shade: [
+                ...list.map(() => false),
+                ...(totalled.length ? [true] : []),
+              ],
             },
           ],
         };
@@ -479,7 +485,10 @@ export default function PurchaseRegisterPage() {
           />
           <div className="ml-auto flex items-center gap-2">
             <ColumnToggle
-              columns={ALL_COLUMNS.map((c) => ({ key: c.key, label: c.header }))}
+              columns={ALL_COLUMNS.map((c) => ({
+                key: c.key,
+                label: c.header,
+              }))}
               hidden={hidden}
               onToggle={toggle}
             />

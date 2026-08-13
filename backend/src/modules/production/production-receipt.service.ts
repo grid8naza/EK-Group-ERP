@@ -85,7 +85,9 @@ export class ProductionReceiptService {
     });
     if (!wo) throw new NotFoundException('Work order not found.');
     if (wo.companyId !== companyId) {
-      throw new BadRequestException('That work order belongs to another company.');
+      throw new BadRequestException(
+        'That work order belongs to another company.',
+      );
     }
     if (wo.status === 'COMPLETED' || wo.status === 'CANCELLED') {
       throw new BadRequestException(
@@ -118,20 +120,22 @@ export class ProductionReceiptService {
     // Create the receipt header first — it is the document the stock movements
     // belong to — then post stock, fill the lines with their batches, and
     // complete the work order.
-    const header = await this.withReceiptNoRetry({ companyId, branchId }, (receiptNo) =>
-      this.prisma.productionReceipt.create({
-        data: {
-          companyId,
-          branchId: branchId ?? null,
-          receiptNo,
-          workOrderId: wo.id,
-          workOrderNo: wo.orderNo,
-          storeId: store.id,
-          storeName: store.name,
-          notes: dto.notes?.trim() || null,
-          createdByUserId: userId,
-        },
-      }),
+    const header = await this.withReceiptNoRetry(
+      { companyId, branchId },
+      (receiptNo) =>
+        this.prisma.productionReceipt.create({
+          data: {
+            companyId,
+            branchId: branchId ?? null,
+            receiptNo,
+            workOrderId: wo.id,
+            workOrderNo: wo.orderNo,
+            storeId: store.id,
+            storeName: store.name,
+            notes: dto.notes?.trim() || null,
+            createdByUserId: userId,
+          },
+        }),
     );
 
     let batches: ProducedBatch[];
@@ -208,7 +212,8 @@ export class ProductionReceiptService {
         where: { id: storeId, companyId },
         select: { id: true, name: true },
       });
-      if (!s) throw new BadRequestException('That store is not in this company.');
+      if (!s)
+        throw new BadRequestException('That store is not in this company.');
       return s;
     }
     return (

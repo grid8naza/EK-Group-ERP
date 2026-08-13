@@ -36,7 +36,10 @@ export class MainMenuController {
   constructor(private readonly service: MenuService) {}
 
   @Get()
-  findAll(@CompanyId() companyId?: number, @Query('moduleId') moduleId?: string) {
+  findAll(
+    @CompanyId() companyId?: number,
+    @Query('moduleId') moduleId?: string,
+  ) {
     return this.service.findAllMainMenus(
       requireCompany(companyId),
       moduleId ? Number(moduleId) : undefined,
@@ -75,10 +78,7 @@ export class MainMenuController {
   // Lock / unlock a main menu (must be unlocked before edit or delete).
   @UseGuards(LockPrivilegeGuard('/cpanel/menus'))
   @Patch(':id/lock')
-  setLock(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: LockDto,
-  ) {
+  setLock(@Param('id', ParseIntPipe) id: number, @Body() dto: LockDto) {
     return this.service.setLockMainMenu(id, dto.locked);
   }
 }
@@ -124,10 +124,7 @@ export class SubMenuController {
   // Lock / unlock a sub-menu (must be unlocked before edit or delete).
   @UseGuards(LockPrivilegeGuard('/cpanel/menus'))
   @Patch(':id/lock')
-  setLock(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: LockDto,
-  ) {
+  setLock(@Param('id', ParseIntPipe) id: number, @Body() dto: LockDto) {
     return this.service.setLockSubMenu(id, dto.locked);
   }
 }

@@ -92,7 +92,9 @@ export class CompanyService {
     // Don't let a company be marked non-branch-applicable while branches still
     // exist — that would orphan them (and the users' branch access).
     if (dto.branchApplicable === false && existing.branchApplicable) {
-      const count = await this.prisma.branch.count({ where: { companyId: id } });
+      const count = await this.prisma.branch.count({
+        where: { companyId: id },
+      });
       if (count > 0) {
         throw new ConflictException(
           `Cannot disable branches — this company still has ${count} branch(es). Delete them first.`,
@@ -249,7 +251,10 @@ export class CompanyService {
     const wanted = dto.moduleIds;
     await this.prisma.$transaction([
       this.prisma.companyModule.deleteMany({
-        where: { companyId, moduleId: { notIn: wanted.length ? wanted : [-1] } },
+        where: {
+          companyId,
+          moduleId: { notIn: wanted.length ? wanted : [-1] },
+        },
       }),
       ...wanted.map((moduleId, i) =>
         this.prisma.companyModule.upsert({

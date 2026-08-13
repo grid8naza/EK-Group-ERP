@@ -74,7 +74,8 @@ export function GroupDrawer({
       if (!/^\d{3}00$/.test(code.trim())) {
         return toast.error('A group code is five digits ending in 00.');
       }
-      if (!parent && !nature) return toast.error('Choose what the group holds.');
+      if (!parent && !nature)
+        return toast.error('Choose what the group holds.');
     }
     setSaving(true);
     try {
@@ -97,7 +98,9 @@ export function GroupDrawer({
       onSaved();
       onClose();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Failed to save the group.');
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to save the group.',
+      );
     } finally {
       setSaving(false);
     }
@@ -150,7 +153,9 @@ export function GroupDrawer({
             onChange={(e) => setCode(e.target.value)}
             placeholder={parent ? `${parent.code.slice(0, 2)}_00` : '_____00'}
           />
-          <Hint>Five digits ending in 00 — the 00 is what makes it a heading.</Hint>
+          <Hint>
+            Five digits ending in 00 — the 00 is what makes it a heading.
+          </Hint>
         </div>
 
         <Input
@@ -175,7 +180,9 @@ export function GroupDrawer({
               options={NATURE_OPTIONS}
               placeholder="Choose"
             />
-            <Hint>This fixes the statement; a child group follows its parent.</Hint>
+            <Hint>
+              This fixes the statement; a child group follows its parent.
+            </Hint>
           </div>
         )}
 
@@ -189,7 +196,11 @@ export function GroupDrawer({
               options={mainGroupsFor(
                 (editing ? group!.nature : nature) as AccountNature,
               ).map((m) => ({ value: m.key, label: m.label }))}
-              placeholder={nature || editing ? 'Not classified' : 'Choose what it holds first'}
+              placeholder={
+                nature || editing
+                  ? 'Not classified'
+                  : 'Choose what it holds first'
+              }
               disabled={editing || !nature}
             />
             <Hint>
@@ -218,8 +229,8 @@ export function GroupDrawer({
               onChange={(e) => setIsActive(e.target.checked)}
             />
             <Hint>
-              A heading can only be closed once every sub-group and account under
-              it is closed.
+              A heading can only be closed once every sub-group and account
+              under it is closed.
             </Hint>
           </div>
         )}

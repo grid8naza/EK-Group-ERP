@@ -37,9 +37,9 @@ export function WorkflowStallNotice({
     >
       <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none" />
       <span>
-        Stopped at level {sequence}: nobody there can act on it. Give an approver
-        access to this company, or put one on that level, and it carries on by
-        itself. {children}
+        Stopped at level {sequence}: nobody there can act on it. Give an
+        approver access to this company, or put one on that level, and it
+        carries on by itself. {children}
       </span>
     </div>
   );

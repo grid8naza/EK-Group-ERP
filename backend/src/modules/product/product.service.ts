@@ -259,7 +259,9 @@ export class ProductService {
         subGroupApplicable: true,
         isActive: true,
         categories: {
-          select: { category: { select: { id: true, code: true, kind: true } } },
+          select: {
+            category: { select: { id: true, code: true, kind: true } },
+          },
         },
       },
     });
@@ -287,7 +289,7 @@ export class ProductService {
     return { ...group, productCategories };
   }
 
-   /**
+  /**
    * Resale stock is bought ready-made, so a PURCHASED product may carry neither
    * bill of materials: no recipe or packing capability, and no BOM line,
    * process step or pack source. Rejecting it here is what keeps the flag
@@ -355,7 +357,10 @@ export class ProductService {
   private async nextLeafSeq(groupId: number): Promise<number> {
     const [items, products] = await Promise.all([
       this.prisma.item.findMany({ where: { groupId }, select: { code: true } }),
-      this.prisma.product.findMany({ where: { groupId }, select: { code: true } }),
+      this.prisma.product.findMany({
+        where: { groupId },
+        select: { code: true },
+      }),
     ]);
     const used = [...items, ...products].map((r) => itemSeqOf(r.code));
     const n = lowestFree(used, MAX_ITEM_SEQ);
@@ -367,7 +372,10 @@ export class ProductService {
     return n;
   }
 
-  private async withCodeRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
+  private async withCodeRetry<T>(
+    fn: () => Promise<T>,
+    attempts = 5,
+  ): Promise<T> {
     for (let i = 0; ; i++) {
       try {
         return await fn();
@@ -384,7 +392,11 @@ export class ProductService {
     }
   }
 
-  async update(companyId: number | undefined, id: number, dto: UpdateProductDto) {
+  async update(
+    companyId: number | undefined,
+    id: number,
+    dto: UpdateProductDto,
+  ) {
     const existing = await this.findOne(companyId, id);
     assertUnlocked(existing, 'product', 'editing');
     await this.assertRefs(dto);
@@ -402,7 +414,8 @@ export class ProductService {
 
     // Only touch the BOM / process flow when the caller sends them (Production
     // screen); the Inventory master screen omits them and leaves them intact.
-    const wantsBomChange = dto.recipe !== undefined || dto.packing !== undefined;
+    const wantsBomChange =
+      dto.recipe !== undefined || dto.packing !== undefined;
     const recipe = (dto.recipe ?? existing.recipe).map(this.lineData);
     const packing = (dto.packing ?? existing.packing).map(this.lineData);
     const wantsProcessChange = dto.processes !== undefined;
@@ -442,7 +455,9 @@ export class ProductService {
               ? dto.description?.trim() || null
               : undefined,
           imageUrl:
-            dto.imageUrl !== undefined ? dto.imageUrl?.trim() || null : undefined,
+            dto.imageUrl !== undefined
+              ? dto.imageUrl?.trim() || null
+              : undefined,
           unitId: dto.unitId,
           unpacked: dto.unpacked,
           packed: dto.packed,
@@ -653,10 +668,7 @@ export class ProductService {
         quantity: l.quantity,
         unitId: l.unitId,
       }));
-    return [
-      ...rows(recipe, BomKind.RECIPE),
-      ...rows(packing, BomKind.PACKING),
-    ];
+    return [...rows(recipe, BomKind.RECIPE), ...rows(packing, BomKind.PACKING)];
   }
 
   /** Build ProductPackSource create rows from the packing sources array. */
@@ -773,10 +785,14 @@ export class ProductService {
     }
     for (const l of [...(dto.recipe ?? []), ...(dto.packing ?? [])]) {
       if (!(await exists('item', l.itemId))) {
-        throw new BadRequestException('A BOM line references an item that does not exist.');
+        throw new BadRequestException(
+          'A BOM line references an item that does not exist.',
+        );
       }
       if (!(await exists('unit', l.unitId))) {
-        throw new BadRequestException('A BOM line references a unit that does not exist.');
+        throw new BadRequestException(
+          'A BOM line references a unit that does not exist.',
+        );
       }
     }
   }
@@ -884,7 +900,9 @@ export class ProductService {
         // Activity objects apply to a producer only, and only for the BOMs the
         // product actually has.
         recipeCostObjectId:
-          r.canProduce && caps.hasRecipe ? objectOf(r.recipeCostObjectId) : null,
+          r.canProduce && caps.hasRecipe
+            ? objectOf(r.recipeCostObjectId)
+            : null,
         packingCostObjectId:
           r.canProduce && caps.hasPacking
             ? objectOf(r.packingCostObjectId)

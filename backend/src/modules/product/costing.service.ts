@@ -228,7 +228,9 @@ export class CostingService {
       const costDelta = round1(breakdown.perUnit - storedCost);
       const prices = this.priceVariances(p, storedCost, breakdown.perUnit);
       const emptyBom =
-        !p.bomLines.some((l) => l.kind === (basis === 'PACKING' ? 'PACKING' : 'RECIPE')) &&
+        !p.bomLines.some(
+          (l) => l.kind === (basis === 'PACKING' ? 'PACKING' : 'RECIPE'),
+        ) &&
         !p.processes.length &&
         (basis !== 'PACKING' || !p.packSources.length);
       rows.push({
@@ -338,10 +340,7 @@ export class CostingService {
    * Only the prices actually sent are touched, so revising retail alone leaves
    * wholesale and intercompany (and their targets) exactly as they were.
    */
-  async revisePrices(
-    companyId: number | undefined,
-    revisions: Revision[],
-  ) {
+  async revisePrices(companyId: number | undefined, revisions: Revision[]) {
     const byId = new Map(revisions.map((r) => [r.productId, r]));
     const rows = (await this.variance(companyId)).filter((r) =>
       byId.has(r.productId),
@@ -368,7 +367,9 @@ export class CostingService {
           // The profit % follows the price it was set from. It is a derived
           // figure — what this price earns — so Recipe Master, Packing Master
           // and the Product Master all show the new margin straight away.
-          data[`${key}ProfitPct`] = cost ? round1(((price - cost) / cost) * 100) : 0;
+          data[`${key}ProfitPct`] = cost
+            ? round1(((price - cost) / cost) * 100)
+            : 0;
         }
         // Resetting a target is a separate decision from repricing: it accepts
         // a new margin as the intended one rather than trying to win the old
@@ -436,7 +437,11 @@ export class CostingService {
         OR: [
           ...(assetIds.length ? [{ machineId: { in: assetIds } }] : []),
           ...(designationIds.length
-            ? [{ manpower: { some: { designationId: { in: designationIds } } } }]
+            ? [
+                {
+                  manpower: { some: { designationId: { in: designationIds } } },
+                },
+              ]
             : []),
         ],
       },
@@ -472,8 +477,12 @@ export class CostingService {
         affected.has(r.productId) && r.hasDrift && !r.emptyBom && !r.isLocked,
     );
 
-    const changed: { productId: number; name: string; from: number; to: number }[] =
-      [];
+    const changed: {
+      productId: number;
+      name: string;
+      from: number;
+      to: number;
+    }[] = [];
     for (const row of rows) {
       await this.prisma.product.update({
         where: { id: row.productId },
@@ -497,7 +506,11 @@ export class CostingService {
   // ---- internals ----
 
   /** Which master owns this product's cost, or null when neither does. */
-  private basisOf(p: { source: string; hasRecipe: boolean; hasPacking: boolean }) {
+  private basisOf(p: {
+    source: string;
+    hasRecipe: boolean;
+    hasPacking: boolean;
+  }) {
     if (p.source !== 'MANUFACTURED') return null;
     // Packing wins when a product somehow carries both: it is the step that
     // completes the product, and its cost already includes the recipe's via the
@@ -593,10 +606,14 @@ export class CostingService {
   }
 
   /** Every rate + unit the pass needs, fetched once. */
-  private async loadRefs(products: Awaited<ReturnType<typeof this.loadProducts>>) {
+  private async loadRefs(
+    products: Awaited<ReturnType<typeof this.loadProducts>>,
+  ) {
     const itemIds = products.flatMap((p) => p.bomLines.map((l) => l.itemId));
     const machineIds = products.flatMap((p) =>
-      p.processes.map((x) => x.machineId).filter((id): id is number => id != null),
+      p.processes
+        .map((x) => x.machineId)
+        .filter((id): id is number => id != null),
     );
     const designationIds = products.flatMap((p) =>
       p.processes.flatMap((x) => x.manpower.map((m) => m.designationId)),
@@ -618,7 +635,11 @@ export class CostingService {
       itemById: new Map<number, ItemRow>(
         items.map((i) => [
           i.id,
-          { id: i.id, unitId: i.unitId, lastPurchasePrice: i.lastPurchasePrice ?? 0 },
+          {
+            id: i.id,
+            unitId: i.unitId,
+            lastPurchasePrice: i.lastPurchasePrice ?? 0,
+          },
         ]),
       ),
       unitById: new Map<number, UnitRow>(units.map((u) => [u.id, u])),
@@ -661,7 +682,9 @@ export class CostingService {
       x.timeUnit === 'HR' ? x.timeValue : x.timeValue / 60;
     const equipmentCost = p.processes.reduce(
       (s, x) =>
-        s + (x.machineId ? (refs.assetRates.get(x.machineId) ?? 0) : 0) * hoursOf(x),
+        s +
+        (x.machineId ? (refs.assetRates.get(x.machineId) ?? 0) : 0) *
+          hoursOf(x),
       0,
     );
     const manpowerCost = p.processes.reduce(
@@ -780,7 +803,9 @@ export class CostingService {
             variancePct != null &&
             Math.abs(variancePct) - (p.maxVariancePct ?? 0) > 0.05,
           priceAtTarget:
-            c.target == null ? null : round1(computedCost * (1 + c.target / 100)),
+            c.target == null
+              ? null
+              : round1(computedCost * (1 + c.target / 100)),
         };
       });
   }

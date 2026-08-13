@@ -99,9 +99,12 @@ export default function CostReviewPage() {
     if (!ok) return;
     setBusy(true);
     try {
-      const res = await api.post<ApplyCostingResult>('/products/costing/apply', {
-        productIds: costable.map((r) => r.productId),
-      });
+      const res = await api.post<ApplyCostingResult>(
+        '/products/costing/apply',
+        {
+          productIds: costable.map((r) => r.productId),
+        },
+      );
       toast.success(
         `Cost updated on ${res.updated} product${res.updated === 1 ? '' : 's'}.`,
       );
@@ -110,7 +113,9 @@ export default function CostReviewPage() {
       }
       await refetch();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Failed to update costs.');
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to update costs.',
+      );
     } finally {
       setBusy(false);
     }
@@ -255,7 +260,9 @@ export default function CostReviewPage() {
             : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300',
         )}
       >
-        {tab === 'empty' && <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />}
+        {tab === 'empty' && (
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
+        )}
         <span>{note}</span>
       </div>
 
@@ -271,7 +278,9 @@ export default function CostReviewPage() {
           onRefresh={refetch}
           onRowClick={(r) => setDetail(r)}
           emptyMessage={
-            tab === 'drift' ? 'Every cost matches the Product Master.' : 'Nothing here.'
+            tab === 'drift'
+              ? 'Every cost matches the Product Master.'
+              : 'Nothing here.'
           }
         />
       </div>

@@ -112,18 +112,20 @@ export class PackingService {
     }
 
     // Header first — it is the document the stock movements belong to.
-    const header = await this.withPackingNoRetry({ companyId, branchId }, (packingNo) =>
-      this.prisma.packing.create({
-        data: {
-          companyId,
-          branchId: branchId ?? null,
-          packingNo,
-          storeId: store.id,
-          storeName: store.name,
-          notes: dto.notes?.trim() || null,
-          createdByUserId: userId,
-        },
-      }),
+    const header = await this.withPackingNoRetry(
+      { companyId, branchId },
+      (packingNo) =>
+        this.prisma.packing.create({
+          data: {
+            companyId,
+            branchId: branchId ?? null,
+            packingNo,
+            storeId: store.id,
+            storeName: store.name,
+            notes: dto.notes?.trim() || null,
+            createdByUserId: userId,
+          },
+        }),
     );
 
     // Consume sources + materials, produce the packed batches (atomic). If the
@@ -196,7 +198,8 @@ export class PackingService {
         where: { id: storeId, companyId },
         select: { id: true, name: true },
       });
-      if (!s) throw new BadRequestException('That store is not in this company.');
+      if (!s)
+        throw new BadRequestException('That store is not in this company.');
       return s;
     }
     return (

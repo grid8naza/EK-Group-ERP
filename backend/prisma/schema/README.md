@@ -2,19 +2,19 @@
 
 The schema is split across this folder using Prisma's `prismaSchemaFolder`
 feature. Prisma concatenates every `*.prisma` file here, so relations may
-*technically* cross files — **but the ownership rule below forbids that across
+_technically_ cross files — **but the ownership rule below forbids that across
 domains**. The split mirrors the NestJS module boundaries and is what makes a
 module's tables extractable into their own database later.
 
 ## Files
 
-| File             | Owns                                              |
-| ---------------- | ------------------------------------------------- |
-| `schema.prisma`  | datasource + generator (shared base)              |
-| `enums.prisma`   | shared enums                                      |
-| `cpanel.prisma`  | the Cpanel module's tables (everything, for now)  |
-| `crm.prisma`     | *(future)* CRM module tables                      |
-| `accounts.prisma`| *(future)* Accounts module tables                 |
+| File              | Owns                                             |
+| ----------------- | ------------------------------------------------ |
+| `schema.prisma`   | datasource + generator (shared base)             |
+| `enums.prisma`    | shared enums                                     |
+| `cpanel.prisma`   | the Cpanel module's tables (everything, for now) |
+| `crm.prisma`      | _(future)_ CRM module tables                     |
+| `accounts.prisma` | _(future)_ Accounts module tables                |
 
 ## The ownership rule
 

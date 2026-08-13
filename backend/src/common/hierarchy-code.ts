@@ -76,7 +76,11 @@ export const GROUP_ROOT_CODE = ZEROS;
  * starts from GROUP_ROOT_CODE, a sub-group from its parent group's code; either
  * way the CC digits stay 00, because a group is not owned by a category.
  */
-export function groupCode(parentCode: string, level: number, n: number): string {
+export function groupCode(
+  parentCode: string,
+  level: number,
+  n: number,
+): string {
   return setSegment(parentCode, levelOffset(level), LEVEL_DIGITS, n);
 }
 

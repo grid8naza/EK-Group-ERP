@@ -89,12 +89,7 @@ export function IconPicker({
           {SelectedIcon ? (
             <SelectedIcon className="h-[18px] w-[18px] flex-none text-slate-600 dark:text-slate-300" />
           ) : null}
-          <span
-            className={cn(
-              'flex-1 truncate',
-              !value && 'text-slate-400',
-            )}
-          >
+          <span className={cn('flex-1 truncate', !value && 'text-slate-400')}>
             {selected ? selected.label : value || placeholder}
           </span>
           {value && (

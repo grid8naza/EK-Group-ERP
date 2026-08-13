@@ -54,10 +54,16 @@ export class LoginScreenConfigDto {
   @IsOptional() @IsInt() @Min(16) @Max(400) logoSize?: number;
 
   @IsOptional() @IsString() heading?: string;
-  @IsOptional() @ValidateNested() @Type(() => TextStyleDto) headingStyle?: TextStyleDto;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TextStyleDto)
+  headingStyle?: TextStyleDto;
 
   @IsOptional() @IsString() description?: string;
-  @IsOptional() @ValidateNested() @Type(() => TextStyleDto) descriptionStyle?: TextStyleDto;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TextStyleDto)
+  descriptionStyle?: TextStyleDto;
 
   // Rich-text (WYSIWYG) HTML; sanitized on the frontend before rendering.
   @IsOptional() @IsString() headingHtml?: string;
@@ -72,13 +78,19 @@ export class LoginScreenConfigDto {
   @IsOptional() @IsInt() backgroundMediaId?: number | null; // LoginMedia.id or null
 
   @IsOptional() @IsString() copyright?: string;
-  @IsOptional() @ValidateNested() @Type(() => TextStyleDto) copyrightStyle?: TextStyleDto;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TextStyleDto)
+  copyrightStyle?: TextStyleDto;
 
   // --- layout & form ---
   @IsOptional() @IsString() @IsIn(['centered', 'split']) layout?: string;
 
   @IsOptional() @IsString() formTitle?: string;
-  @IsOptional() @ValidateNested() @Type(() => TextStyleDto) formTitleStyle?: TextStyleDto;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TextStyleDto)
+  formTitleStyle?: TextStyleDto;
 
   @IsOptional() @IsString() usernameLabel?: string;
   @IsOptional() @IsString() passwordLabel?: string;
@@ -99,17 +111,26 @@ export class LoginScreenConfigDto {
   @IsOptional() @ValidateNested() @Type(() => LinkDto) forgotPassword?: LinkDto;
 
   // Secondary / social sign-in button (e.g. "Sign in with Google"). Display-only.
-  @IsOptional() @ValidateNested() @Type(() => LinkDto) secondaryButton?: LinkDto;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LinkDto)
+  secondaryButton?: LinkDto;
 
   // "Don't have an account? Sign up" line.
   @IsOptional() @ValidateNested() @Type(() => SignUpDto) signUp?: SignUpDto;
 
   // --- Layout 2 image panel overlay ---
   @IsOptional() @IsString() overlayHeading?: string;
-  @IsOptional() @ValidateNested() @Type(() => TextStyleDto) overlayHeadingStyle?: TextStyleDto;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TextStyleDto)
+  overlayHeadingStyle?: TextStyleDto;
 
   @IsOptional() @IsString() overlayText?: string;
-  @IsOptional() @ValidateNested() @Type(() => TextStyleDto) overlayTextStyle?: TextStyleDto;
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TextStyleDto)
+  overlayTextStyle?: TextStyleDto;
 
   @IsOptional() @ValidateNested() @Type(() => LinkDto) knowMore?: LinkDto;
 }

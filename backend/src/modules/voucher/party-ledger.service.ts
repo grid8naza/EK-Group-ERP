@@ -40,14 +40,26 @@ export class PartyLedgerService {
       !kind || kind === 'SUPPLIER'
         ? this.prisma.supplier.findMany({
             where: { companyId },
-            select: { id: true, code: true, name: true, creditDays: true, creditLimit: true },
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              creditDays: true,
+              creditLimit: true,
+            },
             orderBy: { name: 'asc' },
           })
         : [],
       !kind || kind === 'CUSTOMER'
         ? this.prisma.customer.findMany({
             where: { companyId },
-            select: { id: true, code: true, name: true, creditDays: true, creditLimit: true },
+            select: {
+              id: true,
+              code: true,
+              name: true,
+              creditDays: true,
+              creditLimit: true,
+            },
             orderBy: { name: 'asc' },
           })
         : [],
@@ -104,7 +116,11 @@ export class PartyLedgerService {
         narration: true,
         account: { select: { code: true, name: true } },
         voucher: {
-          select: { voucherNo: true, narration: true, type: { select: { name: true } } },
+          select: {
+            voucherNo: true,
+            narration: true,
+            type: { select: { name: true } },
+          },
         },
         billRefs: {
           select: {
@@ -198,7 +214,11 @@ export class PartyLedgerService {
         // that day, not of today.
         payments: {
           where: { status: 'POSTED', date: { lte: on } },
-          select: { amount: true, side: true, line: { select: { debit: true } } },
+          select: {
+            amount: true,
+            side: true,
+            line: { select: { debit: true } },
+          },
         },
       },
       orderBy: [{ partyId: 'asc' }, { date: 'asc' }],

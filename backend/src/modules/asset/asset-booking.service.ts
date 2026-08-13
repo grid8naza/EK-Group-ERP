@@ -32,12 +32,7 @@ export class AssetBookingService {
     await this.assertBookableAsset(dto.assetId);
     const date = this.parseDate(dto.date);
     this.assertTimeOrder(dto.timeFrom, dto.timeTo);
-    await this.assertNoOverlap(
-      dto.assetId,
-      date,
-      dto.timeFrom,
-      dto.timeTo,
-    );
+    await this.assertNoOverlap(dto.assetId, date, dto.timeFrom, dto.timeTo);
 
     return this.prisma.assetBooking.create({
       data: {
@@ -57,7 +52,8 @@ export class AssetBookingService {
     const existing = await this.ensureBooking(id);
 
     // Resolve the effective slot from the patch + current row, then re-validate.
-    const date = dto.date !== undefined ? this.parseDate(dto.date) : existing.date;
+    const date =
+      dto.date !== undefined ? this.parseDate(dto.date) : existing.date;
     const timeFrom = dto.timeFrom ?? existing.timeFrom;
     const timeTo = dto.timeTo ?? existing.timeTo;
     this.assertTimeOrder(timeFrom, timeTo);
@@ -87,7 +83,9 @@ export class AssetBookingService {
   // --- helpers ---
 
   private async ensureBooking(id: number) {
-    const booking = await this.prisma.assetBooking.findUnique({ where: { id } });
+    const booking = await this.prisma.assetBooking.findUnique({
+      where: { id },
+    });
     if (!booking) throw new NotFoundException('Booking not found');
     return booking;
   }

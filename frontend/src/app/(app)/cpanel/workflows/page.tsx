@@ -21,7 +21,12 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Tabs } from '@/components/ui/Tabs';
 import { Input, Select, Checkbox } from '@/components/ui/Field';
@@ -82,13 +87,17 @@ const actionsForForm = (route?: string) =>
  * name no module supplies would be a limit that never applies.
  */
 const LIMIT_FIELD_OPTIONS = [
-  { value: 'amount', label: 'Document value — a voucher’s total, an order’s value' },
+  {
+    value: 'amount',
+    label: 'Document value — a voucher’s total, an order’s value',
+  },
 ];
 
-const APPROVAL_MODE_OPTIONS: { value: WorkflowApprovalMode; label: string }[] = [
-  { value: 'FORM', label: 'Whole form' },
-  { value: 'FIELD', label: 'Field value (limit)' },
-];
+const APPROVAL_MODE_OPTIONS: { value: WorkflowApprovalMode; label: string }[] =
+  [
+    { value: 'FORM', label: 'Whole form' },
+    { value: 'FIELD', label: 'Field value (limit)' },
+  ];
 
 // The step shape POSTed/PATCHed to the API (one per step, sorted by sequence).
 type StepInput = {
@@ -257,7 +266,9 @@ export default function WorkflowsPage() {
   const formRoute = (id?: number | null) =>
     forms.find((o) => o.id === id)?.route ?? null;
   const branchName = (id?: number | null) =>
-    id == null ? 'All branches' : (branches ?? []).find((b) => b.id === id)?.name ?? '—';
+    id == null
+      ? 'All branches'
+      : ((branches ?? []).find((b) => b.id === id)?.name ?? '—');
   const groupName = (id?: number | null) =>
     (userGroups ?? []).find((g) => g.id === id)?.name ?? '';
   const userName = (id: number) =>
@@ -272,7 +283,9 @@ export default function WorkflowsPage() {
   // The form this definition governs — decides which form-specific actions its
   // steps may use (see ACTION_ONLY_ON).
   const selectedFormRoute = useMemo(
-    () => forms.find((f) => String(f.id) === String(def.objectId))?.route ?? undefined,
+    () =>
+      forms.find((f) => String(f.id) === String(def.objectId))?.route ??
+      undefined,
     [forms, def.objectId],
   );
   const [steps, setSteps] = useState<StepDraft[]>([]);
@@ -284,7 +297,10 @@ export default function WorkflowsPage() {
   };
 
   const resetForm = () => {
-    setDef({ ...emptyDef, companyId: activeCompanyId ? String(activeCompanyId) : '' });
+    setDef({
+      ...emptyDef,
+      companyId: activeCompanyId ? String(activeCompanyId) : '',
+    });
     setSteps([]);
     setTab('def');
   };
@@ -365,7 +381,9 @@ export default function WorkflowsPage() {
   // ---- step helpers ----
   const addStep = () => setSteps((rows) => [...rows, blankStep()]);
   const updateStep = (i: number, patch: Partial<StepDraft>) =>
-    setSteps((rows) => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
+    setSteps((rows) =>
+      rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)),
+    );
   const removeStep = (i: number) =>
     setSteps((rows) => rows.filter((_, idx) => idx !== i));
   const moveStep = (i: number, dir: -1 | 1) =>
@@ -427,9 +445,13 @@ export default function WorkflowsPage() {
       approvalMode: d.approvalMode,
       fieldName: d.approvalMode === 'FIELD' ? d.fieldName.trim() || null : null,
       valueFrom:
-        d.approvalMode === 'FIELD' && d.valueFrom !== '' ? Number(d.valueFrom) : null,
+        d.approvalMode === 'FIELD' && d.valueFrom !== ''
+          ? Number(d.valueFrom)
+          : null,
       valueTo:
-        d.approvalMode === 'FIELD' && d.valueTo !== '' ? Number(d.valueTo) : null,
+        d.approvalMode === 'FIELD' && d.valueTo !== ''
+          ? Number(d.valueTo)
+          : null,
       // Cancel is only meaningful at the origin (step 1); reject only downstream.
       canCancel: i === 0 ? d.canCancel : false,
       canReject: i === 0 ? false : d.canReject,
@@ -466,12 +488,15 @@ export default function WorkflowsPage() {
       let saved: WorkflowDefinition;
       if (editing) {
         // company / module / object are immutable — don't send them on update.
-        saved = await api.patch<WorkflowDefinition>(`/workflows/${editing.id}`, {
-          name: def.name,
-          branchId: def.branchId ? Number(def.branchId) : null,
-          isActive: def.isActive,
-          steps: buildSteps(),
-        });
+        saved = await api.patch<WorkflowDefinition>(
+          `/workflows/${editing.id}`,
+          {
+            name: def.name,
+            branchId: def.branchId ? Number(def.branchId) : null,
+            isActive: def.isActive,
+            steps: buildSteps(),
+          },
+        );
         toast.success('Workflow updated.');
       } else {
         saved = await api.post<WorkflowDefinition>('/workflows', {
@@ -561,7 +586,9 @@ export default function WorkflowsPage() {
               are read back: two forms called Purchase are told apart by where
               they are, not by what they are called. */}
           {formRoute(r.objectId) && (
-            <div className="text-xs text-slate-400">{formRoute(r.objectId)}</div>
+            <div className="text-xs text-slate-400">
+              {formRoute(r.objectId)}
+            </div>
           )}
         </div>
       ),
@@ -641,7 +668,9 @@ export default function WorkflowsPage() {
       <Drawer
         open={open}
         onClose={closeDrawer}
-        title={view ? 'View Workflow' : editing ? 'Edit Workflow' : 'New Workflow'}
+        title={
+          view ? 'View Workflow' : editing ? 'Edit Workflow' : 'New Workflow'
+        }
         subtitle="Workflow definition"
         icon={<WorkflowIcon className="h-5 w-5" />}
         width="xl"
@@ -713,7 +742,9 @@ export default function WorkflowsPage() {
                 label="Module"
                 required
                 disabled={!!editing}
-                title={editing ? 'Module cannot change after creation' : undefined}
+                title={
+                  editing ? 'Module cannot change after creation' : undefined
+                }
                 value={def.moduleId}
                 onChange={(e) =>
                   // Changing the module resets the form selection.
@@ -737,7 +768,9 @@ export default function WorkflowsPage() {
                 required
                 wrapClassName="sm:col-span-2"
                 disabled={!!editing || !def.moduleId}
-                title={editing ? 'Form cannot change after creation' : undefined}
+                title={
+                  editing ? 'Form cannot change after creation' : undefined
+                }
                 value={def.objectId}
                 onChange={(e) => setDef({ ...def, objectId: e.target.value })}
                 placeholder={
@@ -749,7 +782,9 @@ export default function WorkflowsPage() {
                 <Checkbox
                   label="Active"
                   checked={def.isActive}
-                  onChange={(e) => setDef({ ...def, isActive: e.target.checked })}
+                  onChange={(e) =>
+                    setDef({ ...def, isActive: e.target.checked })
+                  }
                 />
               </div>
             </div>
@@ -762,8 +797,8 @@ export default function WorkflowsPage() {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Each step is one approval level. Steps run top to bottom in the
-                  order shown.
+                  Each step is one approval level. Steps run top to bottom in
+                  the order shown.
                 </p>
                 {!view && (
                   <button
@@ -778,7 +813,8 @@ export default function WorkflowsPage() {
 
               {steps.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-slate-300 px-4 py-10 text-center text-sm text-slate-400 dark:border-slate-700">
-                  No approval steps yet. Click “Add step” to add the first level.
+                  No approval steps yet. Click “Add step” to add the first
+                  level.
                 </p>
               ) : (
                 steps.map((s, i) => (
@@ -915,22 +951,29 @@ function StepCard({
   // step names an approver by company, branch AND module.
   const groupUsers = (
     step.userGroupId
-      ? users.filter((u) => (u.groupIds ?? []).includes(Number(step.userGroupId)))
+      ? users.filter((u) =>
+          (u.groupIds ?? []).includes(Number(step.userGroupId)),
+        )
       : users.filter(
-          (u) => !actingCompanyId || (u.companyIds ?? []).includes(actingCompanyId),
+          (u) =>
+            !actingCompanyId || (u.companyIds ?? []).includes(actingCompanyId),
         )
   )
-    .filter((u) => !actingBranchId || (u.branchIds ?? []).includes(actingBranchId))
+    .filter(
+      (u) => !actingBranchId || (u.branchIds ?? []).includes(actingBranchId),
+    )
     .filter(userHasModule);
 
   // User groups cascade with the acting company AND module — groups are company-
   // scoped and manage a set of modules. The current selection stays visible.
   const groupOptions = userGroups
     .filter((g) => {
-      if (step.userGroupId && String(g.id) === String(step.userGroupId)) return true;
+      if (step.userGroupId && String(g.id) === String(step.userGroupId))
+        return true;
       const companyOk = !actingCompanyId || g.companyId === actingCompanyId;
       const moduleOk =
-        !actingModuleId || (g.modules ?? []).some((m) => m.id === actingModuleId);
+        !actingModuleId ||
+        (g.modules ?? []).some((m) => m.id === actingModuleId);
       return companyOk && moduleOk;
     })
     .map((g) => ({ value: g.id, label: g.name }));
@@ -956,7 +999,9 @@ function StepCard({
       <Select
         label="Target branch"
         value={step.targetBranchId}
-        onChange={(e) => onChange({ targetBranchId: e.target.value, userIds: [] })}
+        onChange={(e) =>
+          onChange({ targetBranchId: e.target.value, userIds: [] })
+        }
         placeholder="— Same —"
         options={targetBranchOptions}
       />
@@ -1189,7 +1234,8 @@ function UserMultiSelect({
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
     };
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
@@ -1214,7 +1260,7 @@ function UserMultiSelect({
     value.length === 0
       ? 'No users'
       : value.length === 1
-        ? users.find((u) => u.id === value[0])?.name ?? '1 user'
+        ? (users.find((u) => u.id === value[0])?.name ?? '1 user')
         : `${value.length} users`;
 
   return (
@@ -1227,7 +1273,12 @@ function UserMultiSelect({
           className="input-base flex w-full items-center gap-2 text-left"
         >
           <Users className="h-4 w-4 flex-none text-slate-400" />
-          <span className={cn('flex-1 truncate', value.length === 0 && 'text-slate-400')}>
+          <span
+            className={cn(
+              'flex-1 truncate',
+              value.length === 0 && 'text-slate-400',
+            )}
+          >
             {summary}
           </span>
           <ChevronDown
@@ -1281,7 +1332,9 @@ function UserMultiSelect({
                       >
                         {active && <Check className="h-3 w-3" />}
                       </span>
-                      <span className="flex-1 truncate text-left">{u.name}</span>
+                      <span className="flex-1 truncate text-left">
+                        {u.name}
+                      </span>
                     </button>
                   );
                 })

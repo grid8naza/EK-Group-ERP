@@ -28,7 +28,10 @@ interface ReconLine {
     voucherNo: string;
     narration: string | null;
     reference: string | null;
-    instrument: { instrumentNo: string | null; chequeKind: string | null } | null;
+    instrument: {
+      instrumentNo: string | null;
+      chequeKind: string | null;
+    } | null;
   };
 }
 
@@ -186,10 +189,17 @@ export default function BankReconciliationPage() {
           required
           value={accountId}
           options={banks}
-          placeholder={banks.length ? 'Which account?' : 'No bank account in use'}
+          placeholder={
+            banks.length ? 'Which account?' : 'No bank account in use'
+          }
           onChange={(e) => setAccountId(e.target.value)}
         />
-        <DateInput label="Reconcile to" required value={asOn} onChange={setAsOn} />
+        <DateInput
+          label="Reconcile to"
+          required
+          value={asOn}
+          onChange={setAsOn}
+        />
         <div className="flex items-end">
           <button
             className={onlyOpen ? 'btn-primary' : 'btn-secondary'}

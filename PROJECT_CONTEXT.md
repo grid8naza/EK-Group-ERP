@@ -9,6 +9,7 @@ Inventory and wrongly said the Workflow Engine was excluded._
 > trunk. Read/verify against that branch, not `main`.
 
 ## What it is
+
 A **modular ERP platform** (multi-company, multi-branch). Modules are
 enabled/disabled per company — disabling one hides its menus and revokes its
 privileges without deleting data. Two categories of module:
@@ -24,19 +25,21 @@ as an object's path; this app stores an application **route** (e.g.
 **Workflow/approval engine _is_ built** (see below).
 
 ## Stack
-| Layer    | Tech |
-| -------- | ---- |
-| Frontend | Next.js 14 (App Router) + Tailwind CSS |
-| Backend  | NestJS (TypeScript) — modular monolith |
+
+| Layer    | Tech                                             |
+| -------- | ------------------------------------------------ |
+| Frontend | Next.js 14 (App Router) + Tailwind CSS           |
+| Backend  | NestJS (TypeScript) — modular monolith           |
 | ORM      | Prisma (multi-file schema, `prismaSchemaFolder`) |
-| Database | PostgreSQL 16 |
-| Runtime  | Docker + docker-compose |
+| Database | PostgreSQL 16                                    |
+| Runtime  | Docker + docker-compose                          |
 
 Design: warm tan/brown brand palette in light, slate in dark; full light+dark.
 Data entry opens in **right-side drawers** (never modals); modals are only for
 confirms/info. Auth: Layer-1 password + JWT, privilege-gated.
 
 ## Architecture rules (the guardrails)
+
 1. **No feature module imports another feature module.** Cross-module use goes
    through a **port** in `backend/src/contracts/` (DI token + interface;
    implementing module owns the adapter; `contracts.module.ts` binds them).
@@ -44,12 +47,13 @@ confirms/info. Auth: Layer-1 password + JWT, privilege-gated.
 2. **No cross-domain FKs in Prisma.** Each domain has its own
    `prisma/schema/<domain>.prisma`; a `@relation` may only point within the same
    file. Across domains, store a plain id column (`companyId Int`, `productId
-   Int`) with no `@relation`. Keeps a module extractable into its own DB later.
+Int`) with no `@relation`. Keeps a module extractable into its own DB later.
 
 Defined ports today: `user-lookup`, `numbering` (document numbering),
 `batch-numbering`, `workflow`, `metric-provider` (dashboard metrics).
 
 ## Multi-tenant model
+
 - Each **Company** is an isolated tenant; cpanel config (objects, menus, groups,
   widgets, dashboards) and most masters carry `companyId`. Global catalogs:
   Module list, some masters via `*Company` join tables.
@@ -62,6 +66,7 @@ Defined ports today: `user-lookup`, `numbering` (document numbering),
 ## Modules & what they own
 
 ### Cpanel (core)
+
 Company, Branch, Currency, Cost Center, Cost Object, Module Master, Object Master
 (+revisions), Menu (main/sub) setup, Users, User Groups & Privileges (per-route
 action flags: view/add/edit/delete/lock/print/pdf/excel), Lookups, Dashboards &
@@ -70,6 +75,7 @@ Widgets builders, Login-screen branding, Software Info, Document Master,
 Backup/Restore (gated by high-security password).
 
 ### Inventory
+
 Unit (simple/compound/chaining), Category, Group (multilayer), HSN/GST, Item (raw
 material), Product (packed/unpacked; recipe + packing BOM), Store, **Opening
 Stock** (4 screens by material type → `StockLedger`+`StockBatch`), **Stock
@@ -78,6 +84,7 @@ Goods Issue Note (consumption out), Purchase Return, Sales Return. Universal
 `StockLedger` (one row per movement) + `StockBatch` lots.
 
 ### Production
+
 **Recipe Master** — for products flagged `hasRecipe`: ingredient BOM + ordered
 process flow (steps, time, machine→Asset) + manpower (designation→HR × workers) +
 material/labour/overhead costing. **Packing Master** — for `hasPacking` products:
@@ -86,21 +93,26 @@ Inter-Co/Wholesale/Retail pricing + GST + MRP. Plus Production Orders
 (planned→in-progress→completed).
 
 ### Asset
+
 Asset Category, Asset Group (multilayer ≤5), Asset (machine, cost/hour), Asset
 Bookings (machine time-slots during production planning).
 
 ### HR / Manpower
+
 Manpower Category, Group (multilayer), Designation (has `ratePerHour`, feeds
 recipe costing).
 
 ### CRM
+
 Inter-company Purchase Orders (PO-IC) and Sales Orders, driven by the workflow
 engine.
 
 ### Accounts
+
 Supplier/vendor master (`SUP-####`), referenced by GRNs.
 
 ### Workflow
+
 Configurable document-approval engine: per (company+branch+module+form) an
 ordered chain of steps (approver users/group, form- or numeric-field-gated,
 cross-company/branch routing). Runtime instances raise inbox tasks, write an
@@ -109,6 +121,7 @@ drives listing icons. Admin UI in Cpanel (`workflows`, `approval-statuses`);
 user inbox at `/workflow/approvals`.
 
 ## Repo layout
+
 ```
 .
 ├── backend/                         NestJS API + Prisma
@@ -135,6 +148,7 @@ user inbox at `/workflow/approvals`.
 ```
 
 ### Key shared frontend pieces
+
 - `ui/DataTable.tsx` — every listing (sort, search, paginate, column drag/toggle,
   row actions View→Edit→Delete→Lock, bulk-lock).
 - `ui/Drawer.tsx` + `DrawerFooter` — right-side entry drawer; standard
@@ -144,28 +158,33 @@ user inbox at `/workflow/approvals`.
 - `providers/AuthProvider.tsx` — session/nav/permissions source of truth; `can()`.
 
 ## How to run (Docker — recommended)
+
 ```bash
 cp .env.example .env
 docker compose up --build      # db → backend (prisma db push + seed) → frontend
 # fresh slate: docker compose down -v first
 ```
+
 - Web: http://localhost:3000
 - API: http://localhost:4000/api
 - Swagger: http://localhost:4000/api/docs
 - Hot-reload dev: `docker-compose.dev.yml`
 
 ### Default login (seeded)
+
 ```
 Username: superadmin
 Password: Admin@123
 ```
 
 ### Validate without full stack
+
 ```bash
 cd backend && npm install && npx prisma generate && npm run build   # nest build + lint:boundaries
 cd ../frontend && npm install && npm run build
 ```
 
 ## CI (`.github/workflows/ci.yml`, per PR)
+
 Module-boundary check → build (TS + boundaries via prebuild) → **boot smoke
 test** (starts API against Postgres and logs in — catches DI errors).

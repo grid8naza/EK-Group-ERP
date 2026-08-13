@@ -1,7 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, PackageOpen, Upload, Image as ImageIcon, Trash2 } from 'lucide-react';
+import {
+  Plus,
+  PackageOpen,
+  Upload,
+  Image as ImageIcon,
+  Trash2,
+} from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { money2, dec2 } from '@/lib/utils';
 import { mediaUrl } from '@/lib/login-screen';
@@ -14,7 +20,12 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { StatusToggle } from '@/components/ui/StatusToggle';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -151,13 +162,14 @@ export default function ProductsPage() {
   const { data: units } = useFetch<Unit[]>('/units');
   const { data: hsnCodes } = useFetch<HsnCode[]>('/hsn-codes');
   const { data: companies } = useFetch<Company[]>('/companies');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<Product>({
-    endpoint: '/products',
-    route: ROUTE,
-    noun: 'product',
-    nameOf: (p) => p.name,
-    reload: refetch,
-  });
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
+    useLock<Product>({
+      endpoint: '/products',
+      route: ROUTE,
+      noun: 'product',
+      nameOf: (p) => p.name,
+      reload: refetch,
+    });
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
@@ -447,7 +459,9 @@ export default function ProductsPage() {
       return;
     }
     if (Object.keys(form.companies).length === 0) {
-      toast.error('Select at least one company that makes or sells this product.');
+      toast.error(
+        'Select at least one company that makes or sells this product.',
+      );
       return;
     }
 
@@ -593,7 +607,11 @@ export default function ProductsPage() {
 
   const columns: Column<Product>[] = [
     { key: 'code', header: 'Code', accessor: (r) => r.code },
-    { key: 'category', header: 'Category', accessor: (r) => r.category?.name ?? '-' },
+    {
+      key: 'category',
+      header: 'Category',
+      accessor: (r) => r.category?.name ?? '-',
+    },
     { key: 'group', header: 'Group', accessor: (r) => r.group?.name ?? '-' },
     {
       key: 'name',
@@ -605,7 +623,11 @@ export default function ProductsPage() {
         </span>
       ),
     },
-    { key: 'unit', header: 'Unit', accessor: (r) => r.unit?.symbol ?? r.unit?.code ?? '-' },
+    {
+      key: 'unit',
+      header: 'Unit',
+      accessor: (r) => r.unit?.symbol ?? r.unit?.code ?? '-',
+    },
     {
       key: 'source',
       header: 'Source',
@@ -641,7 +663,11 @@ export default function ProductsPage() {
     },
   ];
 
-  const title = view ? 'View Product' : editing ? 'Edit Product' : 'New Product';
+  const title = view
+    ? 'View Product'
+    : editing
+      ? 'Edit Product'
+      : 'New Product';
 
   return (
     <div className="mx-auto flex h-full max-w-7xl flex-col">
@@ -927,11 +953,7 @@ export default function ProductsPage() {
                     that created it. It becomes a pick only if a second category
                     of this kind is ever added. */}
                 {soleCategory ? (
-                  <Input
-                    label="Category"
-                    value={soleCategory.name}
-                    disabled
-                  />
+                  <Input label="Category" value={soleCategory.name} disabled />
                 ) : (
                   <Select
                     label="Category"
@@ -988,7 +1010,9 @@ export default function ProductsPage() {
                   label="Group"
                   required
                   value={form.groupId}
-                  onChange={(e) => setForm({ ...form, groupId: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, groupId: e.target.value })
+                  }
                   placeholder="Select a leaf group"
                   options={drawerLeafOptions.map((g) => ({
                     value: g.id,
@@ -1095,7 +1119,12 @@ export default function ProductsPage() {
                   setForm((f) =>
                     e.target.checked
                       ? { ...f, boxApplicable: true }
-                      : { ...f, boxApplicable: false, boxQty: '', boxUnitId: '' },
+                      : {
+                          ...f,
+                          boxApplicable: false,
+                          boxQty: '',
+                          boxUnitId: '',
+                        },
                   )
                 }
               />
@@ -1128,13 +1157,13 @@ export default function ProductsPage() {
                   }))}
                 />
                 <p className="-mt-1 text-xs text-slate-500 dark:text-slate-400 sm:col-span-2">
-                {form.boxQty && form.boxUnitId && form.unitId
-                  ? `1 ${unitName(form.boxUnitId)} = ${form.boxQty} ${unitName(
-                      form.unitId,
-                    )} — goods are received in this pack, while stock, issues and balances stay in ${unitName(
-                      form.unitId,
-                    )}.`
-                  : 'How much stock one pack holds — pack unit Bottle with a box qty of 200 against a stock unit of Gram means one bottle is 200 g.'}
+                  {form.boxQty && form.boxUnitId && form.unitId
+                    ? `1 ${unitName(form.boxUnitId)} = ${form.boxQty} ${unitName(
+                        form.unitId,
+                      )} — goods are received in this pack, while stock, issues and balances stay in ${unitName(
+                        form.unitId,
+                      )}.`
+                    : 'How much stock one pack holds — pack unit Bottle with a box qty of 200 against a stock unit of Gram means one bottle is 200 g.'}
                 </p>
               </>
             )}
@@ -1210,9 +1239,9 @@ export default function ProductsPage() {
                 <span className="label !mb-0">Profit Targets</span>
                 <p className="text-xs text-slate-400">
                   What each channel should earn, and how far the real margin may
-                  stray before Production &rsaquo; Price Review flags it. A blank
-                  target is never flagged; a blank variance expects the target to
-                  be hit exactly.
+                  stray before Production &rsaquo; Price Review flags it. A
+                  blank target is never flagged; a blank variance expects the
+                  target to be hit exactly.
                 </p>
                 <div className="grid grid-cols-1 gap-4 rounded-lg border border-slate-200 p-3 dark:border-slate-700 sm:grid-cols-2 lg:grid-cols-4">
                   <Input
@@ -1237,7 +1266,10 @@ export default function ProductsPage() {
                     value={form.wholesaleTargetPct}
                     onBlur={blur2('wholesaleTargetPct')}
                     onChange={(e) =>
-                      setForm((f) => ({ ...f, wholesaleTargetPct: e.target.value }))
+                      setForm((f) => ({
+                        ...f,
+                        wholesaleTargetPct: e.target.value,
+                      }))
                     }
                   />
                   <Input
@@ -1248,7 +1280,10 @@ export default function ProductsPage() {
                     value={form.retailTargetPct}
                     onBlur={blur2('retailTargetPct')}
                     onChange={(e) =>
-                      setForm((f) => ({ ...f, retailTargetPct: e.target.value }))
+                      setForm((f) => ({
+                        ...f,
+                        retailTargetPct: e.target.value,
+                      }))
                     }
                   />
                   <Input
@@ -1318,7 +1353,9 @@ export default function ProductsPage() {
                           intercompanyProfitPct: e.target.value,
                           intercompanyPrice:
                             e.target.value !== '' && cost > 0
-                              ? priceFromPct(toN(e.target.value), cost).toFixed(2)
+                              ? priceFromPct(toN(e.target.value), cost).toFixed(
+                                  2,
+                                )
                               : f.intercompanyPrice,
                         };
                       })
@@ -1364,7 +1401,9 @@ export default function ProductsPage() {
                           wholesaleProfitPct: e.target.value,
                           wholesalePrice:
                             e.target.value !== '' && cost > 0
-                              ? priceFromPct(toN(e.target.value), cost).toFixed(2)
+                              ? priceFromPct(toN(e.target.value), cost).toFixed(
+                                  2,
+                                )
                               : f.wholesalePrice,
                         };
                       })
@@ -1409,7 +1448,9 @@ export default function ProductsPage() {
                           retailProfitPct: e.target.value,
                           retailPrice:
                             e.target.value !== '' && cost > 0
-                              ? priceFromPct(toN(e.target.value), cost).toFixed(2)
+                              ? priceFromPct(toN(e.target.value), cost).toFixed(
+                                  2,
+                                )
                               : f.retailPrice,
                         };
                       })

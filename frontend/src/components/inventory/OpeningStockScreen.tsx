@@ -77,9 +77,11 @@ export function OpeningStockScreen({
   // Both ITEM variants draw from Item Master; products from Product Master.
   const isItem = type === 'ITEM_RAW' || type === 'ITEM_PACKING';
 
-  const { data: rows, loading, refetch } = useFetch<StockDocumentRow[]>(
-    `/opening-stock/documents?type=${type}`,
-  );
+  const {
+    data: rows,
+    loading,
+    refetch,
+  } = useFetch<StockDocumentRow[]>(`/opening-stock/documents?type=${type}`);
   const { data: stores } = useFetch<Store[]>('/stores');
   const { data: items } = useFetch<Item[]>('/items');
   const { data: products } = useFetch<Product[]>('/products');
@@ -116,7 +118,8 @@ export function OpeningStockScreen({
       const wantPacking = type === 'ITEM_PACKING';
       return (items ?? [])
         .filter((i) => {
-          const isPacking = i.categoryId != null && packingCatIds.has(i.categoryId);
+          const isPacking =
+            i.categoryId != null && packingCatIds.has(i.categoryId);
           return wantPacking ? isPacking : !isPacking;
         })
         .map((i) => ({
@@ -148,7 +151,11 @@ export function OpeningStockScreen({
   );
 
   const storeOptions = useMemo(
-    () => (stores ?? []).map((s) => ({ value: s.id, label: `${s.name} (${s.code})` })),
+    () =>
+      (stores ?? []).map((s) => ({
+        value: s.id,
+        label: `${s.name} (${s.code})`,
+      })),
     [stores],
   );
   // The active branch's default store (stores are already branch-scoped), used
@@ -309,7 +316,8 @@ export function OpeningStockScreen({
     sLines: DraftLine[],
   ) => JSON.stringify({ sStore, sDate, sRef, sNotes, sLines });
   const isDirty = () =>
-    makeSnap(storeId, docDate, reference, notes, lines) !== initialSnapshot.current;
+    makeSnap(storeId, docDate, reference, notes, lines) !==
+    initialSnapshot.current;
 
   // Close guarded by an unsaved-changes prompt (X, Cancel, Esc). View mode and a
   // pristine form close straight away.
@@ -335,8 +343,10 @@ export function OpeningStockScreen({
         quantity: Number(l.quantity),
         unitPrice: l.unitPrice ? Number(l.unitPrice) : 0,
         // Selling prices apply to products only.
-        intercompanyPrice: !isItem && l.intercompanyPrice ? Number(l.intercompanyPrice) : 0,
-        wholesalePrice: !isItem && l.wholesalePrice ? Number(l.wholesalePrice) : 0,
+        intercompanyPrice:
+          !isItem && l.intercompanyPrice ? Number(l.intercompanyPrice) : 0,
+        wholesalePrice:
+          !isItem && l.wholesalePrice ? Number(l.wholesalePrice) : 0,
         retailPrice: !isItem && l.retailPrice ? Number(l.retailPrice) : 0,
         batchNo2: l.batchNo2.trim() || undefined,
         expiryDate: l.expiry ? new Date(l.expiry).toISOString() : undefined,
@@ -466,7 +476,11 @@ export function OpeningStockScreen({
         <span className="text-slate-800 dark:text-slate-100">{r.docNo}</span>
       ),
     },
-    { key: 'reference', header: 'Reference', accessor: (r) => r.reference ?? '—' },
+    {
+      key: 'reference',
+      header: 'Reference',
+      accessor: (r) => r.reference ?? '—',
+    },
     { key: 'company', header: 'Company', accessor: (r) => r.companyName },
     { key: 'branch', header: 'Branch', accessor: (r) => r.branchName ?? '—' },
     { key: 'store', header: 'Store', accessor: (r) => r.storeName },
@@ -474,14 +488,25 @@ export function OpeningStockScreen({
       key: 'amount',
       header: 'Amount',
       accessor: (r) =>
-        r.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        r.amount.toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }),
       className: 'text-right tabular-nums',
       headerClassName: 'text-right',
       sortable: true,
       sortAccessor: (r) => r.amount,
     },
-    { key: 'txnType', header: 'Transaction Type', accessor: (r) => r.transactionType ?? '—' },
-    { key: 'txnSubtype', header: 'Transaction Subtype', accessor: (r) => r.transactionSubtype ?? '—' },
+    {
+      key: 'txnType',
+      header: 'Transaction Type',
+      accessor: (r) => r.transactionType ?? '—',
+    },
+    {
+      key: 'txnSubtype',
+      header: 'Transaction Subtype',
+      accessor: (r) => r.transactionSubtype ?? '—',
+    },
   ];
 
   return (
@@ -613,7 +638,10 @@ export function OpeningStockScreen({
                 <tbody>
                   {lines.length === 0 ? (
                     <tr>
-                      <td colSpan={13} className="py-4 text-center text-xs text-slate-400">
+                      <td
+                        colSpan={13}
+                        className="py-4 text-center text-xs text-slate-400"
+                      >
                         No lines.
                       </td>
                     </tr>
@@ -622,7 +650,10 @@ export function OpeningStockScreen({
                       const p = l.key ? pickById.get(l.key) : undefined;
                       const docLine = editingDoc?.lines?.[i];
                       return (
-                        <tr key={i} className="border-b border-slate-100 dark:border-slate-800/60">
+                        <tr
+                          key={i}
+                          className="border-b border-slate-100 dark:border-slate-800/60"
+                        >
                           <td className="py-1.5 pl-3 pr-1 text-right text-xs tabular-nums text-slate-400">
                             {i + 1}
                           </td>
@@ -641,7 +672,9 @@ export function OpeningStockScreen({
                                 searchThreshold={0}
                                 advanceToId={`os-${i}-batch`}
                                 value={l.key}
-                                onChange={(e) => selectStockable(i, e.target.value)}
+                                onChange={(e) =>
+                                  selectStockable(i, e.target.value)
+                                }
                                 placeholder={`Select ${isItem ? 'item' : 'product'}`}
                                 options={pickOptions}
                               />
@@ -654,12 +687,16 @@ export function OpeningStockScreen({
                           )}
                           <td className="px-1">
                             {viewMode ? (
-                              <span className="text-slate-600">{l.batchNo2 || '—'}</span>
+                              <span className="text-slate-600">
+                                {l.batchNo2 || '—'}
+                              </span>
                             ) : (
                               <Input
                                 id={`os-${i}-batch`}
                                 value={l.batchNo2}
-                                onChange={(e) => setLine(i, { batchNo2: e.target.value })}
+                                onChange={(e) =>
+                                  setLine(i, { batchNo2: e.target.value })
+                                }
                                 onKeyDown={enterTo(`os-${i}-expiry`)}
                                 placeholder="Supplier batch"
                               />
@@ -691,13 +728,17 @@ export function OpeningStockScreen({
                                 min={0}
                                 step="any"
                                 value={l.quantity}
-                                onChange={(e) => setLine(i, { quantity: e.target.value })}
+                                onChange={(e) =>
+                                  setLine(i, { quantity: e.target.value })
+                                }
                                 onKeyDown={enterTo(`os-${i}-rate`)}
                                 className="text-right tabular-nums"
                               />
                             )}
                           </td>
-                          <td className="px-1 text-slate-500">{p?.unit ?? ''}</td>
+                          <td className="px-1 text-slate-500">
+                            {p?.unit ?? ''}
+                          </td>
                           <td className="px-1">
                             {viewMode ? (
                               <span className="block text-right tabular-nums">
@@ -710,10 +751,16 @@ export function OpeningStockScreen({
                                 min={0}
                                 step="any"
                                 value={l.unitPrice}
-                                onChange={(e) => setLine(i, { unitPrice: e.target.value })}
-                                onBlur={() => setLine(i, { unitPrice: dec2(l.unitPrice) })}
+                                onChange={(e) =>
+                                  setLine(i, { unitPrice: e.target.value })
+                                }
+                                onBlur={() =>
+                                  setLine(i, { unitPrice: dec2(l.unitPrice) })
+                                }
                                 onKeyDown={
-                                  isItem ? enterNextLine(i) : enterTo(`os-${i}-interco`)
+                                  isItem
+                                    ? enterNextLine(i)
+                                    : enterTo(`os-${i}-interco`)
                                 }
                                 className="text-right tabular-nums"
                               />
@@ -741,10 +788,16 @@ export function OpeningStockScreen({
                                     step="any"
                                     value={l.intercompanyPrice}
                                     onChange={(e) =>
-                                      setLine(i, { intercompanyPrice: e.target.value })
+                                      setLine(i, {
+                                        intercompanyPrice: e.target.value,
+                                      })
                                     }
                                     onBlur={() =>
-                                      setLine(i, { intercompanyPrice: dec2(l.intercompanyPrice) })
+                                      setLine(i, {
+                                        intercompanyPrice: dec2(
+                                          l.intercompanyPrice,
+                                        ),
+                                      })
                                     }
                                     onKeyDown={enterTo(`os-${i}-wholesale`)}
                                     className="text-right tabular-nums"
@@ -764,10 +817,14 @@ export function OpeningStockScreen({
                                     step="any"
                                     value={l.wholesalePrice}
                                     onChange={(e) =>
-                                      setLine(i, { wholesalePrice: e.target.value })
+                                      setLine(i, {
+                                        wholesalePrice: e.target.value,
+                                      })
                                     }
                                     onBlur={() =>
-                                      setLine(i, { wholesalePrice: dec2(l.wholesalePrice) })
+                                      setLine(i, {
+                                        wholesalePrice: dec2(l.wholesalePrice),
+                                      })
                                     }
                                     onKeyDown={enterTo(`os-${i}-retail`)}
                                     className="text-right tabular-nums"
@@ -787,10 +844,14 @@ export function OpeningStockScreen({
                                     step="any"
                                     value={l.retailPrice}
                                     onChange={(e) =>
-                                      setLine(i, { retailPrice: e.target.value })
+                                      setLine(i, {
+                                        retailPrice: e.target.value,
+                                      })
                                     }
                                     onBlur={() =>
-                                      setLine(i, { retailPrice: dec2(l.retailPrice) })
+                                      setLine(i, {
+                                        retailPrice: dec2(l.retailPrice),
+                                      })
                                     }
                                     onKeyDown={enterNextLine(i)}
                                     className="text-right tabular-nums"

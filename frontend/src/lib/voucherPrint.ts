@@ -89,7 +89,9 @@ export interface VoucherSignatory {
  */
 const totals = (lines: VoucherDocLine[]) => ({
   debit: lines.filter((l) => l.side === 'DR').reduce((s, l) => s + l.amount, 0),
-  credit: lines.filter((l) => l.side === 'CR').reduce((s, l) => s + l.amount, 0),
+  credit: lines
+    .filter((l) => l.side === 'CR')
+    .reduce((s, l) => s + l.amount, 0),
 });
 
 export function buildVoucherHtml(v: VoucherDocInput): string {
@@ -145,10 +147,7 @@ export function buildVoucherHtml(v: VoucherDocInput): string {
     v.bankLedger ? ['Bank', v.bankLedger] : null,
     v.instrumentNo ? ['Instrument no', v.instrumentNo] : null,
     v.instrumentDate
-      ? [
-          v.postDated ? 'Due on' : 'Instrument date',
-          fmtDate(v.instrumentDate),
-        ]
+      ? [v.postDated ? 'Due on' : 'Instrument date', fmtDate(v.instrumentDate)]
       : null,
     v.postedAt ? ['Posted', fmtDate(v.postedAt)] : null,
   ].filter(Boolean) as string[][];

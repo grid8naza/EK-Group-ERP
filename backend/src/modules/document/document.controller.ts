@@ -39,7 +39,10 @@ export class DocumentController {
   }
 
   @Patch(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateDocumentDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateDocumentDto,
+  ) {
     return this.service.update(id, dto);
   }
 

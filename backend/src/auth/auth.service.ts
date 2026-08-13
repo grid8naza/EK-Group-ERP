@@ -354,7 +354,8 @@ export class AuthService {
       const menus = m.mainMenus
         .filter(
           (mm) =>
-            user.isSuperAdmin || (mainMenuVisible && mainMenuVisible.has(mm.id)),
+            user.isSuperAdmin ||
+            (mainMenuVisible && mainMenuVisible.has(mm.id)),
         )
         .map((mm) => {
           const items = mm.subMenus

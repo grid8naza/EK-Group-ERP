@@ -12,11 +12,7 @@ import { CreateRackDto, UpdateRackDto } from './rack.dto';
 export class RackService {
   constructor(private prisma: PrismaService) {}
 
-  findAll(
-    companyId: number | undefined,
-    storeId?: number,
-    search?: string,
-  ) {
+  findAll(companyId: number | undefined, storeId?: number, search?: string) {
     return this.prisma.rack.findMany({
       // Racks live inside a store, so they inherit the store's company scope; an
       // optional storeId narrows to a single store (the Product form picker).

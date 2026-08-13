@@ -12,11 +12,21 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { StatusToggle } from '@/components/ui/StatusToggle';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import { CATEGORY_KIND_LABEL, type Group, type Category, type Company } from '@/lib/types';
+import {
+  CATEGORY_KIND_LABEL,
+  type Group,
+  type Category,
+  type Company,
+} from '@/lib/types';
 
 const ROUTE = '/inventory/groups';
 const MAX_LEVEL = 5;
@@ -42,13 +52,14 @@ export default function GroupsPage() {
   const { data, loading, refetch } = useFetch<Group[]>('/groups');
   const { data: categories } = useFetch<Category[]>('/categories');
   const { data: companies } = useFetch<Company[]>('/companies');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<Group>({
-    endpoint: '/groups',
-    route: ROUTE,
-    noun: 'group',
-    nameOf: (g) => g.name,
-    reload: refetch,
-  });
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
+    useLock<Group>({
+      endpoint: '/groups',
+      route: ROUTE,
+      noun: 'group',
+      nameOf: (g) => g.name,
+      reload: refetch,
+    });
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Group | null>(null);
@@ -333,7 +344,9 @@ export default function GroupsPage() {
       let node = g.parentGroupId ? groupById.get(g.parentGroupId) : undefined;
       while (node) {
         if (collapsed.has(node.id)) return false;
-        node = node.parentGroupId ? groupById.get(node.parentGroupId) : undefined;
+        node = node.parentGroupId
+          ? groupById.get(node.parentGroupId)
+          : undefined;
       }
       return true;
     });
@@ -801,7 +814,9 @@ export default function GroupsPage() {
               {!form.allCompanies && (
                 <div className="mt-1 max-h-52 space-y-1.5 overflow-y-auto rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                   {companyList.length === 0 ? (
-                    <p className="text-sm text-slate-400">No companies found.</p>
+                    <p className="text-sm text-slate-400">
+                      No companies found.
+                    </p>
                   ) : (
                     companyList.map((co) => (
                       <Checkbox
@@ -816,8 +831,8 @@ export default function GroupsPage() {
               )}
               {!form.allCompanies && (
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {form.companyIds.length} selected — the group is available only
-                  in these companies.
+                  {form.companyIds.length} selected — the group is available
+                  only in these companies.
                 </p>
               )}
             </div>

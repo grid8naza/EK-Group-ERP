@@ -161,7 +161,8 @@ export class BackupController {
     @Param('name') name: string,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
-    const { fileName, stream } = await this.service.getTableFileForDownload(name);
+    const { fileName, stream } =
+      await this.service.getTableFileForDownload(name);
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     return new StreamableFile(stream);
   }
@@ -178,10 +179,7 @@ export class BackupController {
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {
     const { fileName, stream } = await this.service.getFileForDownload(name);
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${fileName}"`,
-    );
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     return new StreamableFile(stream);
   }
 

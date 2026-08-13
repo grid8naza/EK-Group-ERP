@@ -18,7 +18,11 @@ interface SidebarProps {
   onMobileClose: () => void;
 }
 
-export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) {
+export function Sidebar({
+  collapsed,
+  mobileOpen,
+  onMobileClose,
+}: SidebarProps) {
   const { activeModule } = useAuth();
   const { info } = useSoftwareInfo();
   const pathname = usePathname();
@@ -54,10 +58,10 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
   // logo at its size. Only fall back to the full logo (and its size) if no
   // symbol logo is set.
   const showSymbol = collapsed && !!symbolLogo;
-  const activeLogo = collapsed ? symbolLogo ?? fullLogo : fullLogo;
+  const activeLogo = collapsed ? (symbolLogo ?? fullLogo) : fullLogo;
   const logoPx = showSymbol
-    ? info?.symbolLogoSize ?? LOGO_SIZE_DEFAULT
-    : info?.logoSize ?? LOGO_SIZE_DEFAULT;
+    ? (info?.symbolLogoSize ?? LOGO_SIZE_DEFAULT)
+    : (info?.logoSize ?? LOGO_SIZE_DEFAULT);
   const [logoBroken, setLogoBroken] = useState(false);
   useEffect(() => {
     setLogoBroken(false); // retry the image when the shown logo changes
@@ -84,7 +88,9 @@ export function Sidebar({ collapsed, mobileOpen, onMobileClose }: SidebarProps) 
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={!logoBroken && activeLogo ? mediaUrl(activeLogo) : '/brand-logo.png'}
+          src={
+            !logoBroken && activeLogo ? mediaUrl(activeLogo) : '/brand-logo.png'
+          }
           alt="Logo"
           onError={() => setLogoBroken(true)}
           // Constrain the height only (from the size slider) and let the width

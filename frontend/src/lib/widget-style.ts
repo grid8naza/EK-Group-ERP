@@ -11,13 +11,41 @@ import type { WidgetAccent, WidgetStyle } from './types';
 
 // Soft accent tints for widget swatches. The stored key ('blue', 'emerald', …)
 // is unchanged; only the display swatch is restyled to the evergreen system.
-export const WIDGET_ACCENTS: { key: WidgetAccent; label: string; chip: string }[] = [
-  { key: 'blue', label: 'Brand', chip: 'bg-brand-50 text-brand-600 dark:bg-brand-950 dark:text-brand-400' },
-  { key: 'emerald', label: 'Emerald', chip: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400' },
-  { key: 'violet', label: 'Violet', chip: 'bg-violet-50 text-violet-600 dark:bg-violet-950 dark:text-violet-400' },
-  { key: 'amber', label: 'Amber', chip: 'bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400' },
-  { key: 'rose', label: 'Rose', chip: 'bg-rose-50 text-rose-600 dark:bg-rose-950 dark:text-rose-400' },
-  { key: 'slate', label: 'Slate', chip: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300' },
+export const WIDGET_ACCENTS: {
+  key: WidgetAccent;
+  label: string;
+  chip: string;
+}[] = [
+  {
+    key: 'blue',
+    label: 'Brand',
+    chip: 'bg-brand-50 text-brand-600 dark:bg-brand-950 dark:text-brand-400',
+  },
+  {
+    key: 'emerald',
+    label: 'Emerald',
+    chip: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400',
+  },
+  {
+    key: 'violet',
+    label: 'Violet',
+    chip: 'bg-violet-50 text-violet-600 dark:bg-violet-950 dark:text-violet-400',
+  },
+  {
+    key: 'amber',
+    label: 'Amber',
+    chip: 'bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400',
+  },
+  {
+    key: 'rose',
+    label: 'Rose',
+    chip: 'bg-rose-50 text-rose-600 dark:bg-rose-950 dark:text-rose-400',
+  },
+  {
+    key: 'slate',
+    label: 'Slate',
+    chip: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+  },
 ];
 
 export const FONT_FAMILIES = [
@@ -76,7 +104,9 @@ export interface ResolvedWidgetStyle {
   valueStyle: CSSProperties;
 }
 
-export function resolveWidgetStyle(s?: WidgetStyle | null): ResolvedWidgetStyle {
+export function resolveWidgetStyle(
+  s?: WidgetStyle | null,
+): ResolvedWidgetStyle {
   const border = s?.border !== false;
   const shadow = s?.shadow !== false;
   const accent =

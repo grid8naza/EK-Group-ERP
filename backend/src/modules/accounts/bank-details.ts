@@ -38,18 +38,22 @@ export const BANK_ACCOUNT_TYPES = [
 export const CODE_FORMATS = {
   ifscCode: {
     pattern: /^[A-Z]{4}0[A-Z0-9]{6}$/,
-    message: 'An IFSC is eleven characters — four letters, a zero, then six, e.g. SBIN0001234.',
+    message:
+      'An IFSC is eleven characters — four letters, a zero, then six, e.g. SBIN0001234.',
   },
   micrCode: {
     pattern: /^\d{9}$/,
-    message: 'An MICR code is the nine digits printed along the foot of a cheque.',
+    message:
+      'An MICR code is the nine digits printed along the foot of a cheque.',
   },
   swiftCode: {
     pattern: /^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/,
-    message: 'A SWIFT/BIC is eight or eleven characters, e.g. HDFCINBB or HDFCINBBXXX.',
+    message:
+      'A SWIFT/BIC is eight or eleven characters, e.g. HDFCINBB or HDFCINBBXXX.',
   },
   iban: {
     pattern: /^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/,
-    message: 'An IBAN starts with the country code and two check digits, e.g. AE070331234567890123456.',
+    message:
+      'An IBAN starts with the country code and two check digits, e.g. AE070331234567890123456.',
   },
 } as const;

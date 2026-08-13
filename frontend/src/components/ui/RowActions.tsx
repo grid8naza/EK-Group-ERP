@@ -40,17 +40,29 @@ export function RowActions({
     <>
       {before}
       {onView && canView && (
-        <button onClick={onView} title="View" className={`${ICON_BTN} ${BRAND}`}>
+        <button
+          onClick={onView}
+          title="View"
+          className={`${ICON_BTN} ${BRAND}`}
+        >
           <Eye className="h-4 w-4" />
         </button>
       )}
       {onEdit && canEdit && (
-        <button onClick={onEdit} title="Edit" className={`${ICON_BTN} ${BRAND}`}>
+        <button
+          onClick={onEdit}
+          title="Edit"
+          className={`${ICON_BTN} ${BRAND}`}
+        >
           <Pencil className="h-4 w-4" />
         </button>
       )}
       {onDelete && canDelete && (
-        <button onClick={onDelete} title="Delete" className={`${ICON_BTN} ${ROSE}`}>
+        <button
+          onClick={onDelete}
+          title="Delete"
+          className={`${ICON_BTN} ${ROSE}`}
+        >
           <Trash2 className="h-4 w-4" />
         </button>
       )}

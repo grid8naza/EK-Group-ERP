@@ -165,7 +165,8 @@ export default function PackingMasterEditorPage() {
   // Only production-line machines that are currently active can be assigned;
   // any already-referenced machine still resolves for display.
   const machineList = useMemo(
-    () => (assets ?? []).filter((a) => a.isProductionLine && a.status === 'ACTIVE'),
+    () =>
+      (assets ?? []).filter((a) => a.isProductionLine && a.status === 'ACTIVE'),
     [assets],
   );
   // Manpower comes from the HR Designation master; only active designations can
@@ -180,8 +181,14 @@ export default function PackingMasterEditorPage() {
     .filter((v) => v.isActive)
     .map((v) => ({ value: v.label, label: v.label }));
 
-  const itemById = useMemo(() => new Map(itemList.map((i) => [i.id, i])), [itemList]);
-  const unitById = useMemo(() => new Map(unitList.map((u) => [u.id, u])), [unitList]);
+  const itemById = useMemo(
+    () => new Map(itemList.map((i) => [i.id, i])),
+    [itemList],
+  );
+  const unitById = useMemo(
+    () => new Map(unitList.map((u) => [u.id, u])),
+    [unitList],
+  );
   // Yield precision follows the product's own unit (from Product Master).
   const yieldDecimals =
     unitById.get(Number(product?.unitId))?.decimalPlaces ?? 2;
@@ -254,12 +261,14 @@ export default function PackingMasterEditorPage() {
 
   // Overlay data-entry forms. The `*Seq` counters bump after each add so the
   // form remounts and the first field re-focuses, ready for the next entry.
-  const [ingForm, setIngForm] = useState<{ index: number | null; draft: Line } | null>(
-    null,
-  );
-  const [procForm, setProcForm] = useState<{ index: number | null; draft: Proc } | null>(
-    null,
-  );
+  const [ingForm, setIngForm] = useState<{
+    index: number | null;
+    draft: Line;
+  } | null>(null);
+  const [procForm, setProcForm] = useState<{
+    index: number | null;
+    draft: Proc;
+  } | null>(null);
   // Manpower is entered inline in the process drawer via a small entry line
   // (designation + count) that flows on Enter. `mpEditIndex` is the existing
   // manpower row being edited (null when the entry line adds a new one).
@@ -393,7 +402,8 @@ export default function PackingMasterEditorPage() {
   const hoursOf = (p: Proc) =>
     p.timeUnit === 'HR' ? num(p.timeValue) : num(p.timeValue) / 60;
   const equipmentCost = processes.reduce(
-    (s, p) => s + (assetById.get(Number(p.machineId))?.costPerHour ?? 0) * hoursOf(p),
+    (s, p) =>
+      s + (assetById.get(Number(p.machineId))?.costPerHour ?? 0) * hoursOf(p),
     0,
   );
   // Manpower cost: for each process step, sum over its manpower rows the
@@ -431,7 +441,8 @@ export default function PackingMasterEditorPage() {
   const profitOf = (price: string) => num(price) - actualCostPerUnit;
   const profitPctOf = (price: string) =>
     actualCostPerUnit ? (profitOf(price) / actualCostPerUnit) * 100 : 0;
-  const priceFromPct = (pct: string) => actualCostPerUnit * (1 + num(pct) / 100);
+  const priceFromPct = (pct: string) =>
+    actualCostPerUnit * (1 + num(pct) / 100);
   // GST / Cess rates come from this product's HSN code (set in Product Master).
   // Each tax amount is the rate applied to the entered sales price; the total
   // price adds them on top of it. (Not the MRP — that is the figure printed on
@@ -440,9 +451,13 @@ export default function PackingMasterEditorPage() {
   const cgstPct = hsn?.cgst ?? 0;
   const sgstPct = hsn?.sgst ?? 0;
   const cessPct = hsn?.cess ?? 0;
-  const taxOf = (price: string, ratePct: number) => (num(price) * ratePct) / 100;
+  const taxOf = (price: string, ratePct: number) =>
+    (num(price) * ratePct) / 100;
   const totalPriceOf = (price: string) =>
-    num(price) + taxOf(price, cgstPct) + taxOf(price, sgstPct) + taxOf(price, cessPct);
+    num(price) +
+    taxOf(price, cgstPct) +
+    taxOf(price, sgstPct) +
+    taxOf(price, cessPct);
   // The three selling-price columns of the "Price per box" table. Editing a price
   // recomputes its %, and editing a % recomputes its price (both over unit cost).
   const priceCols = [
@@ -492,20 +507,23 @@ export default function PackingMasterEditorPage() {
     const rows = p.manpower.filter((m) => m.designationId);
     if (rows.length === 0) return '—';
     const workers = rows.reduce((s, m) => s + (Number(m.count) || 0), 0);
-    return rows
-      .map(
-        (m) =>
-          `${designationName(m.designationId)}${
-            Number(m.count) > 1 ? ` ×${Number(m.count)}` : ''
-          }`,
-      )
-      .join(', ') || `${workers}`;
+    return (
+      rows
+        .map(
+          (m) =>
+            `${designationName(m.designationId)}${
+              Number(m.count) > 1 ? ` ×${Number(m.count)}` : ''
+            }`,
+        )
+        .join(', ') || `${workers}`
+    );
   };
 
   // Total processing time across all steps, normalised to minutes and shown as
   // a human-friendly "Xh Ym" (or "Y min" under an hour).
   const totalProcMinutes = processes.reduce(
-    (s, p) => s + (p.timeUnit === 'HR' ? num(p.timeValue) * 60 : num(p.timeValue)),
+    (s, p) =>
+      s + (p.timeUnit === 'HR' ? num(p.timeValue) * 60 : num(p.timeValue)),
     0,
   );
   const fmtDuration = (mins: number) => {
@@ -561,7 +579,8 @@ export default function PackingMasterEditorPage() {
     });
 
   // --- ingredient overlay ---
-  const openAddIng = () => setIngForm({ index: null, draft: { ...BLANK_LINE } });
+  const openAddIng = () =>
+    setIngForm({ index: null, draft: { ...BLANK_LINE } });
   const openEditIng = (i: number) =>
     setIngForm({ index: i, draft: { ...packing[i] } });
   const onPickIngItem = (itemId: string) =>
@@ -624,23 +643,31 @@ export default function PackingMasterEditorPage() {
       toast.error('Pick a product and a positive quantity.');
       return;
     }
-    const srcName = productById.get(Number(d.productId))?.name ?? 'Source product';
+    const srcName =
+      productById.get(Number(d.productId))?.name ?? 'Source product';
     if (srcForm.index == null) {
       const rows = [...packSources, d];
       setPackSources(rows);
       setSrcForm({ index: null, draft: { ...BLANK_SRC } });
       setSrcSeq((s) => s + 1);
-      void autoSave({ packSources: rows, packing, processes }, `${srcName} added`);
+      void autoSave(
+        { packSources: rows, packing, processes },
+        `${srcName} added`,
+      );
     } else {
       const rows = packSources.map((r, i) => (i === srcForm.index ? d : r));
       setPackSources(rows);
       setSrcForm(null);
-      void autoSave({ packSources: rows, packing, processes }, `${srcName} updated`);
+      void autoSave(
+        { packSources: rows, packing, processes },
+        `${srcName} updated`,
+      );
     }
   };
   const removeSrc = async (i: number) => {
     const gone =
-      productById.get(Number(packSources[i].productId))?.name ?? 'Source product';
+      productById.get(Number(packSources[i].productId))?.name ??
+      'Source product';
     if (!(await confirmRemove(`Remove ${gone} as a source product?`))) return;
     const rows = packSources.filter((_, idx) => idx !== i);
     setPackSources(rows);
@@ -675,7 +702,10 @@ export default function PackingMasterEditorPage() {
       setProcesses(rows);
       setProcForm({ index: null, draft: { ...BLANK_PROC } });
       setProcSeq((s) => s + 1); // remount → name field re-focuses for the next entry
-      void autoSave({ packSources, packing, processes: rows }, `${clean.name} added`);
+      void autoSave(
+        { packSources, packing, processes: rows },
+        `${clean.name} added`,
+      );
     } else {
       const rows = processes.map((r, i) => (i === procForm.index ? clean : r));
       setProcesses(rows);
@@ -688,7 +718,9 @@ export default function PackingMasterEditorPage() {
   };
   const removeProc = async (i: number) => {
     const gone = processes[i].name;
-    if (!(await confirmRemove(`Remove the ${gone} step from this process flow?`)))
+    if (
+      !(await confirmRemove(`Remove the ${gone} step from this process flow?`))
+    )
       return;
     const rows = processes.filter((_, idx) => idx !== i);
     setProcesses(rows);
@@ -722,12 +754,15 @@ export default function PackingMasterEditorPage() {
   const removeManpower = (idx: number) => {
     setDraftManpower((rows) => rows.filter((_, i) => i !== idx));
     if (mpEditIndex === idx) resetMpEntry();
-    else if (mpEditIndex != null && idx < mpEditIndex) setMpEditIndex(mpEditIndex - 1);
+    else if (mpEditIndex != null && idx < mpEditIndex)
+      setMpEditIndex(mpEditIndex - 1);
   };
   // Rate/hr × step-hours × count for a single draft manpower row.
   const manpowerRowCost = (draft: Proc, m: ManpowerRow) => {
     const hours =
-      draft.timeUnit === 'HR' ? num(draft.timeValue) : num(draft.timeValue) / 60;
+      draft.timeUnit === 'HR'
+        ? num(draft.timeValue)
+        : num(draft.timeValue) / 60;
     return (
       (designationById.get(Number(m.designationId))?.ratePerHour ?? 0) *
       hours *
@@ -855,7 +890,9 @@ export default function PackingMasterEditorPage() {
       if (close) router.push(ROUTE);
       return true;
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Failed to save packing.');
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to save packing.',
+      );
       return false;
     } finally {
       setSaving(false);
@@ -974,7 +1011,9 @@ export default function PackingMasterEditorPage() {
                   step="any"
                   value={yieldQty}
                   onChange={(e) => setYieldQty(e.target.value)}
-                  onBlur={() => setYieldQty((v) => toDecimals(v, yieldDecimals))}
+                  onBlur={() =>
+                    setYieldQty((v) => toDecimals(v, yieldDecimals))
+                  }
                   wrapClassName="w-full"
                   className="text-right font-semibold tabular-nums text-red-800 dark:text-red-400"
                 />
@@ -1002,7 +1041,9 @@ export default function PackingMasterEditorPage() {
                 <th className="w-14 py-2 px-1">Unit</th>
                 <th className="w-28 py-2 px-1 text-right">Cost Price</th>
                 <th className="w-28 py-2 px-1 text-right">Amount</th>
-                {!view && <th className="w-16 py-2 pl-1 text-center">Actions</th>}
+                {!view && (
+                  <th className="w-16 py-2 pl-1 text-center">Actions</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -1032,9 +1073,7 @@ export default function PackingMasterEditorPage() {
                       <td className="px-1 text-right tabular-nums">
                         {money(Number(s.quantity) || 0)}
                       </td>
-                      <td className="px-1">
-                        {sp ? unitCode(sp.unitId) : ''}
-                      </td>
+                      <td className="px-1">{sp ? unitCode(sp.unitId) : ''}</td>
                       <td className="px-1 text-right tabular-nums text-slate-600 dark:text-slate-300">
                         {money(srcRate(s))}
                       </td>
@@ -1056,7 +1095,10 @@ export default function PackingMasterEditorPage() {
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-slate-200 dark:border-slate-700">
-                <td colSpan={5} className="py-2 text-right text-sm font-semibold">
+                <td
+                  colSpan={5}
+                  className="py-2 text-right text-sm font-semibold"
+                >
                   Product Cost
                 </td>
                 <td className="py-2 px-1 text-right text-sm font-bold tabular-nums text-slate-900 dark:text-white">
@@ -1087,7 +1129,9 @@ export default function PackingMasterEditorPage() {
                   <th className="w-14 py-2 px-1">Unit</th>
                   <th className="w-20 py-2 px-1 text-right">Rate</th>
                   <th className="w-24 py-2 px-1 text-right">Amount</th>
-                  {!view && <th className="w-16 py-2 pl-1 text-center">Actions</th>}
+                  {!view && (
+                    <th className="w-16 py-2 pl-1 text-center">Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -1136,7 +1180,10 @@ export default function PackingMasterEditorPage() {
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-slate-200 dark:border-slate-700">
-                  <td colSpan={5} className="py-2 text-right text-sm font-semibold">
+                  <td
+                    colSpan={5}
+                    className="py-2 text-right text-sm font-semibold"
+                  >
                     Total Amount
                   </td>
                   <td className="py-2 px-1 text-right text-sm font-bold tabular-nums text-slate-900 dark:text-white">
@@ -1164,7 +1211,9 @@ export default function PackingMasterEditorPage() {
                   <th className="w-24 py-2 px-1">Time</th>
                   <th className="py-2 px-1">Machine</th>
                   <th className="py-2 px-1">Manpower</th>
-                  {!view && <th className="w-16 py-2 pl-1 text-center">Actions</th>}
+                  {!view && (
+                    <th className="w-16 py-2 pl-1 text-center">Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -1229,8 +1278,8 @@ export default function PackingMasterEditorPage() {
             </table>
             {machineList.length === 0 && !view && (
               <p className="mt-3 flex items-center gap-1 text-xs text-amber-600">
-                <Cog className="h-3.5 w-3.5" /> No production-line machines yet —
-                mark assets as “production line” in the Asset module.
+                <Cog className="h-3.5 w-3.5" /> No production-line machines yet
+                — mark assets as “production line” in the Asset module.
               </p>
             )}
           </div>
@@ -1257,7 +1306,8 @@ export default function PackingMasterEditorPage() {
                         colSpan={2}
                         className="border border-slate-300 bg-slate-700 px-3 py-2 text-center text-sm font-semibold text-white dark:border-slate-600 dark:bg-slate-800"
                       >
-                        Price per {Number(yieldQty) || 1} {yieldUnitCode || 'unit'}
+                        Price per {Number(yieldQty) || 1}{' '}
+                        {yieldUnitCode || 'unit'}
                       </th>
                     </tr>
                     <tr className="bg-slate-100 dark:bg-slate-800/60">
@@ -1524,7 +1574,9 @@ export default function PackingMasterEditorPage() {
         aside={
           <div className="card overflow-hidden border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
             <div className="-mx-4 -mt-4 mb-3 flex items-center justify-between rounded-t-2xl bg-slate-700 px-4 py-2.5 dark:bg-slate-800">
-              <h3 className="text-sm font-semibold text-white">Materials so far</h3>
+              <h3 className="text-sm font-semibold text-white">
+                Materials so far
+              </h3>
               <span className="text-xs text-white/70">
                 {packing.length} item{packing.length === 1 ? '' : 's'}
               </span>
@@ -1554,7 +1606,8 @@ export default function PackingMasterEditorPage() {
                       key={i}
                       className={cn(
                         'border-b border-slate-100 dark:border-slate-800/60',
-                        ingForm?.index === i && 'bg-amber-100/60 dark:bg-amber-500/10',
+                        ingForm?.index === i &&
+                          'bg-amber-100/60 dark:bg-amber-500/10',
                       )}
                     >
                       <td className="py-1.5 pr-1 text-center tabular-nums text-slate-500">
@@ -1564,7 +1617,8 @@ export default function PackingMasterEditorPage() {
                         {itemName(line.itemId)}
                       </td>
                       <td className="px-1 text-right tabular-nums text-slate-600 dark:text-slate-300">
-                        {money(Number(line.quantity) || 0)} {unitCode(line.unitId)}
+                        {money(Number(line.quantity) || 0)}{' '}
+                        {unitCode(line.unitId)}
                       </td>
                       <td className="px-1 text-right font-medium tabular-nums text-slate-800 dark:text-slate-100">
                         {money(amountOf(line))}
@@ -1576,7 +1630,10 @@ export default function PackingMasterEditorPage() {
               {packing.length > 0 && (
                 <tfoot>
                   <tr className="border-t-2 border-slate-200 dark:border-slate-700">
-                    <td colSpan={3} className="py-1.5 text-right text-sm font-semibold">
+                    <td
+                      colSpan={3}
+                      className="py-1.5 text-right text-sm font-semibold"
+                    >
                       Total
                     </td>
                     <td className="py-1.5 px-1 text-right text-sm font-bold tabular-nums text-slate-900 dark:text-white">
@@ -1632,7 +1689,12 @@ export default function PackingMasterEditorPage() {
                 onKeyDown={enterTo('ing-unit')}
                 onChange={(e) =>
                   setIngForm((f) =>
-                    f ? { ...f, draft: { ...f.draft, quantity: e.target.value } } : f,
+                    f
+                      ? {
+                          ...f,
+                          draft: { ...f.draft, quantity: e.target.value },
+                        }
+                      : f,
                   )
                 }
               />
@@ -1647,10 +1709,14 @@ export default function PackingMasterEditorPage() {
                 value={ingForm.draft.unitId}
                 onChange={(e) =>
                   setIngForm((f) =>
-                    f ? { ...f, draft: { ...f.draft, unitId: e.target.value } } : f,
+                    f
+                      ? { ...f, draft: { ...f.draft, unitId: e.target.value } }
+                      : f,
                   )
                 }
-                placeholder={ingForm.draft.itemId ? 'Unit' : 'Pick an item first'}
+                placeholder={
+                  ingForm.draft.itemId ? 'Unit' : 'Pick an item first'
+                }
                 options={unitsForItem(ingForm.draft.itemId).map((u) => ({
                   value: u.id,
                   label: u.name,
@@ -1659,7 +1725,8 @@ export default function PackingMasterEditorPage() {
             </div>
             <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm dark:bg-slate-800/50">
               <span className="text-slate-500 dark:text-slate-400">
-                Rate {money(rateOf(ingForm.draft))} × {Number(ingForm.draft.quantity) || 0}
+                Rate {money(rateOf(ingForm.draft))} ×{' '}
+                {Number(ingForm.draft.quantity) || 0}
               </span>
               <span className="font-semibold tabular-nums text-slate-800 dark:text-slate-100">
                 {money(amountOf(ingForm.draft))}
@@ -1686,7 +1753,9 @@ export default function PackingMasterEditorPage() {
         aside={
           <div className="card overflow-hidden border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
             <div className="-mx-4 -mt-4 mb-3 flex items-center justify-between rounded-t-2xl bg-slate-700 px-4 py-2.5 dark:bg-slate-800">
-              <h3 className="text-sm font-semibold text-white">Process flow so far</h3>
+              <h3 className="text-sm font-semibold text-white">
+                Process flow so far
+              </h3>
               <span className="text-xs text-white/70">
                 {processes.length} step{processes.length === 1 ? '' : 's'}
               </span>
@@ -1715,7 +1784,8 @@ export default function PackingMasterEditorPage() {
                       key={i}
                       className={cn(
                         'border-b border-slate-100 dark:border-slate-800/60',
-                        procForm?.index === i && 'bg-amber-100/60 dark:bg-amber-500/10',
+                        procForm?.index === i &&
+                          'bg-amber-100/60 dark:bg-amber-500/10',
                       )}
                     >
                       <td className="py-1.5 pr-1 text-center tabular-nums text-slate-500">
@@ -1734,7 +1804,10 @@ export default function PackingMasterEditorPage() {
               {processes.length > 0 && (
                 <tfoot>
                   <tr className="border-t-2 border-slate-200 dark:border-slate-700">
-                    <td colSpan={2} className="py-1.5 text-right text-sm font-semibold">
+                    <td
+                      colSpan={2}
+                      className="py-1.5 text-right text-sm font-semibold"
+                    >
                       Total time
                     </td>
                     <td className="py-1.5 px-1 text-right text-sm font-bold tabular-nums text-slate-900 dark:text-white">
@@ -1794,7 +1867,9 @@ export default function PackingMasterEditorPage() {
               value={procForm.draft.machineId}
               onChange={(e) =>
                 setProcForm((f) =>
-                  f ? { ...f, draft: { ...f.draft, machineId: e.target.value } } : f,
+                  f
+                    ? { ...f, draft: { ...f.draft, machineId: e.target.value } }
+                    : f,
                 )
               }
               placeholder="— Select machine —"
@@ -1814,7 +1889,12 @@ export default function PackingMasterEditorPage() {
                 onKeyDown={enterTo('proc-tunit')}
                 onChange={(e) =>
                   setProcForm((f) =>
-                    f ? { ...f, draft: { ...f.draft, timeValue: e.target.value } } : f,
+                    f
+                      ? {
+                          ...f,
+                          draft: { ...f.draft, timeValue: e.target.value },
+                        }
+                      : f,
                   )
                 }
               />
@@ -1861,7 +1941,8 @@ export default function PackingMasterEditorPage() {
                 <>
                   {procForm.draft.manpower.map((m, idx) => {
                     const rate =
-                      designationById.get(Number(m.designationId))?.ratePerHour ?? 0;
+                      designationById.get(Number(m.designationId))
+                        ?.ratePerHour ?? 0;
                     const name =
                       designationById.get(Number(m.designationId))?.name ?? '—';
                     return (
@@ -1914,7 +1995,10 @@ export default function PackingMasterEditorPage() {
                         advanceToId="mp-count"
                         value={mpDraft.designationId}
                         onChange={(e) =>
-                          setMpDraft((d) => ({ ...d, designationId: e.target.value }))
+                          setMpDraft((d) => ({
+                            ...d,
+                            designationId: e.target.value,
+                          }))
                         }
                         placeholder="— Select designation —"
                         options={designationList
@@ -1922,7 +2006,8 @@ export default function PackingMasterEditorPage() {
                             (d) =>
                               !procForm.draft.manpower.some(
                                 (mm, j) =>
-                                  j !== mpEditIndex && Number(mm.designationId) === d.id,
+                                  j !== mpEditIndex &&
+                                  Number(mm.designationId) === d.id,
                               ),
                           )
                           .map((d) => ({ value: d.id, label: d.name }))}
@@ -1941,7 +2026,10 @@ export default function PackingMasterEditorPage() {
                           e.preventDefault();
                           if (commitManpower()) {
                             setTimeout(
-                              () => document.getElementById('mp-designation')?.focus(),
+                              () =>
+                                document
+                                  .getElementById('mp-designation')
+                                  ?.focus(),
                               0,
                             );
                           } else {
@@ -1987,14 +2075,18 @@ export default function PackingMasterEditorPage() {
       <Drawer
         open={!!srcForm}
         onClose={() => setSrcForm(null)}
-        title={srcForm?.index == null ? 'Add Source Product' : 'Edit Source Product'}
+        title={
+          srcForm?.index == null ? 'Add Source Product' : 'Edit Source Product'
+        }
         subtitle="Unpacked product and quantity"
         icon={<ListTree className="h-5 w-5" />}
         width="sm"
         aside={
           <div className="card overflow-hidden border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
             <div className="-mx-4 -mt-4 mb-3 flex items-center justify-between rounded-t-2xl bg-slate-700 px-4 py-2.5 dark:bg-slate-800">
-              <h3 className="text-sm font-semibold text-white">Source products so far</h3>
+              <h3 className="text-sm font-semibold text-white">
+                Source products so far
+              </h3>
               <span className="text-xs text-white/70">
                 {packSources.length} item{packSources.length === 1 ? '' : 's'}
               </span>
@@ -2026,7 +2118,8 @@ export default function PackingMasterEditorPage() {
                         key={i}
                         className={cn(
                           'border-b border-slate-100 dark:border-slate-800/60',
-                          srcForm?.index === i && 'bg-amber-100/60 dark:bg-amber-500/10',
+                          srcForm?.index === i &&
+                            'bg-amber-100/60 dark:bg-amber-500/10',
                         )}
                       >
                         <td className="py-1.5 pr-1 text-center tabular-nums text-slate-500">
@@ -2050,7 +2143,10 @@ export default function PackingMasterEditorPage() {
               {packSources.length > 0 && (
                 <tfoot>
                   <tr className="border-t-2 border-slate-200 dark:border-slate-700">
-                    <td colSpan={3} className="py-1.5 text-right text-sm font-semibold">
+                    <td
+                      colSpan={3}
+                      className="py-1.5 text-right text-sm font-semibold"
+                    >
                       Total
                     </td>
                     <td className="py-1.5 px-1 text-right text-sm font-bold tabular-nums text-slate-900 dark:text-white">
@@ -2085,7 +2181,9 @@ export default function PackingMasterEditorPage() {
               value={srcForm.draft.productId}
               onChange={(e) =>
                 setSrcForm((f) =>
-                  f ? { ...f, draft: { ...f.draft, productId: e.target.value } } : f,
+                  f
+                    ? { ...f, draft: { ...f.draft, productId: e.target.value } }
+                    : f,
                 )
               }
               placeholder="Select source product"
@@ -2111,7 +2209,9 @@ export default function PackingMasterEditorPage() {
               onKeyDown={enterTo('src-add')}
               onChange={(e) =>
                 setSrcForm((f) =>
-                  f ? { ...f, draft: { ...f.draft, quantity: e.target.value } } : f,
+                  f
+                    ? { ...f, draft: { ...f.draft, quantity: e.target.value } }
+                    : f,
                 )
               }
             />
@@ -2343,7 +2443,9 @@ function CostBreakdown({ rows, total, empty }: Omit<CostDetail, 'title'>) {
               className="align-top border-b border-slate-100 dark:border-slate-800/60"
             >
               <td className="py-1.5 pr-4">
-                <div className="text-slate-700 dark:text-slate-200">{r.label}</div>
+                <div className="text-slate-700 dark:text-slate-200">
+                  {r.label}
+                </div>
                 <div className="text-xs text-slate-400">{r.detail}</div>
               </td>
               <td className="whitespace-nowrap py-1.5 text-right font-medium tabular-nums text-slate-700 dark:text-slate-200">
@@ -2428,4 +2530,3 @@ function CostDetailDialog({
     </div>
   );
 }
-

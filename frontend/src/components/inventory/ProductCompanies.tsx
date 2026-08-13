@@ -167,9 +167,7 @@ export function ProductCompanies({
                         }
                       />
                       <span className="text-xs text-slate-400">
-                        {row.canProduce
-                          ? 'Makes it in-house'
-                          : 'Buys it in'}
+                        {row.canProduce ? 'Makes it in-house' : 'Buys it in'}
                       </span>
                     </div>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

@@ -78,7 +78,8 @@ export default function GroupReportPage() {
   // only item categories, Product-wise only product categories.
   const filterCategories = useMemo(() => {
     let cats = categories ?? [];
-    if (applies === 'item') cats = cats.filter((c) => ITEM_KINDS.includes(c.kind));
+    if (applies === 'item')
+      cats = cats.filter((c) => ITEM_KINDS.includes(c.kind));
     else if (applies === 'product')
       cats = cats.filter((c) => PRODUCT_KINDS.includes(c.kind));
     return cats;
@@ -138,7 +139,10 @@ export default function GroupReportPage() {
     const levels = [...byLevel.keys()].sort((a, b) => a - b);
     return [
       { label: 'Total Categories', value: blocks.length },
-      ...levels.map((l) => ({ label: `Group - L${l}`, value: byLevel.get(l)! })),
+      ...levels.map((l) => ({
+        label: `Group - L${l}`,
+        value: byLevel.get(l)!,
+      })),
     ];
   }, [filteredGroups, blocks.length]);
 
@@ -211,7 +215,10 @@ export default function GroupReportPage() {
           />
           <div className="ml-auto flex items-center gap-2">
             <ColumnToggle
-              columns={ALL_COLUMNS.map((c) => ({ key: c.key, label: c.header }))}
+              columns={ALL_COLUMNS.map((c) => ({
+                key: c.key,
+                label: c.header,
+              }))}
               hidden={hidden}
               onToggle={toggle}
             />

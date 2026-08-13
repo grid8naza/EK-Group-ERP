@@ -113,7 +113,9 @@ export function buildRecipeHtml(
   // --- costing (mirrors the editor) ---
   const materialCost = p.recipe.reduce((s, l) => s + amountOf(l), 0);
   const equipmentCost = p.processes.reduce(
-    (s, proc) => s + (assetById.get(Number(proc.machineId))?.costPerHour ?? 0) * hoursOf(proc),
+    (s, proc) =>
+      s +
+      (assetById.get(Number(proc.machineId))?.costPerHour ?? 0) * hoursOf(proc),
     0,
   );
   const manpowerCost = p.processes.reduce(
@@ -138,7 +140,8 @@ export function buildRecipeHtml(
   const taxOf = (price: number, ratePct: number) => (price * ratePct) / 100;
 
   const totalProcMinutes = p.processes.reduce(
-    (s, proc) => s + (proc.timeUnit === 'HR' ? proc.timeValue * 60 : proc.timeValue),
+    (s, proc) =>
+      s + (proc.timeUnit === 'HR' ? proc.timeValue * 60 : proc.timeValue),
     0,
   );
   const fmtDuration = (mins: number) => {

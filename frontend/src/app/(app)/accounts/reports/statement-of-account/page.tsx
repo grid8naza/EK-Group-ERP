@@ -22,7 +22,12 @@ import {
   type ReportColumn,
   type ReportSpec,
 } from '@/lib/reportDoc';
-import type { Company, PartyLite, PartyStatement, StatementRow } from '@/lib/types';
+import type {
+  Company,
+  PartyLite,
+  PartyStatement,
+  StatementRow,
+} from '@/lib/types';
 
 const ROUTE = '/accounts/reports/statement-of-account';
 
@@ -35,8 +40,19 @@ const asDate = (iso: string) => new Date(iso).toLocaleDateString();
 
 const ALL_COLUMNS: ReportColumn<StatementRow>[] = [
   { key: 'date', header: 'Date', weight: 10, cell: (r) => asDate(r.date) },
-  { key: 'voucherNo', header: 'Voucher', weight: 16, dark: true, cell: (r) => r.voucherNo },
-  { key: 'voucherType', header: 'Type', weight: 12, cell: (r) => r.voucherType },
+  {
+    key: 'voucherNo',
+    header: 'Voucher',
+    weight: 16,
+    dark: true,
+    cell: (r) => r.voucherNo,
+  },
+  {
+    key: 'voucherType',
+    header: 'Type',
+    weight: 12,
+    cell: (r) => r.voucherType,
+  },
   {
     // Which bills the entry touched. This is the column that makes a statement
     // answerable — "what is this 400 against?" is otherwise unanswerable.
@@ -62,8 +78,20 @@ const ALL_COLUMNS: ReportColumn<StatementRow>[] = [
     weight: 22,
     cell: (r) => r.narration ?? '',
   },
-  { key: 'debit', header: 'Debit', weight: 12, numeric: true, cell: (r) => (r.debit ? money(r.debit) : '') },
-  { key: 'credit', header: 'Credit', weight: 12, numeric: true, cell: (r) => (r.credit ? money(r.credit) : '') },
+  {
+    key: 'debit',
+    header: 'Debit',
+    weight: 12,
+    numeric: true,
+    cell: (r) => (r.debit ? money(r.debit) : ''),
+  },
+  {
+    key: 'credit',
+    header: 'Credit',
+    weight: 12,
+    numeric: true,
+    cell: (r) => (r.credit ? money(r.credit) : ''),
+  },
   {
     key: 'balance',
     header: 'Balance',
@@ -71,7 +99,8 @@ const ALL_COLUMNS: ReportColumn<StatementRow>[] = [
     numeric: true,
     // Dr / Cr rather than a minus sign: a negative balance on a supplier means
     // nothing to read at a glance, "1,200 Cr" means they are owed.
-    cell: (r) => `${money(Math.abs(r.balance))} ${r.balance >= 0 ? 'Dr' : 'Cr'}`,
+    cell: (r) =>
+      `${money(Math.abs(r.balance))} ${r.balance >= 0 ? 'Dr' : 'Cr'}`,
   },
 ];
 
@@ -87,7 +116,9 @@ export default function StatementOfAccountPage() {
   const { can, activeCompany, activeCompanyId } = useAuth();
   const toast = useToast();
 
-  const [partyKind, setPartyKind] = useState<'CUSTOMER' | 'SUPPLIER'>('CUSTOMER');
+  const [partyKind, setPartyKind] = useState<'CUSTOMER' | 'SUPPLIER'>(
+    'CUSTOMER',
+  );
   const [partyId, setPartyId] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -143,8 +174,14 @@ export default function StatementOfAccountPage() {
             // for it.
             { label: 'Opening', value: data.openingBalance },
             { label: 'Entries', value: data.rows.length },
-            { label: 'Debits', value: data.rows.reduce((s, r) => s + r.debit, 0) },
-            { label: 'Credits', value: data.rows.reduce((s, r) => s + r.credit, 0) },
+            {
+              label: 'Debits',
+              value: data.rows.reduce((s, r) => s + r.debit, 0),
+            },
+            {
+              label: 'Credits',
+              value: data.rows.reduce((s, r) => s + r.credit, 0),
+            },
             { label: 'Closing', value: data.closingBalance },
           ]
         : [],
@@ -242,7 +279,10 @@ export default function StatementOfAccountPage() {
           />
           <div className="ml-auto flex items-center gap-2">
             <ColumnToggle
-              columns={ALL_COLUMNS.map((c) => ({ key: c.key, label: c.header }))}
+              columns={ALL_COLUMNS.map((c) => ({
+                key: c.key,
+                label: c.header,
+              }))}
               hidden={hidden}
               onToggle={toggle}
             />

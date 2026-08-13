@@ -55,7 +55,9 @@ export class CustomerService {
 
   async create(companyId: number | undefined, dto: CreateCustomerDto) {
     if (!companyId) {
-      throw new BadRequestException('Select a company before adding a customer.');
+      throw new BadRequestException(
+        'Select a company before adding a customer.',
+      );
     }
     const controlAccountId = await resolveControlAccount(
       this.prisma,
@@ -136,7 +138,8 @@ export class CustomerService {
         gstNumber: norm(dto.gstNumber),
         address: norm(dto.address),
         creditDays: dto.creditDays !== undefined ? dto.creditDays : undefined,
-        creditLimit: dto.creditLimit !== undefined ? dto.creditLimit : undefined,
+        creditLimit:
+          dto.creditLimit !== undefined ? dto.creditLimit : undefined,
         controlAccountId,
         isActive: dto.isActive,
       },

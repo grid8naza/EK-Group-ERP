@@ -143,10 +143,7 @@ export default function ApprovalStatusesPage() {
         const Icon = resolveIcon(r.icon);
         return (
           <span title={r.name} className="inline-flex">
-            <Icon
-              className="h-5 w-5"
-              style={{ color: r.color || undefined }}
-            />
+            <Icon className="h-5 w-5" style={{ color: r.color || undefined }} />
           </span>
         );
       },
@@ -213,7 +210,12 @@ export default function ApprovalStatusesPage() {
           view ? (
             <CloseFooter onClose={close} />
           ) : (
-            <DrawerFooter onCancel={close} onSave={save} saving={saving} dataEntry />
+            <DrawerFooter
+              onCancel={close}
+              onSave={save}
+              saving={saving}
+              dataEntry
+            />
           )
         }
       >

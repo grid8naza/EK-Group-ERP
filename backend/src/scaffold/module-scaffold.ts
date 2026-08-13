@@ -25,10 +25,7 @@ import {
   WORKFLOW_SUBS,
   WORKFLOW_EXTRA_MENUS,
 } from '../modules/workflow/workflow-provisioning';
-import {
-  CRM_SUBS,
-  CRM_REPORT_MENUS,
-} from '../modules/crm/crm-provisioning';
+import { CRM_SUBS, CRM_REPORT_MENUS } from '../modules/crm/crm-provisioning';
 import {
   PURCHASE_SUBS,
   PURCHASE_REPORT_MENUS,
@@ -171,7 +168,8 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     name: 'Human Resources',
     icon: 'id-card',
     sortOrder: 5,
-    description: 'HR & employees — manpower category, group & designation masters.',
+    description:
+      'HR & employees — manpower category, group & designation masters.',
     autoEnable: true, // on for every company so the manpower masters appear
     menu: { name: 'Human Resources', icon: 'id-card' },
     subs: HR_SUBS,

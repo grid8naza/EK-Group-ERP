@@ -34,7 +34,8 @@ export class OpeningStockService {
   constructor(
     private prisma: PrismaService,
     @Inject(NUMBERING) private readonly numbering: NumberingPort,
-    @Inject(BATCH_NUMBERING) private readonly batchNumbering: BatchNumberingPort,
+    @Inject(BATCH_NUMBERING)
+    private readonly batchNumbering: BatchNumberingPort,
     // Batches are regenerated on every edit and dropped on delete, so this
     // service must ask whether anything is holding them first.
     @Inject(STOCK) private readonly stock: StockPort,
@@ -83,7 +84,8 @@ export class OpeningStockService {
 
   async findOne(id: number) {
     const header = await this.prisma.openingStock.findUnique({ where: { id } });
-    if (!header) throw new NotFoundException('Opening stock document not found');
+    if (!header)
+      throw new NotFoundException('Opening stock document not found');
     const lines = await this.prisma.stockLedger.findMany({
       where: { transactionType: 'OPENING_STOCK', documentId: id },
       orderBy: { id: 'asc' },
@@ -134,7 +136,9 @@ export class OpeningStockService {
       return rows.filter((r) => r.itemId != null && ok.has(r.itemId));
     }
     const pids = [
-      ...new Set(rows.filter((r) => r.productId != null).map((r) => r.productId!)),
+      ...new Set(
+        rows.filter((r) => r.productId != null).map((r) => r.productId!),
+      ),
     ];
     const prods = pids.length
       ? await this.prisma.product.findMany({
@@ -144,7 +148,9 @@ export class OpeningStockService {
       : [];
     const wantPacked = type === 'PRODUCT_PACKED';
     const ok = new Set(
-      prods.filter((p) => (wantPacked ? p.packed : p.unpacked)).map((p) => p.id),
+      prods
+        .filter((p) => (wantPacked ? p.packed : p.unpacked))
+        .map((p) => p.id),
     );
     return rows.filter((r) => r.productId != null && ok.has(r.productId));
   }
@@ -166,8 +172,9 @@ export class OpeningStockService {
   ) {
     const filtered = await this.filteredLedger(companyId, branchId, type);
 
-    const uniq = <T>(xs: (T | null | undefined)[]) =>
-      [...new Set(xs.filter((x): x is T => x != null))];
+    const uniq = <T>(xs: (T | null | undefined)[]) => [
+      ...new Set(xs.filter((x): x is T => x != null)),
+    ];
     const itemIds = uniq(filtered.map((r) => r.itemId));
     const productIds = uniq(filtered.map((r) => r.productId));
     const catIds = uniq(filtered.map((r) => r.categoryId));
@@ -181,25 +188,46 @@ export class OpeningStockService {
 
     const [its, prs, cats, grps, uns, sts, docs] = await Promise.all([
       itemIds.length
-        ? this.prisma.item.findMany({ where: { id: { in: itemIds } }, select: { id: true, name: true } })
+        ? this.prisma.item.findMany({
+            where: { id: { in: itemIds } },
+            select: { id: true, name: true },
+          })
         : [],
       productIds.length
-        ? this.prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, name: true } })
+        ? this.prisma.product.findMany({
+            where: { id: { in: productIds } },
+            select: { id: true, name: true },
+          })
         : [],
       catIds.length
-        ? this.prisma.category.findMany({ where: { id: { in: catIds } }, select: { id: true, name: true } })
+        ? this.prisma.category.findMany({
+            where: { id: { in: catIds } },
+            select: { id: true, name: true },
+          })
         : [],
       groupIds.length
-        ? this.prisma.group.findMany({ where: { id: { in: groupIds } }, select: { id: true, name: true } })
+        ? this.prisma.group.findMany({
+            where: { id: { in: groupIds } },
+            select: { id: true, name: true },
+          })
         : [],
       unitIds.length
-        ? this.prisma.unit.findMany({ where: { id: { in: unitIds } }, select: { id: true, symbol: true, code: true } })
+        ? this.prisma.unit.findMany({
+            where: { id: { in: unitIds } },
+            select: { id: true, symbol: true, code: true },
+          })
         : [],
       storeIds.length
-        ? this.prisma.store.findMany({ where: { id: { in: storeIds } }, select: { id: true, name: true } })
+        ? this.prisma.store.findMany({
+            where: { id: { in: storeIds } },
+            select: { id: true, name: true },
+          })
         : [],
       docIds.length
-        ? this.prisma.openingStock.findMany({ where: { id: { in: docIds } }, select: { id: true, isLocked: true } })
+        ? this.prisma.openingStock.findMany({
+            where: { id: { in: docIds } },
+            select: { id: true, isLocked: true },
+          })
         : [],
     ]);
 
@@ -207,7 +235,9 @@ export class OpeningStockService {
     const prodMap = new Map(prs.map((x) => [x.id, x.name] as const));
     const catMap = new Map(cats.map((x) => [x.id, x.name] as const));
     const grpMap = new Map(grps.map((x) => [x.id, x.name] as const));
-    const unitMap = new Map(uns.map((x) => [x.id, x.symbol ?? x.code] as const));
+    const unitMap = new Map(
+      uns.map((x) => [x.id, x.symbol ?? x.code] as const),
+    );
     const storeMap = new Map(sts.map((x) => [x.id, x.name] as const));
     const lockMap = new Map(docs.map((x) => [x.id, x.isLocked] as const));
 
@@ -221,16 +251,20 @@ export class OpeningStockService {
       itemId: r.itemId,
       productId: r.productId,
       name: r.itemId
-        ? itemMap.get(r.itemId) ?? ''
+        ? (itemMap.get(r.itemId) ?? '')
         : r.productId
-          ? prodMap.get(r.productId) ?? ''
+          ? (prodMap.get(r.productId) ?? '')
           : '',
       categoryId: r.categoryId,
-      categoryName: r.categoryId ? catMap.get(r.categoryId) ?? null : null,
+      categoryName: r.categoryId ? (catMap.get(r.categoryId) ?? null) : null,
       primaryGroupId: r.primaryGroupId,
-      primaryGroupName: r.primaryGroupId ? grpMap.get(r.primaryGroupId) ?? null : null,
+      primaryGroupName: r.primaryGroupId
+        ? (grpMap.get(r.primaryGroupId) ?? null)
+        : null,
       parentGroupId: r.parentGroupId,
-      parentGroupName: r.parentGroupId ? grpMap.get(r.parentGroupId) ?? null : null,
+      parentGroupName: r.parentGroupId
+        ? (grpMap.get(r.parentGroupId) ?? null)
+        : null,
       batchNo1: r.batchNo1,
       batchNo2: r.batchNo2,
       expiryDate: r.expiryDate,
@@ -288,8 +322,9 @@ export class OpeningStockService {
         });
     }
     const docs = [...byDoc.values()];
-    const uniq = <T,>(xs: (T | null | undefined)[]) =>
-      [...new Set(xs.filter((x): x is T => x != null))];
+    const uniq = <T>(xs: (T | null | undefined)[]) => [
+      ...new Set(xs.filter((x): x is T => x != null)),
+    ];
     const companyIds = uniq(docs.map((d) => d.companyId));
     const branchIds = uniq(docs.map((d) => d.branchId));
     const storeIds = uniq(docs.map((d) => d.storeId));
@@ -309,16 +344,28 @@ export class OpeningStockService {
 
     const [companies, branches, stores, headers] = await Promise.all([
       companyIds.length
-        ? this.prisma.company.findMany({ where: { id: { in: companyIds } }, select: { id: true, name: true } })
+        ? this.prisma.company.findMany({
+            where: { id: { in: companyIds } },
+            select: { id: true, name: true },
+          })
         : [],
       branchIds.length
-        ? this.prisma.branch.findMany({ where: { id: { in: branchIds } }, select: { id: true, name: true } })
+        ? this.prisma.branch.findMany({
+            where: { id: { in: branchIds } },
+            select: { id: true, name: true },
+          })
         : [],
       storeIds.length
-        ? this.prisma.store.findMany({ where: { id: { in: storeIds } }, select: { id: true, name: true } })
+        ? this.prisma.store.findMany({
+            where: { id: { in: storeIds } },
+            select: { id: true, name: true },
+          })
         : [],
       docIds.length
-        ? this.prisma.openingStock.findMany({ where: { id: { in: docIds } }, select: { id: true, isLocked: true } })
+        ? this.prisma.openingStock.findMany({
+            where: { id: { in: docIds } },
+            select: { id: true, isLocked: true },
+          })
         : [],
     ]);
     const companyMap = new Map(companies.map((x) => [x.id, x.name] as const));
@@ -333,7 +380,7 @@ export class OpeningStockService {
       companyId: d.companyId,
       companyName: companyMap.get(d.companyId) ?? '',
       branchId: d.branchId,
-      branchName: d.branchId ? branchMap.get(d.branchId) ?? null : null,
+      branchName: d.branchId ? (branchMap.get(d.branchId) ?? null) : null,
       storeId: d.storeId,
       storeName: storeMap.get(d.storeId) ?? '',
       reference: d.reference,
@@ -352,7 +399,9 @@ export class OpeningStockService {
     dto: CreateOpeningStockDto,
   ) {
     if (!companyId) {
-      throw new BadRequestException('Select a company before entering opening stock.');
+      throw new BadRequestException(
+        'Select a company before entering opening stock.',
+      );
     }
     const companyCode = await this.companyCode(companyId);
     const store = await this.prisma.store.findFirst({
@@ -413,8 +462,11 @@ export class OpeningStockService {
     branchId: number | undefined,
     dto: UpdateOpeningStockDto,
   ) {
-    const existing = await this.prisma.openingStock.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('Opening stock document not found');
+    const existing = await this.prisma.openingStock.findUnique({
+      where: { id },
+    });
+    if (!existing)
+      throw new NotFoundException('Opening stock document not found');
     assertUnlocked(existing, 'opening stock', 'editing');
     const effCompany = existing.companyId;
     const companyCode = await this.companyCode(effCompany);
@@ -430,7 +482,12 @@ export class OpeningStockService {
     const resolved = dto.lines ? await this.resolveLines(dto.lines) : null;
     const txnBranchId = store.branchId ?? branchId ?? null;
     const ruleBatchNos = dto.lines
-      ? await this.ruleBatchNumbers(effCompany, txnBranchId, dto.lines.length, docDate)
+      ? await this.ruleBatchNumbers(
+          effCompany,
+          txnBranchId,
+          dto.lines.length,
+          docDate,
+        )
       : null;
 
     return this.prisma.$transaction(async (tx) => {
@@ -440,8 +497,11 @@ export class OpeningStockService {
           storeId,
           docDate,
           reference:
-            dto.reference !== undefined ? dto.reference?.trim() || null : undefined,
-          notes: dto.notes !== undefined ? dto.notes?.trim() || null : undefined,
+            dto.reference !== undefined
+              ? dto.reference?.trim() || null
+              : undefined,
+          notes:
+            dto.notes !== undefined ? dto.notes?.trim() || null : undefined,
         },
       });
 
@@ -457,7 +517,12 @@ export class OpeningStockService {
         // These batches are about to be destroyed. If stock is reserved against
         // any of them, the hold would outlive the batch and quietly sterilise the
         // quantity — so refuse, and let the reservation be dealt with first.
-        await assertBatchesFree(this.stock, batchIds, 'opening stock', 'editing');
+        await assertBatchesFree(
+          this.stock,
+          batchIds,
+          'opening stock',
+          'editing',
+        );
         await tx.stockLedger.deleteMany({
           where: { transactionType: 'OPENING_STOCK', documentId: id },
         });
@@ -490,8 +555,11 @@ export class OpeningStockService {
   }
 
   async remove(id: number) {
-    const existing = await this.prisma.openingStock.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('Opening stock document not found');
+    const existing = await this.prisma.openingStock.findUnique({
+      where: { id },
+    });
+    if (!existing)
+      throw new NotFoundException('Opening stock document not found');
     assertUnlocked(existing, 'opening stock', 'deleting');
     await this.prisma.$transaction(async (tx) => {
       const old = await tx.stockLedger.findMany({
@@ -502,7 +570,12 @@ export class OpeningStockService {
         .map((l) => l.batchId)
         .filter((b): b is number => b != null);
       // Deleting takes the batches with it — see the guard in update().
-      await assertBatchesFree(this.stock, batchIds, 'opening stock', 'deleting');
+      await assertBatchesFree(
+        this.stock,
+        batchIds,
+        'opening stock',
+        'deleting',
+      );
       await tx.stockLedger.deleteMany({
         where: { transactionType: 'OPENING_STOCK', documentId: id },
       });
@@ -515,8 +588,11 @@ export class OpeningStockService {
   }
 
   async setLock(id: number, locked: boolean) {
-    const existing = await this.prisma.openingStock.findUnique({ where: { id } });
-    if (!existing) throw new NotFoundException('Opening stock document not found');
+    const existing = await this.prisma.openingStock.findUnique({
+      where: { id },
+    });
+    if (!existing)
+      throw new NotFoundException('Opening stock document not found');
     return this.prisma.openingStock.update({
       where: { id },
       data: { isLocked: locked },
@@ -602,10 +678,14 @@ export class OpeningStockService {
     const out: LineClass[] = [];
     for (const l of lines) {
       if (!l.itemId && !l.productId) {
-        throw new BadRequestException('Each line must have an item or a product.');
+        throw new BadRequestException(
+          'Each line must have an item or a product.',
+        );
       }
       if (l.itemId && l.productId) {
-        throw new BadRequestException('A line cannot be both an item and a product.');
+        throw new BadRequestException(
+          'A line cannot be both an item and a product.',
+        );
       }
       out.push(await this.classify(l.itemId ?? null, l.productId ?? null));
     }

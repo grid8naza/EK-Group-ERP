@@ -12,7 +12,12 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { StatusToggle } from '@/components/ui/StatusToggle';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -39,13 +44,14 @@ export default function AssetGroupsPage() {
   const { data, loading, refetch } = useFetch<AssetGroup[]>('/asset-groups');
   const { data: categories } = useFetch<AssetCategory[]>('/asset-categories');
   const { data: companies } = useFetch<Company[]>('/companies');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<AssetGroup>({
-    endpoint: '/asset-groups',
-    route: ROUTE,
-    noun: 'asset group',
-    nameOf: (g) => g.name,
-    reload: refetch,
-  });
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
+    useLock<AssetGroup>({
+      endpoint: '/asset-groups',
+      route: ROUTE,
+      noun: 'asset group',
+      nameOf: (g) => g.name,
+      reload: refetch,
+    });
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AssetGroup | null>(null);
@@ -93,7 +99,8 @@ export default function AssetGroupsPage() {
   // chosen category.
   const formParentOptions = parentCandidates.filter(
     (g) =>
-      g.isActive && (!form.categoryId || String(g.categoryId) === form.categoryId),
+      g.isActive &&
+      (!form.categoryId || String(g.categoryId) === form.categoryId),
   );
 
   const closeDrawer = () => {
@@ -242,7 +249,9 @@ export default function AssetGroupsPage() {
     guardEdit(g, async () => {
       try {
         await api.patch(`/asset-groups/${g.id}`, { isActive: !g.isActive });
-        toast.success(g.isActive ? 'Asset group set inactive.' : 'Asset group set active.');
+        toast.success(
+          g.isActive ? 'Asset group set inactive.' : 'Asset group set active.',
+        );
         refetch();
       } catch (e) {
         toast.error(e instanceof ApiError ? e.message : 'Failed to update.');
@@ -356,7 +365,11 @@ export default function AssetGroupsPage() {
     },
   ];
 
-  const title = view ? 'View Asset Group' : editing ? 'Edit Asset Group' : 'New Asset Group';
+  const title = view
+    ? 'View Asset Group'
+    : editing
+      ? 'Edit Asset Group'
+      : 'New Asset Group';
   // Code of the primary group chosen in the filter (used to scope the parent
   // filter to that primary's subtree).
   const primaryGroupCode = primaryFilter
@@ -626,7 +639,9 @@ export default function AssetGroupsPage() {
               {!form.allCompanies && (
                 <div className="mt-1 max-h-52 space-y-1.5 overflow-y-auto rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                   {companyList.length === 0 ? (
-                    <p className="text-sm text-slate-400">No companies found.</p>
+                    <p className="text-sm text-slate-400">
+                      No companies found.
+                    </p>
                   ) : (
                     companyList.map((co) => (
                       <Checkbox
@@ -641,8 +656,8 @@ export default function AssetGroupsPage() {
               )}
               {!form.allCompanies && (
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {form.companyIds.length} selected — the asset group is available only
-                  in these companies.
+                  {form.companyIds.length} selected — the asset group is
+                  available only in these companies.
                 </p>
               )}
             </div>

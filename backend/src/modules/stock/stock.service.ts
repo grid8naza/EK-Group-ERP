@@ -136,7 +136,10 @@ export class StockService {
     ]);
 
     const onHandOf = new Map(
-      ledger.map((r) => [r.itemId!, (r._sum.qtyIn ?? 0) - (r._sum.qtyOut ?? 0)]),
+      ledger.map((r) => [
+        r.itemId!,
+        (r._sum.qtyIn ?? 0) - (r._sum.qtyOut ?? 0),
+      ]),
     );
     const unitOf = new Map(items.map((i) => [i.id, i.unitId]));
 
@@ -342,35 +345,37 @@ export class StockService {
     const batchOf = new Map(batches.map((b) => [b.id, b]));
     const pricesOf = new Map(inbound.map((l) => [l.batchId!, l]));
 
-    return holds
-      .map((h) => {
-        const b = batchOf.get(h.batchId);
-        const p = pricesOf.get(h.batchId);
-        return {
-          lineId: h.documentLineId,
-          productId: h.productId,
-          batchId: h.batchId,
-          batchNo: b?.batchNo1 ?? `#${h.batchId}`,
-          supplierBatchNo: b?.batchNo2 ?? null,
-          expiryDate: b?.expiryDate?.toISOString() ?? null,
-          quantity: h._sum.quantity ?? 0,
-          intercompanyPrice: p?.intercompanyPrice ?? 0,
-          wholesalePrice: p?.wholesalePrice ?? 0,
-          retailPrice: p?.retailPrice ?? 0,
-          _expiry: b?.expiryDate ?? null,
-        };
-      })
-      // Same order FEFO allocated in, so the document reads the way it was filled.
-      .sort((a, b) => {
-        if (a.lineId !== b.lineId) return a.lineId - b.lineId;
-        if (a._expiry && b._expiry) {
-          const d = a._expiry.getTime() - b._expiry.getTime();
-          if (d !== 0) return d;
-        } else if (a._expiry) return -1;
-        else if (b._expiry) return 1;
-        return a.batchId - b.batchId;
-      })
-      .map(({ _expiry, ...rest }) => rest);
+    return (
+      holds
+        .map((h) => {
+          const b = batchOf.get(h.batchId);
+          const p = pricesOf.get(h.batchId);
+          return {
+            lineId: h.documentLineId,
+            productId: h.productId,
+            batchId: h.batchId,
+            batchNo: b?.batchNo1 ?? `#${h.batchId}`,
+            supplierBatchNo: b?.batchNo2 ?? null,
+            expiryDate: b?.expiryDate?.toISOString() ?? null,
+            quantity: h._sum.quantity ?? 0,
+            intercompanyPrice: p?.intercompanyPrice ?? 0,
+            wholesalePrice: p?.wholesalePrice ?? 0,
+            retailPrice: p?.retailPrice ?? 0,
+            _expiry: b?.expiryDate ?? null,
+          };
+        })
+        // Same order FEFO allocated in, so the document reads the way it was filled.
+        .sort((a, b) => {
+          if (a.lineId !== b.lineId) return a.lineId - b.lineId;
+          if (a._expiry && b._expiry) {
+            const d = a._expiry.getTime() - b._expiry.getTime();
+            if (d !== 0) return d;
+          } else if (a._expiry) return -1;
+          else if (b._expiry) return 1;
+          return a.batchId - b.batchId;
+        })
+        .map(({ _expiry, ...rest }) => rest)
+    );
   }
 
   // --- helpers ---

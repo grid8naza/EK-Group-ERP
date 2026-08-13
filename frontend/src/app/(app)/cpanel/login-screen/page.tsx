@@ -59,7 +59,9 @@ export default function LoginScreenSetupPage() {
   const toast = useToast();
   const readOnly = !can(ROUTE, 'edit');
 
-  const [config, setConfig] = useState<LoginScreenConfig>(() => withDefaults(null));
+  const [config, setConfig] = useState<LoginScreenConfig>(() =>
+    withDefaults(null),
+  );
   const [media, setMedia] = useState<LoginMedia[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -76,16 +78,18 @@ export default function LoginScreenSetupPage() {
     baselineRef.current = JSON.stringify(c);
   };
   useUnsavedChangesGuard(
-    () => !readOnly && !loading && JSON.stringify(config) !== baselineRef.current,
+    () =>
+      !readOnly && !loading && JSON.stringify(config) !== baselineRef.current,
   );
 
   useEffect(() => {
     let active = true;
     (async () => {
       try {
-        const res = await api.get<{ config: LoginScreenConfig | null; media: LoginMedia[] }>(
-          '/login-screen',
-        );
+        const res = await api.get<{
+          config: LoginScreenConfig | null;
+          media: LoginMedia[];
+        }>('/login-screen');
         if (!active) return;
         const loaded = withDefaults(res.config);
         setConfig(loaded);
@@ -118,7 +122,8 @@ export default function LoginScreenSetupPage() {
     document.head.appendChild(link);
   }, [config]);
 
-  const patch = (p: Partial<LoginScreenConfig>) => setConfig((c) => ({ ...c, ...p }));
+  const patch = (p: Partial<LoginScreenConfig>) =>
+    setConfig((c) => ({ ...c, ...p }));
   const patchStyle = (key: keyof LoginScreenConfig, s: Partial<TextStyle>) =>
     setConfig((c) => ({ ...c, [key]: { ...(c[key] as TextStyle), ...s } }));
 
@@ -126,14 +131,17 @@ export default function LoginScreenSetupPage() {
   const setButtons = (next: CtaButton[]) => patch({ buttons: next });
   const updateButton = (i: number, b: Partial<CtaButton>) =>
     setButtons(buttons.map((x, idx) => (idx === i ? { ...x, ...b } : x)));
-  const patchForgot = (p: Partial<NonNullable<LoginScreenConfig['forgotPassword']>>) =>
-    patch({ forgotPassword: { ...config.forgotPassword, ...p } });
-  const patchSecondary = (p: Partial<NonNullable<LoginScreenConfig['secondaryButton']>>) =>
-    patch({ secondaryButton: { ...config.secondaryButton, ...p } });
+  const patchForgot = (
+    p: Partial<NonNullable<LoginScreenConfig['forgotPassword']>>,
+  ) => patch({ forgotPassword: { ...config.forgotPassword, ...p } });
+  const patchSecondary = (
+    p: Partial<NonNullable<LoginScreenConfig['secondaryButton']>>,
+  ) => patch({ secondaryButton: { ...config.secondaryButton, ...p } });
   const patchSignUp = (p: Partial<NonNullable<LoginScreenConfig['signUp']>>) =>
     patch({ signUp: { ...config.signUp, ...p } });
-  const patchKnowMore = (p: Partial<NonNullable<LoginScreenConfig['knowMore']>>) =>
-    patch({ knowMore: { ...config.knowMore, ...p } });
+  const patchKnowMore = (
+    p: Partial<NonNullable<LoginScreenConfig['knowMore']>>,
+  ) => patch({ knowMore: { ...config.knowMore, ...p } });
 
   // Field-level alignment for the rich-text fields: store on the field's style
   // (applied to the render container) and strip any stale inline text-align.
@@ -149,10 +157,10 @@ export default function LoginScreenSetupPage() {
   const save = async () => {
     setSaving(true);
     try {
-      const res = await api.put<{ config: LoginScreenConfig | null; media: LoginMedia[] }>(
-        '/login-screen',
-        { config },
-      );
+      const res = await api.put<{
+        config: LoginScreenConfig | null;
+        media: LoginMedia[];
+      }>('/login-screen', { config });
       const saved = withDefaults(res.config);
       setConfig(saved);
       markClean(saved);
@@ -169,12 +177,18 @@ export default function LoginScreenSetupPage() {
     const fd = new FormData();
     fd.append('file', file);
     try {
-      const res = await api.post<{ config: LoginScreenConfig | null }>('/login-screen/logo', fd);
+      const res = await api.post<{ config: LoginScreenConfig | null }>(
+        '/login-screen/logo',
+        fd,
+      );
       const logoUrl = res.config?.logoUrl ?? null;
       patch({ logoUrl });
       // The upload persisted the logo on its own, so move the clean baseline
       // with it — a bare upload must not read as an unsaved edit.
-      markClean({ ...(JSON.parse(baselineRef.current) as LoginScreenConfig), logoUrl });
+      markClean({
+        ...(JSON.parse(baselineRef.current) as LoginScreenConfig),
+        logoUrl,
+      });
       toast.success('Logo uploaded.');
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Upload failed.');
@@ -195,9 +209,10 @@ export default function LoginScreenSetupPage() {
 
   const deleteMedia = async (id: number) => {
     try {
-      const res = await api.delete<{ media: LoginMedia[]; config: LoginScreenConfig | null }>(
-        `/login-screen/media/${id}`,
-      );
+      const res = await api.delete<{
+        media: LoginMedia[];
+        config: LoginScreenConfig | null;
+      }>(`/login-screen/media/${id}`);
       setMedia(res.media ?? []);
       if (config.backgroundMediaId === id) patch({ backgroundMediaId: null });
       toast.success('Media removed.');
@@ -209,7 +224,10 @@ export default function LoginScreenSetupPage() {
   if (loading) {
     return (
       <div>
-        <PageHeader title="Login Screen Setup" icon={<ImageIcon className="h-5 w-5" />} />
+        <PageHeader
+          title="Login Screen Setup"
+          icon={<ImageIcon className="h-5 w-5" />}
+        />
         <p className="text-sm text-slate-400">Loading…</p>
       </div>
     );
@@ -239,7 +257,9 @@ export default function LoginScreenSetupPage() {
         <fieldset disabled={readOnly} className="space-y-6">
           {/* Layout */}
           <section className="card p-5">
-            <h2 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">Layout</h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">
+              Layout
+            </h2>
             <div className="grid gap-3 sm:grid-cols-2">
               {LAYOUT_OPTIONS.map((opt) => (
                 <button
@@ -256,7 +276,9 @@ export default function LoginScreenSetupPage() {
                   <div className="text-sm font-medium text-slate-800 dark:text-slate-100">
                     {opt.label}
                   </div>
-                  <div className="mt-0.5 text-xs text-slate-500">{opt.hint}</div>
+                  <div className="mt-0.5 text-xs text-slate-500">
+                    {opt.hint}
+                  </div>
                 </button>
               ))}
             </div>
@@ -264,12 +286,18 @@ export default function LoginScreenSetupPage() {
 
           {/* Logo */}
           <section className="card p-5">
-            <h2 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">Logo</h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">
+              Logo
+            </h2>
             <div className="flex items-center gap-4">
               <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
                 {config.logoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={mediaUrl(config.logoUrl)} alt="Logo" className="h-full w-full object-contain" />
+                  <img
+                    src={mediaUrl(config.logoUrl)}
+                    alt="Logo"
+                    className="h-full w-full object-contain"
+                  />
                 ) : (
                   <ImageIcon className="h-6 w-6 text-slate-300" />
                 )}
@@ -318,7 +346,9 @@ export default function LoginScreenSetupPage() {
                 className="w-full max-w-xs accent-brand-600"
               />
             </div>
-            <p className="mt-2 text-xs text-slate-400">PNG, JPG, WEBP or GIF — up to 5 MB.</p>
+            <p className="mt-2 text-xs text-slate-400">
+              PNG, JPG, WEBP or GIF — up to 5 MB.
+            </p>
           </section>
 
           {/* Heading (rich text) */}
@@ -343,7 +373,9 @@ export default function LoginScreenSetupPage() {
 
           {/* Colors */}
           <section className="card p-5">
-            <h2 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">Colors</h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">
+              Colors
+            </h2>
             <div className="flex flex-wrap gap-6">
               <ColorField
                 label="Form card"
@@ -359,7 +391,9 @@ export default function LoginScreenSetupPage() {
             <div className="mt-4">
               <label className="label">
                 Form card opacity — {config.cardOpacity ?? 100}%{' '}
-                <span className="font-normal text-slate-400">(lower = more transparent)</span>
+                <span className="font-normal text-slate-400">
+                  (lower = more transparent)
+                </span>
               </label>
               <input
                 type="range"
@@ -372,8 +406,8 @@ export default function LoginScreenSetupPage() {
               />
             </div>
             <p className="mt-2 text-xs text-slate-400">
-              Page background is used when no media is selected below. Card opacity lets the
-              background show through the login card.
+              Page background is used when no media is selected below. Card
+              opacity lets the background show through the login card.
             </p>
           </section>
 
@@ -435,10 +469,18 @@ export default function LoginScreenSetupPage() {
                     title={m.originalName}
                   >
                     {m.kind === 'VIDEO' ? (
-                      <video src={mediaUrl(m.url)} className="h-full w-full object-cover" muted />
+                      <video
+                        src={mediaUrl(m.url)}
+                        className="h-full w-full object-cover"
+                        muted
+                      />
                     ) : (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={mediaUrl(m.url)} alt={m.originalName} className="h-full w-full object-cover" />
+                      <img
+                        src={mediaUrl(m.url)}
+                        alt={m.originalName}
+                        className="h-full w-full object-cover"
+                      />
                     )}
                   </button>
                   <button
@@ -458,14 +500,17 @@ export default function LoginScreenSetupPage() {
               ))}
             </div>
             <p className="mt-2 text-xs text-slate-400">
-              Image, GIF or video — up to 50 MB. Layout 1 uses the selected item behind the card;
-              Layout 2 cycles through all uploaded media as a slideshow on the image panel.
+              Image, GIF or video — up to 50 MB. Layout 1 uses the selected item
+              behind the card; Layout 2 cycles through all uploaded media as a
+              slideshow on the image panel.
             </p>
           </section>
 
           {/* Form options */}
           <section className="card p-5">
-            <h2 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">Form</h2>
+            <h2 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">
+              Form
+            </h2>
             <Input
               label="Card title"
               value={config.formTitle ?? ''}
@@ -601,7 +646,9 @@ export default function LoginScreenSetupPage() {
           {/* Image panel overlay (Layout 2, rich text) */}
           <RichField
             title="Image overlay heading (Layout 2)"
-            value={config.overlayHeadingHtml || textToHtml(config.overlayHeading)}
+            value={
+              config.overlayHeadingHtml || textToHtml(config.overlayHeading)
+            }
             onChange={(html) => patch({ overlayHeadingHtml: html })}
             style={config.overlayHeadingStyle}
             onAlign={alignHandler('overlayHeadingStyle', 'overlayHeadingHtml')}
@@ -653,7 +700,9 @@ export default function LoginScreenSetupPage() {
                 <button
                   type="button"
                   className="btn-secondary inline-flex items-center gap-1 text-xs"
-                  onClick={() => setButtons([...buttons, { label: '', url: '' }])}
+                  onClick={() =>
+                    setButtons([...buttons, { label: '', url: '' }])
+                  }
                 >
                   <Plus className="h-3.5 w-3.5" /> Add
                 </button>
@@ -662,7 +711,9 @@ export default function LoginScreenSetupPage() {
             <p className="mb-3 text-xs text-slate-400">
               Pill buttons shown under the card on Layout 1 (centered).
             </p>
-            {buttons.length === 0 && <p className="text-sm text-slate-400">No buttons.</p>}
+            {buttons.length === 0 && (
+              <p className="text-sm text-slate-400">No buttons.</p>
+            )}
             <div className="space-y-3">
               {buttons.map((b, i) => (
                 <div key={i} className="flex items-end gap-2">
@@ -683,7 +734,9 @@ export default function LoginScreenSetupPage() {
                   <button
                     type="button"
                     className="mb-1 rounded-lg p-2 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950"
-                    onClick={() => setButtons(buttons.filter((_, idx) => idx !== i))}
+                    onClick={() =>
+                      setButtons(buttons.filter((_, idx) => idx !== i))
+                    }
                     title="Remove"
                   >
                     <X className="h-4 w-4" />
@@ -716,7 +769,9 @@ export default function LoginScreenSetupPage() {
       {/* Always-reachable save bar — sticks to the bottom while scrolling. */}
       {!readOnly && (
         <div className="sticky bottom-0 z-30 mt-6 flex items-center justify-end gap-3 border-t border-slate-200 bg-white/85 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/85">
-          <span className="text-xs text-slate-400">Changes aren’t saved until you click Save.</span>
+          <span className="text-xs text-slate-400">
+            Changes aren’t saved until you click Save.
+          </span>
           <button
             type="button"
             className="btn-primary inline-flex items-center gap-2"
@@ -753,7 +808,9 @@ function RichField({
 }) {
   return (
     <section className="card p-5">
-      <h2 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">{title}</h2>
+      <h2 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">
+        {title}
+      </h2>
       <RichTextEditor
         value={value}
         onChange={onChange}
@@ -788,7 +845,9 @@ function StyledTextField({
   const align = style?.align ?? 'left';
   return (
     <section className="card p-5">
-      <h2 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">{label}</h2>
+      <h2 className="mb-3 text-sm font-semibold text-slate-800 dark:text-slate-100">
+        {label}
+      </h2>
       {multiline ? (
         <Textarea
           value={value}
@@ -797,7 +856,11 @@ function StyledTextField({
           rows={2}
         />
       ) : (
-        <Input value={value} onChange={(e) => onText(e.target.value)} placeholder={`Enter ${label.toLowerCase()}`} />
+        <Input
+          value={value}
+          onChange={(e) => onText(e.target.value)}
+          placeholder={`Enter ${label.toLowerCase()}`}
+        />
       )}
       {hint && <p className="mt-1 text-xs text-slate-400">{hint}</p>}
       <div className="mt-3 flex flex-wrap items-end gap-3">
@@ -806,7 +869,10 @@ function StyledTextField({
           wrapClassName="w-44"
           value={style?.fontFamily ?? ''}
           onChange={(e) => onStyle({ fontFamily: e.target.value })}
-          options={FONT_OPTIONS.map((f) => ({ value: f.value, label: f.label }))}
+          options={FONT_OPTIONS.map((f) => ({
+            value: f.value,
+            label: f.label,
+          }))}
         />
         <Input
           label="Size"
@@ -815,7 +881,11 @@ function StyledTextField({
           min={FONT_SIZE_RANGE.min}
           max={FONT_SIZE_RANGE.max}
           value={style?.fontSize ?? ''}
-          onChange={(e) => onStyle({ fontSize: e.target.value ? Number(e.target.value) : undefined })}
+          onChange={(e) =>
+            onStyle({
+              fontSize: e.target.value ? Number(e.target.value) : undefined,
+            })
+          }
         />
         <ColorField
           label="Color"
@@ -823,21 +893,41 @@ function StyledTextField({
           onChange={(v) => onStyle({ color: v })}
         />
         <div className="flex gap-1">
-          <ToggleBtn active={!!style?.bold} onClick={() => onStyle({ bold: !style?.bold })} title="Bold">
+          <ToggleBtn
+            active={!!style?.bold}
+            onClick={() => onStyle({ bold: !style?.bold })}
+            title="Bold"
+          >
             <Bold className="h-4 w-4" />
           </ToggleBtn>
-          <ToggleBtn active={!!style?.italic} onClick={() => onStyle({ italic: !style?.italic })} title="Italic">
+          <ToggleBtn
+            active={!!style?.italic}
+            onClick={() => onStyle({ italic: !style?.italic })}
+            title="Italic"
+          >
             <Italic className="h-4 w-4" />
           </ToggleBtn>
         </div>
         <div className="flex gap-1">
-          <ToggleBtn active={align === 'left'} onClick={() => onStyle({ align: 'left' })} title="Align left">
+          <ToggleBtn
+            active={align === 'left'}
+            onClick={() => onStyle({ align: 'left' })}
+            title="Align left"
+          >
             <AlignLeft className="h-4 w-4" />
           </ToggleBtn>
-          <ToggleBtn active={align === 'center'} onClick={() => onStyle({ align: 'center' })} title="Align center">
+          <ToggleBtn
+            active={align === 'center'}
+            onClick={() => onStyle({ align: 'center' })}
+            title="Align center"
+          >
             <AlignCenter className="h-4 w-4" />
           </ToggleBtn>
-          <ToggleBtn active={align === 'right'} onClick={() => onStyle({ align: 'right' })} title="Align right">
+          <ToggleBtn
+            active={align === 'right'}
+            onClick={() => onStyle({ align: 'right' })}
+            title="Align right"
+          >
             <AlignRight className="h-4 w-4" />
           </ToggleBtn>
         </div>
@@ -909,7 +999,12 @@ function PreviewLogo({ config }: { config: LoginScreenConfig }) {
   const size = Math.min((config.logoSize ?? 48) * 0.85, 120);
   return config.logoUrl ? (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={mediaUrl(config.logoUrl)} alt="Logo" style={{ height: size }} className="w-auto object-contain" />
+    <img
+      src={mediaUrl(config.logoUrl)}
+      alt="Logo"
+      style={{ height: size }}
+      className="w-auto object-contain"
+    />
   ) : (
     <div
       className="flex items-center justify-center rounded-2xl bg-brand-600 text-white"
@@ -921,12 +1016,18 @@ function PreviewLogo({ config }: { config: LoginScreenConfig }) {
 }
 
 function PreviewFormFields({ config }: { config: LoginScreenConfig }) {
-  const btnStyle = config.buttonColor ? { backgroundColor: config.buttonColor } : undefined;
+  const btnStyle = config.buttonColor
+    ? { backgroundColor: config.buttonColor }
+    : undefined;
   return (
     <div className="text-left">
-      <div className="mb-1 text-[11px] font-medium text-slate-600">{config.usernameLabel || 'Username'}</div>
+      <div className="mb-1 text-[11px] font-medium text-slate-600">
+        {config.usernameLabel || 'Username'}
+      </div>
       <div className="mb-3 h-7 rounded-md border border-slate-200 bg-white" />
-      <div className="mb-1 text-[11px] font-medium text-slate-600">{config.passwordLabel || 'Password'}</div>
+      <div className="mb-1 text-[11px] font-medium text-slate-600">
+        {config.passwordLabel || 'Password'}
+      </div>
       <div className="mb-3 h-7 rounded-md border border-slate-200 bg-white" />
       {(config.showRememberMe || config.forgotPassword?.show) && (
         <div className="mb-3 flex items-center justify-between text-[11px] text-slate-500">
@@ -953,14 +1054,18 @@ function PreviewFormFields({ config }: { config: LoginScreenConfig }) {
       </div>
       {config.secondaryButton?.show && (
         <div className="mt-2 flex h-8 items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white text-[11px] font-semibold text-slate-700">
-          <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full border text-[8px]">G</span>
+          <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full border text-[8px]">
+            G
+          </span>
           {config.secondaryButton.label || 'Sign in with Google'}
         </div>
       )}
       {config.signUp?.show && (
         <div className="mt-2 text-center text-[11px] text-slate-500">
           {config.signUp.prompt || "Don't have an account?"}{' '}
-          <span className="font-medium text-slate-800 underline">{config.signUp.label || 'Sign up'}</span>
+          <span className="font-medium text-slate-800 underline">
+            {config.signUp.label || 'Sign up'}
+          </span>
         </div>
       )}
     </div>
@@ -969,9 +1074,17 @@ function PreviewFormFields({ config }: { config: LoginScreenConfig }) {
 
 function PreviewCard({ config }: { config: LoginScreenConfig }) {
   return (
-    <div className="rounded-xl p-4 shadow" style={{ backgroundColor: withAlpha(config.cardColor, config.cardOpacity) }}>
+    <div
+      className="rounded-xl p-4 shadow"
+      style={{
+        backgroundColor: withAlpha(config.cardColor, config.cardOpacity),
+      }}
+    >
       {config.formTitle && (
-        <div className="mb-2 text-left" style={resolveTextStyle(config.formTitleStyle)}>
+        <div
+          className="mb-2 text-left"
+          style={resolveTextStyle(config.formTitleStyle)}
+        >
           {config.formTitle}
         </div>
       )}
@@ -997,14 +1110,35 @@ function PreviewButtons({ config }: { config: LoginScreenConfig }) {
   );
 }
 
-function MediaBg({ media, config }: { media?: LoginMedia; config: LoginScreenConfig }) {
+function MediaBg({
+  media,
+  config,
+}: {
+  media?: LoginMedia;
+  config: LoginScreenConfig;
+}) {
   if (!media)
-    return <div className="absolute inset-0" style={{ backgroundColor: config.pageColor }} />;
+    return (
+      <div
+        className="absolute inset-0"
+        style={{ backgroundColor: config.pageColor }}
+      />
+    );
   return media.kind === 'VIDEO' ? (
-    <video src={mediaUrl(media.url)} autoPlay muted loop className="absolute inset-0 h-full w-full object-cover" />
+    <video
+      src={mediaUrl(media.url)}
+      autoPlay
+      muted
+      loop
+      className="absolute inset-0 h-full w-full object-cover"
+    />
   ) : (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={mediaUrl(media.url)} alt="" className="absolute inset-0 h-full w-full object-cover" />
+    <img
+      src={mediaUrl(media.url)}
+      alt=""
+      className="absolute inset-0 h-full w-full object-cover"
+    />
   );
 }
 
@@ -1027,7 +1161,14 @@ function RichOrPlain({
   className?: string;
 }) {
   const clean = html ? sanitizeHtml(html) : '';
-  if (clean) return <div className={className} style={style} dangerouslySetInnerHTML={{ __html: clean }} />;
+  if (clean)
+    return (
+      <div
+        className={className}
+        style={style}
+        dangerouslySetInnerHTML={{ __html: clean }}
+      />
+    );
   if (!text) return null;
   return (
     <div className={className} style={style}>
@@ -1050,7 +1191,11 @@ function LoginPreview({
     return (
       <div className="grid min-h-[360px] grid-cols-2 overflow-hidden rounded-xl border border-slate-200 shadow dark:border-slate-700">
         {/* left image panel (slideshow + overlay) */}
-        <LoginCarousel media={media} fallbackColor={config.pageColor} className="min-h-[360px]">
+        <LoginCarousel
+          media={media}
+          fallbackColor={config.pageColor}
+          className="min-h-[360px]"
+        >
           <RichOrPlain
             html={config.overlayHeadingHtml}
             text={config.overlayHeading}
@@ -1069,13 +1214,20 @@ function LoginPreview({
           )}
         </LoginCarousel>
         {/* right form panel */}
-        <div className="flex items-center justify-center p-4" style={{ backgroundColor: config.cardColor || '#ffffff' }}>
+        <div
+          className="flex items-center justify-center p-4"
+          style={{ backgroundColor: config.cardColor || '#ffffff' }}
+        >
           <div className="w-full">
             <div className="mb-3 flex flex-col items-center text-center">
               <div className="mb-2 flex justify-center">
                 <PreviewLogo config={config} />
               </div>
-              <RichOrPlain html={config.headingHtml} text={config.heading} style={resolveTextStyle(config.headingStyle)} />
+              <RichOrPlain
+                html={config.headingHtml}
+                text={config.heading}
+                style={resolveTextStyle(config.headingStyle)}
+              />
               <RichOrPlain
                 className="mt-1"
                 html={config.descriptionHtml}
@@ -1085,7 +1237,10 @@ function LoginPreview({
             </div>
             <PreviewFormFields config={config} />
             {config.copyright && (
-              <div className="mt-2 text-center" style={resolveTextStyle(config.copyrightStyle)}>
+              <div
+                className="mt-2 text-center"
+                style={resolveTextStyle(config.copyrightStyle)}
+              >
                 {formatCopyright(config.copyright, year)}
               </div>
             )}
@@ -1106,7 +1261,11 @@ function LoginPreview({
         <div className="mb-3 flex justify-center">
           <PreviewLogo config={config} />
         </div>
-        <RichOrPlain html={config.headingHtml} text={config.heading} style={resolveTextStyle(config.headingStyle)} />
+        <RichOrPlain
+          html={config.headingHtml}
+          text={config.heading}
+          style={resolveTextStyle(config.headingStyle)}
+        />
         <RichOrPlain
           className="mt-1"
           html={config.descriptionHtml}

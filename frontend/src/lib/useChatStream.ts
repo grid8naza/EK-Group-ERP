@@ -85,13 +85,17 @@ export function useChatStream(
             const dataLines: string[] = [];
             for (const line of frame.split('\n')) {
               if (line.startsWith('event:')) type = line.slice(6).trim();
-              else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+              else if (line.startsWith('data:'))
+                dataLines.push(line.slice(5).trim());
               // ':' comment lines (keep-alives) and 'id:' are ignored.
             }
             if (!dataLines.length) continue;
             if (type === 'ping') continue;
             try {
-              eventRef.current({ type, data: JSON.parse(dataLines.join('\n')) });
+              eventRef.current({
+                type,
+                data: JSON.parse(dataLines.join('\n')),
+              });
             } catch {
               // A frame we cannot parse is dropped rather than killing the
               // stream — the next one is very likely fine.

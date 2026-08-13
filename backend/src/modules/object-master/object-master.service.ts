@@ -80,20 +80,22 @@ export class ObjectMasterService {
       ...visibility,
       objectType,
     });
-    const [data, total, forms, reports, tables, dashboards] = await Promise.all([
-      this.prisma.objectMaster.findMany({
-        where,
-        include: { module: { select: { id: true, name: true, code: true } } },
-        orderBy,
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-      }),
-      this.prisma.objectMaster.count({ where }),
-      this.prisma.objectMaster.count({ where: countWhere('FORM') }),
-      this.prisma.objectMaster.count({ where: countWhere('REPORT') }),
-      this.prisma.objectMaster.count({ where: countWhere('TABLE') }),
-      this.prisma.objectMaster.count({ where: countWhere('DASHBOARD') }),
-    ]);
+    const [data, total, forms, reports, tables, dashboards] = await Promise.all(
+      [
+        this.prisma.objectMaster.findMany({
+          where,
+          include: { module: { select: { id: true, name: true, code: true } } },
+          orderBy,
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        }),
+        this.prisma.objectMaster.count({ where }),
+        this.prisma.objectMaster.count({ where: countWhere('FORM') }),
+        this.prisma.objectMaster.count({ where: countWhere('REPORT') }),
+        this.prisma.objectMaster.count({ where: countWhere('TABLE') }),
+        this.prisma.objectMaster.count({ where: countWhere('DASHBOARD') }),
+      ],
+    );
 
     return {
       data,

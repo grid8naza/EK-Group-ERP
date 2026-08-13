@@ -96,7 +96,8 @@ const TAB_META: Record<Tab, { label: string; hint: string; note: string }> = {
 
 /** Editable cells, keyed `${productId}:${priceKey}` / `${productId}:${key}#t`. */
 const priceKeyOf = (productId: number, key: PriceKey) => `${productId}:${key}`;
-const targetKeyOf = (productId: number, key: PriceKey) => `${productId}:${key}#t`;
+const targetKeyOf = (productId: number, key: PriceKey) =>
+  `${productId}:${key}#t`;
 
 export default function PriceReviewPage() {
   const { can } = useAuth();
@@ -205,8 +206,12 @@ export default function PriceReviewPage() {
       title: 'Reprice to target',
       message:
         `${r.name} — set ${moves
-          .map((p) => `${p.label} ${money(p.price)} → ${money(p.priceAtTarget!)}`)
-          .join(', ')}. This overwrites anything typed into those price boxes. ` +
+          .map(
+            (p) => `${p.label} ${money(p.price)} → ${money(p.priceAtTarget!)}`,
+          )
+          .join(
+            ', ',
+          )}. This overwrites anything typed into those price boxes. ` +
         `Nothing is written until you press Save.`,
       confirmText: 'Reprice',
       cancelText: 'Cancel',
@@ -273,10 +278,15 @@ export default function PriceReviewPage() {
     if (!ok) return;
     setBusy(true);
     try {
-      const res = await api.post<RevisePricesResult>('/products/costing/prices', {
-        revisions: pending,
-      });
-      toast.success(`${res.updated} product${res.updated === 1 ? '' : 's'} updated.`);
+      const res = await api.post<RevisePricesResult>(
+        '/products/costing/prices',
+        {
+          revisions: pending,
+        },
+      );
+      toast.success(
+        `${res.updated} product${res.updated === 1 ? '' : 's'} updated.`,
+      );
       if (res.skippedLocked.length) {
         toast.error(`Skipped (locked): ${res.skippedLocked.join(', ')}`);
       }
@@ -308,9 +318,12 @@ export default function PriceReviewPage() {
     if (!ok) return;
     setBusy(true);
     try {
-      const res = await api.post<ApplyCostingResult>('/products/costing/apply', {
-        productIds: costable.map((r) => r.productId),
-      });
+      const res = await api.post<ApplyCostingResult>(
+        '/products/costing/apply',
+        {
+          productIds: costable.map((r) => r.productId),
+        },
+      );
       toast.success(
         `Cost updated on ${res.updated} product${res.updated === 1 ? '' : 's'}.`,
       );
@@ -319,7 +332,9 @@ export default function PriceReviewPage() {
       }
       await reload();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Failed to update costs.');
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to update costs.',
+      );
     } finally {
       setBusy(false);
     }
@@ -343,7 +358,8 @@ export default function PriceReviewPage() {
     // cost, one against the recomputed cost.
     const masterPct = profitPctAt(livePrice, r.storedCost);
     const costingPct = profitPctAt(livePrice, costBasisOf(r));
-    const variance = liveTarget == null ? null : round1(costingPct - liveTarget);
+    const variance =
+      liveTarget == null ? null : round1(costingPct - liveTarget);
     // Colour by how the margin sits against target. Without a tolerance nothing
     // "alerts", but the direction still shows — a channel short of target must
     // never read the same as one comfortably over it.
@@ -364,8 +380,12 @@ export default function PriceReviewPage() {
             step="any"
             value={shownPrice(r, key)}
             onClick={(e) => e.stopPropagation()}
-            onChange={(e) => setCell(priceKeyOf(r.productId, key), e.target.value)}
-            onBlur={(e) => setCell(priceKeyOf(r.productId, key), toPrice(e.target.value))}
+            onChange={(e) =>
+              setCell(priceKeyOf(r.productId, key), e.target.value)
+            }
+            onBlur={(e) =>
+              setCell(priceKeyOf(r.productId, key), toPrice(e.target.value))
+            }
           />
         ) : (
           <span className="tabular-nums">{money(p.price)}</span>
@@ -387,7 +407,9 @@ export default function PriceReviewPage() {
               title="Target profit % for this channel (blank = no target)"
               value={shownTarget(r, key)}
               onClick={(e) => e.stopPropagation()}
-              onChange={(e) => setCell(targetKeyOf(r.productId, key), e.target.value)}
+              onChange={(e) =>
+                setCell(targetKeyOf(r.productId, key), e.target.value)
+              }
             />
           ) : (
             <span className="text-slate-500">
@@ -395,7 +417,10 @@ export default function PriceReviewPage() {
             </span>
           )}
           <span className="text-slate-300">·</span>
-          <span className="text-slate-400" title="Margin at the Product Master's cost">
+          <span
+            className="text-slate-400"
+            title="Margin at the Product Master's cost"
+          >
             {money(masterPct)}
           </span>
           <span className="text-slate-300">·</span>
@@ -582,7 +607,9 @@ export default function PriceReviewPage() {
                 disabled={!pending.length || busy}
                 onClick={save}
               >
-                {busy ? 'Saving…' : `Save${pending.length ? ` (${pending.length})` : ''}`}
+                {busy
+                  ? 'Saving…'
+                  : `Save${pending.length ? ` (${pending.length})` : ''}`}
               </button>
             </div>
           ) : null
@@ -623,7 +650,9 @@ export default function PriceReviewPage() {
             : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300',
         )}
       >
-        {tab === 'empty' && <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />}
+        {tab === 'empty' && (
+          <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" />
+        )}
         <span>{note}</span>
       </div>
 
@@ -633,7 +662,8 @@ export default function PriceReviewPage() {
           Under each price:
         </span>
         <span>
-          <b className="text-slate-700 dark:text-slate-200">target %</b> (editable)
+          <b className="text-slate-700 dark:text-slate-200">target %</b>{' '}
+          (editable)
         </span>
         <span className="text-slate-300">·</span>
         <span>actual at Product Master cost</span>

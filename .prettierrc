@@ -1,0 +1,45 @@
+# Prettier — one formatting style for both apps.
+#
+# At the repo root rather than per app, because backend and frontend are one
+# codebase to read: a file that changed quote style on the way across the
+# boundary would look like two projects.
+#
+# Every value below was measured against the code that already exists rather
+# than chosen by taste — for each option, the setting that leaves the FEWEST
+# files needing a rewrite (over ~510 .ts/.tsx files):
+#
+#   printWidth     80  → 268 files    (90 → 322, 100 → 351)
+#   trailingComma  all → 268          (es5 → 352)
+#   arrowParens    always → 268       (avoid → 295)
+#   semi           true → 268         (false → 510)
+#   jsxSingleQuote false → 268        (true → 324)
+#
+# Written in YAML (which `.prettierrc` accepts) so those numbers can sit beside
+# the settings they justify.
+#
+# NOTE: this codebase was hand-formatted, not Prettier-formatted, so ~268 files
+# still differ from this config. The file stops a stray `npx prettier` from
+# imposing a DIFFERENT style — it does not make the repo Prettier-clean. Doing
+# that needs one deliberate sweep (`npx prettier --write .`) as its own commit;
+# until then, format only the files you are already changing.
+
+# The one setting that is not a Prettier default, and the one the codebase is
+# unanimous about.
+singleQuote: true
+
+# JSX attributes keep double quotes — className="…" throughout.
+jsxSingleQuote: false
+
+# Stated rather than inherited: this file exists to be deterministic, and a
+# default that shifts in a future major would take the whole repo with it.
+printWidth: 80
+tabWidth: 2
+semi: true
+trailingComma: all
+arrowParens: always
+bracketSpacing: true
+
+# LF in the repository, whatever the checkout does locally. Half the team is on
+# Windows with core.autocrlf, and a formatter that rewrote line endings would
+# turn every touched file into a whole-file diff.
+endOfLine: lf

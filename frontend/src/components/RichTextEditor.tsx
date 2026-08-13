@@ -1,7 +1,14 @@
 'use client';
 
 import { useEffect, useRef, type CSSProperties } from 'react';
-import { Bold, Italic, Underline, AlignLeft, AlignCenter, AlignRight } from 'lucide-react';
+import {
+  Bold,
+  Italic,
+  Underline,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { FONT_OPTIONS, type TextAlign } from '@/lib/login-screen';
 
@@ -87,13 +94,28 @@ export function RichTextEditor({
   return (
     <div className="rounded-lg border border-slate-300 dark:border-slate-600">
       <div className="flex flex-wrap items-center gap-1 border-b border-slate-200 p-2 dark:border-slate-700">
-        <button type="button" className={btn} title="Bold" onClick={() => exec('bold')}>
+        <button
+          type="button"
+          className={btn}
+          title="Bold"
+          onClick={() => exec('bold')}
+        >
           <Bold className="h-4 w-4" />
         </button>
-        <button type="button" className={btn} title="Italic" onClick={() => exec('italic')}>
+        <button
+          type="button"
+          className={btn}
+          title="Italic"
+          onClick={() => exec('italic')}
+        >
           <Italic className="h-4 w-4" />
         </button>
-        <button type="button" className={btn} title="Underline" onClick={() => exec('underline')}>
+        <button
+          type="button"
+          className={btn}
+          title="Underline"
+          onClick={() => exec('underline')}
+        >
           <Underline className="h-4 w-4" />
         </button>
 
@@ -146,17 +168,23 @@ export function RichTextEditor({
 
         <span className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
 
-        {([
-          ['left', AlignLeft, 'Align left'],
-          ['center', AlignCenter, 'Align center'],
-          ['right', AlignRight, 'Align right'],
-        ] as const).map(([a, Icon, title]) => (
+        {(
+          [
+            ['left', AlignLeft, 'Align left'],
+            ['center', AlignCenter, 'Align center'],
+            ['right', AlignRight, 'Align right'],
+          ] as const
+        ).map(([a, Icon, title]) => (
           <button
             key={a}
             type="button"
             title={title}
             onClick={() => onAlign?.(a)}
-            className={cn(btn, (align ?? 'left') === a && 'bg-brand-50 text-brand-600 dark:bg-brand-950')}
+            className={cn(
+              btn,
+              (align ?? 'left') === a &&
+                'bg-brand-50 text-brand-600 dark:bg-brand-950',
+            )}
           >
             <Icon className="h-4 w-4" />
           </button>

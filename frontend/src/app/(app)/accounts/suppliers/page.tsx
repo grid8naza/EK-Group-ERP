@@ -11,7 +11,12 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Checkbox, Select, Textarea } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -92,7 +97,8 @@ export default function SuppliersPage() {
     address: s.address ?? '',
     creditDays: s.creditDays == null ? '' : String(s.creditDays),
     creditLimit: s.creditLimit == null ? '' : String(s.creditLimit),
-    controlAccountId: s.controlAccountId == null ? '' : String(s.controlAccountId),
+    controlAccountId:
+      s.controlAccountId == null ? '' : String(s.controlAccountId),
     isActive: s.isActive,
   });
 
@@ -208,14 +214,20 @@ export default function SuppliersPage() {
         </span>
       ),
     },
-    { key: 'contactPerson', header: 'Contact', accessor: (r) => r.contactPerson ?? '—' },
+    {
+      key: 'contactPerson',
+      header: 'Contact',
+      accessor: (r) => r.contactPerson ?? '—',
+    },
     { key: 'phone', header: 'Phone', accessor: (r) => r.phone ?? '—' },
     { key: 'gstNumber', header: 'GSTIN', accessor: (r) => r.gstNumber ?? '—' },
     {
       key: 'controlAccount',
       header: 'Main ledger',
       accessor: (r) =>
-        r.controlAccount ? `${r.controlAccount.code} ${r.controlAccount.name}` : '',
+        r.controlAccount
+          ? `${r.controlAccount.code} ${r.controlAccount.name}`
+          : '',
       render: (r) =>
         r.controlAccount ? (
           <span className="text-xs text-slate-500 dark:text-slate-400">
@@ -236,7 +248,11 @@ export default function SuppliersPage() {
     },
   ];
 
-  const title = view ? 'View Supplier' : editing ? 'Edit Supplier' : 'New Supplier';
+  const title = view
+    ? 'View Supplier'
+    : editing
+      ? 'Edit Supplier'
+      : 'New Supplier';
 
   return (
     <div className="mx-auto flex h-full max-w-7xl flex-col">
@@ -303,9 +319,7 @@ export default function SuppliersPage() {
       >
         <ReadOnlyFieldset readOnly={view}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {editing && (
-              <Input label="Code" value={editing.code} disabled />
-            )}
+            {editing && <Input label="Code" value={editing.code} disabled />}
             <Input
               label="Supplier name"
               required
@@ -317,7 +331,9 @@ export default function SuppliersPage() {
             <Input
               label="Contact person"
               value={form.contactPerson}
-              onChange={(e) => setForm({ ...form, contactPerson: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, contactPerson: e.target.value })
+              }
             />
             <Input
               label="Phone"
@@ -361,9 +377,10 @@ export default function SuppliersPage() {
                 disabled={!mainLedgers.length}
               />
               <p className="mt-1 text-xs text-slate-400">
-                The control account this supplier is kept under — Trade Creditors,
-                Other Creditors. A voucher line naming that account offers only the
-                suppliers kept under it, so every supplier belongs to exactly one.
+                The control account this supplier is kept under — Trade
+                Creditors, Other Creditors. A voucher line naming that account
+                offers only the suppliers kept under it, so every supplier
+                belongs to exactly one.
               </p>
             </div>
             {/* The terms THEY give us. Left blank, a bill is due the day it is
@@ -382,14 +399,18 @@ export default function SuppliersPage() {
               min="0"
               step="0.01"
               value={form.creditLimit}
-              onChange={(e) => setForm({ ...form, creditLimit: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, creditLimit: e.target.value })
+              }
               placeholder="No ceiling"
             />
             <div className="sm:col-span-2">
               <Checkbox
                 label="Active"
                 checked={form.isActive}
-                onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+                onChange={(e) =>
+                  setForm({ ...form, isActive: e.target.checked })
+                }
               />
             </div>
           </div>

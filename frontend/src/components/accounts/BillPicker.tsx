@@ -80,7 +80,8 @@ export function BillPicker({
     setPicked(new Map(initial.map((p) => [p.id, p.amount])));
     // Focus the first row so the list can be worked with arrows and Space.
     const t = setTimeout(
-      () => listRef.current?.querySelector<HTMLElement>('[data-bill-row]')?.focus(),
+      () =>
+        listRef.current?.querySelector<HTMLElement>('[data-bill-row]')?.focus(),
       120,
     );
     return () => clearTimeout(t);
@@ -330,7 +331,9 @@ export function BillPicker({
                           : 'Within the agreed credit period'
                       }
                     >
-                      {b.dueDate ? new Date(b.dueDate).toLocaleDateString() : '—'}
+                      {b.dueDate
+                        ? new Date(b.dueDate).toLocaleDateString()
+                        : '—'}
                     </span>
                     <span className="text-right tabular-nums">
                       {money(b.pending)}

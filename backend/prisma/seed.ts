@@ -20,17 +20,68 @@ async function main() {
   // Module catalog (global). Enablement is per-company below.
   // -------------------------------------------------------------------------
   const moduleDefs = [
-    { code: 'CPANEL', name: 'Cpanel', icon: 'settings', sortOrder: 1, isCore: true, isActive: true, description: 'Control panel: configure the whole application.' },
-    { code: 'CRM', name: 'CRM', icon: 'users', sortOrder: 2, isActive: true, description: 'Customer relationship management.' },
-    { code: 'ACCOUNTS', name: 'Accounts', icon: 'wallet', sortOrder: 3, isActive: true, description: 'Finance & accounting.' },
-    { code: 'INVENTORY', name: 'Inventory', icon: 'package', sortOrder: 4, isActive: true, description: 'Stock & inventory.' },
-    { code: 'HR', name: 'Human Resources', icon: 'id-card', sortOrder: 5, isActive: true, description: 'HR & employees.' },
-    { code: 'PRODUCTION', name: 'Production', icon: 'factory', sortOrder: 6, isActive: true, description: 'Manufacturing & production orders.' },
+    {
+      code: 'CPANEL',
+      name: 'Cpanel',
+      icon: 'settings',
+      sortOrder: 1,
+      isCore: true,
+      isActive: true,
+      description: 'Control panel: configure the whole application.',
+    },
+    {
+      code: 'CRM',
+      name: 'CRM',
+      icon: 'users',
+      sortOrder: 2,
+      isActive: true,
+      description: 'Customer relationship management.',
+    },
+    {
+      code: 'ACCOUNTS',
+      name: 'Accounts',
+      icon: 'wallet',
+      sortOrder: 3,
+      isActive: true,
+      description: 'Finance & accounting.',
+    },
+    {
+      code: 'INVENTORY',
+      name: 'Inventory',
+      icon: 'package',
+      sortOrder: 4,
+      isActive: true,
+      description: 'Stock & inventory.',
+    },
+    {
+      code: 'HR',
+      name: 'Human Resources',
+      icon: 'id-card',
+      sortOrder: 5,
+      isActive: true,
+      description: 'HR & employees.',
+    },
+    {
+      code: 'PRODUCTION',
+      name: 'Production',
+      icon: 'factory',
+      sortOrder: 6,
+      isActive: true,
+      description: 'Manufacturing & production orders.',
+    },
     // Workplace — everything addressed to a PERSON rather than owned by a
     // business domain (approvals, internal mail, chat, tasks). Seeded here, not
     // left to the scaffold sync, because every company enables it and every
     // group, user and login default below points at it. Code stays WORKFLOW.
-    { code: 'WORKFLOW', name: 'Workplace', icon: 'briefcase', sortOrder: 8, isActive: true, description: 'Everything addressed to a person rather than owned by a business domain — approvals, internal mail, chat and tasks.' },
+    {
+      code: 'WORKFLOW',
+      name: 'Workplace',
+      icon: 'briefcase',
+      sortOrder: 8,
+      isActive: true,
+      description:
+        'Everything addressed to a person rather than owned by a business domain — approvals, internal mail, chat and tasks.',
+    },
   ];
   const modules: Record<string, number> = {};
   for (const m of moduleDefs) {
@@ -77,16 +128,49 @@ async function main() {
   // Lookups (global) — Developers, Icons.
   // -------------------------------------------------------------------------
   const devLookup = await prisma.lookup.create({
-    data: { code: 'DEVELOPERS', name: 'Developers', description: 'Developer / author names', isSystem: true },
+    data: {
+      code: 'DEVELOPERS',
+      name: 'Developers',
+      description: 'Developer / author names',
+      isSystem: true,
+    },
   });
-  for (const [i, value] of ['Pavani', 'Vismaya', 'Ramesh', 'Jose', 'Dhanya'].entries()) {
-    await prisma.lookupValue.create({ data: { lookupId: devLookup.id, value, label: value, sortOrder: i + 1 } });
+  for (const [i, value] of [
+    'Pavani',
+    'Vismaya',
+    'Ramesh',
+    'Jose',
+    'Dhanya',
+  ].entries()) {
+    await prisma.lookupValue.create({
+      data: { lookupId: devLookup.id, value, label: value, sortOrder: i + 1 },
+    });
   }
   const iconLookup = await prisma.lookup.create({
-    data: { code: 'ICONS', name: 'Icons', description: 'Selectable menu icons (lucide names)', isSystem: true },
+    data: {
+      code: 'ICONS',
+      name: 'Icons',
+      description: 'Selectable menu icons (lucide names)',
+      isSystem: true,
+    },
   });
-  for (const [i, value] of ['settings', 'users', 'list', 'database', 'database-backup', 'building', 'shield', 'menu', 'wallet', 'layout-dashboard', 'factory', 'package'].entries()) {
-    await prisma.lookupValue.create({ data: { lookupId: iconLookup.id, value, label: value, sortOrder: i + 1 } });
+  for (const [i, value] of [
+    'settings',
+    'users',
+    'list',
+    'database',
+    'database-backup',
+    'building',
+    'shield',
+    'menu',
+    'wallet',
+    'layout-dashboard',
+    'factory',
+    'package',
+  ].entries()) {
+    await prisma.lookupValue.create({
+      data: { lookupId: iconLookup.id, value, label: value, sortOrder: i + 1 },
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -96,7 +180,12 @@ async function main() {
     { code: 'INR', name: 'Indian Rupee', symbol: '₹', fractionalUnit: 'Paisa' },
     { code: 'USD', name: 'US Dollar', symbol: '$', fractionalUnit: 'Cent' },
     { code: 'EUR', name: 'Euro', symbol: '€', fractionalUnit: 'Cent' },
-    { code: 'GBP', name: 'Pound Sterling', symbol: '£', fractionalUnit: 'Penny' },
+    {
+      code: 'GBP',
+      name: 'Pound Sterling',
+      symbol: '£',
+      fractionalUnit: 'Penny',
+    },
     { code: 'AED', name: 'UAE Dirham', symbol: 'د.إ', fractionalUnit: 'Fils' },
   ]) {
     await prisma.currency.create({ data: c });
@@ -130,7 +219,12 @@ async function main() {
     // Enable the chosen modules for this company.
     for (const [i, code] of opts.enabledModules.entries()) {
       await prisma.companyModule.create({
-        data: { companyId: cid, moduleId: modules[code], sortOrder: i + 1, isActive: true },
+        data: {
+          companyId: cid,
+          moduleId: modules[code],
+          sortOrder: i + 1,
+          isActive: true,
+        },
       });
     }
 
@@ -143,7 +237,9 @@ async function main() {
     // (Cpanel is already linked by provisioning).
     for (const code of opts.enabledModules) {
       if (code === 'CPANEL') continue;
-      await prisma.userGroupModule.create({ data: { userGroupId: adminGroup.id, moduleId: modules[code] } });
+      await prisma.userGroupModule.create({
+        data: { userGroupId: adminGroup.id, moduleId: modules[code] },
+      });
     }
 
     // ---- CRM (if enabled) ----
@@ -155,10 +251,14 @@ async function main() {
       crmGroup = await prisma.userGroup.create({
         data: { companyId: cid, name: 'CRM Team', description: 'CRM users.' },
       });
-      await prisma.userGroupModule.create({ data: { userGroupId: crmGroup.id, moduleId: modules['CRM'] } });
+      await prisma.userGroupModule.create({
+        data: { userGroupId: crmGroup.id, moduleId: modules['CRM'] },
+      });
       // Workplace as well — it belongs to every group, whatever the group's
       // business scope (the scaffold sync asserts the same on every boot).
-      await prisma.userGroupModule.create({ data: { userGroupId: crmGroup.id, moduleId: modules['WORKFLOW'] } });
+      await prisma.userGroupModule.create({
+        data: { userGroupId: crmGroup.id, moduleId: modules['WORKFLOW'] },
+      });
     }
 
     return { company, adminGroup, crmGroup };
@@ -180,7 +280,15 @@ async function main() {
     name: 'EK Food Products',
     legalName: 'Edakkattukudiyil Regency Food Products Private Limited',
     city: 'Kochi',
-    enabledModules: ['CPANEL', 'CRM', 'ACCOUNTS', 'INVENTORY', 'HR', 'PRODUCTION', 'WORKFLOW'],
+    enabledModules: [
+      'CPANEL',
+      'CRM',
+      'ACCOUNTS',
+      'INVENTORY',
+      'HR',
+      'PRODUCTION',
+      'WORKFLOW',
+    ],
     author: 'Pavani',
   });
   const ek002 = await seedCompany({
@@ -188,7 +296,15 @@ async function main() {
     name: 'EK Bake House',
     legalName: 'Edakkattukudiyil Regency Bake House Private Limited',
     city: 'Muvattupuzha',
-    enabledModules: ['CPANEL', 'CRM', 'ACCOUNTS', 'INVENTORY', 'HR', 'PRODUCTION', 'WORKFLOW'],
+    enabledModules: [
+      'CPANEL',
+      'CRM',
+      'ACCOUNTS',
+      'INVENTORY',
+      'HR',
+      'PRODUCTION',
+      'WORKFLOW',
+    ],
     author: 'Vismaya',
   });
   // The trading company: it buys and resells rather than manufacturing, which
@@ -199,7 +315,14 @@ async function main() {
     name: 'Regency Bakers',
     legalName: 'Regency Bakers & Confectionaries',
     city: 'Kochi',
-    enabledModules: ['CPANEL', 'CRM', 'ACCOUNTS', 'INVENTORY', 'HR', 'WORKFLOW'],
+    enabledModules: [
+      'CPANEL',
+      'CRM',
+      'ACCOUNTS',
+      'INVENTORY',
+      'HR',
+      'WORKFLOW',
+    ],
     author: 'Pavani',
   });
 
@@ -287,8 +410,12 @@ async function main() {
     },
   });
 
-  console.log(`Done. Super admin: ${username} / ${password}  |  Sample user: jdoe / User@123`);
-  console.log(`High security password (backup/restore): ${highSecurityPassword}`);
+  console.log(
+    `Done. Super admin: ${username} / ${password}  |  Sample user: jdoe / User@123`,
+  );
+  console.log(
+    `High security password (backup/restore): ${highSecurityPassword}`,
+  );
 }
 
 main()

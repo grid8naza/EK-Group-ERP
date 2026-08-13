@@ -91,7 +91,9 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
    *  nothing else would catch one that is not there. */
   private async companies(): Promise<Set<number>> {
     return new Set(
-      (await this.prisma.company.findMany({ select: { id: true } })).map((c) => c.id),
+      (await this.prisma.company.findMany({ select: { id: true } })).map(
+        (c) => c.id,
+      ),
     );
   }
 
@@ -111,7 +113,9 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
    */
   private async seedUnits(): Promise<number> {
     const id = new Map(
-      (await this.prisma.unit.findMany({ select: { id: true, code: true } })).map((u) => [u.code, u.id]),
+      (
+        await this.prisma.unit.findMany({ select: { id: true, code: true } })
+      ).map((u) => [u.code, u.id]),
     );
     let made = 0;
     for (const pass of [
@@ -122,11 +126,16 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
         if (id.has(u.code)) continue;
         const row = await this.prisma.unit.create({
           data: {
-            code: u.code, name: u.name, symbol: u.symbol,
+            code: u.code,
+            name: u.name,
+            symbol: u.symbol,
             type: u.type as never,
-            baseUnitId: u.baseUnitCode ? (id.get(u.baseUnitCode) ?? null) : null,
+            baseUnitId: u.baseUnitCode
+              ? (id.get(u.baseUnitCode) ?? null)
+              : null,
             conversionFactor: u.conversionFactor,
-            decimalPlaces: u.decimalPlaces, isActive: u.isActive,
+            decimalPlaces: u.decimalPlaces,
+            isActive: u.isActive,
           },
           select: { id: true },
         });
@@ -138,16 +147,24 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
   }
 
   private async seedHsn(): Promise<number> {
-    const have = await this.have(this.prisma.hsnCode.findMany({ select: { code: true } }));
+    const have = await this.have(
+      this.prisma.hsnCode.findMany({ select: { code: true } }),
+    );
     const rows = HSN_CODES.filter((h) => !have.has(h.code));
     if (!rows.length) return 0;
-    const res = await this.prisma.hsnCode.createMany({ data: rows, skipDuplicates: true });
+    const res = await this.prisma.hsnCode.createMany({
+      data: rows,
+      skipDuplicates: true,
+    });
     return res.count;
   }
 
   // ---- inventory classification tree --------------------------------------
 
-  private async seedInventoryTree(): Promise<{ categories: number; groups: number }> {
+  private async seedInventoryTree(): Promise<{
+    categories: number;
+    groups: number;
+  }> {
     const companies = await this.companies();
     const missing = new Set<number>();
 
@@ -158,7 +175,10 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
     if (newCats.length) {
       await this.prisma.category.createMany({
         data: newCats.map((c) => ({
-          code: c.code, name: c.name, kind: c.kind, allCompanies: c.allCompanies,
+          code: c.code,
+          name: c.name,
+          kind: c.kind,
+          allCompanies: c.allCompanies,
         })),
         skipDuplicates: true,
       });
@@ -166,23 +186,33 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
 
     // Parents before children: a sub-group needs its parent's id.
     const groupId = new Map(
-      (await this.prisma.group.findMany({ select: { id: true, code: true } })).map(
-        (g) => [g.code, g.id],
-      ),
+      (
+        await this.prisma.group.findMany({ select: { id: true, code: true } })
+      ).map((g) => [g.code, g.id]),
     );
     let groups = 0;
-    for (const level of [...new Set(INVENTORY_GROUPS.map((g) => g.level))].sort((a, b) => a - b)) {
+    for (const level of [...new Set(INVENTORY_GROUPS.map((g) => g.level))].sort(
+      (a, b) => a - b,
+    )) {
       for (const g of INVENTORY_GROUPS.filter((x) => x.level === level)) {
         if (groupId.has(g.code)) continue;
-        const parentGroupId = g.parentCode ? (groupId.get(g.parentCode) ?? null) : null;
+        const parentGroupId = g.parentCode
+          ? (groupId.get(g.parentCode) ?? null)
+          : null;
         if (g.parentCode && parentGroupId == null) {
-          this.logger.warn(`Group ${g.code} skipped: parent ${g.parentCode} missing.`);
+          this.logger.warn(
+            `Group ${g.code} skipped: parent ${g.parentCode} missing.`,
+          );
           continue;
         }
         const row = await this.prisma.group.create({
           data: {
-            code: g.code, name: g.name, level: g.level, parentGroupId,
-            subGroupApplicable: g.subGroupApplicable, allCompanies: g.allCompanies,
+            code: g.code,
+            name: g.name,
+            level: g.level,
+            parentGroupId,
+            subGroupApplicable: g.subGroupApplicable,
+            allCompanies: g.allCompanies,
           },
           select: { id: true },
         });
@@ -194,13 +224,18 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
     // Links for everything, including rows that were already here: a boot that
     // died between the rows and their links would otherwise never recover.
     const catId = new Map(
-      (await this.prisma.category.findMany({ select: { id: true, code: true } })).map(
-        (c) => [c.code, c.id],
-      ),
+      (
+        await this.prisma.category.findMany({
+          select: { id: true, code: true },
+        })
+      ).map((c) => [c.code, c.id]),
     );
     const haveGC = new Set(
-      (await this.prisma.groupCategory.findMany({ select: { groupId: true, categoryId: true } }))
-        .map((r) => `${r.groupId}:${r.categoryId}`),
+      (
+        await this.prisma.groupCategory.findMany({
+          select: { groupId: true, categoryId: true },
+        })
+      ).map((r) => `${r.groupId}:${r.categoryId}`),
     );
     const gc: { groupId: number; categoryId: number }[] = [];
     for (const g of INVENTORY_GROUPS) {
@@ -212,39 +247,63 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
         gc.push({ groupId: gid, categoryId: cid });
       }
     }
-    if (gc.length) await this.prisma.groupCategory.createMany({ data: gc, skipDuplicates: true });
+    if (gc.length)
+      await this.prisma.groupCategory.createMany({
+        data: gc,
+        skipDuplicates: true,
+      });
 
     const haveCC = new Set(
-      (await this.prisma.categoryCompany.findMany({ select: { categoryId: true, companyId: true } }))
-        .map((r) => `${r.categoryId}:${r.companyId}`),
+      (
+        await this.prisma.categoryCompany.findMany({
+          select: { categoryId: true, companyId: true },
+        })
+      ).map((r) => `${r.categoryId}:${r.companyId}`),
     );
     const cc: { categoryId: number; companyId: number }[] = [];
     for (const c of INVENTORY_CATEGORIES) {
       const cid = catId.get(c.code);
       if (cid == null) continue;
       for (const companyId of c.companies) {
-        if (!companies.has(companyId)) { missing.add(companyId); continue; }
+        if (!companies.has(companyId)) {
+          missing.add(companyId);
+          continue;
+        }
         if (haveCC.has(`${cid}:${companyId}`)) continue;
         cc.push({ categoryId: cid, companyId });
       }
     }
-    if (cc.length) await this.prisma.categoryCompany.createMany({ data: cc, skipDuplicates: true });
+    if (cc.length)
+      await this.prisma.categoryCompany.createMany({
+        data: cc,
+        skipDuplicates: true,
+      });
 
     const haveGCo = new Set(
-      (await this.prisma.groupCompany.findMany({ select: { groupId: true, companyId: true } }))
-        .map((r) => `${r.groupId}:${r.companyId}`),
+      (
+        await this.prisma.groupCompany.findMany({
+          select: { groupId: true, companyId: true },
+        })
+      ).map((r) => `${r.groupId}:${r.companyId}`),
     );
     const gco: { groupId: number; companyId: number }[] = [];
     for (const g of INVENTORY_GROUPS) {
       const gid = groupId.get(g.code);
       if (gid == null) continue;
       for (const companyId of g.companies) {
-        if (!companies.has(companyId)) { missing.add(companyId); continue; }
+        if (!companies.has(companyId)) {
+          missing.add(companyId);
+          continue;
+        }
         if (haveGCo.has(`${gid}:${companyId}`)) continue;
         gco.push({ groupId: gid, companyId });
       }
     }
-    if (gco.length) await this.prisma.groupCompany.createMany({ data: gco, skipDuplicates: true });
+    if (gco.length)
+      await this.prisma.groupCompany.createMany({
+        data: gco,
+        skipDuplicates: true,
+      });
 
     this.warnMissingCompanies('Inventory tree', missing);
     return { categories: newCats.length, groups };
@@ -257,7 +316,9 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
     const missing = new Set<number>();
     let made = 0;
 
-    const haveCat = await this.have(this.prisma.hrCategory.findMany({ select: { code: true } }));
+    const haveCat = await this.have(
+      this.prisma.hrCategory.findMany({ select: { code: true } }),
+    );
     for (const c of HR_CATEGORIES) {
       if (haveCat.has(c.code)) continue;
       await this.prisma.hrCategory.create({
@@ -266,22 +327,36 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
       made++;
     }
     const catId = new Map(
-      (await this.prisma.hrCategory.findMany({ select: { id: true, code: true } })).map((c) => [c.code, c.id]),
+      (
+        await this.prisma.hrCategory.findMany({
+          select: { id: true, code: true },
+        })
+      ).map((c) => [c.code, c.id]),
     );
 
     const groupId = new Map(
-      (await this.prisma.hrGroup.findMany({ select: { id: true, code: true } })).map((g) => [g.code, g.id]),
+      (
+        await this.prisma.hrGroup.findMany({ select: { id: true, code: true } })
+      ).map((g) => [g.code, g.id]),
     );
-    for (const level of [...new Set(HR_GROUPS.map((g) => g.level))].sort((a, b) => a - b)) {
+    for (const level of [...new Set(HR_GROUPS.map((g) => g.level))].sort(
+      (a, b) => a - b,
+    )) {
       for (const g of HR_GROUPS.filter((x) => x.level === level)) {
         if (groupId.has(g.code)) continue;
         const categoryId = catId.get(g.categoryCode);
         if (categoryId == null) continue;
         const row = await this.prisma.hrGroup.create({
           data: {
-            code: g.code, name: g.name, categoryId, level: g.level,
-            parentGroupId: g.parentCode ? (groupId.get(g.parentCode) ?? null) : null,
-            subGroupApplicable: g.subGroupApplicable, allCompanies: g.allCompanies,
+            code: g.code,
+            name: g.name,
+            categoryId,
+            level: g.level,
+            parentGroupId: g.parentCode
+              ? (groupId.get(g.parentCode) ?? null)
+              : null,
+            subGroupApplicable: g.subGroupApplicable,
+            allCompanies: g.allCompanies,
           },
           select: { id: true },
         });
@@ -290,7 +365,9 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
       }
     }
 
-    const haveDes = await this.have(this.prisma.hrDesignation.findMany({ select: { code: true } }));
+    const haveDes = await this.have(
+      this.prisma.hrDesignation.findMany({ select: { code: true } }),
+    );
     for (const d of HR_DESIGNATIONS) {
       if (haveDes.has(d.code)) continue;
       const categoryId = catId.get(d.categoryCode);
@@ -298,17 +375,26 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
       if (categoryId == null || gid == null) continue;
       const row = await this.prisma.hrDesignation.create({
         data: {
-          code: d.code, name: d.name, categoryId, groupId: gid,
-          ratePerHour: d.ratePerHour, allCompanies: d.allCompanies,
+          code: d.code,
+          name: d.name,
+          categoryId,
+          groupId: gid,
+          ratePerHour: d.ratePerHour,
+          allCompanies: d.allCompanies,
         },
         select: { id: true },
       });
       made++;
       for (const companyId of d.companies) {
-        if (!companies.has(companyId)) { missing.add(companyId); continue; }
-        await this.prisma.hrDesignationCompany.create({
-          data: { designationId: row.id, companyId },
-        }).catch(() => undefined);
+        if (!companies.has(companyId)) {
+          missing.add(companyId);
+          continue;
+        }
+        await this.prisma.hrDesignationCompany
+          .create({
+            data: { designationId: row.id, companyId },
+          })
+          .catch(() => undefined);
       }
     }
 
@@ -323,7 +409,9 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
     const missing = new Set<number>();
     let made = 0;
 
-    const haveCat = await this.have(this.prisma.assetCategory.findMany({ select: { code: true } }));
+    const haveCat = await this.have(
+      this.prisma.assetCategory.findMany({ select: { code: true } }),
+    );
     for (const c of ASSET_CATEGORIES) {
       if (haveCat.has(c.code)) continue;
       await this.prisma.assetCategory.create({
@@ -332,22 +420,38 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
       made++;
     }
     const catId = new Map(
-      (await this.prisma.assetCategory.findMany({ select: { id: true, code: true } })).map((c) => [c.code, c.id]),
+      (
+        await this.prisma.assetCategory.findMany({
+          select: { id: true, code: true },
+        })
+      ).map((c) => [c.code, c.id]),
     );
 
     const groupId = new Map(
-      (await this.prisma.assetGroup.findMany({ select: { id: true, code: true } })).map((g) => [g.code, g.id]),
+      (
+        await this.prisma.assetGroup.findMany({
+          select: { id: true, code: true },
+        })
+      ).map((g) => [g.code, g.id]),
     );
-    for (const level of [...new Set(ASSET_GROUPS.map((g) => g.level))].sort((a, b) => a - b)) {
+    for (const level of [...new Set(ASSET_GROUPS.map((g) => g.level))].sort(
+      (a, b) => a - b,
+    )) {
       for (const g of ASSET_GROUPS.filter((x) => x.level === level)) {
         if (groupId.has(g.code)) continue;
         const categoryId = catId.get(g.categoryCode);
         if (categoryId == null) continue;
         const row = await this.prisma.assetGroup.create({
           data: {
-            code: g.code, name: g.name, categoryId, level: g.level,
-            parentGroupId: g.parentCode ? (groupId.get(g.parentCode) ?? null) : null,
-            subGroupApplicable: g.subGroupApplicable, allCompanies: g.allCompanies,
+            code: g.code,
+            name: g.name,
+            categoryId,
+            level: g.level,
+            parentGroupId: g.parentCode
+              ? (groupId.get(g.parentCode) ?? null)
+              : null,
+            subGroupApplicable: g.subGroupApplicable,
+            allCompanies: g.allCompanies,
           },
           select: { id: true },
         });
@@ -357,7 +461,9 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
     }
 
     const unitId = await this.unitIds();
-    const haveAsset = await this.have(this.prisma.asset.findMany({ select: { code: true } }));
+    const haveAsset = await this.have(
+      this.prisma.asset.findMany({ select: { code: true } }),
+    );
     for (const a of ASSETS) {
       if (haveAsset.has(a.code)) continue;
       const categoryId = catId.get(a.categoryCode);
@@ -365,12 +471,20 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
       if (categoryId == null || gid == null) continue;
       const row = await this.prisma.asset.create({
         data: {
-          code: a.code, name: a.name, categoryId, groupId: gid,
-          brand: a.brand, model: a.model,
-          minCapacity: a.minCapacity, maxCapacity: a.maxCapacity,
-          capacityUnitId: a.capacityUnitCode ? (unitId.get(a.capacityUnitCode) ?? null) : null,
+          code: a.code,
+          name: a.name,
+          categoryId,
+          groupId: gid,
+          brand: a.brand,
+          model: a.model,
+          minCapacity: a.minCapacity,
+          maxCapacity: a.maxCapacity,
+          capacityUnitId: a.capacityUnitCode
+            ? (unitId.get(a.capacityUnitCode) ?? null)
+            : null,
           perUnitId: a.perUnitCode ? (unitId.get(a.perUnitCode) ?? null) : null,
-          isProductionLine: a.isProductionLine, costPerHour: a.costPerHour,
+          isProductionLine: a.isProductionLine,
+          costPerHour: a.costPerHour,
           lifeSpanYears: a.lifeSpanYears,
           status: a.status as never,
           allCompanies: a.allCompanies,
@@ -379,8 +493,12 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
       });
       made++;
       for (const companyId of a.companies) {
-        if (!companies.has(companyId)) { missing.add(companyId); continue; }
-        await this.prisma.assetCompany.create({ data: { assetId: row.id, companyId } })
+        if (!companies.has(companyId)) {
+          missing.add(companyId);
+          continue;
+        }
+        await this.prisma.assetCompany
+          .create({ data: { assetId: row.id, companyId } })
           .catch(() => undefined);
       }
     }
@@ -397,46 +515,83 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
     let made = 0;
 
     const haveStore = new Set(
-      (await this.prisma.store.findMany({ select: { companyId: true, code: true } }))
-        .map((s) => `${s.companyId}:${s.code}`),
+      (
+        await this.prisma.store.findMany({
+          select: { companyId: true, code: true },
+        })
+      ).map((s) => `${s.companyId}:${s.code}`),
     );
     for (const s of STORES) {
-      if (!companies.has(s.companyId)) { missing.add(s.companyId); continue; }
+      if (!companies.has(s.companyId)) {
+        missing.add(s.companyId);
+        continue;
+      }
       if (haveStore.has(`${s.companyId}:${s.code}`)) continue;
       await this.prisma.store.create({
-        data: { companyId: s.companyId, code: s.code, name: s.name, isActive: s.isActive },
+        data: {
+          companyId: s.companyId,
+          code: s.code,
+          name: s.name,
+          isActive: s.isActive,
+        },
       });
       made++;
     }
 
     const haveCentre = new Set(
-      (await this.prisma.costCenter.findMany({ select: { companyId: true, code: true } }))
-        .map((c) => `${c.companyId}:${c.code}`),
+      (
+        await this.prisma.costCenter.findMany({
+          select: { companyId: true, code: true },
+        })
+      ).map((c) => `${c.companyId}:${c.code}`),
     );
     for (const c of COST_CENTERS) {
-      if (!companies.has(c.companyId)) { missing.add(c.companyId); continue; }
+      if (!companies.has(c.companyId)) {
+        missing.add(c.companyId);
+        continue;
+      }
       if (haveCentre.has(`${c.companyId}:${c.code}`)) continue;
       await this.prisma.costCenter.create({
-        data: { companyId: c.companyId, code: c.code, name: c.name, isActive: c.isActive },
+        data: {
+          companyId: c.companyId,
+          code: c.code,
+          name: c.name,
+          isActive: c.isActive,
+        },
       });
       made++;
     }
 
     const centreId = new Map(
-      (await this.prisma.costCenter.findMany({ select: { id: true, companyId: true, code: true } }))
-        .map((c) => [`${c.companyId}:${c.code}`, c.id]),
+      (
+        await this.prisma.costCenter.findMany({
+          select: { id: true, companyId: true, code: true },
+        })
+      ).map((c) => [`${c.companyId}:${c.code}`, c.id]),
     );
     const haveObject = new Set(
-      (await this.prisma.costObject.findMany({ select: { companyId: true, code: true } }))
-        .map((o) => `${o.companyId}:${o.code}`),
+      (
+        await this.prisma.costObject.findMany({
+          select: { companyId: true, code: true },
+        })
+      ).map((o) => `${o.companyId}:${o.code}`),
     );
     for (const o of COST_OBJECTS) {
-      if (!companies.has(o.companyId)) { missing.add(o.companyId); continue; }
+      if (!companies.has(o.companyId)) {
+        missing.add(o.companyId);
+        continue;
+      }
       if (haveObject.has(`${o.companyId}:${o.code}`)) continue;
       const costCenterId = centreId.get(`${o.companyId}:${o.costCenterCode}`);
       if (costCenterId == null) continue;
       await this.prisma.costObject.create({
-        data: { companyId: o.companyId, code: o.code, name: o.name, costCenterId, isActive: o.isActive },
+        data: {
+          companyId: o.companyId,
+          code: o.code,
+          name: o.name,
+          costCenterId,
+          isActive: o.isActive,
+        },
       });
       made++;
     }
@@ -449,7 +604,9 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
 
   private async unitIds(): Promise<Map<string, number>> {
     return new Map(
-      (await this.prisma.unit.findMany({ select: { id: true, code: true } })).map((u) => [u.code, u.id]),
+      (
+        await this.prisma.unit.findMany({ select: { id: true, code: true } })
+      ).map((u) => [u.code, u.id]),
     );
   }
 
@@ -458,15 +615,25 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
     const missing = new Set<number>();
     const unitId = await this.unitIds();
     const catId = new Map(
-      (await this.prisma.category.findMany({ select: { id: true, code: true } })).map((c) => [c.code, c.id]),
+      (
+        await this.prisma.category.findMany({
+          select: { id: true, code: true },
+        })
+      ).map((c) => [c.code, c.id]),
     );
     const groupId = new Map(
-      (await this.prisma.group.findMany({ select: { id: true, code: true } })).map((g) => [g.code, g.id]),
+      (
+        await this.prisma.group.findMany({ select: { id: true, code: true } })
+      ).map((g) => [g.code, g.id]),
     );
     const hsnId = new Map(
-      (await this.prisma.hsnCode.findMany({ select: { id: true, code: true } })).map((h) => [h.code, h.id]),
+      (
+        await this.prisma.hsnCode.findMany({ select: { id: true, code: true } })
+      ).map((h) => [h.code, h.id]),
     );
-    const have = await this.have(this.prisma.item.findMany({ select: { code: true } }));
+    const have = await this.have(
+      this.prisma.item.findMany({ select: { code: true } }),
+    );
 
     let made = 0;
     for (const i of ITEMS) {
@@ -475,22 +642,33 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
       const gid = groupId.get(i.groupCode);
       const uid = unitId.get(i.unitCode);
       if (categoryId == null || gid == null || uid == null) {
-        this.logger.warn(`Item ${i.code} (${i.name}) skipped: category, group or unit missing.`);
+        this.logger.warn(
+          `Item ${i.code} (${i.name}) skipped: category, group or unit missing.`,
+        );
         continue;
       }
       const row = await this.prisma.item.create({
         data: {
-          code: i.code, name: i.name, categoryId, groupId: gid, unitId: uid,
+          code: i.code,
+          name: i.name,
+          categoryId,
+          groupId: gid,
+          unitId: uid,
           lastPurchasePrice: i.lastPurchasePrice,
           hsnCodeId: i.hsnCode ? (hsnId.get(i.hsnCode) ?? null) : null,
-          shelfLife: i.shelfLife, allCompanies: i.allCompanies,
+          shelfLife: i.shelfLife,
+          allCompanies: i.allCompanies,
         },
         select: { id: true },
       });
       made++;
       for (const companyId of i.companies) {
-        if (!companies.has(companyId)) { missing.add(companyId); continue; }
-        await this.prisma.itemCompany.create({ data: { itemId: row.id, companyId } })
+        if (!companies.has(companyId)) {
+          missing.add(companyId);
+          continue;
+        }
+        await this.prisma.itemCompany
+          .create({ data: { itemId: row.id, companyId } })
           .catch(() => undefined);
       }
     }
@@ -506,15 +684,25 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
     const missing = new Set<number>();
     const unitId = await this.unitIds();
     const catId = new Map(
-      (await this.prisma.category.findMany({ select: { id: true, code: true } })).map((c) => [c.code, c.id]),
+      (
+        await this.prisma.category.findMany({
+          select: { id: true, code: true },
+        })
+      ).map((c) => [c.code, c.id]),
     );
     const groupId = new Map(
-      (await this.prisma.group.findMany({ select: { id: true, code: true } })).map((g) => [g.code, g.id]),
+      (
+        await this.prisma.group.findMany({ select: { id: true, code: true } })
+      ).map((g) => [g.code, g.id]),
     );
     const hsnId = new Map(
-      (await this.prisma.hsnCode.findMany({ select: { id: true, code: true } })).map((h) => [h.code, h.id]),
+      (
+        await this.prisma.hsnCode.findMany({ select: { id: true, code: true } })
+      ).map((h) => [h.code, h.id]),
     );
-    const have = await this.have(this.prisma.product.findMany({ select: { code: true } }));
+    const have = await this.have(
+      this.prisma.product.findMany({ select: { code: true } }),
+    );
 
     let made = 0;
     for (const p of PRODUCTS) {
@@ -523,47 +711,86 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
       const gid = groupId.get(p.groupCode);
       const uid = unitId.get(p.unitCode);
       if (categoryId == null || gid == null || uid == null) {
-        this.logger.warn(`Product ${p.code} (${p.name}) skipped: category, group or unit missing.`);
+        this.logger.warn(
+          `Product ${p.code} (${p.name}) skipped: category, group or unit missing.`,
+        );
         continue;
       }
       const row = await this.prisma.product.create({
         data: {
-          code: p.code, name: p.name, categoryId, groupId: gid, unitId: uid,
-          unpacked: p.unpacked, packed: p.packed, canSell: p.canSell,
+          code: p.code,
+          name: p.name,
+          categoryId,
+          groupId: gid,
+          unitId: uid,
+          unpacked: p.unpacked,
+          packed: p.packed,
+          canSell: p.canSell,
           source: p.source as never,
-          hasRecipe: p.hasRecipe, hasPacking: p.hasPacking, isIngredient: p.isIngredient,
+          hasRecipe: p.hasRecipe,
+          hasPacking: p.hasPacking,
+          isIngredient: p.isIngredient,
           costPrice: p.costPrice,
-          intercompanyPrice: p.intercompanyPrice, wholesalePrice: p.wholesalePrice, retailPrice: p.retailPrice,
-          intercompanyTargetPct: p.intercompanyTargetPct, wholesaleTargetPct: p.wholesaleTargetPct,
-          retailTargetPct: p.retailTargetPct, maxVariancePct: p.maxVariancePct, mrp: p.mrp,
+          intercompanyPrice: p.intercompanyPrice,
+          wholesalePrice: p.wholesalePrice,
+          retailPrice: p.retailPrice,
+          intercompanyTargetPct: p.intercompanyTargetPct,
+          wholesaleTargetPct: p.wholesaleTargetPct,
+          retailTargetPct: p.retailTargetPct,
+          maxVariancePct: p.maxVariancePct,
+          mrp: p.mrp,
           boxQty: p.boxQty,
           boxUnitId: p.boxUnitCode ? (unitId.get(p.boxUnitCode) ?? null) : null,
           hsnCodeId: p.hsnCode ? (hsnId.get(p.hsnCode) ?? null) : null,
-          shelfLife: p.shelfLife, yieldQty: p.yieldQty,
-          yieldUnitId: p.yieldUnitCode ? (unitId.get(p.yieldUnitCode) ?? null) : null,
+          shelfLife: p.shelfLife,
+          yieldQty: p.yieldQty,
+          yieldUnitId: p.yieldUnitCode
+            ? (unitId.get(p.yieldUnitCode) ?? null)
+            : null,
           imageUrl: p.imageUrl,
-          prodSun: p.prodSun, prodMon: p.prodMon, prodTue: p.prodTue, prodWed: p.prodWed,
-          prodThu: p.prodThu, prodFri: p.prodFri, prodSat: p.prodSat, prodOccasional: p.prodOccasional,
+          prodSun: p.prodSun,
+          prodMon: p.prodMon,
+          prodTue: p.prodTue,
+          prodWed: p.prodWed,
+          prodThu: p.prodThu,
+          prodFri: p.prodFri,
+          prodSat: p.prodSat,
+          prodOccasional: p.prodOccasional,
         },
         select: { id: true },
       });
       made++;
       for (const c of p.companies) {
-        if (!companies.has(c.companyId)) { missing.add(c.companyId); continue; }
-        await this.prisma.productCompany.create({
-          data: { productId: row.id, companyId: c.companyId, canProduce: c.canProduce, canSell: c.canSell },
-        }).catch(() => undefined);
+        if (!companies.has(c.companyId)) {
+          missing.add(c.companyId);
+          continue;
+        }
+        await this.prisma.productCompany
+          .create({
+            data: {
+              productId: row.id,
+              companyId: c.companyId,
+              canProduce: c.canProduce,
+              canSell: c.canSell,
+            },
+          })
+          .catch(() => undefined);
       }
     }
 
     // Pack sources LAST, once every product exists — a pack points at a bulk
     // that may sit later in the list than it does.
     const prodId = new Map(
-      (await this.prisma.product.findMany({ select: { id: true, code: true } })).map((p) => [p.code, p.id]),
+      (
+        await this.prisma.product.findMany({ select: { id: true, code: true } })
+      ).map((p) => [p.code, p.id]),
     );
     const havePack = new Set(
-      (await this.prisma.productPackSource.findMany({ select: { productId: true, sourceProductId: true } }))
-        .map((s) => `${s.productId}:${s.sourceProductId}`),
+      (
+        await this.prisma.productPackSource.findMany({
+          select: { productId: true, sourceProductId: true },
+        })
+      ).map((s) => `${s.productId}:${s.sourceProductId}`),
     );
     for (const p of PRODUCTS) {
       const pid = prodId.get(p.code);
@@ -572,7 +799,12 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
         const sid = prodId.get(s.sourceProductCode);
         if (sid == null || havePack.has(`${pid}:${sid}`)) continue;
         await this.prisma.productPackSource.create({
-          data: { productId: pid, sourceProductId: sid, quantity: s.quantity, sequence: i },
+          data: {
+            productId: pid,
+            sourceProductId: sid,
+            quantity: s.quantity,
+            sequence: i,
+          },
         });
       }
     }
@@ -592,24 +824,35 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
   private async seedRecipes(): Promise<number> {
     const products = await this.prisma.product.findMany({
       select: {
-        id: true, code: true,
+        id: true,
+        code: true,
         _count: { select: { bomLines: true, processes: true } },
       },
     });
     const blank = new Map(
-      products.filter((p) => !p._count.bomLines && !p._count.processes).map((p) => [p.code, p.id]),
+      products
+        .filter((p) => !p._count.bomLines && !p._count.processes)
+        .map((p) => [p.code, p.id]),
     );
     if (!blank.size) return 0;
 
     const unitId = await this.unitIds();
     const itemId = new Map(
-      (await this.prisma.item.findMany({ select: { id: true, code: true } })).map((i) => [i.code, i.id]),
+      (
+        await this.prisma.item.findMany({ select: { id: true, code: true } })
+      ).map((i) => [i.code, i.id]),
     );
     const machineId = new Map(
-      (await this.prisma.asset.findMany({ select: { id: true, code: true } })).map((a) => [a.code, a.id]),
+      (
+        await this.prisma.asset.findMany({ select: { id: true, code: true } })
+      ).map((a) => [a.code, a.id]),
     );
     const desigId = new Map(
-      (await this.prisma.hrDesignation.findMany({ select: { id: true, code: true } })).map((d) => [d.code, d.id]),
+      (
+        await this.prisma.hrDesignation.findMany({
+          select: { id: true, code: true },
+        })
+      ).map((d) => [d.code, d.id]),
     );
 
     let made = 0;
@@ -621,29 +864,54 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
         const iid = itemId.get(l.itemCode);
         const uid = unitId.get(l.unitCode);
         if (iid == null || uid == null) return [];
-        return [{ productId, kind: l.kind as never, sequence: i, itemId: iid, quantity: l.quantity, unitId: uid }];
+        return [
+          {
+            productId,
+            kind: l.kind as never,
+            sequence: i,
+            itemId: iid,
+            quantity: l.quantity,
+            unitId: uid,
+          },
+        ];
       });
       if (lines.length !== r.bom.length) {
         this.logger.warn(
           `Recipe for ${r.productCode}: ${r.bom.length - lines.length} line(s) dropped — item or unit missing.`,
         );
       }
-      if (lines.length) await this.prisma.productBomLine.createMany({ data: lines });
+      if (lines.length)
+        await this.prisma.productBomLine.createMany({ data: lines });
 
       for (const [i, s] of r.processes.entries()) {
         const step = await this.prisma.productProcess.create({
           data: {
-            productId, sequence: i, name: s.name, description: s.description,
-            timeValue: s.timeValue, timeUnit: s.timeUnit as never,
-            machineId: s.machineCode ? (machineId.get(s.machineCode) ?? null) : null,
+            productId,
+            sequence: i,
+            name: s.name,
+            description: s.description,
+            timeValue: s.timeValue,
+            timeUnit: s.timeUnit as never,
+            machineId: s.machineCode
+              ? (machineId.get(s.machineCode) ?? null)
+              : null,
           },
           select: { id: true },
         });
         const crew = s.manpower.flatMap((m) => {
           const did = desigId.get(m.designationCode);
-          return did == null ? [] : [{ processId: step.id, designationId: did, workerCount: m.workerCount }];
+          return did == null
+            ? []
+            : [
+                {
+                  processId: step.id,
+                  designationId: did,
+                  workerCount: m.workerCount,
+                },
+              ];
         });
-        if (crew.length) await this.prisma.productProcessManpower.createMany({ data: crew });
+        if (crew.length)
+          await this.prisma.productProcessManpower.createMany({ data: crew });
       }
       made++;
     }
@@ -669,7 +937,9 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
 
     const companies = await this.companies();
     const accounts = new Map(
-      (await this.prisma.account.findMany({ select: { id: true, code: true } })).map((a) => [a.code, a.id]),
+      (
+        await this.prisma.account.findMany({ select: { id: true, code: true } })
+      ).map((a) => [a.code, a.id]),
     );
     if (!accounts.size) {
       this.logger.warn(
@@ -679,8 +949,11 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
       return 0;
     }
     const adopted = new Set(
-      (await this.prisma.accountCompany.findMany({ select: { accountId: true, companyId: true } }))
-        .map((r) => `${r.accountId}:${r.companyId}`),
+      (
+        await this.prisma.accountCompany.findMany({
+          select: { accountId: true, companyId: true },
+        })
+      ).map((r) => `${r.accountId}:${r.companyId}`),
     );
 
     const missingCompanies = new Set<number>();
@@ -694,17 +967,32 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
     ) => {
       for (const r of rows) {
         if (have.has(`${r.companyId}:${r.code}`)) continue;
-        if (!companies.has(r.companyId)) { missingCompanies.add(r.companyId); continue; }
+        if (!companies.has(r.companyId)) {
+          missingCompanies.add(r.companyId);
+          continue;
+        }
         const controlAccountId = accounts.get(r.controlAccountCode);
-        if (controlAccountId == null || !adopted.has(`${controlAccountId}:${r.companyId}`)) {
-          missingLedgers.add(`${r.controlAccountCode} in company ${r.companyId}`);
+        if (
+          controlAccountId == null ||
+          !adopted.has(`${controlAccountId}:${r.companyId}`)
+        ) {
+          missingLedgers.add(
+            `${r.controlAccountCode} in company ${r.companyId}`,
+          );
           continue;
         }
         await create({
-          companyId: r.companyId, code: r.code, name: r.name, controlAccountId,
-          contactPerson: r.contactPerson, phone: r.phone, email: r.email,
-          gstNumber: r.gstNumber, address: r.address,
-          creditDays: r.creditDays, creditLimit: r.creditLimit,
+          companyId: r.companyId,
+          code: r.code,
+          name: r.name,
+          controlAccountId,
+          contactPerson: r.contactPerson,
+          phone: r.phone,
+          email: r.email,
+          gstNumber: r.gstNumber,
+          address: r.address,
+          creditDays: r.creditDays,
+          creditLimit: r.creditLimit,
           isActive: r.isActive,
         });
         made++;
@@ -712,16 +1000,26 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
     };
 
     const haveCus = new Set(
-      (await this.prisma.customer.findMany({ select: { companyId: true, code: true } }))
-        .map((c) => `${c.companyId}:${c.code}`),
+      (
+        await this.prisma.customer.findMany({
+          select: { companyId: true, code: true },
+        })
+      ).map((c) => `${c.companyId}:${c.code}`),
     );
-    await seed(CUSTOMERS, haveCus, (data) => this.prisma.customer.create({ data: data as never }));
+    await seed(CUSTOMERS, haveCus, (data) =>
+      this.prisma.customer.create({ data: data as never }),
+    );
 
     const haveSup = new Set(
-      (await this.prisma.supplier.findMany({ select: { companyId: true, code: true } }))
-        .map((s) => `${s.companyId}:${s.code}`),
+      (
+        await this.prisma.supplier.findMany({
+          select: { companyId: true, code: true },
+        })
+      ).map((s) => `${s.companyId}:${s.code}`),
     );
-    await seed(SUPPLIERS, haveSup, (data) => this.prisma.supplier.create({ data: data as never }));
+    await seed(SUPPLIERS, haveSup, (data) =>
+      this.prisma.supplier.create({ data: data as never }),
+    );
 
     this.warnMissingCompanies('Customers / suppliers', missingCompanies);
     if (missingLedgers.size) {

@@ -11,7 +11,12 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -32,13 +37,14 @@ export default function CurrenciesPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<Currency[]>('/currencies');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<Currency>({
-    endpoint: '/currencies',
-    route: ROUTE,
-    noun: 'currency',
-    nameOf: (c) => c.name,
-    reload: refetch,
-  });
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
+    useLock<Currency>({
+      endpoint: '/currencies',
+      route: ROUTE,
+      noun: 'currency',
+      nameOf: (c) => c.name,
+      reload: refetch,
+    });
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Currency | null>(null);

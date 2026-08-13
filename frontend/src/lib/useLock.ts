@@ -50,7 +50,9 @@ export function useLock<T extends Lockable>(opts: {
     }
     try {
       await api.patch(`${opts.endpoint}/${row.id}/lock`, { locked: locking });
-      toast.success(locking ? `${cap(opts.noun)} locked.` : `${cap(opts.noun)} unlocked.`);
+      toast.success(
+        locking ? `${cap(opts.noun)} locked.` : `${cap(opts.noun)} unlocked.`,
+      );
       opts.reload();
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to update lock.');
@@ -134,7 +136,12 @@ export function useLock<T extends Lockable>(opts: {
     guardEdit,
     guardDelete,
     // Ready-to-pass bundle for the DataTable's `bulkLock` prop.
-    bulkLock: { canLock, canUnlock, onLockAll: lockAll, onUnlockAll: unlockAll },
+    bulkLock: {
+      canLock,
+      canUnlock,
+      onLockAll: lockAll,
+      onUnlockAll: unlockAll,
+    },
   };
 }
 

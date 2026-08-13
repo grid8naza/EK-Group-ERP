@@ -96,24 +96,26 @@ export class LpoService {
       );
     }
 
-    const order = await this.withOrderNoRetry({ companyId, branchId }, (orderNo) =>
-      this.prisma.localPurchaseOrder.create({
-        data: {
-          companyId,
-          branchId: branchId ?? null,
-          supplierId: dto.supplierId,
-          orderNo,
-          deliveryAt: dto.deliveryAt ? new Date(dto.deliveryAt) : null,
-          storeId: dto.storeId ?? null,
-          placedByUserId: userId,
-          status: 'DRAFT',
-          notes: dto.notes?.trim() || null,
-          lines: {
-            create: lines.map((l, i) => ({ sequence: i, ...l })),
+    const order = await this.withOrderNoRetry(
+      { companyId, branchId },
+      (orderNo) =>
+        this.prisma.localPurchaseOrder.create({
+          data: {
+            companyId,
+            branchId: branchId ?? null,
+            supplierId: dto.supplierId,
+            orderNo,
+            deliveryAt: dto.deliveryAt ? new Date(dto.deliveryAt) : null,
+            storeId: dto.storeId ?? null,
+            placedByUserId: userId,
+            status: 'DRAFT',
+            notes: dto.notes?.trim() || null,
+            lines: {
+              create: lines.map((l, i) => ({ sequence: i, ...l })),
+            },
           },
-        },
-        include: withLines,
-      }),
+          include: withLines,
+        }),
     );
     return this.findOne(userId, order.id, true);
   }
@@ -378,7 +380,9 @@ export class LpoService {
       select: { id: true },
     });
     if (!supplier) {
-      throw new BadRequestException('Choose a valid supplier for this company.');
+      throw new BadRequestException(
+        'Choose a valid supplier for this company.',
+      );
     }
   }
 

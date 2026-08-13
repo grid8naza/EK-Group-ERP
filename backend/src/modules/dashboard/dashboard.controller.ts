@@ -57,7 +57,10 @@ export class DashboardController {
     @Query('moduleId') moduleId?: string,
   ) {
     if (!moduleId) throw new BadRequestException('moduleId is required');
-    return this.service.widgetCatalog(requireCompany(companyId), Number(moduleId));
+    return this.service.widgetCatalog(
+      requireCompany(companyId),
+      Number(moduleId),
+    );
   }
 
   @Post()
@@ -66,10 +69,7 @@ export class DashboardController {
   }
 
   @Get(':id')
-  getOne(
-    @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: AuthUser,
-  ) {
+  getOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AuthUser) {
     return this.service.getOne(id, user.id);
   }
 
@@ -89,19 +89,13 @@ export class DashboardController {
   // Lock / unlock a dashboard (must be unlocked before edit or delete).
   @UseGuards(LockPrivilegeGuard('/cpanel/dashboards'))
   @Patch(':id/lock')
-  setLock(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: LockDto,
-  ) {
+  setLock(@Param('id', ParseIntPipe) id: number, @Body() dto: LockDto) {
     return this.service.setLock(id, dto.locked);
   }
 
   // Admin: design the header banner (theme / colors / subtitle / layout).
   @Patch(':id/header')
-  setHeader(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: SetHeaderDto,
-  ) {
+  setHeader(@Param('id', ParseIntPipe) id: number, @Body() dto: SetHeaderDto) {
     return this.service.setHeader(id, dto);
   }
 

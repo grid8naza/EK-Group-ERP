@@ -42,7 +42,10 @@ export default function DashboardViewPage() {
   const [detail, setDetail] = useState<DashboardDetail | null>(null);
   const [widgets, setWidgets] = useState<DashboardWidget[]>([]);
   const [loading, setLoading] = useState(true);
-  const [metricValues, setMetricValues] = useState<Record<string, MetricValue> | null>(null);
+  const [metricValues, setMetricValues] = useState<Record<
+    string,
+    MetricValue
+  > | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(true);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -119,9 +122,12 @@ export default function DashboardViewPage() {
   const saveLayout = async () => {
     setSaving(true);
     try {
-      const res = await api.put<DashboardDetail>(`/dashboards/${id}/my-layout`, {
-        widgets: widgets.map((w) => ({ widgetId: w.widgetId })),
-      });
+      const res = await api.put<DashboardDetail>(
+        `/dashboards/${id}/my-layout`,
+        {
+          widgets: widgets.map((w) => ({ widgetId: w.widgetId })),
+        },
+      );
       setDetail(res);
       setDirty(false);
       toast.success('Layout saved.');
@@ -135,7 +141,9 @@ export default function DashboardViewPage() {
   const resetLayout = async () => {
     setSaving(true);
     try {
-      const res = await api.delete<DashboardDetail>(`/dashboards/${id}/my-layout`);
+      const res = await api.delete<DashboardDetail>(
+        `/dashboards/${id}/my-layout`,
+      );
       setDetail(res);
       setWidgets((res.widgets ?? []).filter((w) => !w.hidden));
       setDirty(false);
@@ -211,73 +219,73 @@ export default function DashboardViewPage() {
         )
       ) : (
         <div className="card mb-6 overflow-hidden">
-        <div
-          className={cn(header.containerClass, header.padClass)}
-          style={header.containerStyle}
-        >
-          {header.pattern && (
-            <div className="pointer-events-none absolute -right-10 -top-10 h-44 w-44 rounded-full bg-white/10" />
-          )}
           <div
-            className={cn(
-              'relative flex gap-4',
-              centered
-                ? 'flex-col items-center text-center'
-                : 'items-start justify-between',
-            )}
+            className={cn(header.containerClass, header.padClass)}
+            style={header.containerStyle}
           >
-            <div className={centered ? 'max-w-2xl' : undefined}>
-              <p
-                className={cn(
-                  'flex items-center gap-2 text-sm font-medium',
-                  centered && 'justify-center',
-                  header.labelClass,
-                )}
-              >
-                <DashIcon className="h-4 w-4" />
-                {detail?.module?.name ?? activeModule?.name ?? 'Dashboard'}
-              </p>
-              <h1 className="mt-1 text-2xl font-bold sm:text-3xl">
-                {detail?.name ?? 'Dashboard'}
-              </h1>
-              <p
-                className={cn(
-                  'mt-2 max-w-lg text-sm',
-                  centered && 'mx-auto',
-                  header.subtitleClass,
-                )}
-              >
-                {header.subtitle}
-              </p>
-            </div>
+            {header.pattern && (
+              <div className="pointer-events-none absolute -right-10 -top-10 h-44 w-44 rounded-full bg-white/10" />
+            )}
             <div
               className={cn(
-                'flex flex-none flex-wrap items-center gap-2',
-                centered ? 'justify-center' : 'justify-end',
+                'relative flex gap-4',
+                centered
+                  ? 'flex-col items-center text-center'
+                  : 'items-start justify-between',
               )}
             >
-              {dirty && (
-                <button
-                  onClick={saveLayout}
-                  disabled={saving}
-                  className="flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-2 text-sm font-medium backdrop-blur transition hover:bg-white/30"
+              <div className={centered ? 'max-w-2xl' : undefined}>
+                <p
+                  className={cn(
+                    'flex items-center gap-2 text-sm font-medium',
+                    centered && 'justify-center',
+                    header.labelClass,
+                  )}
                 >
-                  <Save className="h-4 w-4" /> Save layout
-                </button>
-              )}
-              {detail?.isCustomized && (
-                <button
-                  onClick={resetLayout}
-                  disabled={saving}
-                  className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium backdrop-blur transition hover:bg-white/20"
-                  title="Reset to the default layout"
+                  <DashIcon className="h-4 w-4" />
+                  {detail?.module?.name ?? activeModule?.name ?? 'Dashboard'}
+                </p>
+                <h1 className="mt-1 text-2xl font-bold sm:text-3xl">
+                  {detail?.name ?? 'Dashboard'}
+                </h1>
+                <p
+                  className={cn(
+                    'mt-2 max-w-lg text-sm',
+                    centered && 'mx-auto',
+                    header.subtitleClass,
+                  )}
                 >
-                  <RotateCcw className="h-4 w-4" /> Reset
-                </button>
-              )}
+                  {header.subtitle}
+                </p>
+              </div>
+              <div
+                className={cn(
+                  'flex flex-none flex-wrap items-center gap-2',
+                  centered ? 'justify-center' : 'justify-end',
+                )}
+              >
+                {dirty && (
+                  <button
+                    onClick={saveLayout}
+                    disabled={saving}
+                    className="flex items-center gap-1.5 rounded-lg bg-white/20 px-3 py-2 text-sm font-medium backdrop-blur transition hover:bg-white/30"
+                  >
+                    <Save className="h-4 w-4" /> Save layout
+                  </button>
+                )}
+                {detail?.isCustomized && (
+                  <button
+                    onClick={resetLayout}
+                    disabled={saving}
+                    className="flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium backdrop-blur transition hover:bg-white/20"
+                    title="Reset to the default layout"
+                  >
+                    <RotateCcw className="h-4 w-4" /> Reset
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
         </div>
       )}
 
@@ -331,8 +339,14 @@ function SortableWidget({
   loading: boolean;
   activeModule: ReturnType<typeof useAuth>['activeModule'];
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: widget.widgetId });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: widget.widgetId });
 
   const wide = widget.width >= 2 && !isStatWidget(widget.type);
 

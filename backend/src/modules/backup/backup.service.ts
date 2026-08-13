@@ -378,11 +378,15 @@ export class BackupService implements OnModuleInit {
     // One round-trip for exact counts of every table. Names come straight from
     // the catalog, so they're safe to interpolate as identifiers.
     const countSql = names
-      .map((n) => `SELECT '${n}' AS name, count(*)::int AS count FROM "public"."${n}"`)
+      .map(
+        (n) =>
+          `SELECT '${n}' AS name, count(*)::int AS count FROM "public"."${n}"`,
+      )
       .join(' UNION ALL ');
-    const counts = await this.prisma.$queryRawUnsafe<
-      { name: string; count: number }[]
-    >(countSql);
+    const counts =
+      await this.prisma.$queryRawUnsafe<{ name: string; count: number }[]>(
+        countSql,
+      );
     const countByName = new Map(counts.map((c) => [c.name, Number(c.count)]));
 
     return names.map((name) => ({
@@ -455,13 +459,19 @@ export class BackupService implements OnModuleInit {
       const result = await this.run(
         'pg_dump',
         [
-          '-h', conn.host,
-          '-p', conn.port,
-          '-U', conn.user,
-          '-d', conn.database,
+          '-h',
+          conn.host,
+          '-p',
+          conn.port,
+          '-U',
+          conn.user,
+          '-d',
+          conn.database,
           '-Fc',
-          '-t', `public.${table}`,
-          '-f', filePath,
+          '-t',
+          `public.${table}`,
+          '-f',
+          filePath,
         ],
         conn.password,
       );
@@ -493,7 +503,11 @@ export class BackupService implements OnModuleInit {
   }
 
   /** Restore a single table from a server-side per-table dump. */
-  async restoreTableFromFile(password: string, table: string, fileName: string) {
+  async restoreTableFromFile(
+    password: string,
+    table: string,
+    fileName: string,
+  ) {
     await this.verifyPassword(password);
     await this.assertBackableTable(table);
     const match = TABLE_DUMP_RE.exec(fileName);
@@ -524,7 +538,11 @@ export class BackupService implements OnModuleInit {
   }
 
   /** Restore a single table from an uploaded dump (temp path), then clean up. */
-  async restoreTableFromUpload(password: string, table: string, tempPath: string) {
+  async restoreTableFromUpload(
+    password: string,
+    table: string,
+    tempPath: string,
+  ) {
     await this.verifyPassword(password);
     await this.assertBackableTable(table);
     try {
@@ -580,7 +598,10 @@ export class BackupService implements OnModuleInit {
     const conn = this.connection();
 
     // Extract just the table's data as SQL (COPY blocks + sequence resets).
-    const sqlPath = path.join(os.tmpdir(), `restore-${table}-${randomUUID()}.sql`);
+    const sqlPath = path.join(
+      os.tmpdir(),
+      `restore-${table}-${randomUUID()}.sql`,
+    );
     const extract = await this.run(
       'pg_restore',
       ['--data-only', '-t', table, '-f', sqlPath, filePath],
@@ -595,7 +616,10 @@ export class BackupService implements OnModuleInit {
 
     // Wrap the extracted data: clear the table, then reload — all with FK
     // enforcement disabled, in one transaction.
-    const wrappedPath = path.join(os.tmpdir(), `restore-${table}-${randomUUID()}-wrapped.sql`);
+    const wrappedPath = path.join(
+      os.tmpdir(),
+      `restore-${table}-${randomUUID()}-wrapped.sql`,
+    );
     const data = await fs.readFile(sqlPath, 'utf8');
     const script =
       `BEGIN;\nSET session_replication_role = replica;\n` +
@@ -606,12 +630,18 @@ export class BackupService implements OnModuleInit {
       const run = await this.run(
         'psql',
         [
-          '-h', conn.host,
-          '-p', conn.port,
-          '-U', conn.user,
-          '-d', conn.database,
-          '-v', 'ON_ERROR_STOP=1',
-          '-f', wrappedPath,
+          '-h',
+          conn.host,
+          '-p',
+          conn.port,
+          '-U',
+          conn.user,
+          '-d',
+          conn.database,
+          '-v',
+          'ON_ERROR_STOP=1',
+          '-f',
+          wrappedPath,
         ],
         conn.password,
       );
@@ -674,7 +704,11 @@ export class BackupService implements OnModuleInit {
   }
 
   /** Run a postgres CLI tool, feeding the password via PGPASSWORD. */
-  private run(cmd: string, args: string[], password: string): Promise<ProcResult> {
+  private run(
+    cmd: string,
+    args: string[],
+    password: string,
+  ): Promise<ProcResult> {
     return new Promise((resolve) => {
       const child = spawn(cmd, args, {
         env: { ...process.env, PGPASSWORD: password },
@@ -729,9 +763,7 @@ export class BackupService implements OnModuleInit {
     await fs.writeFile(this.metaPath(fileName), JSON.stringify(meta), 'utf8');
   }
 
-  private async readMeta(
-    fileName: string,
-  ): Promise<{
+  private async readMeta(fileName: string): Promise<{
     note: string | null;
     createdBy: string | null;
     createdAt: string;

@@ -87,11 +87,16 @@ export function buildPaymentAdviceHtml(p: PaymentAdviceInput): string {
   const where = [p.company.address, p.company.city, p.company.state]
     .filter(Boolean)
     .join(', ');
-  const contact = [p.company.phone, p.company.email].filter(Boolean).join('  ·  ');
+  const contact = [p.company.phone, p.company.email]
+    .filter(Boolean)
+    .join('  ·  ');
 
   const bankRows = p.bank
     ? [
-        ['Bank', [p.bank.bankName, p.bank.branchName].filter(Boolean).join(', ')],
+        [
+          'Bank',
+          [p.bank.bankName, p.bank.branchName].filter(Boolean).join(', '),
+        ],
         ['Account', maskAccountNo(p.bank.accountNumber)],
         // Only the codes this account actually carries: a blank IBAN row on a
         // domestic payment is a question the payee does not need to ask.
@@ -103,9 +108,7 @@ export function buildPaymentAdviceHtml(p: PaymentAdviceInput): string {
 
   const bankBlock = p.bank
     ? `<table class="kv">${(bankRows as string[][])
-        .map(
-          ([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`,
-        )
+        .map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`)
         .join('')}</table>`
     : `<p class="muted">No bank details are recorded against ${esc(
         p.bankLedger ?? 'this ledger',
@@ -282,7 +285,9 @@ function splitWords(s: string, max: number): [string, string] {
   const joints = [...s.matchAll(/ (?:Crore|Lakh|Thousand|Hundred) /g)]
     .map((m) => m.index + m[0].length - 1)
     .filter((i) => i > 0 && i <= max);
-  const cut = joints.length ? joints[joints.length - 1] : s.lastIndexOf(' ', max);
+  const cut = joints.length
+    ? joints[joints.length - 1]
+    : s.lastIndexOf(' ', max);
   return cut < 0
     ? [s.slice(0, max), s.slice(max)]
     : [s.slice(0, cut), s.slice(cut + 1)];
@@ -422,4 +427,3 @@ export function buildChequeHtml(c: ChequeInput): string {
 </body>
 </html>`;
 }
-

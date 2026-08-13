@@ -96,7 +96,10 @@ export class LoginScreenService implements OnApplicationBootstrap {
       const { config } = await this.getConfig();
       const c = (config as Record<string, unknown>) ?? {};
       if (c.backgroundMediaId === id) {
-        await this.saveConfig({ ...c, backgroundMediaId: null } as LoginScreenConfigDto);
+        await this.saveConfig({
+          ...c,
+          backgroundMediaId: null,
+        } as LoginScreenConfigDto);
       }
     }
     return this.getConfig();

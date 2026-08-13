@@ -195,7 +195,11 @@ export class UnitService {
   // --- helpers ---
 
   /** Base/factor for a non-chaining unit: explicit for COMPOUND, null otherwise. */
-  private compoundResolved(dto: { type: UnitType; baseUnitId?: number | null; conversionFactor?: number | null }) {
+  private compoundResolved(dto: {
+    type: UnitType;
+    baseUnitId?: number | null;
+    conversionFactor?: number | null;
+  }) {
     const isCompound = dto.type === UnitType.COMPOUND;
     return {
       baseUnitId: isCompound ? dto.baseUnitId! : null,
@@ -229,7 +233,9 @@ export class UnitService {
         throw new BadRequestException('Each rung needs a positive quantity.');
       }
       if (selfId && l.unitId === selfId) {
-        throw new BadRequestException('A unit cannot reference itself in its chain.');
+        throw new BadRequestException(
+          'A unit cannot reference itself in its chain.',
+        );
       }
     }
 
@@ -240,14 +246,21 @@ export class UnitService {
     const byId = new Map(units.map((u) => [u.id, u]));
     for (const l of chainLinks) {
       const u = byId.get(l.unitId);
-      if (!u) throw new BadRequestException('A rung references a unit that does not exist.');
+      if (!u)
+        throw new BadRequestException(
+          'A rung references a unit that does not exist.',
+        );
       if (u.type === UnitType.CHAINING) {
-        throw new BadRequestException('A rung cannot reference another chaining unit.');
+        throw new BadRequestException(
+          'A rung cannot reference another chaining unit.',
+        );
       }
     }
     const last = chainLinks[chainLinks.length - 1];
     if (byId.get(last.unitId)!.type !== UnitType.SIMPLE) {
-      throw new BadRequestException('The last rung must reference a simple unit.');
+      throw new BadRequestException(
+        'The last rung must reference a simple unit.',
+      );
     }
 
     return {

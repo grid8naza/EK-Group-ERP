@@ -63,4 +63,3 @@ export class DocumentNumberingController {
     return this.service.setLock(companyId, documentId, dto.locked);
   }
 }
-

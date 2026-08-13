@@ -35,7 +35,9 @@ export default function PackingMasterPage() {
   const finishedCategoryIds = useMemo(
     () =>
       new Set(
-        (categories ?? []).filter((c) => c.kind === 'FINISHED').map((c) => c.id),
+        (categories ?? [])
+          .filter((c) => c.kind === 'FINISHED')
+          .map((c) => c.id),
       ),
     [categories],
   );
@@ -93,7 +95,9 @@ export default function PackingMasterPage() {
         packableCodes.some((c) => c.startsWith(g.code.slice(0, 4)))),
   );
   const primaryPrefix = primaryFilter
-    ? primaryGroups.find((g) => String(g.id) === primaryFilter)?.code.slice(0, 4)
+    ? primaryGroups
+        .find((g) => String(g.id) === primaryFilter)
+        ?.code.slice(0, 4)
     : undefined;
   const primaryNameOf = (code: string) =>
     (groups ?? []).find(
@@ -129,7 +133,8 @@ export default function PackingMasterPage() {
       );
     if (groupFilter)
       rows = rows.filter((p) => String(p.groupId) === groupFilter);
-    if (packingFilter === 'with') rows = rows.filter((p) => p.packing.length > 0);
+    if (packingFilter === 'with')
+      rows = rows.filter((p) => p.packing.length > 0);
     else if (packingFilter === 'without')
       rows = rows.filter((p) => p.packing.length === 0);
     return rows;
@@ -147,20 +152,23 @@ export default function PackingMasterPage() {
   const canView = can(ROUTE, 'view');
   // The packing lock is the product's lock (governed by the Products - Packed
   // screen), so locking here also blocks editing the product under Inventory.
-  const { canLock, canUnlock, toggleLock, guardEdit, bulkLock } = useLock<Product>({
-    endpoint: '/products',
-    route: '/inventory/products-packed',
-    noun: 'Packing',
-    nameOf: (p) => p.name,
-    reload: refetch,
-  });
+  const { canLock, canUnlock, toggleLock, guardEdit, bulkLock } =
+    useLock<Product>({
+      endpoint: '/products',
+      route: '/inventory/products-packed',
+      noun: 'Packing',
+      nameOf: (p) => p.name,
+      reload: refetch,
+    });
 
   // The packing is edited/viewed on a dedicated full-screen page.
   const openPacking = (p: Product, view: boolean) =>
     router.push(`${ROUTE}/${p.id}${view ? '?view=1' : ''}`);
   const editPacking = (p: Product) => {
     if (p.isLocked) {
-      toast.error('This product is locked. Unlock it first (Inventory) to edit the packing.');
+      toast.error(
+        'This product is locked. Unlock it first (Inventory) to edit the packing.',
+      );
       return;
     }
     openPacking(p, false);
@@ -181,7 +189,9 @@ export default function PackingMasterPage() {
         packableCodes.some((c) => c.startsWith(g.code.slice(0, 4)))),
   );
   const pickPrimaryPrefix = pickPrimary
-    ? pickerPrimaries.find((g) => String(g.id) === pickPrimary)?.code.slice(0, 4)
+    ? pickerPrimaries
+        .find((g) => String(g.id) === pickPrimary)
+        ?.code.slice(0, 4)
     : undefined;
   const pickerLeaves = pickerGroupPool.filter(
     (g) =>
@@ -360,7 +370,10 @@ export default function PackingMasterPage() {
         width="sm"
         footer={
           <div className="flex justify-end gap-2">
-            <button className="btn-secondary" onClick={() => setPickerOpen(false)}>
+            <button
+              className="btn-secondary"
+              onClick={() => setPickerOpen(false)}
+            >
               Cancel
             </button>
             <button className="btn-primary" onClick={confirmPick}>
@@ -371,10 +384,10 @@ export default function PackingMasterPage() {
       >
         <div className="space-y-4">
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Packing belongs to a packed product. Choose the product below to open
-            its full-screen packing (source product, materials, process flow
-            &amp; costing). New products are created under Inventory → Products -
-            Packed.
+            Packing belongs to a packed product. Choose the product below to
+            open its full-screen packing (source product, materials, process
+            flow &amp; costing). New products are created under Inventory →
+            Products - Packed.
           </p>
           {/* No category picker either, for the same reason the toolbar has
               none: everything this screen can open is a finished product. */}

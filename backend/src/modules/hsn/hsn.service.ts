@@ -57,7 +57,8 @@ export class HsnService {
       return await this.prisma.hsnCode.update({
         where: { id },
         data: {
-          code: dto.code !== undefined ? dto.code.trim().toUpperCase() : undefined,
+          code:
+            dto.code !== undefined ? dto.code.trim().toUpperCase() : undefined,
           description: dto.description?.trim(),
           cgst: dto.cgst,
           sgst: dto.sgst,

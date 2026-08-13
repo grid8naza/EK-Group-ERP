@@ -77,7 +77,9 @@ export default function DocumentNumberingPage() {
       if (!ok) return;
     }
     try {
-      await api.patch(`/document-numbering/${r.documentId}/lock`, { locked: locking });
+      await api.patch(`/document-numbering/${r.documentId}/lock`, {
+        locked: locking,
+      });
       toast.success(locking ? 'Rule locked.' : 'Rule unlocked.');
       refetch();
     } catch (e) {
@@ -93,10 +95,15 @@ export default function DocumentNumberingPage() {
   };
 
   // Bulk lock/unlock across the current (filtered) rows.
-  const bulkLockRows = async (rows: DocumentNumberingRow[], locked: boolean) => {
+  const bulkLockRows = async (
+    rows: DocumentNumberingRow[],
+    locked: boolean,
+  ) => {
     const targets = rows.filter((r) => !!r.isLocked !== locked);
     if (targets.length === 0) {
-      toast.info(locked ? 'No unlocked rules to lock.' : 'No locked rules to unlock.');
+      toast.info(
+        locked ? 'No unlocked rules to lock.' : 'No locked rules to unlock.',
+      );
       return;
     }
     const ok = await confirm({
@@ -113,7 +120,9 @@ export default function DocumentNumberingPage() {
     const failed = results.filter((x) => x.status === 'rejected').length;
     const done = targets.length - failed;
     if (done > 0)
-      toast.success(`${done} rule${done === 1 ? '' : 's'} ${locked ? 'locked' : 'unlocked'}.`);
+      toast.success(
+        `${done} rule${done === 1 ? '' : 's'} ${locked ? 'locked' : 'unlocked'}.`,
+      );
     if (failed > 0)
       toast.error(`${failed} could not be ${locked ? 'locked' : 'unlocked'}.`);
     refetch();
@@ -129,7 +138,8 @@ export default function DocumentNumberingPage() {
   const docName = (id: string) =>
     (data ?? []).find((r) => String(r.documentId) === id)?.documentName ?? '';
   const docOptions = useMemo(
-    () => (data ?? []).map((r) => ({ value: r.documentId, label: r.documentName })),
+    () =>
+      (data ?? []).map((r) => ({ value: r.documentId, label: r.documentName })),
     [data],
   );
 
@@ -254,10 +264,26 @@ export default function DocumentNumberingPage() {
         </span>
       ),
     },
-    { key: 'prefix', header: 'Prefix', accessor: (r) => (r.prefixEnabled ? 'Yes' : 'No') },
-    { key: 'prefixValue', header: 'Prefix Val', accessor: (r) => r.prefixValue ?? '—' },
-    { key: 'suffix', header: 'Suffix', accessor: (r) => (r.suffixEnabled ? 'Yes' : 'No') },
-    { key: 'suffixValue', header: 'Suffix Val', accessor: (r) => r.suffixValue ?? '—' },
+    {
+      key: 'prefix',
+      header: 'Prefix',
+      accessor: (r) => (r.prefixEnabled ? 'Yes' : 'No'),
+    },
+    {
+      key: 'prefixValue',
+      header: 'Prefix Val',
+      accessor: (r) => r.prefixValue ?? '—',
+    },
+    {
+      key: 'suffix',
+      header: 'Suffix',
+      accessor: (r) => (r.suffixEnabled ? 'Yes' : 'No'),
+    },
+    {
+      key: 'suffixValue',
+      header: 'Suffix Val',
+      accessor: (r) => r.suffixValue ?? '—',
+    },
     {
       key: 'startingNo',
       header: 'Starting No',
@@ -296,7 +322,9 @@ export default function DocumentNumberingPage() {
           canAdd && (
             <button className="btn-primary" onClick={openNew}>
               <Plus className="h-4 w-4" /> Add New
-              <span className="ml-1 hidden text-[10px] opacity-70 sm:inline">Alt+A</span>
+              <span className="ml-1 hidden text-[10px] opacity-70 sm:inline">
+                Alt+A
+              </span>
             </button>
           )
         }
@@ -312,8 +340,12 @@ export default function DocumentNumberingPage() {
         onRefresh={refetch}
         searchPlaceholder="Search documents..."
         onView={openView}
-        onEdit={canEditPriv ? (r) => guardLocked(r, () => openEdit(r)) : undefined}
-        onDelete={canDeletePriv ? (r) => guardLocked(r, () => removeRule(r)) : undefined}
+        onEdit={
+          canEditPriv ? (r) => guardLocked(r, () => openEdit(r)) : undefined
+        }
+        onDelete={
+          canDeletePriv ? (r) => guardLocked(r, () => removeRule(r)) : undefined
+        }
         canView={canViewPriv}
         canEdit={canEditPriv}
         canDelete={canDeletePriv}
@@ -345,7 +377,11 @@ export default function DocumentNumberingPage() {
           view ? (
             <CloseFooter onClose={closeDrawer} />
           ) : (
-            <DrawerFooter onCancel={closeDrawer} onSave={save} saving={saving} />
+            <DrawerFooter
+              onCancel={closeDrawer}
+              onSave={save}
+              saving={saving}
+            />
           )
         }
       >
@@ -413,7 +449,9 @@ export default function DocumentNumberingPage() {
             <Select
               label="Renumber"
               value={form.renumber}
-              onChange={(e) => patch({ renumber: e.target.value as NumberingRenumber })}
+              onChange={(e) =>
+                patch({ renumber: e.target.value as NumberingRenumber })
+              }
               options={RENUMBER}
             />
             {showPeriod && (
@@ -421,7 +459,9 @@ export default function DocumentNumberingPage() {
                 label="Month-year position"
                 value={form.periodPosition}
                 onChange={(e) =>
-                  patch({ periodPosition: e.target.value as NumberingPeriodPosition })
+                  patch({
+                    periodPosition: e.target.value as NumberingPeriodPosition,
+                  })
                 }
                 options={POSITION}
               />

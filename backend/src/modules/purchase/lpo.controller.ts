@@ -60,7 +60,10 @@ export class LpoController {
   }
 
   @Get(':id')
-  findOne(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
+  findOne(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
     return this.service.findOne(user.id, id, !!user.isSuperAdmin);
   }
 

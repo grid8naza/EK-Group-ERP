@@ -38,7 +38,10 @@ export class CurrencyController {
   }
 
   @Patch(':id')
-  update(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateCurrencyDto) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateCurrencyDto,
+  ) {
     return this.service.update(id, dto);
   }
 

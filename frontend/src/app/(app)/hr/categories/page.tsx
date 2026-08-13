@@ -12,7 +12,12 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { StatusToggle } from '@/components/ui/StatusToggle';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -35,13 +40,14 @@ export default function HrCategoriesPage() {
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<HrCategory[]>('/hr-categories');
   const { data: companies } = useFetch<Company[]>('/companies');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<HrCategory>({
-    endpoint: '/hr-categories',
-    route: ROUTE,
-    noun: 'manpower category',
-    nameOf: (c) => c.name,
-    reload: refetch,
-  });
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
+    useLock<HrCategory>({
+      endpoint: '/hr-categories',
+      route: ROUTE,
+      noun: 'manpower category',
+      nameOf: (c) => c.name,
+      reload: refetch,
+    });
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<HrCategory | null>(null);
@@ -137,7 +143,10 @@ export default function HrCategoriesPage() {
     try {
       let saved: HrCategory;
       if (editing) {
-        saved = await api.patch<HrCategory>(`/hr-categories/${editing.id}`, payload);
+        saved = await api.patch<HrCategory>(
+          `/hr-categories/${editing.id}`,
+          payload,
+        );
         toast.success('Manpower category updated.');
       } else {
         saved = await api.post<HrCategory>('/hr-categories', payload);
@@ -183,7 +192,9 @@ export default function HrCategoriesPage() {
       try {
         await api.patch(`/hr-categories/${c.id}`, { isActive: !c.isActive });
         toast.success(
-          c.isActive ? 'Manpower category set inactive.' : 'Manpower category set active.',
+          c.isActive
+            ? 'Manpower category set inactive.'
+            : 'Manpower category set active.',
         );
         refetch();
       } catch (e) {
@@ -360,7 +371,9 @@ export default function HrCategoriesPage() {
               {!form.allCompanies && (
                 <div className="mt-1 max-h-52 space-y-1.5 overflow-y-auto rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                   {companyList.length === 0 ? (
-                    <p className="text-sm text-slate-400">No companies found.</p>
+                    <p className="text-sm text-slate-400">
+                      No companies found.
+                    </p>
                   ) : (
                     companyList.map((co) => (
                       <Checkbox
@@ -375,8 +388,8 @@ export default function HrCategoriesPage() {
               )}
               {!form.allCompanies && (
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {form.companyIds.length} selected — the manpower category is available
-                  only in these companies.
+                  {form.companyIds.length} selected — the manpower category is
+                  available only in these companies.
                 </p>
               )}
             </div>

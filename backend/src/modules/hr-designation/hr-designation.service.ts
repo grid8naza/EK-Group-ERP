@@ -176,7 +176,10 @@ export class HrDesignationService {
     return n;
   }
 
-  private async withCodeRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
+  private async withCodeRetry<T>(
+    fn: () => Promise<T>,
+    attempts = 5,
+  ): Promise<T> {
     for (let i = 0; ; i++) {
       try {
         return await fn();
@@ -205,7 +208,10 @@ export class HrDesignationService {
     const wantsLinkChange =
       dto.allCompanies !== undefined || dto.companyIds !== undefined;
     const companyIds = wantsLinkChange
-      ? this.resolveCompanies(allCompanies, dto.companyIds ?? existing.companyIds)
+      ? this.resolveCompanies(
+          allCompanies,
+          dto.companyIds ?? existing.companyIds,
+        )
       : null;
 
     try {
@@ -300,7 +306,9 @@ export class HrDesignationService {
       e instanceof Prisma.PrismaClientKnownRequestError &&
       e.code === 'P2002'
     ) {
-      return new ConflictException(`Designation code "${code}" already exists.`);
+      return new ConflictException(
+        `Designation code "${code}" already exists.`,
+      );
     }
     return e;
   }

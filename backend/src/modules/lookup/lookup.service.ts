@@ -54,7 +54,9 @@ export class LookupService {
           orderBy: { label: 'asc' },
           // The type a subtype sits under, so a two-level list can be shown and
           // filtered without a second round trip.
-          include: { parent: { select: { id: true, value: true, label: true } } },
+          include: {
+            parent: { select: { id: true, value: true, label: true } },
+          },
         },
       },
     });
@@ -275,7 +277,9 @@ export class LookupService {
     // the field is saying "leave it", not "clear it".
     const parentValueId = await this.resolveParentValue(
       lookup,
-      dto.parentValueId === undefined ? existing.parentValueId : dto.parentValueId,
+      dto.parentValueId === undefined
+        ? existing.parentValueId
+        : dto.parentValueId,
     );
     return this.prisma.lookupValue.update({
       where: { id },

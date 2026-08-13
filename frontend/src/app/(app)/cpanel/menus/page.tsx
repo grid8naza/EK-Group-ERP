@@ -30,7 +30,12 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { RowActions } from '@/components/ui/RowActions';
 import {
@@ -305,7 +310,10 @@ export default function MenusPage() {
       };
       let saved: MainMenu;
       if (mEditing) {
-        saved = await api.patch<MainMenu>(`/main-menus/${mEditing.id}`, payload);
+        saved = await api.patch<MainMenu>(
+          `/main-menus/${mEditing.id}`,
+          payload,
+        );
         toast.success('Main menu updated.');
       } else {
         saved = await api.post<MainMenu>('/main-menus', payload);
@@ -692,7 +700,11 @@ export default function MenusPage() {
         open={mOpen}
         onClose={closeMain}
         title={
-          mView ? 'View Main Menu' : mEditing ? 'Edit Main Menu' : 'New Main Menu'
+          mView
+            ? 'View Main Menu'
+            : mEditing
+              ? 'Edit Main Menu'
+              : 'New Main Menu'
         }
         subtitle="Main Menu"
         icon={<MenuIcon className="h-5 w-5" />}
@@ -761,7 +773,9 @@ export default function MenusPage() {
       <Drawer
         open={sOpen}
         onClose={closeSub}
-        title={sView ? 'View Sub Menu' : sEditing ? 'Edit Sub Menu' : 'New Sub Menu'}
+        title={
+          sView ? 'View Sub Menu' : sEditing ? 'Edit Sub Menu' : 'New Sub Menu'
+        }
         subtitle={selectedMain?.menuName}
         icon={<ListTree className="h-5 w-5" />}
         footer={
@@ -818,9 +832,7 @@ export default function MenusPage() {
               <div className="input-base flex items-center gap-2 text-slate-600 dark:text-slate-300">
                 {(() => {
                   const Icon = resolveIcon(sForm.icon);
-                  return (
-                    <Icon className="h-[18px] w-[18px] flex-none" />
-                  );
+                  return <Icon className="h-[18px] w-[18px] flex-none" />;
                 })()}
                 <span
                   className={cn(
@@ -857,8 +869,14 @@ function SortableRow({
   disabled?: boolean;
   children: (handle: React.ReactNode) => React.ReactNode;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id, disabled });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id, disabled });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,

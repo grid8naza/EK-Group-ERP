@@ -14,11 +14,7 @@ import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, CloseFooter } from '@/components/ui/Drawer';
 import { Input } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import type {
-  MaterialRequest,
-  MaterialRequestStatus,
-  Unit,
-} from '@/lib/types';
+import type { MaterialRequest, MaterialRequestStatus, Unit } from '@/lib/types';
 
 const ROUTE = '/production/material-requests';
 
@@ -36,9 +32,8 @@ export default function MaterialRequestsPage() {
   const { can } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
-  const { data, loading, refetch } = useFetch<MaterialRequest[]>(
-    '/material-requests',
-  );
+  const { data, loading, refetch } =
+    useFetch<MaterialRequest[]>('/material-requests');
   const { data: units } = useFetch<Unit[]>('/units');
   const { canLock, canUnlock, toggleLock, guardDelete, bulkLock } =
     useLock<MaterialRequest>({
@@ -75,7 +70,9 @@ export default function MaterialRequestsPage() {
 
   const openView = async (row: MaterialRequest) => {
     try {
-      const full = await api.get<MaterialRequest>(`/material-requests/${row.id}`);
+      const full = await api.get<MaterialRequest>(
+        `/material-requests/${row.id}`,
+      );
       setCurrent(full);
       // Default to what the store can actually give: the requirement, capped by
       // what was on hand. A store issuing more than it holds is refused anyway.
@@ -136,7 +133,9 @@ export default function MaterialRequestsPage() {
         { lines },
       );
       setCurrent(upd);
-      toast.success(`Materials issued${upd.issueNo ? ` (${upd.issueNo})` : ''}.`);
+      toast.success(
+        `Materials issued${upd.issueNo ? ` (${upd.issueNo})` : ''}.`,
+      );
       refetch();
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to issue.');

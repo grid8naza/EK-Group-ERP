@@ -48,8 +48,18 @@ type PendingAction =
   | { kind: 'restore-file'; fileName: string }
   | { kind: 'restore-upload'; file: File }
   | { kind: 'backup-tables'; tables: string[] }
-  | { kind: 'restore-table-file'; table: string; tableLabel: string; fileName: string }
-  | { kind: 'restore-table-upload'; table: string; tableLabel: string; file: File };
+  | {
+      kind: 'restore-table-file';
+      table: string;
+      tableLabel: string;
+      fileName: string;
+    }
+  | {
+      kind: 'restore-table-upload';
+      table: string;
+      tableLabel: string;
+      file: File;
+    };
 
 const isTableRestore = (a: PendingAction | null) =>
   a?.kind === 'restore-table-file' || a?.kind === 'restore-table-upload';
@@ -240,7 +250,9 @@ export default function BackupPage() {
         fd.append('highSecurityPassword', password);
         fd.append('table', pending.table);
         await api.post('/backup/tables/restore/upload', fd);
-        toast.success(`Table “${pending.tableLabel}” restored from uploaded file.`);
+        toast.success(
+          `Table “${pending.tableLabel}” restored from uploaded file.`,
+        );
         setTableUploadFile(null);
         setRestoreTarget('');
         if (tableFileInput.current) tableFileInput.current.value = '';
@@ -355,7 +367,9 @@ export default function BackupPage() {
       setNewPw('');
       setConfirmPw('');
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Failed to change password.');
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to change password.',
+      );
     } finally {
       setSavingPw(false);
     }
@@ -371,8 +385,16 @@ export default function BackupPage() {
         </span>
       ),
     },
-    { key: 'sizeBytes', header: 'Size', accessor: (r) => formatBytes(r.sizeBytes) },
-    { key: 'createdAt', header: 'Created', accessor: (r) => formatDate(r.createdAt) },
+    {
+      key: 'sizeBytes',
+      header: 'Size',
+      accessor: (r) => formatBytes(r.sizeBytes),
+    },
+    {
+      key: 'createdAt',
+      header: 'Created',
+      accessor: (r) => formatDate(r.createdAt),
+    },
     { key: 'createdBy', header: 'By', accessor: (r) => r.createdBy ?? '-' },
     { key: 'note', header: 'Note', accessor: (r) => r.note ?? '-' },
   ];
@@ -413,8 +435,16 @@ export default function BackupPage() {
       header: 'File',
       accessor: (r) => r.fileName,
     },
-    { key: 'sizeBytes', header: 'Size', accessor: (r) => formatBytes(r.sizeBytes) },
-    { key: 'createdAt', header: 'Created', accessor: (r) => formatDate(r.createdAt) },
+    {
+      key: 'sizeBytes',
+      header: 'Size',
+      accessor: (r) => formatBytes(r.sizeBytes),
+    },
+    {
+      key: 'createdAt',
+      header: 'Created',
+      accessor: (r) => formatDate(r.createdAt),
+    },
     { key: 'createdBy', header: 'By', accessor: (r) => r.createdBy ?? '-' },
     { key: 'note', header: 'Note', accessor: (r) => r.note ?? '-' },
   ];
@@ -427,7 +457,10 @@ export default function BackupPage() {
         icon={<DatabaseBackup className="h-5 w-5" />}
         actions={
           <>
-            <button className="btn-secondary" onClick={() => setPwMgrOpen(true)}>
+            <button
+              className="btn-secondary"
+              onClick={() => setPwMgrOpen(true)}
+            >
               <KeyRound className="h-4 w-4" /> Security Password
             </button>
             <button className="btn-primary" onClick={startBackup}>
@@ -576,7 +609,8 @@ export default function BackupPage() {
       {/* Restore a single table from an uploaded dump. */}
       <div className="card mb-6 p-4">
         <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
-          <Upload className="h-4 w-4 text-brand-600" /> Restore a table from a file
+          <Upload className="h-4 w-4 text-brand-600" /> Restore a table from a
+          file
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
           <Select

@@ -39,10 +39,14 @@ export class WorkOrderService {
   ) {}
 
   /** Port: create the Work Order for a sales order (one per order). */
-  async createFromSalesOrder(input: CreateWorkOrderInput): Promise<WorkOrderRef> {
+  async createFromSalesOrder(
+    input: CreateWorkOrderInput,
+  ): Promise<WorkOrderRef> {
     if (!input.companyId) throw new BadRequestException('No active company.');
     if (!input.lines.length) {
-      throw new BadRequestException('There is nothing to produce for this order.');
+      throw new BadRequestException(
+        'There is nothing to produce for this order.',
+      );
     }
     const existing = await this.prisma.workOrder.findUnique({
       where: { salesOrderId: input.salesOrderId },
@@ -56,27 +60,27 @@ export class WorkOrderService {
     const created = await this.withOrderNoRetry(
       { companyId: input.companyId, branchId: input.branchId },
       (orderNo) =>
-      this.prisma.workOrder.create({
-        data: {
-          companyId: input.companyId,
-          branchId: input.branchId ?? null,
-          orderNo,
-          salesOrderId: input.salesOrderId,
-          soNumber: input.soNumber,
-          soDeliveryAt: input.soDeliveryAt ?? null,
-          status: 'PENDING',
-          createdByUserId: input.userId,
-          lines: {
-            create: input.lines.map((l, i) => ({
-              sequence: i,
-              productId: l.productId,
-              quantity: l.quantity,
-              unitId: l.unitId,
-            })),
+        this.prisma.workOrder.create({
+          data: {
+            companyId: input.companyId,
+            branchId: input.branchId ?? null,
+            orderNo,
+            salesOrderId: input.salesOrderId,
+            soNumber: input.soNumber,
+            soDeliveryAt: input.soDeliveryAt ?? null,
+            status: 'PENDING',
+            createdByUserId: input.userId,
+            lines: {
+              create: input.lines.map((l, i) => ({
+                sequence: i,
+                productId: l.productId,
+                quantity: l.quantity,
+                unitId: l.unitId,
+              })),
+            },
           },
-        },
-        select: { id: true, orderNo: true },
-      }),
+          select: { id: true, orderNo: true },
+        }),
     );
     return created;
   }

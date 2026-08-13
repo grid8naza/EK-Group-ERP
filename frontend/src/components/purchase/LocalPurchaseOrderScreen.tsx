@@ -128,7 +128,10 @@ export function LocalPurchaseOrderScreen() {
       // factor, the same rule the inter-company order uses.
       ...(products ?? [])
         .filter((p) => p.isActive && p.canSell && p.source === 'PURCHASED')
-        .map((p) => ({ value: `product:${p.id}`, label: `${p.name} — Product` })),
+        .map((p) => ({
+          value: `product:${p.id}`,
+          label: `${p.name} — Product`,
+        })),
     ],
     [items, products],
   );
@@ -152,7 +155,10 @@ export function LocalPurchaseOrderScreen() {
     return m;
   }, [items, products]);
 
-  const targetName = (l: { itemId?: number | null; productId?: number | null }) =>
+  const targetName = (l: {
+    itemId?: number | null;
+    productId?: number | null;
+  }) =>
     targetInfo.get(targetOf(l))?.name ??
     (l.itemId ? `Item #${l.itemId}` : `Product #${l.productId}`);
 
@@ -162,7 +168,9 @@ export function LocalPurchaseOrderScreen() {
 
   const supplierOptions = useMemo(() => {
     const m = new Map<number, string>();
-    (rows ?? []).forEach((r) => m.set(r.supplierId, supplierName(r.supplierId)));
+    (rows ?? []).forEach((r) =>
+      m.set(r.supplierId, supplierName(r.supplierId)),
+    );
     return [...m.entries()].map(([value, label]) => ({ value, label }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, suppliers]);
@@ -217,7 +225,9 @@ export function LocalPurchaseOrderScreen() {
       note: notes,
       ls: lines,
     } satisfies Draft);
-  useUnsavedChangesGuard(() => mode === 'edit' && snapshot() !== baselineRef.current);
+  useUnsavedChangesGuard(
+    () => mode === 'edit' && snapshot() !== baselineRef.current,
+  );
 
   // Push a draft into the form and take it as the clean baseline.
   const hydrate = (d: Draft) => {
@@ -284,7 +294,9 @@ export function LocalPurchaseOrderScreen() {
   });
 
   const loadOrder = async (id: number) => {
-    const full = await api.get<LocalPurchaseOrder>(`/local-purchase-orders/${id}`);
+    const full = await api.get<LocalPurchaseOrder>(
+      `/local-purchase-orders/${id}`,
+    );
     setCurrent(full);
     setComment('');
     hydrate(draftOf(full));
@@ -507,7 +519,10 @@ export function LocalPurchaseOrderScreen() {
               title={label}
               className="inline-flex justify-center text-slate-600 dark:text-slate-300"
             >
-              <Icon className="h-5 w-5" style={{ color: st.color || undefined }} />
+              <Icon
+                className="h-5 w-5"
+                style={{ color: st.color || undefined }}
+              />
             </span>
           );
         }
@@ -553,7 +568,11 @@ export function LocalPurchaseOrderScreen() {
               >
                 Save &amp; Close
               </button>
-              <button className="btn-primary" onClick={doForward} disabled={saving}>
+              <button
+                className="btn-primary"
+                onClick={doForward}
+                disabled={saving}
+              >
                 <Send className="h-4 w-4" /> {submitLabel}
               </button>
             </div>
@@ -767,7 +786,9 @@ function DraftEditor(props: {
           label="Supplier"
           required
           disabled={!creating}
-          title={!creating ? 'Supplier cannot change after creation' : undefined}
+          title={
+            !creating ? 'Supplier cannot change after creation' : undefined
+          }
           value={supplierId}
           onChange={(e) => onSupplier(e.target.value)}
           placeholder="Select a supplier"
@@ -811,7 +832,10 @@ function DraftEditor(props: {
         <tbody>
           {lines.length === 0 ? (
             <tr>
-              <td colSpan={6} className="py-4 text-center text-xs text-slate-400">
+              <td
+                colSpan={6}
+                className="py-4 text-center text-xs text-slate-400"
+              >
                 No lines yet — click “Add line”.
               </td>
             </tr>
@@ -876,7 +900,10 @@ function DraftEditor(props: {
         {lines.length > 0 && (
           <tfoot>
             <tr className="border-t border-slate-200 dark:border-slate-700">
-              <td colSpan={4} className="py-2 pr-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <td
+                colSpan={4}
+                className="py-2 pr-2 text-right text-xs font-semibold uppercase tracking-wide text-slate-500"
+              >
                 Order value
               </td>
               <td className="px-1 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-100">

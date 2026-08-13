@@ -80,7 +80,13 @@ export class WorkflowDefinitionService {
   private async shadowedDefinitions(companyId: number) {
     const active = await this.prisma.workflowDefinition.findMany({
       where: { companyId, isActive: true },
-      select: { id: true, name: true, branchId: true, moduleId: true, objectId: true },
+      select: {
+        id: true,
+        name: true,
+        branchId: true,
+        moduleId: true,
+        objectId: true,
+      },
       orderBy: { id: 'asc' },
     });
     const governing = new Map<string, { id: number; name: string }>();
@@ -138,7 +144,11 @@ export class WorkflowDefinitionService {
     return this.flatten(created);
   }
 
-  async update(companyId: number | undefined, id: number, dto: UpdateWorkflowDto) {
+  async update(
+    companyId: number | undefined,
+    id: number,
+    dto: UpdateWorkflowDto,
+  ) {
     const existing = await this.findOne(companyId, id);
     assertUnlocked(existing, 'workflow', 'editing');
     // Only when it is actually MOVING. Re-sending the branch a workflow already
@@ -164,12 +174,19 @@ export class WorkflowDefinitionService {
         where: { definitionId: id },
         select: { userGroupId: true, users: { select: { userId: true } } },
       });
-      await this.assertApproversHaveAccess(existing.companyId, existing.moduleId, dto.steps, {
-        groupIds: new Set(
-          prior.map((s) => s.userGroupId).filter((g): g is number => g != null),
-        ),
-        userIds: new Set(prior.flatMap((s) => s.users.map((u) => u.userId))),
-      });
+      await this.assertApproversHaveAccess(
+        existing.companyId,
+        existing.moduleId,
+        dto.steps,
+        {
+          groupIds: new Set(
+            prior
+              .map((s) => s.userGroupId)
+              .filter((g): g is number => g != null),
+          ),
+          userIds: new Set(prior.flatMap((s) => s.users.map((u) => u.userId))),
+        },
+      );
     }
 
     // Re-checked on the two edits that can create a clash: switching a
@@ -179,10 +196,7 @@ export class WorkflowDefinitionService {
     const willBeActive = dto.isActive ?? existing.isActive;
     const willBeBranch =
       dto.branchId !== undefined ? dto.branchId : existing.branchId;
-    if (
-      willBeActive &&
-      (dto.isActive === true || dto.branchId !== undefined)
-    ) {
+    if (willBeActive && (dto.isActive === true || dto.branchId !== undefined)) {
       await this.assertOnlyActiveFor(
         {
           companyId: existing.companyId,
@@ -334,7 +348,11 @@ export class WorkflowDefinitionService {
     if (branchId == null) return;
     const branch = await this.prisma.branch.findUnique({
       where: { id: branchId },
-      select: { name: true, companyId: true, company: { select: { name: true } } },
+      select: {
+        name: true,
+        companyId: true,
+        company: { select: { name: true } },
+      },
     });
     if (!branch) {
       throw new BadRequestException('That branch no longer exists.');
@@ -367,10 +385,17 @@ export class WorkflowDefinitionService {
   ) {
     const group = await this.prisma.userGroup.findUnique({
       where: { id: userGroupId },
-      select: { id: true, name: true, companyId: true, company: { select: { name: true } } },
+      select: {
+        id: true,
+        name: true,
+        companyId: true,
+        company: { select: { name: true } },
+      },
     });
     if (!group) {
-      throw new BadRequestException(`Step ${sequence}: that user group no longer exists.`);
+      throw new BadRequestException(
+        `Step ${sequence}: that user group no longer exists.`,
+      );
     }
     if (!neededCompanyIds.includes(group.companyId)) {
       const needed = await this.prisma.company.findMany({
@@ -523,9 +548,9 @@ export class WorkflowDefinitionService {
   }
 
   /** Flatten each step's `users` join rows to a plain `userIds` array. */
-  private flatten<
-    T extends { steps: { users: { userId: number }[] }[] },
-  >(def: T) {
+  private flatten<T extends { steps: { users: { userId: number }[] }[] }>(
+    def: T,
+  ) {
     return {
       ...def,
       steps: def.steps.map((s) => {

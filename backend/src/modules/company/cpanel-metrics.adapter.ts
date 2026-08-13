@@ -23,7 +23,11 @@ export class CpanelMetricsAdapter implements MetricProviderPort {
   }
 
   metrics(): MetricDef[] {
-    const M = (key: string, label: string, compute: MetricDef['compute']): MetricDef => ({
+    const M = (
+      key: string,
+      label: string,
+      compute: MetricDef['compute'],
+    ): MetricDef => ({
       key,
       label,
       moduleCode: 'CPANEL',

@@ -29,7 +29,7 @@ partly out of date. Current reality (see `PROJECT_CONTEXT.md` for the full map):
 - **New contract ports:** `numbering`, `batch-numbering`, `workflow`,
   `metric-provider` (in addition to `user-lookup`).
 - **Prisma schema split** now spans: `cpanel, inventory, production, asset, hr,
-  crm, accounts, workflow, enums, schema`.
+crm, accounts, workflow, enums, schema`.
 
 The section below is retained as historical context; treat conflicts in its
 favour of this block.
@@ -50,6 +50,7 @@ data). Two modules are live today:
   HSN Code Master, Item Master.
 
 ### Decisions locked in
+
 - **Backend:** NestJS (TypeScript), separate container. **DB/ORM:** PostgreSQL +
   Prisma (schema split under `prisma/schema/`: `cpanel`, `inventory`,
   `production`, `enums`). **Frontend:** Next.js 14 (App Router) + Tailwind.
@@ -71,6 +72,7 @@ data). Two modules are live today:
   a separate "high security password".
 
 ### Default login (seeded)
+
 ```
 username: superadmin
 password: Admin@123
@@ -110,19 +112,19 @@ provisioned with **zero** dashboards/widgets — admins build them.
 
 ## Status by area
 
-| Area | Status | Notes |
-| --- | --- | --- |
-| Repo scaffold (compose, .env, .gitignore, README) | ✅ Done | `.env` present; `docker compose up` works out of the box |
-| Prisma schema (cpanel + inventory + production + enums) | ✅ Done | `backend/prisma/schema/` |
-| Backend foundation (main, app.module, PrismaService, Swagger, global JWT guard) | ✅ Done | |
-| Auth + privilege/navigation builder | ✅ Done | `/auth/login`, `/auth/me`; company + branch context |
-| Cpanel backend modules (company, module, lookup, object, menu, user-group, user, currency, branch, cost-center, cost-object, backup) | ✅ Done & build-verified | |
-| Dashboards & Widgets (reworked) | ✅ Done & **smoke-tested** | M:N group→dashboard, widget rename, blank provisioning |
-| Inventory backend (unit, category, group, hsn, item) + provisioning | ✅ Done | menus per company; masters global |
-| Prisma seed (super admin, modules, menus, sample companies/data) | ✅ Done | idempotent-ish; run on boot |
-| Docker (Dockerfiles + compose, db push + seed on boot) | ✅ Done | `prisma db push --accept-data-loss` then `npm run seed` |
-| Frontend shell + Cpanel + Inventory pages | ✅ Done & build-verified | `next build` passes (21 routes) |
-| Full-stack `docker compose up` smoke test | ✅ **PASSED (2026-06-27)** | Fresh volume → login, empty dashboards/widgets, routes correct |
+| Area                                                                                                                                 | Status                     | Notes                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------- | -------------------------------------------------------------- |
+| Repo scaffold (compose, .env, .gitignore, README)                                                                                    | ✅ Done                    | `.env` present; `docker compose up` works out of the box       |
+| Prisma schema (cpanel + inventory + production + enums)                                                                              | ✅ Done                    | `backend/prisma/schema/`                                       |
+| Backend foundation (main, app.module, PrismaService, Swagger, global JWT guard)                                                      | ✅ Done                    |                                                                |
+| Auth + privilege/navigation builder                                                                                                  | ✅ Done                    | `/auth/login`, `/auth/me`; company + branch context            |
+| Cpanel backend modules (company, module, lookup, object, menu, user-group, user, currency, branch, cost-center, cost-object, backup) | ✅ Done & build-verified   |                                                                |
+| Dashboards & Widgets (reworked)                                                                                                      | ✅ Done & **smoke-tested** | M:N group→dashboard, widget rename, blank provisioning         |
+| Inventory backend (unit, category, group, hsn, item) + provisioning                                                                  | ✅ Done                    | menus per company; masters global                              |
+| Prisma seed (super admin, modules, menus, sample companies/data)                                                                     | ✅ Done                    | idempotent-ish; run on boot                                    |
+| Docker (Dockerfiles + compose, db push + seed on boot)                                                                               | ✅ Done                    | `prisma db push --accept-data-loss` then `npm run seed`        |
+| Frontend shell + Cpanel + Inventory pages                                                                                            | ✅ Done & build-verified   | `next build` passes (21 routes)                                |
+| Full-stack `docker compose up` smoke test                                                                                            | ✅ **PASSED (2026-06-27)** | Fresh volume → login, empty dashboards/widgets, routes correct |
 
 ---
 
@@ -132,14 +134,16 @@ provisioned with **zero** dashboards/widgets — admins build them.
 docker compose up --build -d        # postgres → backend (db push + seed) → frontend
 # fresh slate (drops the DB volume): docker compose down -v first
 ```
-- Web:  http://localhost:3000  (login superadmin / Admin@123)
-- API:  http://localhost:4000/api
+
+- Web: http://localhost:3000 (login superadmin / Admin@123)
+- API: http://localhost:4000/api
 - Docs: http://localhost:4000/api/docs
 
 Hot-reload dev: use `docker-compose.dev.yml` (the default compose is a no-reload
 prod build).
 
 ### Validate without the full stack
+
 ```bash
 cd backend
 npm install
@@ -151,6 +155,7 @@ cd ../frontend && npm install && npm run build
 ---
 
 ## Project layout
+
 ```
 EK-Group-ERP/
 ├── docker-compose.yml / docker-compose.dev.yml
@@ -184,13 +189,15 @@ EK-Group-ERP/
 ```
 
 ## API contract (highlights)
+
 All under `NEXT_PUBLIC_API_URL` (default `http://localhost:4000/api`); all except
 `/auth/login` need `Authorization: Bearer <token>`. Company/branch context flow
 via `X-Company-Id` / `X-Branch-Id` headers.
+
 - `POST /auth/login`, `GET /auth/me` → `{ user, companies, activeCompanyId,
-  branchApplicable, branches, activeBranchId, navigation, permissions }`
+branchApplicable, branches, activeBranchId, navigation, permissions }`
   - `navigation: [{ id, code, name, icon, menus:[…], dashboards:[{ id, name, icon,
-    route, isDefault, branchId }] }]`  (no `gadgets`)
+route, isDefault, branchId }] }]` (no `gadgets`)
 - `GET/POST /widgets (?moduleId=)`, `PATCH/DELETE /widgets/:id`, `PATCH /widgets/:id/lock`
 - `GET/POST /dashboards (?moduleId=&branchId=)`, `GET/PATCH/DELETE /dashboards/:id`,
   `GET /dashboards/widgets?moduleId=` (catalog), `PUT /dashboards/:id/widgets`
@@ -201,4 +208,7 @@ via `X-Company-Id` / `X-Branch-Id` headers.
   `/currencies`, `/branches`, `/cost-centers`, `/cost-objects`, `/objects`,
   `/main-menus`, `/sub-menus`, `/menus/tree`, `/user-groups`, `/users`, `/backup`
 - Inventory: `/units`, `/categories`, `/groups`, `/hsn-codes`, `/items`
+
+```
+
 ```

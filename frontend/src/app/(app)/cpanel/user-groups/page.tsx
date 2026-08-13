@@ -17,7 +17,12 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -93,15 +98,19 @@ export default function UserGroupsPage() {
   const toast = useToast();
   const confirm = useConfirm();
 
-  const { data: groups, loading, refetch } =
-    useFetch<UserGroup[]>('/user-groups');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<UserGroup>({
-    endpoint: '/user-groups',
-    route: ROUTE,
-    noun: 'user group',
-    nameOf: (g) => g.name,
-    reload: refetch,
-  });
+  const {
+    data: groups,
+    loading,
+    refetch,
+  } = useFetch<UserGroup[]>('/user-groups');
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
+    useLock<UserGroup>({
+      endpoint: '/user-groups',
+      route: ROUTE,
+      noun: 'user group',
+      nameOf: (g) => g.name,
+      reload: refetch,
+    });
   const [modules, setModules] = useState<Module[]>([]);
   // Discount authority levels, maintained in Inventory > Lookups.
   const discountLevels = useLookupValues('DISCOUNT_LEVEL');
@@ -207,7 +216,10 @@ export default function UserGroupsPage() {
       };
       let saved: UserGroup;
       if (editing) {
-        saved = await api.patch<UserGroup>(`/user-groups/${editing.id}`, payload);
+        saved = await api.patch<UserGroup>(
+          `/user-groups/${editing.id}`,
+          payload,
+        );
         toast.success('Group updated.');
       } else {
         saved = await api.post<UserGroup>('/user-groups', payload);
@@ -276,7 +288,9 @@ export default function UserGroupsPage() {
   // Map a single main-menu node within the module-grouped structure.
   const mapNode = (
     mainId: number,
-    fn: (n: PrivilegeModuleGroup['tree'][number]) => PrivilegeModuleGroup['tree'][number],
+    fn: (
+      n: PrivilegeModuleGroup['tree'][number],
+    ) => PrivilegeModuleGroup['tree'][number],
   ) =>
     setPrivModules((prev) =>
       prev.map((mg) => ({
@@ -435,7 +449,11 @@ export default function UserGroupsPage() {
           <span className="text-slate-400">—</span>
         ),
     },
-    { key: 'description', header: 'Description', accessor: (r) => r.description },
+    {
+      key: 'description',
+      header: 'Description',
+      accessor: (r) => r.description,
+    },
   ];
 
   return (
@@ -512,79 +530,79 @@ export default function UserGroupsPage() {
         }
       >
         <ReadOnlyFieldset readOnly={view}>
-        <div className="space-y-4">
-          <Input
-            label="Name"
-            required
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-          />
-          <div>
-            <label className="label">
-              Modules<span className="ml-0.5 text-rose-500">*</span>
-            </label>
-            <p className="mb-2 text-xs text-slate-400">
-              A group can manage one or more modules. Users in this group will
-              see the selected modules in the top module switcher.
-            </p>
-            {modules.length === 0 ? (
-              <p className="text-sm text-slate-400">No modules available</p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {modules.map((m) => {
-                  const active = form.moduleIds.includes(m.id);
-                  const Icon = resolveIcon(m.icon);
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => toggleFormModule(m.id)}
-                      className={cn(
-                        'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition',
-                        active
-                          ? 'border-brand-600 bg-brand-600 text-white'
-                          : 'border-slate-300 bg-white text-slate-600 hover:border-brand-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
-                      )}
-                    >
-                      <Icon className="h-4 w-4" />
-                      {m.name}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-          {/* Discount authority — set once per role rather than per user. At
+          <div className="space-y-4">
+            <Input
+              label="Name"
+              required
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+            <div>
+              <label className="label">
+                Modules<span className="ml-0.5 text-rose-500">*</span>
+              </label>
+              <p className="mb-2 text-xs text-slate-400">
+                A group can manage one or more modules. Users in this group will
+                see the selected modules in the top module switcher.
+              </p>
+              {modules.length === 0 ? (
+                <p className="text-sm text-slate-400">No modules available</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {modules.map((m) => {
+                    const active = form.moduleIds.includes(m.id);
+                    const Icon = resolveIcon(m.icon);
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => toggleFormModule(m.id)}
+                        className={cn(
+                          'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition',
+                          active
+                            ? 'border-brand-600 bg-brand-600 text-white'
+                            : 'border-slate-300 bg-white text-slate-600 hover:border-brand-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+                        )}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {m.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            {/* Discount authority — set once per role rather than per user. At
               billing this turns the logged-in user into a ceiling: the level
               indexes the product's discount matrix for the per-product
               percentage. The levels themselves are maintained in
               Inventory > Lookups (DISCOUNT_LEVEL). */}
-          <div>
-            <Select
-              label="Discount level"
-              value={form.discountLevelId}
+            <div>
+              <Select
+                label="Discount level"
+                value={form.discountLevelId}
+                onChange={(e) =>
+                  setForm({ ...form, discountLevelId: e.target.value })
+                }
+                placeholder="— None (no discount allowed) —"
+                options={discountLevels.map((v) => ({
+                  value: String(v.id),
+                  label: v.label,
+                }))}
+              />
+              <p className="mt-1 text-xs text-slate-400">
+                The maximum discount members of this group may give. The
+                percentage itself is set per product, on the product master.
+              </p>
+            </div>
+            <Textarea
+              label="Description"
+              value={form.description}
               onChange={(e) =>
-                setForm({ ...form, discountLevelId: e.target.value })
+                setForm({ ...form, description: e.target.value })
               }
-              placeholder="— None (no discount allowed) —"
-              options={discountLevels.map((v) => ({
-                value: String(v.id),
-                label: v.label,
-              }))}
             />
-            <p className="mt-1 text-xs text-slate-400">
-              The maximum discount members of this group may give. The
-              percentage itself is set per product, on the product master.
-            </p>
           </div>
-          <Textarea
-            label="Description"
-            value={form.description}
-            onChange={(e) =>
-              setForm({ ...form, description: e.target.value })
-            }
-          />
-        </div>
         </ReadOnlyFieldset>
       </Drawer>
 
@@ -625,8 +643,8 @@ export default function UserGroupsPage() {
         ) : (
           <div className="space-y-6">
             <p className="text-sm text-slate-500 dark:text-slate-400">
-              Enable the <span className="font-medium">Menu</span> visibility for
-              each main menu, then grant per-screen actions. Forms use{' '}
+              Enable the <span className="font-medium">Menu</span> visibility
+              for each main menu, then grant per-screen actions. Forms use{' '}
               <span className="font-medium">Add / Edit / Delete</span>; reports
               use <span className="font-medium">Print / PDF / Excel</span> (
               <span className="text-slate-400">—</span> = not applicable).
@@ -665,222 +683,233 @@ export default function UserGroupsPage() {
                       collapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]',
                     )}
                   >
-                  <div className="overflow-hidden">
-                  <div className="space-y-3 pt-3">
-                  {grp.tree.length === 0 && (
-                    <p className="text-sm text-slate-400">
-                      No menus in this module.
-                    </p>
-                  )}
-                  {grp.tree.map((node) => (
-                    <div
-                      key={node.mainMenu.id}
-                      className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800"
-                    >
-                {/* Main menu header */}
-                <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/60">
-                  <label className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
-                      checked={node.visible}
-                      onChange={(e) =>
-                        setMainVisible(node.mainMenu.id, e.target.checked)
-                      }
-                    />
-                    {node.mainMenu.menuName}
-                    <span className="text-xs font-normal text-slate-400">
-                      (Menu visibility)
-                    </span>
-                  </label>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-brand-600 hover:underline"
-                      onClick={() => toggleAllForMain(node.mainMenu.id, true)}
-                    >
-                      Select all
-                    </button>
-                    <button
-                      type="button"
-                      className="text-xs font-medium text-slate-400 hover:underline"
-                      onClick={() => toggleAllForMain(node.mainMenu.id, false)}
-                    >
-                      Clear
-                    </button>
-                  </div>
-                </div>
-
-                {/* Sub menu matrix */}
-                {node.subMenus.length === 0 ? (
-                  <p className="px-4 py-3 text-sm text-slate-400">
-                    No sub menus.
-                  </p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                          <th className="px-4 py-2 text-left">Sub Menu</th>
-                          {['Menu', ...ACTION_COLS.map((c) => c.header)].map(
-                            (h) => (
-                              <th
-                                key={h}
-                                className="px-3 py-2 text-center"
-                                style={{ width: 64 }}
-                              >
-                                {h}
-                              </th>
-                            ),
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {node.subMenus.map((s) => (
-                          <tr
-                            key={s.id}
-                            className="border-b border-slate-100 last:border-0 dark:border-slate-800/60"
+                    <div className="overflow-hidden">
+                      <div className="space-y-3 pt-3">
+                        {grp.tree.length === 0 && (
+                          <p className="text-sm text-slate-400">
+                            No menus in this module.
+                          </p>
+                        )}
+                        {grp.tree.map((node) => (
+                          <div
+                            key={node.mainMenu.id}
+                            className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800"
                           >
-                            <td className="px-4 py-2">
-                              <span
-                                className={cn(
-                                  'font-medium text-slate-700 dark:text-slate-200',
-                                  !s.canMenu && 'opacity-50',
-                                )}
-                                title={
-                                  !s.canMenu
-                                    ? 'Hidden — MENU is unchecked'
-                                    : undefined
-                                }
-                              >
-                                {s.subMenuName}
-                              </span>
-                              {s.objectType && (
-                                <span className="ml-2 text-xs text-slate-400">
-                                  {s.objectType}
+                            {/* Main menu header */}
+                            <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/60">
+                              <label className="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-100">
+                                <input
+                                  type="checkbox"
+                                  className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
+                                  checked={node.visible}
+                                  onChange={(e) =>
+                                    setMainVisible(
+                                      node.mainMenu.id,
+                                      e.target.checked,
+                                    )
+                                  }
+                                />
+                                {node.mainMenu.menuName}
+                                <span className="text-xs font-normal text-slate-400">
+                                  (Menu visibility)
                                 </span>
-                              )}
-                            </td>
-                            {/* MENU visibility */}
-                            <td className="px-3 py-2 text-center">
-                              <input
-                                type="checkbox"
-                                className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
-                                checked={s.canMenu}
-                                onChange={(e) =>
-                                  setSubPriv(
-                                    node.mainMenu.id,
-                                    s.id,
-                                    'canMenu',
-                                    e.target.checked,
-                                  )
-                                }
-                              />
-                            </td>
-                            {/* Action columns — only those that apply to this
+                              </label>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  className="text-xs font-medium text-brand-600 hover:underline"
+                                  onClick={() =>
+                                    toggleAllForMain(node.mainMenu.id, true)
+                                  }
+                                >
+                                  Select all
+                                </button>
+                                <button
+                                  type="button"
+                                  className="text-xs font-medium text-slate-400 hover:underline"
+                                  onClick={() =>
+                                    toggleAllForMain(node.mainMenu.id, false)
+                                  }
+                                >
+                                  Clear
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Sub menu matrix */}
+                            {node.subMenus.length === 0 ? (
+                              <p className="px-4 py-3 text-sm text-slate-400">
+                                No sub menus.
+                              </p>
+                            ) : (
+                              <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="border-b border-slate-200 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                                      <th className="px-4 py-2 text-left">
+                                        Sub Menu
+                                      </th>
+                                      {[
+                                        'Menu',
+                                        ...ACTION_COLS.map((c) => c.header),
+                                      ].map((h) => (
+                                        <th
+                                          key={h}
+                                          className="px-3 py-2 text-center"
+                                          style={{ width: 64 }}
+                                        >
+                                          {h}
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {node.subMenus.map((s) => (
+                                      <tr
+                                        key={s.id}
+                                        className="border-b border-slate-100 last:border-0 dark:border-slate-800/60"
+                                      >
+                                        <td className="px-4 py-2">
+                                          <span
+                                            className={cn(
+                                              'font-medium text-slate-700 dark:text-slate-200',
+                                              !s.canMenu && 'opacity-50',
+                                            )}
+                                            title={
+                                              !s.canMenu
+                                                ? 'Hidden — MENU is unchecked'
+                                                : undefined
+                                            }
+                                          >
+                                            {s.subMenuName}
+                                          </span>
+                                          {s.objectType && (
+                                            <span className="ml-2 text-xs text-slate-400">
+                                              {s.objectType}
+                                            </span>
+                                          )}
+                                        </td>
+                                        {/* MENU visibility */}
+                                        <td className="px-3 py-2 text-center">
+                                          <input
+                                            type="checkbox"
+                                            className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
+                                            checked={s.canMenu}
+                                            onChange={(e) =>
+                                              setSubPriv(
+                                                node.mainMenu.id,
+                                                s.id,
+                                                'canMenu',
+                                                e.target.checked,
+                                              )
+                                            }
+                                          />
+                                        </td>
+                                        {/* Action columns — only those that apply to this
                                 object type (forms vs reports) are checkable. */}
-                            {ACTION_COLS.map((col) => {
-                              const applies = isReport(s.objectType)
-                                ? col.forReport
-                                : col.forForm;
-                              if (!applies) {
-                                return (
-                                  <td
-                                    key={col.key}
-                                    className="px-3 py-2 text-center text-slate-300 dark:text-slate-700"
-                                  >
-                                    —
-                                  </td>
-                                );
-                              }
-                              // Actions are meaningless when the menu is hidden,
-                              // so disable them until MENU is checked.
-                              const disabled = !s.canMenu;
-                              return (
-                                <td
-                                  key={col.key}
-                                  className="px-3 py-2 text-center"
+                                        {ACTION_COLS.map((col) => {
+                                          const applies = isReport(s.objectType)
+                                            ? col.forReport
+                                            : col.forForm;
+                                          if (!applies) {
+                                            return (
+                                              <td
+                                                key={col.key}
+                                                className="px-3 py-2 text-center text-slate-300 dark:text-slate-700"
+                                              >
+                                                —
+                                              </td>
+                                            );
+                                          }
+                                          // Actions are meaningless when the menu is hidden,
+                                          // so disable them until MENU is checked.
+                                          const disabled = !s.canMenu;
+                                          return (
+                                            <td
+                                              key={col.key}
+                                              className="px-3 py-2 text-center"
+                                            >
+                                              <input
+                                                type="checkbox"
+                                                disabled={disabled}
+                                                title={
+                                                  disabled
+                                                    ? 'Enable MENU first to grant this action'
+                                                    : undefined
+                                                }
+                                                className={cn(
+                                                  'h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800',
+                                                  disabled &&
+                                                    'cursor-not-allowed opacity-40',
+                                                )}
+                                                checked={s[col.key]}
+                                                onChange={(e) =>
+                                                  setSubPriv(
+                                                    node.mainMenu.id,
+                                                    s.id,
+                                                    col.key,
+                                                    e.target.checked,
+                                                  )
+                                                }
+                                              />
+                                            </td>
+                                          );
+                                        })}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+
+                        {/* Dashboards for this module */}
+                        <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
+                          <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                            <LayoutDashboard className="h-4 w-4 text-brand-600" />
+                            Dashboards
+                          </div>
+                          <p className="mb-3 text-xs text-slate-400">
+                            Selected dashboards appear in the {grp.module.name}{' '}
+                            dashboard menu for this group — choose two or more
+                            and all of them show. They switch with company,
+                            branch and module.
+                          </p>
+                          {grp.dashboards.length === 0 ? (
+                            <p className="text-sm text-slate-400">
+                              No dashboards for this module yet.
+                            </p>
+                          ) : (
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                              {grp.dashboards.map((d) => (
+                                <label
+                                  key={d.id}
+                                  className="flex cursor-pointer items-start gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40"
                                 >
                                   <input
                                     type="checkbox"
-                                    disabled={disabled}
-                                    title={
-                                      disabled
-                                        ? 'Enable MENU first to grant this action'
-                                        : undefined
-                                    }
-                                    className={cn(
-                                      'h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800',
-                                      disabled &&
-                                        'cursor-not-allowed opacity-40',
-                                    )}
-                                    checked={s[col.key]}
-                                    onChange={(e) =>
-                                      setSubPriv(
-                                        node.mainMenu.id,
-                                        s.id,
-                                        col.key,
-                                        e.target.checked,
-                                      )
+                                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
+                                    checked={d.selected}
+                                    onChange={() =>
+                                      toggleDashboard(grp.module.id, d.id)
                                     }
                                   />
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-                    </div>
-                  ))}
-
-                  {/* Dashboards for this module */}
-                  <div className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-                    <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
-                      <LayoutDashboard className="h-4 w-4 text-brand-600" />
-                      Dashboards
-                    </div>
-                    <p className="mb-3 text-xs text-slate-400">
-                      Selected dashboards appear in the {grp.module.name}{' '}
-                      dashboard menu for this group — choose two or more and all
-                      of them show. They switch with company, branch and module.
-                    </p>
-                    {grp.dashboards.length === 0 ? (
-                      <p className="text-sm text-slate-400">
-                        No dashboards for this module yet.
-                      </p>
-                    ) : (
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        {grp.dashboards.map((d) => (
-                          <label
-                            key={d.id}
-                            className="flex cursor-pointer items-start gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm transition hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/40"
-                          >
-                            <input
-                              type="checkbox"
-                              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
-                              checked={d.selected}
-                              onChange={() =>
-                                toggleDashboard(grp.module.id, d.id)
-                              }
-                            />
-                            <span>
-                              <span className="font-medium text-slate-700 dark:text-slate-200">
-                                {d.name}
-                              </span>
-                              <span className="block text-xs text-slate-400">
-                                {d.branchName ?? 'All branches'}
-                              </span>
-                            </span>
-                          </label>
-                        ))}
+                                  <span>
+                                    <span className="font-medium text-slate-700 dark:text-slate-200">
+                                      {d.name}
+                                    </span>
+                                    <span className="block text-xs text-slate-400">
+                                      {d.branchName ?? 'All branches'}
+                                    </span>
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                  </div>
-                  </div>
+                    </div>
                   </div>
                 </section>
               );

@@ -18,8 +18,7 @@ import { AuthUser } from './current-user.decorator';
 export class SuperAdminGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const user = context.switchToHttp().getRequest().user as
-      | AuthUser
-      | undefined;
+      AuthUser | undefined;
     if (!user?.isSuperAdmin) {
       throw new ForbiddenException(
         'Only super admins can perform this action.',

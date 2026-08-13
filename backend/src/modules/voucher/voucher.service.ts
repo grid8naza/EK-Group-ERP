@@ -307,7 +307,11 @@ export class VoucherService {
         accountId: true,
         payments: {
           where: { status: 'POSTED' },
-          select: { amount: true, side: true, line: { select: { debit: true } } },
+          select: {
+            amount: true,
+            side: true,
+            line: { select: { debit: true } },
+          },
         },
       },
       orderBy: [{ date: 'asc' }, { id: 'asc' }],
@@ -321,7 +325,10 @@ export class VoucherService {
         const billSide = sideOf(b);
         const settled = b.payments.reduce(
           (s, p) =>
-            s + (sideOf(p) === billSide ? -paise(Number(p.amount)) : paise(Number(p.amount))),
+            s +
+            (sideOf(p) === billSide
+              ? -paise(Number(p.amount))
+              : paise(Number(p.amount))),
           0,
         );
         const pending = paise(Number(b.amount)) - settled;
@@ -424,84 +431,89 @@ export class VoucherService {
     const totals = this.totals(lines);
     const status: VoucherStatus = dto.post ? 'POSTED' : 'DRAFT';
 
-    return this.withNumberRetry({ companyId, branchId: branch }, type.documentCode, type.code, date, (voucherNo) =>
-      this.prisma.voucher.create({
-        data: {
-          companyId,
-          branchId: branch,
-          voucherTypeId: type.id,
-          voucherNo,
-          date,
-          narration: dto.narration?.trim() || null,
-          reference: dto.reference?.trim() || null,
-          ...txn,
-          status,
-          totalDebit: totals.debit,
-          totalCredit: totals.credit,
-          createdByUserId: userId,
-          postedByUserId: dto.post ? userId : null,
-          postedAt: dto.post ? new Date() : null,
-          lines: {
-            create: lines.map(({ bills, ...l }, i) => ({
-              sequence: i,
-              companyId: companyId,
-              branchId: branch,
-              date,
-              status,
-              ...l,
-              // The bill stack this line moves. Party/account/date/status are
-              // copied down so an ageing report reads that table alone.
-              ...(bills.length
-                ? {
-                    billRefs: {
-                      create: bills.map((b) => ({
-                        companyId: companyId,
-                        branchId: branch,
-                        accountId: l.accountId,
-                        partyKind: l.partyKind!,
-                        partyId: l.partyId!,
-                        refType: b.refType,
-                        side: b.side,
-                        billRef: b.billRef,
-                        refNote: b.refNote,
-                        againstId: b.againstId,
-                        amount: b.amount,
-                        dueDate: b.dueDate,
-                        date,
-                        status,
-                      })),
-                    },
-                  }
-                : {}),
-            })),
-          },
-          ...(instrument
-            ? {
-                instrument: {
-                  create: {
-                    companyId,
-                    ...instrument,
-                    // A post-dated cheque's history starts where the voucher
-                    // does, so the register can say how long it has been sitting
-                    // there without inferring it from somewhere else.
-                    ...(instrument.status
-                      ? {
-                          events: {
-                            create: {
-                              status: instrument.status,
-                              date,
-                              createdByUserId: userId,
+    return this.withNumberRetry(
+      { companyId, branchId: branch },
+      type.documentCode,
+      type.code,
+      date,
+      (voucherNo) =>
+        this.prisma.voucher.create({
+          data: {
+            companyId,
+            branchId: branch,
+            voucherTypeId: type.id,
+            voucherNo,
+            date,
+            narration: dto.narration?.trim() || null,
+            reference: dto.reference?.trim() || null,
+            ...txn,
+            status,
+            totalDebit: totals.debit,
+            totalCredit: totals.credit,
+            createdByUserId: userId,
+            postedByUserId: dto.post ? userId : null,
+            postedAt: dto.post ? new Date() : null,
+            lines: {
+              create: lines.map(({ bills, ...l }, i) => ({
+                sequence: i,
+                companyId: companyId,
+                branchId: branch,
+                date,
+                status,
+                ...l,
+                // The bill stack this line moves. Party/account/date/status are
+                // copied down so an ageing report reads that table alone.
+                ...(bills.length
+                  ? {
+                      billRefs: {
+                        create: bills.map((b) => ({
+                          companyId: companyId,
+                          branchId: branch,
+                          accountId: l.accountId,
+                          partyKind: l.partyKind!,
+                          partyId: l.partyId!,
+                          refType: b.refType,
+                          side: b.side,
+                          billRef: b.billRef,
+                          refNote: b.refNote,
+                          againstId: b.againstId,
+                          amount: b.amount,
+                          dueDate: b.dueDate,
+                          date,
+                          status,
+                        })),
+                      },
+                    }
+                  : {}),
+              })),
+            },
+            ...(instrument
+              ? {
+                  instrument: {
+                    create: {
+                      companyId,
+                      ...instrument,
+                      // A post-dated cheque's history starts where the voucher
+                      // does, so the register can say how long it has been sitting
+                      // there without inferring it from somewhere else.
+                      ...(instrument.status
+                        ? {
+                            events: {
+                              create: {
+                                status: instrument.status,
+                                date,
+                                createdByUserId: userId,
+                              },
                             },
-                          },
-                        }
-                      : {}),
+                          }
+                        : {}),
+                    },
                   },
-                },
-              }
-            : {}),
-        },
-        include: withLines,
-      }),
+                }
+              : {}),
+          },
+          include: withLines,
+        }),
     );
   }
 
@@ -552,7 +564,11 @@ export class VoucherService {
     );
     if (dto.post) {
       this.assertBalanced(lines);
-      await this.assertMayPostDirectly(existing.companyId, branch, existing.type);
+      await this.assertMayPostDirectly(
+        existing.companyId,
+        branch,
+        existing.type,
+      );
     }
     // Re-checked whether or not the patch mentions it: the lines may have moved
     // under a cheque that was already there, and a post-dated one that now
@@ -575,9 +591,13 @@ export class VoucherService {
           date,
           branchId: branch,
           narration:
-            dto.narration !== undefined ? dto.narration?.trim() || null : undefined,
+            dto.narration !== undefined
+              ? dto.narration?.trim() || null
+              : undefined,
           reference:
-            dto.reference !== undefined ? dto.reference?.trim() || null : undefined,
+            dto.reference !== undefined
+              ? dto.reference?.trim() || null
+              : undefined,
           ...txn,
           status,
           totalDebit: totals.debit,
@@ -1018,7 +1038,11 @@ export class VoucherService {
       });
       return tx.voucher.update({
         where: { id },
-        data: { status: 'POSTED', postedByUserId: userId, postedAt: new Date() },
+        data: {
+          status: 'POSTED',
+          postedByUserId: userId,
+          postedAt: new Date(),
+        },
         include: withLines,
       });
     });
@@ -1029,7 +1053,11 @@ export class VoucherService {
    * voucher is never deleted, so the gap in the numbering that a deletion would
    * leave never appears (D.12).
    */
-  async cancel(companyId: number | undefined, id: number, dto: CancelVoucherDto) {
+  async cancel(
+    companyId: number | undefined,
+    id: number,
+    dto: CancelVoucherDto,
+  ) {
     const existing = await this.findOne(companyId, id);
     if (existing.status === 'CANCELLED') {
       throw new BadRequestException('This voucher is already cancelled.');
@@ -1592,11 +1620,7 @@ export class VoucherService {
         lookup: { select: { code: true } },
       },
     });
-    if (
-      !mode ||
-      mode.lookup.code !== PAYMENT_MODE_LOOKUP ||
-      !mode.isActive
-    ) {
+    if (!mode || mode.lookup.code !== PAYMENT_MODE_LOOKUP || !mode.isActive) {
       throw new BadRequestException('Choose how the money moved.');
     }
 
@@ -1723,9 +1747,9 @@ export class VoucherService {
     return date;
   }
 
-  private async companySetup(companyId: number): Promise<
-    CompanyEntrySetup & { booksStartDate: Date | null }
-  > {
+  private async companySetup(
+    companyId: number,
+  ): Promise<CompanyEntrySetup & { booksStartDate: Date | null }> {
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
       select: {
@@ -1761,7 +1785,9 @@ export class VoucherService {
       select: { companyId: true, isActive: true },
     });
     if (!branch || branch.companyId !== companyId || !branch.isActive) {
-      throw new BadRequestException('That branch is not one of this company’s.');
+      throw new BadRequestException(
+        'That branch is not one of this company’s.',
+      );
     }
     return branchId;
   }
@@ -1793,7 +1819,8 @@ export class VoucherService {
      *  not mistaken for duplicates of themselves. */
     excludeVoucherId?: number,
   ): Promise<ResolvedLine[]> {
-    if (!inputs?.length) throw new BadRequestException('A voucher needs lines.');
+    if (!inputs?.length)
+      throw new BadRequestException('A voucher needs lines.');
 
     const accountIds = [...new Set(inputs.map((l) => l.accountId))];
     const accounts = await this.prisma.account.findMany({
@@ -1820,7 +1847,8 @@ export class VoucherService {
     for (const [i, line] of inputs.entries()) {
       const at = `line ${i + 1}`;
       const account = byId.get(line.accountId);
-      if (!account) throw new BadRequestException(`Choose an account on ${at}.`);
+      if (!account)
+        throw new BadRequestException(`Choose an account on ${at}.`);
       const label = `${account.code} ${account.name}`;
       if (!account.isActive) {
         throw new BadRequestException(`${label} is inactive (${at}).`);
@@ -1876,7 +1904,12 @@ export class VoucherService {
           )
         : header;
 
-      const party = await this.resolveParty(companyId, account, line.partyId, at);
+      const party = await this.resolveParty(
+        companyId,
+        account,
+        line.partyId,
+        at,
+      );
       const bills = await this.resolveBills(
         companyId,
         party,
@@ -1912,7 +1945,10 @@ export class VoucherService {
    * `at` names where the fault is, so a bad line says which line.
    */
   private async resolveTransaction(
-    input: { transactionTypeId?: number | null; transactionSubtypeId?: number | null },
+    input: {
+      transactionTypeId?: number | null;
+      transactionSubtypeId?: number | null;
+    },
     at = 'this voucher',
   ): Promise<ResolvedTransaction> {
     const typeId = input.transactionTypeId ?? null;
@@ -1940,14 +1976,11 @@ export class VoucherService {
     const byId = new Map(values.map((v) => [v.id, v]));
 
     const type = byId.get(typeId);
-    if (
-      !type ||
-      type.lookup.code !== TXN_TYPE_LOOKUP_CODE ||
-      !type.isActive
-    ) {
+    if (!type || type.lookup.code !== TXN_TYPE_LOOKUP_CODE || !type.isActive) {
       throw new BadRequestException(`Choose a valid transaction type (${at}).`);
     }
-    if (!subtypeId) return { transactionTypeId: typeId, transactionSubtypeId: null };
+    if (!subtypeId)
+      return { transactionTypeId: typeId, transactionSubtypeId: null };
 
     const subtype = byId.get(subtypeId);
     if (
@@ -1955,7 +1988,9 @@ export class VoucherService {
       subtype.lookup.code !== TXN_SUBTYPE_LOOKUP_CODE ||
       !subtype.isActive
     ) {
-      throw new BadRequestException(`Choose a valid transaction subtype (${at}).`);
+      throw new BadRequestException(
+        `Choose a valid transaction subtype (${at}).`,
+      );
     }
     if (subtype.parentValueId !== typeId) {
       throw new BadRequestException(
@@ -2070,7 +2105,10 @@ export class VoucherService {
 
     const net = inputs.reduce(
       (s, b) =>
-        s + ((b.side ?? lineSide) === lineSide ? paise(b.amount) : -paise(b.amount)),
+        s +
+        ((b.side ?? lineSide) === lineSide
+          ? paise(b.amount)
+          : -paise(b.amount)),
       0,
     );
     if (net !== paise(amount)) {
@@ -2186,7 +2224,11 @@ export class VoucherService {
         const billSide = sideOf(target);
         if (side !== billSide) {
           // Settling. It cannot clear more than the bill still owes.
-          const left = await this.outstanding(target.id, billSide, Number(target.amount));
+          const left = await this.outstanding(
+            target.id,
+            billSide,
+            Number(target.amount),
+          );
           if (paise(b.amount) > paise(left)) {
             throw new BadRequestException(
               `Only ${left.toFixed(2)} is outstanding on bill ${target.billRef} — ${b.amount.toFixed(2)} would over-settle it (${at}).`,
@@ -2303,7 +2345,9 @@ export class VoucherService {
         // supplementary charge is as real as a payment.
         (left, a) =>
           left +
-          (sideOf(a) === billSide ? paise(Number(a.amount)) : -paise(Number(a.amount))),
+          (sideOf(a) === billSide
+            ? paise(Number(a.amount))
+            : -paise(Number(a.amount))),
         paise(raised),
       ),
     );
@@ -2370,7 +2414,9 @@ export class VoucherService {
         select: { companyId: true, isActive: true },
       });
       if (!centre || centre.companyId !== companyId || !centre.isActive) {
-        throw new BadRequestException('That cost centre is not this company’s.');
+        throw new BadRequestException(
+          'That cost centre is not this company’s.',
+        );
       }
     }
     if (dims.costObjectId) {
@@ -2379,7 +2425,9 @@ export class VoucherService {
         select: { companyId: true, costCenterId: true, isActive: true },
       });
       if (!object || object.companyId !== companyId || !object.isActive) {
-        throw new BadRequestException('That cost object is not this company’s.');
+        throw new BadRequestException(
+          'That cost object is not this company’s.',
+        );
       }
       if (object.costCenterId !== dims.costCenterId) {
         throw new BadRequestException(
@@ -2404,7 +2452,9 @@ export class VoucherService {
       throw new BadRequestException(
         `Debits ${fromPaise(debit).toFixed(2)} and credits ${fromPaise(
           credit,
-        ).toFixed(2)} differ by ${diff}. A voucher must balance before it is posted.`,
+        ).toFixed(
+          2,
+        )} differ by ${diff}. A voucher must balance before it is posted.`,
       );
     }
   }
@@ -2440,7 +2490,8 @@ export class VoucherService {
         return await write(voucherNo);
       } catch (e) {
         const clash =
-          e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
+          e instanceof Prisma.PrismaClientKnownRequestError &&
+          e.code === 'P2002';
         if (!clash || attempt === 4) throw e;
       }
     }

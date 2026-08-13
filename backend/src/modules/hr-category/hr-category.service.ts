@@ -106,7 +106,10 @@ export class HrCategoryService {
   }
 
   /** Re-run an allocate+insert if it loses the code-uniqueness race. */
-  private async withCodeRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
+  private async withCodeRetry<T>(
+    fn: () => Promise<T>,
+    attempts = 5,
+  ): Promise<T> {
     for (let i = 0; ; i++) {
       try {
         return await fn();
@@ -136,7 +139,10 @@ export class HrCategoryService {
     const wantsLinkChange =
       dto.allCompanies !== undefined || dto.companyIds !== undefined;
     const companyIds = wantsLinkChange
-      ? this.resolveCompanies(allCompanies, dto.companyIds ?? existing.companyIds)
+      ? this.resolveCompanies(
+          allCompanies,
+          dto.companyIds ?? existing.companyIds,
+        )
       : null;
 
     try {

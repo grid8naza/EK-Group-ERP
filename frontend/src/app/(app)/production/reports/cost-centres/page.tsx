@@ -220,7 +220,10 @@ export default function CostCentrePerformancePage() {
           />
           <div className="ml-auto flex items-center gap-2">
             <ColumnToggle
-              columns={ALL_COLUMNS.map((c) => ({ key: c.key, label: c.header }))}
+              columns={ALL_COLUMNS.map((c) => ({
+                key: c.key,
+                label: c.header,
+              }))}
               hidden={hidden}
               onToggle={toggle}
             />

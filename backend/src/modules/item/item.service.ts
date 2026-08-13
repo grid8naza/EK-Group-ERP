@@ -124,7 +124,9 @@ export class ItemService {
         subGroupApplicable: true,
         isActive: true,
         categories: {
-          select: { category: { select: { id: true, code: true, kind: true } } },
+          select: {
+            category: { select: { id: true, code: true, kind: true } },
+          },
         },
       },
     });
@@ -159,7 +161,9 @@ export class ItemService {
    */
   private async assertCategoryOfGroup(
     categoryId: number | null | undefined,
-    group: { itemCategories: { id: number; code: string; kind: CategoryKind }[] },
+    group: {
+      itemCategories: { id: number; code: string; kind: CategoryKind }[];
+    },
   ) {
     if (categoryId == null) {
       throw new BadRequestException('Select a category for this item.');
@@ -177,7 +181,10 @@ export class ItemService {
   private async nextLeafSeq(groupId: number): Promise<number> {
     const [items, products] = await Promise.all([
       this.prisma.item.findMany({ where: { groupId }, select: { code: true } }),
-      this.prisma.product.findMany({ where: { groupId }, select: { code: true } }),
+      this.prisma.product.findMany({
+        where: { groupId },
+        select: { code: true },
+      }),
     ]);
     const used = [...items, ...products].map((r) => itemSeqOf(r.code));
     const n = lowestFree(used, MAX_ITEM_SEQ);
@@ -189,7 +196,10 @@ export class ItemService {
     return n;
   }
 
-  private async withCodeRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
+  private async withCodeRetry<T>(
+    fn: () => Promise<T>,
+    attempts = 5,
+  ): Promise<T> {
     for (let i = 0; ; i++) {
       try {
         return await fn();
@@ -215,7 +225,10 @@ export class ItemService {
     const wantsLinkChange =
       dto.allCompanies !== undefined || dto.companyIds !== undefined;
     const companyIds = wantsLinkChange
-      ? this.resolveCompanies(allCompanies, dto.companyIds ?? existing.companyIds)
+      ? this.resolveCompanies(
+          allCompanies,
+          dto.companyIds ?? existing.companyIds,
+        )
       : null;
 
     try {

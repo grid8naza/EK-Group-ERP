@@ -130,10 +130,7 @@ export default function WorkOrdersPage() {
     if (!ok) return;
     setBusy(true);
     try {
-      await api.post(
-        `/production-receipts/from-work-order/${current.id}`,
-        {},
-      );
+      await api.post(`/production-receipts/from-work-order/${current.id}`, {});
       toast.success('Production recorded — finished goods banked to stock.');
       setCurrent({ ...current, status: 'COMPLETED' });
       refetch();
@@ -159,7 +156,11 @@ export default function WorkOrdersPage() {
       header: 'Delivery',
       accessor: (r) => fmtDate(r.soDeliveryAt),
     },
-    { key: 'created', header: 'Created', accessor: (r) => fmtDate(r.createdAt) },
+    {
+      key: 'created',
+      header: 'Created',
+      accessor: (r) => fmtDate(r.createdAt),
+    },
     {
       key: 'status',
       header: 'Status',

@@ -19,11 +19,7 @@ import {
   matchesAttributes,
   type AttributeFilters,
 } from './AttributeFilter';
-import type {
-  AccountGroup,
-  AccountNature,
-  CoaAccount,
-} from '@/lib/types';
+import type { AccountGroup, AccountNature, CoaAccount } from '@/lib/types';
 
 const ROUTE = '/accounts/account-ledgers';
 
@@ -47,9 +43,12 @@ const BLOCKS: { digit: string; label: string }[] = [
 
 const NATURE_TONE: Record<AccountNature, string> = {
   ASSET: 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300',
-  LIABILITY: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',
-  EQUITY: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300',
-  INCOME: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
+  LIABILITY:
+    'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',
+  EQUITY:
+    'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-300',
+  INCOME:
+    'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
   EXPENSE: 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300',
 };
 
@@ -102,7 +101,11 @@ export default function AccountLedgersPage() {
   const { can, activeCompany } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
-  const { data: accounts, loading, refetch } = useFetch<CoaAccount[]>('/coa/accounts');
+  const {
+    data: accounts,
+    loading,
+    refetch,
+  } = useFetch<CoaAccount[]>('/coa/accounts');
   const { data: groups } = useFetch<AccountGroup[]>('/coa/groups');
 
   const [search, setSearch] = useState('');
@@ -152,13 +155,17 @@ export default function AccountLedgersPage() {
   const toggleAdoption = async (a: CoaAccount) => {
     setBusy(a.id);
     try {
-      await api.patch(`/coa/accounts/${a.id}/adoption`, { adopted: !a.adopted });
+      await api.patch(`/coa/accounts/${a.id}/adoption`, {
+        adopted: !a.adopted,
+      });
       toast.success(
         `${a.code} ${a.name} ${a.adopted ? 'dropped from' : 'adopted by'} this company.`,
       );
       await refetch();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Failed to change adoption.');
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to change adoption.',
+      );
     } finally {
       setBusy(null);
     }
@@ -263,7 +270,8 @@ export default function AccountLedgersPage() {
       accessor: (a) => a.statement,
       render: (a) => (
         <span className="text-xs text-slate-500">
-          {a.statement === 'BS' ? 'Balance Sheet' : 'Profit & Loss'} · {a.normalSide}
+          {a.statement === 'BS' ? 'Balance Sheet' : 'Profit & Loss'} ·{' '}
+          {a.normalSide}
         </span>
       ),
     },
@@ -301,7 +309,11 @@ export default function AccountLedgersPage() {
                 : 'bg-slate-100 text-slate-300 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-600',
             )}
           >
-            {a.adopted ? <Check className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
+            {a.adopted ? (
+              <Check className="h-4 w-4" />
+            ) : (
+              <Minus className="h-4 w-4" />
+            )}
           </button>
         ) : a.adopted ? (
           <Check className="mx-auto h-4 w-4 text-emerald-600" />
@@ -373,8 +385,8 @@ export default function AccountLedgersPage() {
         <p className="basis-full pt-1 text-xs">
           Only these accounts are posted to; the headings they hang from are
           maintained under Account Groups. Codes are fixed by the annexure — the
-          name, notes, adoption and what an entry is asked for (cost centre, cost
-          object) are what you maintain here.
+          name, notes, adoption and what an entry is asked for (cost centre,
+          cost object) are what you maintain here.
         </p>
       </div>
 
@@ -397,7 +409,10 @@ export default function AccountLedgersPage() {
                   setBlock(e.target.value);
                   setGroupFilter('');
                 }}
-                options={BLOCKS.map((b) => ({ value: b.digit, label: b.label }))}
+                options={BLOCKS.map((b) => ({
+                  value: b.digit,
+                  label: b.label,
+                }))}
                 placeholder="All blocks"
                 className="w-56"
               />

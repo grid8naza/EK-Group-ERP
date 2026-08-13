@@ -5,11 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  Prisma,
-  WorkflowActionType,
-  WorkflowInstance,
-} from '@prisma/client';
+import { Prisma, WorkflowActionType, WorkflowInstance } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { USER_LOOKUP, UserLookupPort } from '../../contracts/user-lookup.port';
 import {
@@ -124,7 +120,9 @@ export class WorkflowRuntimeService {
     // turning an approved ICPO into a sales order. The engine cannot reach a
     // module to do any of that, so it sends the approver where the module can.
     const objects = await this.prisma.objectMaster.findMany({
-      where: { id: { in: [...new Set(tasks.map((t) => t.instance.objectId))] } },
+      where: {
+        id: { in: [...new Set(tasks.map((t) => t.instance.objectId))] },
+      },
       select: { id: true, route: true, objectName: true },
     });
     const objectById = new Map(objects.map((o) => [o.id, o]));
@@ -135,7 +133,9 @@ export class WorkflowRuntimeService {
     // number and an amount asks them to approve what they cannot identify. The
     // instance has carried both since it started; it was simply never returned.
     const companies = await this.prisma.company.findMany({
-      where: { id: { in: [...new Set(tasks.map((t) => t.instance.companyId))] } },
+      where: {
+        id: { in: [...new Set(tasks.map((t) => t.instance.companyId))] },
+      },
       select: { id: true, name: true },
     });
     const companyById = new Map(companies.map((c) => [c.id, c.name]));
@@ -286,7 +286,14 @@ export class WorkflowRuntimeService {
       }
       await this.completeTask(task.id);
       await this.skipSiblings(instance.id, task.sequence);
-      await this.log(instance.id, step.id, task.sequence, userId, 'REJECT', dto.comment);
+      await this.log(
+        instance.id,
+        step.id,
+        task.sequence,
+        userId,
+        'REJECT',
+        dto.comment,
+      );
       await this.finish(instance.id, 'REJECTED');
       // Alerts are for receivers (the next approver), not the sender — a rejection
       // ends the flow with no receiver, so no notification is raised here. The
@@ -299,7 +306,14 @@ export class WorkflowRuntimeService {
       }
       await this.completeTask(task.id);
       await this.skipSiblings(instance.id, task.sequence);
-      await this.log(instance.id, step.id, task.sequence, userId, 'CANCEL', dto.comment);
+      await this.log(
+        instance.id,
+        step.id,
+        task.sequence,
+        userId,
+        'CANCEL',
+        dto.comment,
+      );
       await this.finish(instance.id, 'CANCELLED');
       return this.getInstance(instance.id);
     }
@@ -322,7 +336,14 @@ export class WorkflowRuntimeService {
 
     await this.completeTask(task.id);
     await this.skipSiblings(instance.id, task.sequence);
-    await this.log(instance.id, step.id, task.sequence, userId, loggedAction, dto.comment);
+    await this.log(
+      instance.id,
+      step.id,
+      task.sequence,
+      userId,
+      loggedAction,
+      dto.comment,
+    );
 
     if (advance && !TERMINAL_ACTIONS.includes(step.action)) {
       await this.activateNext(instance, task.sequence);
@@ -393,9 +414,7 @@ export class WorkflowRuntimeService {
    * If the creator isn't a first-level approver, the workflow simply waits at
    * level 1 for whoever is.
    */
-  async submitAsCreator(
-    input: StartWorkflowInput,
-  ): Promise<{
+  async submitAsCreator(input: StartWorkflowInput): Promise<{
     instanceId: number;
     status: WorkflowStatus;
     statusLabel: string | null;
@@ -415,7 +434,8 @@ export class WorkflowRuntimeService {
     let status = instance.status as WorkflowStatus;
     let statusLabel: string | null = null;
     const myTask = instance.tasks.find(
-      (t) => t.assignedUserId === input.startedByUserId && t.status === 'PENDING',
+      (t) =>
+        t.assignedUserId === input.startedByUserId && t.status === 'PENDING',
     );
     if (myTask) {
       const step = await this.prisma.workflowStep.findUnique({
@@ -471,7 +491,9 @@ export class WorkflowRuntimeService {
       },
     });
     if (!task) {
-      throw new ForbiddenException('You have no pending action on this document.');
+      throw new ForbiddenException(
+        'You have no pending action on this document.',
+      );
     }
     const step = await this.prisma.workflowStep.findUnique({
       where: { id: task.stepId },
@@ -736,7 +758,12 @@ export class WorkflowRuntimeService {
       if (!def) return { governed: false, allowed: true };
       return {
         governed: true,
-        allowed: await this.userInCreateStep(userId, def.id, def.companyId, moduleId),
+        allowed: await this.userInCreateStep(
+          userId,
+          def.id,
+          def.companyId,
+          moduleId,
+        ),
       };
     }
     const defs = await this.prisma.workflowDefinition.findMany({
@@ -767,7 +794,9 @@ export class WorkflowRuntimeService {
     const steps = await this.prisma.workflowStep.findMany({
       where: {
         definitionId,
-        action: { in: ['CREATE_FORWARD', 'CREATE_APPROVE', 'CREATE_REFERENCE'] },
+        action: {
+          in: ['CREATE_FORWARD', 'CREATE_APPROVE', 'CREATE_REFERENCE'],
+        },
       },
       include: { users: { select: { userId: true } } },
     });
@@ -879,7 +908,11 @@ export class WorkflowRuntimeService {
       // Link each alert to the task it's about, so the bell can drop it the moment
       // that task stops being PENDING (actioned here, or skipped when a peer acts).
       const tasks = await this.prisma.workflowTask.findMany({
-        where: { instanceId: instance.id, stepId: next.id, sequence: next.sequence },
+        where: {
+          instanceId: instance.id,
+          stepId: next.id,
+          sequence: next.sequence,
+        },
         select: { id: true, assignedUserId: true },
       });
       // Named by KIND as well as by number. The bell serves every module at
@@ -947,7 +980,10 @@ export class WorkflowRuntimeService {
     documentModuleId: number,
   ): Promise<number[]> {
     const needed = [
-      ...new Set([step.targetCompanyId ?? documentCompanyId, documentCompanyId]),
+      ...new Set([
+        step.targetCompanyId ?? documentCompanyId,
+        documentCompanyId,
+      ]),
     ];
     // The module the step acts in, tested in the company the document is in —
     // module access is granted per company, so the pair is the question.
@@ -996,7 +1032,10 @@ export class WorkflowRuntimeService {
       };
     }
     if (!canApprove) {
-      return { kind: 'REVIEW', reason: 'Beyond your limit — review and pass up' };
+      return {
+        kind: 'REVIEW',
+        reason: 'Beyond your limit — review and pass up',
+      };
     }
     return { kind: 'APPROVAL', reason: null };
   }

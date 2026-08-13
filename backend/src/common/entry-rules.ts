@@ -90,10 +90,18 @@ export function resolveEntryRules(
  */
 export function applyEntryRules(
   rules: EntryRules,
-  values: { branchId?: number | null; costCenterId?: number | null; costObjectId?: number | null },
+  values: {
+    branchId?: number | null;
+    costCenterId?: number | null;
+    costObjectId?: number | null;
+  },
   /** Named in the error, e.g. "Mess Provisions Consumed". */
   label?: string,
-): { branchId: number | null; costCenterId: number | null; costObjectId: number | null } {
+): {
+  branchId: number | null;
+  costCenterId: number | null;
+  costObjectId: number | null;
+} {
   const where = label ? ` on ${label}` : '';
   const take = (
     rule: EntryFieldRule,
@@ -107,8 +115,16 @@ export function applyEntryRules(
     return value ?? null;
   };
 
-  const costCenterId = take(rules.costCenter, values.costCenterId, 'cost centre');
-  const costObjectId = take(rules.costObject, values.costObjectId, 'cost object');
+  const costCenterId = take(
+    rules.costCenter,
+    values.costCenterId,
+    'cost centre',
+  );
+  const costObjectId = take(
+    rules.costObject,
+    values.costObjectId,
+    'cost object',
+  );
   // Dropping the centre drops the department with it: an object recorded under
   // no centre could never be rolled up.
   return {

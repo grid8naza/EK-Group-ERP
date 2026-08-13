@@ -13,11 +13,7 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, CloseFooter } from '@/components/ui/Drawer';
 import { Badge } from '@/components/ui/Badge';
-import type {
-  ProductionPlan,
-  ProductionPlanStatus,
-  Unit,
-} from '@/lib/types';
+import type { ProductionPlan, ProductionPlanStatus, Unit } from '@/lib/types';
 
 const ROUTE = '/production/plans';
 
@@ -34,9 +30,8 @@ export default function ProductionPlansPage() {
   const { can } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
-  const { data, loading, refetch } = useFetch<ProductionPlan[]>(
-    '/production-plans',
-  );
+  const { data, loading, refetch } =
+    useFetch<ProductionPlan[]>('/production-plans');
   const { data: pending, refetch: refetchPending } = useFetch<{
     count: number;
   }>('/production-plans/pending-count');
@@ -130,7 +125,9 @@ export default function ProductionPlansPage() {
       );
     } catch (e) {
       toast.error(
-        e instanceof ApiError ? e.message : 'Failed to raise material requests.',
+        e instanceof ApiError
+          ? e.message
+          : 'Failed to raise material requests.',
       );
     } finally {
       setRaising(false);
@@ -201,7 +198,9 @@ export default function ProductionPlansPage() {
               onClick={createPlan}
               disabled={creating || pendingCount === 0}
               title={
-                pendingCount === 0 ? 'No pending work orders to plan' : undefined
+                pendingCount === 0
+                  ? 'No pending work orders to plan'
+                  : undefined
               }
             >
               <Plus className="h-4 w-4" /> New Plan

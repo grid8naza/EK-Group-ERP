@@ -12,10 +12,7 @@ import {
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { MAIN_GROUPS_BY_NATURE } from './main-groups';
-import {
-  CompanyEntrySetup,
-  resolveEntryRules,
-} from '../../common/entry-rules';
+import { CompanyEntrySetup, resolveEntryRules } from '../../common/entry-rules';
 import {
   CreateAccountDto,
   CreateGroupDto,
@@ -196,7 +193,13 @@ export class CoaService {
     if (!companyId) throw new NotFoundException('Select a company first.');
     const account = await this.prisma.account.findUnique({
       where: { id: accountId },
-      select: { id: true, code: true, name: true, hasCostCenter: true, hasCostObject: true },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        hasCostCenter: true,
+        hasCostObject: true,
+      },
     });
     if (!account) throw new NotFoundException('Account not found');
     const setup = await this.companySetup(companyId);
@@ -260,7 +263,9 @@ export class CoaService {
       },
       update: {
         localName:
-          dto.localName !== undefined ? dto.localName?.trim() || null : undefined,
+          dto.localName !== undefined
+            ? dto.localName?.trim() || null
+            : undefined,
         // Re-adopting revives a row that was dropped earlier, so both flags are
         // restored unless the caller says otherwise.
         allowPosting: dto.allowPosting ?? true,
@@ -348,7 +353,9 @@ export class CoaService {
       swiftCode: null,
       iban: null,
     };
-    for (const [field, { pattern, message }] of Object.entries(CODE_FORMATS) as [
+    for (const [field, { pattern, message }] of Object.entries(
+      CODE_FORMATS,
+    ) as [
       keyof typeof CODE_FORMATS,
       (typeof CODE_FORMATS)[keyof typeof CODE_FORMATS],
     ][]) {
@@ -547,7 +554,8 @@ export class CoaService {
         parentGroupId: parent?.id ?? null,
         nature,
         statement: statementOf(nature),
-        normalSide: dto.normalSide ?? parent?.normalSide ?? defaultSideOf(nature),
+        normalSide:
+          dto.normalSide ?? parent?.normalSide ?? defaultSideOf(nature),
         // A sub-group reports under its parent's schedule, so it carries none
         // of its own however the form was filled in.
         mainGroup: parent ? null : this.checkedMainGroup(dto.mainGroup, nature),
@@ -588,11 +596,16 @@ export class CoaService {
    * read the other way stops a group being reopened under a closed parent.
    */
   async updateGroup(id: number, dto: UpdateGroupDto) {
-    const existing = await this.prisma.accountGroup.findUnique({ where: { id } });
+    const existing = await this.prisma.accountGroup.findUnique({
+      where: { id },
+    });
     if (!existing) throw new NotFoundException('Account group not found');
 
     if (dto.isActive === false && existing.isActive) {
-      await this.assertEmptyOfLive(existing.id, `${existing.code} ${existing.name}`);
+      await this.assertEmptyOfLive(
+        existing.id,
+        `${existing.code} ${existing.name}`,
+      );
     }
     if (dto.isActive === true && !existing.isActive && existing.parentGroupId) {
       const parent = await this.prisma.accountGroup.findUnique({
@@ -622,8 +635,12 @@ export class CoaService {
     ]);
     if (children || accounts) {
       const held = [
-        children ? `${children} active sub-group${children === 1 ? '' : 's'}` : null,
-        accounts ? `${accounts} active account${accounts === 1 ? '' : 's'}` : null,
+        children
+          ? `${children} active sub-group${children === 1 ? '' : 's'}`
+          : null,
+        accounts
+          ? `${accounts} active account${accounts === 1 ? '' : 's'}`
+          : null,
       ]
         .filter(Boolean)
         .join(' and ');
@@ -688,11 +705,17 @@ export class CoaService {
   async updateAccount(id: number, dto: UpdateAccountDto) {
     const existing = await this.prisma.account.findUnique({
       where: { id },
-      include: { group: { select: { code: true, name: true, isActive: true } } },
+      include: {
+        group: { select: { code: true, name: true, isActive: true } },
+      },
     });
     if (!existing) throw new NotFoundException('Account not found');
 
-    if (dto.isActive === true && !existing.isActive && !existing.group.isActive) {
+    if (
+      dto.isActive === true &&
+      !existing.isActive &&
+      !existing.group.isActive
+    ) {
       throw new BadRequestException(
         `${existing.group.code} ${existing.group.name} is inactive. Reopen the group before the accounts under it.`,
       );

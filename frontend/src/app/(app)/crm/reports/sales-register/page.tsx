@@ -121,7 +121,12 @@ const ALL_COLUMNS: ReportColumn<SalesRow>[] = [
     cell: (r) => asDate(r.expiryDate),
   },
   { key: 'store', header: 'Store', weight: 12, cell: (r) => r.storeName ?? '' },
-  { key: 'orderRef', header: 'Order Ref', weight: 12, cell: (r) => r.orderRef ?? '' },
+  {
+    key: 'orderRef',
+    header: 'Order Ref',
+    weight: 12,
+    cell: (r) => r.orderRef ?? '',
+  },
   {
     key: 'qty',
     header: 'Qty',
@@ -330,7 +335,10 @@ export default function SalesRegisterPage() {
         // reader adding up a column wants the answer at the foot of it.
         if (totalled.length) {
           const sums = new Map(
-            totalled.map((t) => [t.header, list.reduce((n, r) => n + t.of(r), 0)]),
+            totalled.map((t) => [
+              t.header,
+              list.reduce((n, r) => n + t.of(r), 0),
+            ]),
           );
           body.push(
             selected.columns.map((header, i) => {
@@ -346,7 +354,10 @@ export default function SalesRegisterPage() {
               subheading: `${label} — ${money(takings)}`,
               subcount: list.length,
               rows: body,
-              shade: [...list.map(() => false), ...(totalled.length ? [true] : [])],
+              shade: [
+                ...list.map(() => false),
+                ...(totalled.length ? [true] : []),
+              ],
             },
           ],
         };
@@ -485,7 +496,10 @@ export default function SalesRegisterPage() {
           />
           <div className="ml-auto flex items-center gap-2">
             <ColumnToggle
-              columns={ALL_COLUMNS.map((c) => ({ key: c.key, label: c.header }))}
+              columns={ALL_COLUMNS.map((c) => ({
+                key: c.key,
+                label: c.header,
+              }))}
               hidden={hidden}
               onToggle={toggle}
             />

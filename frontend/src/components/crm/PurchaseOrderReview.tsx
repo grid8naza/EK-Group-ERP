@@ -7,7 +7,11 @@ import type { PurchaseOrder } from '@/lib/types';
 
 const num = (n: number) => n.toLocaleString();
 
-export type ReviewLine = { lineId: number; acceptedQty: string; cancelled: boolean };
+export type ReviewLine = {
+  lineId: number;
+  acceptedQty: string;
+  cancelled: boolean;
+};
 
 export interface PurchaseOrderReviewProps {
   order: PurchaseOrder;
@@ -163,7 +167,9 @@ export function PurchaseOrderReview({
                         className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-red-600 disabled:opacity-40 dark:hover:bg-slate-800"
                         onClick={() => onToggleCancel(l.id)}
                         disabled={disabled}
-                        title={cancelled ? 'Restore this line' : 'Cancel this line'}
+                        title={
+                          cancelled ? 'Restore this line' : 'Cancel this line'
+                        }
                         aria-label={cancelled ? 'Restore line' : 'Cancel line'}
                       >
                         {cancelled ? (

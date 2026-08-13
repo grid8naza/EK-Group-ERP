@@ -45,8 +45,12 @@ type ChartRow =
  * asks for nothing, and the chart would be lying to print otherwise.
  */
 const costKey = (a: CoaAccount): 'OBJECT' | 'CENTRE' | 'NONE' => {
-  const centre = a.entryRules ? a.entryRules.costCenter === 'REQUIRED' : a.hasCostCenter;
-  const object = a.entryRules ? a.entryRules.costObject === 'REQUIRED' : a.hasCostObject;
+  const centre = a.entryRules
+    ? a.entryRules.costCenter === 'REQUIRED'
+    : a.hasCostCenter;
+  const object = a.entryRules
+    ? a.entryRules.costObject === 'REQUIRED'
+    : a.hasCostObject;
   return object ? 'OBJECT' : centre ? 'CENTRE' : 'NONE';
 };
 
@@ -102,7 +106,11 @@ const ALL_COLUMNS: ReportColumn<ChartRow>[] = [
     header: 'Statement',
     weight: 12,
     cell: (r) =>
-      r.kind === 'group' ? '' : r.statement === 'BS' ? 'Balance Sheet' : 'Profit & Loss',
+      r.kind === 'group'
+        ? ''
+        : r.statement === 'BS'
+          ? 'Balance Sheet'
+          : 'Profit & Loss',
   },
   {
     key: 'normalSide',
@@ -177,7 +185,8 @@ export default function ChartOfAccountsReportPage() {
       if (cost && costKey(a) !== cost) return false;
       // Only the whole master can hold a row that answers No, so the filter is
       // ignored outright on the adopted scope rather than emptying the page.
-      if (scope === 'all' && used && (used === 'yes') !== !!a.adopted) return false;
+      if (scope === 'all' && used && (used === 'yes') !== !!a.adopted)
+        return false;
       // Code and name together, so "12001" and "raw mat" both land — and the
       // local name where the company has given the account one, since that is
       // what the reader is looking at in the column.
@@ -328,7 +337,9 @@ export default function ChartOfAccountsReportPage() {
     groupId ? groupOptions.find((o) => o.value === groupId)?.label : null,
     // Worth naming on the printed page: "44 accounts" with the cost filter on
     // is a different statement from "44 accounts".
-    cost ? `Asks for: ${COST_OPTIONS.find((o) => o.value === cost)?.label}` : null,
+    cost
+      ? `Asks for: ${COST_OPTIONS.find((o) => o.value === cost)?.label}`
+      : null,
     scope === 'all' && used
       ? USED_OPTIONS.find((o) => o.value === used)?.label
       : null,
@@ -421,7 +432,10 @@ export default function ChartOfAccountsReportPage() {
               setMain('');
               setGroupId('');
             }}
-            options={PRIMARY_GROUPS.map((p) => ({ value: p.key, label: p.label }))}
+            options={PRIMARY_GROUPS.map((p) => ({
+              value: p.key,
+              label: p.label,
+            }))}
             placeholder="All primary groups"
             wrapClassName="min-w-0 flex-1 basis-0"
           />
@@ -507,7 +521,10 @@ export default function ChartOfAccountsReportPage() {
           </button>
           <div className="flex-none">
             <ColumnToggle
-              columns={ALL_COLUMNS.map((c) => ({ key: c.key, label: c.header }))}
+              columns={ALL_COLUMNS.map((c) => ({
+                key: c.key,
+                label: c.header,
+              }))}
               hidden={hidden}
               onToggle={toggle}
             />

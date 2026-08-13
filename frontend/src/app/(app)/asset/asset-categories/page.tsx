@@ -12,7 +12,12 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { StatusToggle } from '@/components/ui/StatusToggle';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -33,15 +38,17 @@ export default function AssetCategoriesPage() {
   const { can } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
-  const { data, loading, refetch } = useFetch<AssetCategory[]>('/asset-categories');
+  const { data, loading, refetch } =
+    useFetch<AssetCategory[]>('/asset-categories');
   const { data: companies } = useFetch<Company[]>('/companies');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<AssetCategory>({
-    endpoint: '/asset-categories',
-    route: ROUTE,
-    noun: 'asset category',
-    nameOf: (c) => c.name,
-    reload: refetch,
-  });
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
+    useLock<AssetCategory>({
+      endpoint: '/asset-categories',
+      route: ROUTE,
+      noun: 'asset category',
+      nameOf: (c) => c.name,
+      reload: refetch,
+    });
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AssetCategory | null>(null);
@@ -137,7 +144,10 @@ export default function AssetCategoriesPage() {
     try {
       let saved: AssetCategory;
       if (editing) {
-        saved = await api.patch<AssetCategory>(`/asset-categories/${editing.id}`, payload);
+        saved = await api.patch<AssetCategory>(
+          `/asset-categories/${editing.id}`,
+          payload,
+        );
         toast.success('Asset category updated.');
       } else {
         saved = await api.post<AssetCategory>('/asset-categories', payload);
@@ -183,7 +193,9 @@ export default function AssetCategoriesPage() {
       try {
         await api.patch(`/asset-categories/${c.id}`, { isActive: !c.isActive });
         toast.success(
-          c.isActive ? 'Asset category set inactive.' : 'Asset category set active.',
+          c.isActive
+            ? 'Asset category set inactive.'
+            : 'Asset category set active.',
         );
         refetch();
       } catch (e) {
@@ -360,7 +372,9 @@ export default function AssetCategoriesPage() {
               {!form.allCompanies && (
                 <div className="mt-1 max-h-52 space-y-1.5 overflow-y-auto rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                   {companyList.length === 0 ? (
-                    <p className="text-sm text-slate-400">No companies found.</p>
+                    <p className="text-sm text-slate-400">
+                      No companies found.
+                    </p>
                   ) : (
                     companyList.map((co) => (
                       <Checkbox
@@ -375,8 +389,8 @@ export default function AssetCategoriesPage() {
               )}
               {!form.allCompanies && (
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {form.companyIds.length} selected — the asset category is available
-                  only in these companies.
+                  {form.companyIds.length} selected — the asset category is
+                  available only in these companies.
                 </p>
               )}
             </div>

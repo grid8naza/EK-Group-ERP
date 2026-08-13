@@ -83,9 +83,21 @@ export interface LoginScreenConfig {
   knowMore?: LinkConf;
 }
 
-export const LAYOUT_OPTIONS: { value: LoginLayout; label: string; hint: string }[] = [
-  { value: 'centered', label: 'Layout 1 — Centered', hint: 'Logo, text and card stacked in the middle.' },
-  { value: 'split', label: 'Layout 2 — Split', hint: 'Branding panel on the left, login card on the right.' },
+export const LAYOUT_OPTIONS: {
+  value: LoginLayout;
+  label: string;
+  hint: string;
+}[] = [
+  {
+    value: 'centered',
+    label: 'Layout 1 — Centered',
+    hint: 'Logo, text and card stacked in the middle.',
+  },
+  {
+    value: 'split',
+    label: 'Layout 2 — Split',
+    hint: 'Branding panel on the left, login card on the right.',
+  },
 ];
 
 export type LoginMediaKind = 'IMAGE' | 'GIF' | 'VIDEO';
@@ -112,7 +124,12 @@ export const DEFAULT_LOGIN_CONFIG: Required<
   heading: 'Welcome to Erp Grid8',
   headingStyle: { fontSize: 24, color: '#0f172a', bold: true, italic: false },
   description: 'Sign in to access your control panel',
-  descriptionStyle: { fontSize: 14, color: '#64748b', bold: false, italic: false },
+  descriptionStyle: {
+    fontSize: 14,
+    color: '#64748b',
+    bold: false,
+    italic: false,
+  },
   headingHtml: '',
   descriptionHtml: '',
   overlayHeadingHtml: '',
@@ -121,7 +138,12 @@ export const DEFAULT_LOGIN_CONFIG: Required<
   cardOpacity: 100,
   pageColor: '#f8fafc',
   copyright: 'Erp Grid8 © {year} — Modular ERP',
-  copyrightStyle: { fontSize: 12, color: '#94a3b8', bold: false, italic: false },
+  copyrightStyle: {
+    fontSize: 12,
+    color: '#94a3b8',
+    bold: false,
+    italic: false,
+  },
 
   // layout & form
   layout: 'centered',
@@ -136,13 +158,28 @@ export const DEFAULT_LOGIN_CONFIG: Required<
   rememberMeLabel: 'Remember me',
   forgotPassword: { show: false, label: 'Forgot your password?', url: '#' },
   secondaryButton: { show: false, label: 'Sign in with Google', url: '#' },
-  signUp: { show: false, prompt: "Don't have an account?", label: 'Sign up', url: '#' },
+  signUp: {
+    show: false,
+    prompt: "Don't have an account?",
+    label: 'Sign up',
+    url: '#',
+  },
 
   // Layout 2 image-panel overlay
   overlayHeading: '',
-  overlayHeadingStyle: { fontSize: 44, color: '#ffffff', bold: true, italic: false },
+  overlayHeadingStyle: {
+    fontSize: 44,
+    color: '#ffffff',
+    bold: true,
+    italic: false,
+  },
   overlayText: '',
-  overlayTextStyle: { fontSize: 16, color: '#e5e7eb', bold: false, italic: false },
+  overlayTextStyle: {
+    fontSize: 16,
+    color: '#e5e7eb',
+    bold: false,
+    italic: false,
+  },
   knowMore: { show: false, label: 'Know more', url: '#' },
 };
 
@@ -154,19 +191,60 @@ export const FONT_OPTIONS: {
   google?: string; // Google family name to load, if any
 }[] = [
   { value: '', label: 'Default (theme font)', stack: '' },
-  { value: 'system', label: 'System Sans', stack: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif' },
+  {
+    value: 'system',
+    label: 'System Sans',
+    stack: 'system-ui, -apple-system, Segoe UI, Roboto, sans-serif',
+  },
   { value: 'arial', label: 'Arial', stack: 'Arial, Helvetica, sans-serif' },
-  { value: 'georgia', label: 'Georgia', stack: 'Georgia, "Times New Roman", serif' },
-  { value: 'times', label: 'Times New Roman', stack: '"Times New Roman", Times, serif' },
+  {
+    value: 'georgia',
+    label: 'Georgia',
+    stack: 'Georgia, "Times New Roman", serif',
+  },
+  {
+    value: 'times',
+    label: 'Times New Roman',
+    stack: '"Times New Roman", Times, serif',
+  },
   { value: 'courier', label: 'Courier New', stack: '"Courier New", monospace' },
   { value: 'verdana', label: 'Verdana', stack: 'Verdana, Geneva, sans-serif' },
-  { value: 'trebuchet', label: 'Trebuchet MS', stack: '"Trebuchet MS", sans-serif' },
-  { value: 'roboto', label: 'Roboto', stack: "'Roboto', sans-serif", google: 'Roboto' },
-  { value: 'open-sans', label: 'Open Sans', stack: "'Open Sans', sans-serif", google: 'Open Sans' },
+  {
+    value: 'trebuchet',
+    label: 'Trebuchet MS',
+    stack: '"Trebuchet MS", sans-serif',
+  },
+  {
+    value: 'roboto',
+    label: 'Roboto',
+    stack: "'Roboto', sans-serif",
+    google: 'Roboto',
+  },
+  {
+    value: 'open-sans',
+    label: 'Open Sans',
+    stack: "'Open Sans', sans-serif",
+    google: 'Open Sans',
+  },
   { value: 'lato', label: 'Lato', stack: "'Lato', sans-serif", google: 'Lato' },
-  { value: 'montserrat', label: 'Montserrat', stack: "'Montserrat', sans-serif", google: 'Montserrat' },
-  { value: 'poppins', label: 'Poppins', stack: "'Poppins', sans-serif", google: 'Poppins' },
-  { value: 'playfair', label: 'Playfair Display', stack: "'Playfair Display', serif", google: 'Playfair Display' },
+  {
+    value: 'montserrat',
+    label: 'Montserrat',
+    stack: "'Montserrat', sans-serif",
+    google: 'Montserrat',
+  },
+  {
+    value: 'poppins',
+    label: 'Poppins',
+    stack: "'Poppins', sans-serif",
+    google: 'Poppins',
+  },
+  {
+    value: 'playfair',
+    label: 'Playfair Display',
+    stack: "'Playfair Display', serif",
+    google: 'Playfair Display',
+  },
 ];
 
 const FONT_BY_VALUE = new Map(FONT_OPTIONS.map((f) => [f.value, f]));
@@ -197,13 +275,20 @@ export function resolveTextStyle(
  * semi-transparent without fading its contents (as CSS `opacity` would). Falls
  * back to the original value for non-hex input.
  */
-export function withAlpha(hex: string | undefined, opacityPct?: number): string {
+export function withAlpha(
+  hex: string | undefined,
+  opacityPct?: number,
+): string {
   const a = Math.max(0, Math.min(100, opacityPct ?? 100)) / 100;
   const h = (hex ?? '#ffffff').trim();
   const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(h);
   if (!m) return h;
   let v = m[1];
-  if (v.length === 3) v = v.split('').map((c) => c + c).join('');
+  if (v.length === 3)
+    v = v
+      .split('')
+      .map((c) => c + c)
+      .join('');
   const r = parseInt(v.slice(0, 2), 16);
   const g = parseInt(v.slice(2, 4), 16);
   const b = parseInt(v.slice(4, 6), 16);
@@ -240,13 +325,18 @@ export function usedGoogleFonts(config: LoginScreenConfig): string[] {
 export function googleFontsHref(families: string[]): string {
   if (!families.length) return '';
   const params = families
-    .map((f) => `family=${encodeURIComponent(f)}:ital,wght@0,400;0,700;1,400;1,700`)
+    .map(
+      (f) =>
+        `family=${encodeURIComponent(f)}:ital,wght@0,400;0,700;1,400;1,700`,
+    )
     .join('&');
   return `https://fonts.googleapis.com/css2?${params}&display=swap`;
 }
 
 /** Fill an incoming config with defaults so render code can assume presence. */
-export function withDefaults(config: LoginScreenConfig | null | undefined): LoginScreenConfig {
+export function withDefaults(
+  config: LoginScreenConfig | null | undefined,
+): LoginScreenConfig {
   return { ...DEFAULT_LOGIN_CONFIG, ...(config ?? {}) };
 }
 
@@ -259,15 +349,45 @@ export function formatCopyright(text: string, year: number): string {
 // public + the save endpoint is JWT-only, so we sanitize to a small safe subset
 // before rendering. Browser-only (uses the DOM); returns '' on the server.
 const SANITIZE_ALLOWED_TAGS = new Set([
-  'B', 'STRONG', 'I', 'EM', 'U', 'S', 'SPAN', 'BR', 'DIV', 'P', 'FONT', 'SUB', 'SUP',
+  'B',
+  'STRONG',
+  'I',
+  'EM',
+  'U',
+  'S',
+  'SPAN',
+  'BR',
+  'DIV',
+  'P',
+  'FONT',
+  'SUB',
+  'SUP',
 ]);
 const SANITIZE_DANGEROUS_TAGS = new Set([
-  'SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'FORM', 'INPUT',
-  'BUTTON', 'SVG', 'IMG', 'A',
+  'SCRIPT',
+  'STYLE',
+  'IFRAME',
+  'OBJECT',
+  'EMBED',
+  'LINK',
+  'META',
+  'FORM',
+  'INPUT',
+  'BUTTON',
+  'SVG',
+  'IMG',
+  'A',
 ]);
 const SANITIZE_ALLOWED_STYLE = new Set([
-  'color', 'background-color', 'font-weight', 'font-style', 'text-decoration',
-  'text-decoration-line', 'font-family', 'font-size', 'text-align',
+  'color',
+  'background-color',
+  'font-weight',
+  'font-style',
+  'text-decoration',
+  'text-decoration-line',
+  'font-family',
+  'font-size',
+  'text-align',
 ]);
 
 /**
@@ -313,7 +433,8 @@ export function sanitizeHtml(html: string): string {
         }
         // Strip every attribute except a filtered inline style.
         for (const attr of Array.from(el.attributes)) {
-          if (attr.name.toLowerCase() !== 'style') el.removeAttribute(attr.name);
+          if (attr.name.toLowerCase() !== 'style')
+            el.removeAttribute(attr.name);
         }
         const style = el.getAttribute('style');
         if (style) {
@@ -321,7 +442,9 @@ export function sanitizeHtml(html: string): string {
             .split(';')
             .map((d) => d.trim())
             .filter(Boolean)
-            .filter((d) => SANITIZE_ALLOWED_STYLE.has(d.split(':')[0].trim().toLowerCase()))
+            .filter((d) =>
+              SANITIZE_ALLOWED_STYLE.has(d.split(':')[0].trim().toLowerCase()),
+            )
             .filter((d) => !/url\s*\(|expression|javascript:/i.test(d))
             .join('; ');
           if (safe) el.setAttribute('style', safe);

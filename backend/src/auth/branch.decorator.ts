@@ -8,7 +8,8 @@ import { createParamDecorator, ExecutionContext } from '@nestjs/common';
 export const BranchId = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): number | undefined => {
     const request = ctx.switchToHttp().getRequest();
-    const raw = request.headers['x-branch-id'] ?? request.headers['X-Branch-Id'];
+    const raw =
+      request.headers['x-branch-id'] ?? request.headers['X-Branch-Id'];
     const n = Number(Array.isArray(raw) ? raw[0] : raw);
     return Number.isFinite(n) && n > 0 ? n : undefined;
   },

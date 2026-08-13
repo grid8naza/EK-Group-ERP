@@ -53,7 +53,11 @@ export class MetricRegistryService {
     if (!mod) return [];
     return [...this.defs.values()]
       .filter((d) => d.moduleCode === mod.code)
-      .map((d) => ({ key: d.key, label: d.label, format: d.format ?? 'number' }));
+      .map((d) => ({
+        key: d.key,
+        label: d.label,
+        format: d.format ?? 'number',
+      }));
   }
 
   /** Compute several metrics at once for one company/branch scope. */
@@ -68,7 +72,11 @@ export class MetricRegistryService {
         const def = this.defs.get(key)!;
         const format = def.format ?? 'number';
         try {
-          out[key] = { value: await def.compute(ctx), format, label: def.label };
+          out[key] = {
+            value: await def.compute(ctx),
+            format,
+            label: def.label,
+          };
         } catch {
           // A failing metric shouldn't break the whole dashboard.
           out[key] = { value: 0, format, label: def.label };

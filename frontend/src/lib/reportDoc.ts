@@ -187,7 +187,9 @@ const SERIAL_HEAD = 'Sl. No';
 const SERIAL_WEIGHT = 6;
 
 /** Columns/weights with the serial column prepended when `serial` is set. */
-export function reportColumns(spec: Pick<ReportSpec, 'columns' | 'weights' | 'serial'>) {
+export function reportColumns(
+  spec: Pick<ReportSpec, 'columns' | 'weights' | 'serial'>,
+) {
   return spec.serial
     ? {
         columns: [SERIAL_HEAD, ...spec.columns],
@@ -254,7 +256,8 @@ export const colPercent = (weights: readonly number[], i: number) => {
   return `${((weights[i] / total) * 100).toFixed(3)}%`;
 };
 
-const fmt = (v: Cell) => (typeof v === 'number' ? v.toLocaleString() : String(v));
+const fmt = (v: Cell) =>
+  typeof v === 'number' ? v.toLocaleString() : String(v);
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -283,7 +286,12 @@ export function printReport(
   const colgroup = `<colgroup>${columns
     .map((_, i) => `<col style="width:${colPercent(weights, i)}">`)
     .join('')}</colgroup>`;
-  const plan = headerPlan(spec.columns, spec.groups, spec.subHeaders, spec.serial);
+  const plan = headerPlan(
+    spec.columns,
+    spec.groups,
+    spec.subHeaders,
+    spec.serial,
+  );
   const head = plan
     ? `<thead><tr>${plan.top
         .map(
@@ -303,7 +311,10 @@ export function printReport(
       .map((r, i) => {
         const cells = spec.serial ? [i + 1, ...r] : r;
         return `<tr${t.shade?.[i] ? ' class="lvl1"' : ''}>${cells
-          .map((v, ci) => `<td${rightCols.has(ci) ? ' class="num"' : ''}>${esc(fmt(v))}</td>`)
+          .map(
+            (v, ci) =>
+              `<td${rightCols.has(ci) ? ' class="num"' : ''}>${esc(fmt(v))}</td>`,
+          )
           .join('')}</tr>`;
       })
       .join('')}</tbody></table>`;
@@ -417,22 +428,25 @@ export function pdfReport(spec: ReportSpec): void {
     }
   };
   const rightCols = rightAlignedOutputCols(spec);
-  const columnStyles: Record<
-    number,
-    { cellWidth: number; halign?: 'center' }
-  > = Object.fromEntries(
-    columns.map((_, i) => [
-      i,
-      { cellWidth: (weights[i] / totalW) * tableWidth },
-    ]),
-  );
+  const columnStyles: Record<number, { cellWidth: number; halign?: 'center' }> =
+    Object.fromEntries(
+      columns.map((_, i) => [
+        i,
+        { cellWidth: (weights[i] / totalW) * tableWidth },
+      ]),
+    );
   // Serial stays centered; numeric columns are right-aligned in the BODY only
   // (via didParseCell) so headers keep the centered headStyles alignment.
   if (spec.serial) columnStyles[0].halign = 'center';
 
   // Two-tier header (group labels spanning Price/% sub-columns) when the spec
   // declares column groups; otherwise a single header row.
-  const plan = headerPlan(spec.columns, spec.groups, spec.subHeaders, spec.serial);
+  const plan = headerPlan(
+    spec.columns,
+    spec.groups,
+    spec.subHeaders,
+    spec.serial,
+  );
   const pdfHead = plan
     ? [
         plan.top.map((c) => ({
@@ -482,9 +496,7 @@ export function pdfReport(spec: ReportSpec): void {
       autoTable(doc, {
         startY: y,
         head: pdfHead as unknown as string[][],
-        body: t.rows.map((r, i) =>
-          (spec.serial ? [i + 1, ...r] : r).map(fmt),
-        ),
+        body: t.rows.map((r, i) => (spec.serial ? [i + 1, ...r] : r).map(fmt)),
         // Match the HTML report: light beige header, dark slate text, thin tan
         // grid lines, and vertically-centered spanning header cells.
         styles: {

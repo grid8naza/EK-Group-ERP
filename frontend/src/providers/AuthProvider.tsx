@@ -134,8 +134,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (cur && navigation.some((m) => m.id === cur)) return cur;
       const byPath = navigation.find(
         (m) =>
-          m.menus.some((menu) => menu.items.some((it) => it.route === pathname)) ||
-          (m.dashboards ?? []).some((d) => d.route === pathname),
+          m.menus.some((menu) =>
+            menu.items.some((it) => it.route === pathname),
+          ) || (m.dashboards ?? []).some((d) => d.route === pathname),
       );
       if (byPath) return byPath.id;
       const def = user?.defaultModuleId ?? null;
@@ -269,9 +270,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const nav = res.navigation || [];
       const defId = res.user?.defaultModuleId ?? null;
       const mod =
-        (defId ? nav.find((m) => m.id === defId) : undefined) ??
-        nav[0] ??
-        null;
+        (defId ? nav.find((m) => m.id === defId) : undefined) ?? nav[0] ?? null;
       router.replace(moduleLandingRoute(mod));
     },
     [router, applyProfile],

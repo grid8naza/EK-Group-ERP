@@ -104,7 +104,9 @@ export class MailService {
 
     const to = await this.resolveRecipients(userId, dto.to);
     const ccIds = (dto.cc ?? []).filter((id) => !to.has(id));
-    const cc = await this.resolveRecipients(userId, ccIds, { allowEmpty: true });
+    const cc = await this.resolveRecipients(userId, ccIds, {
+      allowEmpty: true,
+    });
     if (to.size === 0) throw new BadRequestException('Address it to someone.');
 
     const attachments = (dto.attachments ?? []).map((a) =>
@@ -346,7 +348,10 @@ export class MailService {
     const visible =
       mail.senderId === userId || (recipient && recipient.deletedAt === null);
     if (!visible) throw new NotFoundException('No such mail.');
-    return { mail, recipient: recipient?.deletedAt === null ? recipient : null };
+    return {
+      mail,
+      recipient: recipient?.deletedAt === null ? recipient : null,
+    };
   }
 
   // --------------------------------------------------------------- helpers --
@@ -474,8 +479,7 @@ export class MailService {
         ? {
             id: mail.parent.id,
             subject: mail.parent.subject,
-            senderName:
-              names.get(mail.parent.senderId)?.name ?? 'Someone',
+            senderName: names.get(mail.parent.senderId)?.name ?? 'Someone',
             sentAt: mail.parent.sentAt.toISOString(),
           }
         : null,

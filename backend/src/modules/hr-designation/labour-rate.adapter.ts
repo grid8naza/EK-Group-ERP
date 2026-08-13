@@ -12,7 +12,9 @@ export class LabourRateAdapter implements LabourRatePort {
   constructor(private readonly prisma: PrismaService) {}
 
   async ratePerHourFor(designationIds: number[]): Promise<Map<number, number>> {
-    const ids = [...new Set(designationIds)].filter((id) => Number.isFinite(id));
+    const ids = [...new Set(designationIds)].filter((id) =>
+      Number.isFinite(id),
+    );
     if (!ids.length) return new Map();
     const rows = await this.prisma.hrDesignation.findMany({
       where: { id: { in: ids } },

@@ -65,7 +65,12 @@ const HELP = {
  * account from Bank to PDC issued is a correction, not a mistake to argue with.
  * The server holds the same rule, so a payload that says two is still refused.
  */
-const MONEY_FLAGS = ['isCash', 'isBank', 'isPdcIssued', 'isPdcReceived'] as const;
+const MONEY_FLAGS = [
+  'isCash',
+  'isBank',
+  'isPdcIssued',
+  'isPdcReceived',
+] as const;
 type MoneyFlag = (typeof MONEY_FLAGS)[number];
 
 const money = (flag: MoneyFlag, on: boolean) =>
@@ -384,7 +389,9 @@ export function AccountDrawer({
       onSaved();
       onClose();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Failed to save the account.');
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to save the account.',
+      );
     } finally {
       setSaving(false);
     }
@@ -428,7 +435,10 @@ export function AccountDrawer({
                   setForm({ ...form, scope: e.target.value as Form['scope'] })
                 }
                 options={[
-                  { value: 'GROUP', label: 'Group master — every company may adopt it' },
+                  {
+                    value: 'GROUP',
+                    label: 'Group master — every company may adopt it',
+                  },
                   { value: 'PRIVATE', label: `Private to ${companyName}` },
                 ]}
                 className="sm:col-span-2"
@@ -454,7 +464,11 @@ export function AccountDrawer({
             value={form.code}
             disabled={editing}
             onChange={(e) => setForm({ ...form, code: e.target.value })}
-            placeholder={group ? `${group.code.slice(0, 3)}01 – ${group.code.slice(0, 3)}99` : '—'}
+            placeholder={
+              group
+                ? `${group.code.slice(0, 3)}01 – ${group.code.slice(0, 3)}99`
+                : '—'
+            }
           />
           <Input
             label="Name"
@@ -476,7 +490,10 @@ export function AccountDrawer({
                 · {group.statement === 'BS' ? 'Balance Sheet' : 'Profit & Loss'}
               </span>
               {group.tallyGroup && (
-                <span className="text-slate-400"> · Tally: {group.tallyGroup}</span>
+                <span className="text-slate-400">
+                  {' '}
+                  · Tally: {group.tallyGroup}
+                </span>
               )}
             </div>
           )}
@@ -486,7 +503,9 @@ export function AccountDrawer({
               <Select
                 label="Normal side"
                 value={form.normalSide}
-                onChange={(e) => setForm({ ...form, normalSide: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, normalSide: e.target.value })
+                }
                 options={SIDE_OPTIONS}
                 placeholder="Follow the group"
               />
@@ -513,7 +532,9 @@ export function AccountDrawer({
                     hasCostCenter: e.target.checked,
                     // A department has no division to sit in once the centre is
                     // no longer asked for.
-                    hasCostObject: e.target.checked ? form.hasCostObject : false,
+                    hasCostObject: e.target.checked
+                      ? form.hasCostObject
+                      : false,
                   })
                 }
               />
@@ -532,19 +553,21 @@ export function AccountDrawer({
               />
             </div>
             <p className="mt-2 text-xs text-slate-400">
-              Unticked, the entry screen does not ask and the field stays blank on
-              the line. Company and branch are asked for on every entry.
+              Unticked, the entry screen does not ask and the field stays blank
+              on the line. Company and branch are asked for on every entry.
             </p>
             {/* Level 1 overrides level 2, so say so where it bites rather than
                 leaving a ticked box that nothing acts on. */}
-            {account?.entryRules && form.hasCostCenter &&
+            {account?.entryRules &&
+              form.hasCostCenter &&
               account.entryRules.costCenter === 'OFF' && (
                 <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-                  {companyName} is not set up for cost centres, so nothing is asked
-                  for here until that is turned on in the company master.
+                  {companyName} is not set up for cost centres, so nothing is
+                  asked for here until that is turned on in the company master.
                 </p>
               )}
-            {account?.entryRules && form.hasCostObject &&
+            {account?.entryRules &&
+              form.hasCostObject &&
               account.entryRules.costObject === 'OFF' &&
               account.entryRules.costCenter !== 'OFF' && (
                 <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
@@ -567,14 +590,18 @@ export function AccountDrawer({
               help={HELP.isControl}
               checked={form.isControl}
               disabled={editing}
-              onChange={(e) => setForm({ ...form, isControl: e.target.checked })}
+              onChange={(e) =>
+                setForm({ ...form, isControl: e.target.checked })
+              }
             />
             <Checkbox
               label="GST relevant"
               help={HELP.isGstRelevant}
               checked={form.isGstRelevant}
               disabled={editing}
-              onChange={(e) => setForm({ ...form, isGstRelevant: e.target.checked })}
+              onChange={(e) =>
+                setForm({ ...form, isGstRelevant: e.target.checked })
+              }
             />
             {/* One or the other: ticking one clears the other rather than
                 refusing the pair, since choosing "bank" over "cash" is a
@@ -584,14 +611,18 @@ export function AccountDrawer({
               help={HELP.isCash}
               checked={form.isCash}
               disabled={editing}
-              onChange={(e) => setForm({ ...form, ...money('isCash', e.target.checked) })}
+              onChange={(e) =>
+                setForm({ ...form, ...money('isCash', e.target.checked) })
+              }
             />
             <Checkbox
               label="Bank"
               help={HELP.isBank}
               checked={form.isBank}
               disabled={editing}
-              onChange={(e) => setForm({ ...form, ...money('isBank', e.target.checked) })}
+              onChange={(e) =>
+                setForm({ ...form, ...money('isBank', e.target.checked) })
+              }
             />
             <Checkbox
               label="PDC issued"
@@ -608,7 +639,10 @@ export function AccountDrawer({
               checked={form.isPdcReceived}
               disabled={editing}
               onChange={(e) =>
-                setForm({ ...form, ...money('isPdcReceived', e.target.checked) })
+                setForm({
+                  ...form,
+                  ...money('isPdcReceived', e.target.checked),
+                })
               }
             />
             <Checkbox
@@ -616,21 +650,27 @@ export function AccountDrawer({
               help={HELP.isReconcilable}
               checked={form.isReconcilable}
               disabled={editing}
-              onChange={(e) => setForm({ ...form, isReconcilable: e.target.checked })}
+              onChange={(e) =>
+                setForm({ ...form, isReconcilable: e.target.checked })
+              }
             />
             <Checkbox
               label="Allow manual journal"
               help={HELP.allowManualJe}
               checked={form.allowManualJe}
               disabled={editing}
-              onChange={(e) => setForm({ ...form, allowManualJe: e.target.checked })}
+              onChange={(e) =>
+                setForm({ ...form, allowManualJe: e.target.checked })
+              }
             />
             {editing && (
               <Checkbox
                 label="Active"
                 help={HELP.isActive}
                 checked={form.isActive}
-                onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+                onChange={(e) =>
+                  setForm({ ...form, isActive: e.target.checked })
+                }
               />
             )}
           </div>
@@ -640,7 +680,9 @@ export function AccountDrawer({
               label="Aged by"
               required
               value={form.controlParty}
-              onChange={(e) => setForm({ ...form, controlParty: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, controlParty: e.target.value })
+              }
               options={PARTY_OPTIONS}
               placeholder="Which party"
             />
@@ -678,8 +720,8 @@ export function AccountDrawer({
               </p>
               {!account?.adopted && (
                 <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-                  {companyName} has not adopted this account, so nothing is posted
-                  to it here yet.
+                  {companyName} has not adopted this account, so nothing is
+                  posted to it here yet.
                 </p>
               )}
 
@@ -689,7 +731,9 @@ export function AccountDrawer({
                   required
                   value={bank.bankName}
                   placeholder="e.g. Federal Bank"
-                  onChange={(e) => setBank({ ...bank, bankName: e.target.value })}
+                  onChange={(e) =>
+                    setBank({ ...bank, bankName: e.target.value })
+                  }
                 />
                 <Input
                   label="Account number"
@@ -722,12 +766,16 @@ export function AccountDrawer({
                 <Input
                   label="Branch"
                   value={bank.branchName}
-                  onChange={(e) => setBank({ ...bank, branchName: e.target.value })}
+                  onChange={(e) =>
+                    setBank({ ...bank, branchName: e.target.value })
+                  }
                 />
                 <Select
                   label="Currency"
                   value={bank.currencyId}
-                  onChange={(e) => setBank({ ...bank, currencyId: e.target.value })}
+                  onChange={(e) =>
+                    setBank({ ...bank, currencyId: e.target.value })
+                  }
                   options={(currencies ?? [])
                     .filter((c) => c.isActive)
                     .map((c) => ({ value: String(c.id), label: c.code }))}
@@ -757,14 +805,19 @@ export function AccountDrawer({
                   label="MICR"
                   value={bank.micrCode}
                   placeholder="682010012"
-                  onChange={(e) => setBank({ ...bank, micrCode: e.target.value })}
+                  onChange={(e) =>
+                    setBank({ ...bank, micrCode: e.target.value })
+                  }
                 />
                 <Input
                   label="SWIFT / BIC"
                   value={bank.swiftCode}
                   placeholder="HDFCINBB"
                   onChange={(e) =>
-                    setBank({ ...bank, swiftCode: e.target.value.toUpperCase() })
+                    setBank({
+                      ...bank,
+                      swiftCode: e.target.value.toUpperCase(),
+                    })
                   }
                 />
                 <Input
@@ -809,8 +862,8 @@ export function AccountDrawer({
                   <p className="mt-0.5 text-xs text-slate-400">
                     Print one cheque on plain paper, hold it against a leaf from
                     this book, and shift it here until it lands. Millimetres;
-                    negative moves left and up. Every cheque drawn on this account
-                    follows.
+                    negative moves left and up. Every cheque drawn on this
+                    account follows.
                   </p>
                   <div className="mt-2 grid grid-cols-2 gap-3">
                     <Input
@@ -848,8 +901,8 @@ export function AccountDrawer({
               {/* Nothing is being saved in view mode, so nothing is at risk. */}
               {!readOnly && account?.bankDetail && !bankFilled && (
                 <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                  Every box is empty, so saving removes the bank details recorded
-                  here. The ledger and everything posted to it stay.
+                  Every box is empty, so saving removes the bank details
+                  recorded here. The ledger and everything posted to it stay.
                 </p>
               )}
             </div>

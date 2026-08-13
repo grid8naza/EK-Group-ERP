@@ -111,20 +111,20 @@ export class PurchaseOrderService {
     const order = await this.withOrderNoRetry(
       { companyId: orderingCompanyId, branchId: orderingBranchId },
       (orderNo) =>
-      this.prisma.purchaseOrder.create({
-        data: {
-          companyId: dto.supplierCompanyId,
-          orderNo,
-          deliveryAt: dto.deliveryAt ? new Date(dto.deliveryAt) : null,
-          orderingCompanyId,
-          orderingBranchId: orderingBranchId ?? null,
-          placedByUserId: userId,
-          status: 'DRAFT',
-          notes: dto.notes?.trim() || null,
-          lines: { create: dto.lines.map((l, i) => ({ sequence: i, ...l })) },
-        },
-        include: withLines,
-      }),
+        this.prisma.purchaseOrder.create({
+          data: {
+            companyId: dto.supplierCompanyId,
+            orderNo,
+            deliveryAt: dto.deliveryAt ? new Date(dto.deliveryAt) : null,
+            orderingCompanyId,
+            orderingBranchId: orderingBranchId ?? null,
+            placedByUserId: userId,
+            status: 'DRAFT',
+            notes: dto.notes?.trim() || null,
+            lines: { create: dto.lines.map((l, i) => ({ sequence: i, ...l })) },
+          },
+          include: withLines,
+        }),
     );
     return this.findOne(userId, order.id, true);
   }
@@ -564,7 +564,8 @@ export class PurchaseOrderService {
           reservedQty,
           // Balance is the production gap: accepted but not covered by stock.
           // Null accepted means unreviewed, so there's no gap to state yet.
-          balanceQty: accepted === null ? null : Math.max(0, accepted - reservedQty),
+          balanceQty:
+            accepted === null ? null : Math.max(0, accepted - reservedQty),
         };
       }),
       salesOrderId: salesOrder?.id ?? null,
@@ -606,7 +607,10 @@ export class PurchaseOrderService {
         'This order has not been submitted to you yet.',
       );
     }
-    const state = await this.workflow.docState(userId, await this.docRef(order.id));
+    const state = await this.workflow.docState(
+      userId,
+      await this.docRef(order.id),
+    );
     if (!state.myTask?.canEdit) {
       throw new ForbiddenException(
         'You have no pending action on this order, or your step cannot edit it.',

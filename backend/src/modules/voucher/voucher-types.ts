@@ -122,12 +122,48 @@ export const VOUCHER_TYPES: VoucherTypeSeed[] = [
     isSystemOnly: false,
   },
   // ---- written by the module that owns the event ----
-  { code: 'PAYROLL', name: 'Payroll Voucher', nature: 'PAYROLL', documentCode: 'PAYROLL_VOUCHER', isSystemOnly: true },
-  { code: 'DEPRECIATION', name: 'Depreciation Voucher', nature: 'DEPRECIATION', documentCode: 'DEPRECIATION_VOUCHER', isSystemOnly: true },
-  { code: 'INTERCOMPANY', name: 'Intercompany Voucher', nature: 'INTERCOMPANY', documentCode: 'INTERCOMPANY_VOUCHER', isSystemOnly: true },
-  { code: 'MESS', name: 'Mess Voucher', nature: 'MESS', documentCode: 'MESS_VOUCHER', isSystemOnly: true },
-  { code: 'GST_SETOFF', name: 'GST Set-off Voucher', nature: 'GST_SETOFF', documentCode: 'GST_SETOFF_VOUCHER', isSystemOnly: true },
-  { code: 'OPENING', name: 'Opening Voucher', nature: 'OPENING', documentCode: 'OPENING_VOUCHER', isSystemOnly: true },
+  {
+    code: 'PAYROLL',
+    name: 'Payroll Voucher',
+    nature: 'PAYROLL',
+    documentCode: 'PAYROLL_VOUCHER',
+    isSystemOnly: true,
+  },
+  {
+    code: 'DEPRECIATION',
+    name: 'Depreciation Voucher',
+    nature: 'DEPRECIATION',
+    documentCode: 'DEPRECIATION_VOUCHER',
+    isSystemOnly: true,
+  },
+  {
+    code: 'INTERCOMPANY',
+    name: 'Intercompany Voucher',
+    nature: 'INTERCOMPANY',
+    documentCode: 'INTERCOMPANY_VOUCHER',
+    isSystemOnly: true,
+  },
+  {
+    code: 'MESS',
+    name: 'Mess Voucher',
+    nature: 'MESS',
+    documentCode: 'MESS_VOUCHER',
+    isSystemOnly: true,
+  },
+  {
+    code: 'GST_SETOFF',
+    name: 'GST Set-off Voucher',
+    nature: 'GST_SETOFF',
+    documentCode: 'GST_SETOFF_VOUCHER',
+    isSystemOnly: true,
+  },
+  {
+    code: 'OPENING',
+    name: 'Opening Voucher',
+    nature: 'OPENING',
+    documentCode: 'OPENING_VOUCHER',
+    isSystemOnly: true,
+  },
 ];
 
 /**

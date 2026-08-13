@@ -11,7 +11,12 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Checkbox, Textarea } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -53,7 +58,7 @@ export default function StoresPage() {
   const canView = can(ROUTE, 'view');
 
   const branchName = (id?: number | null) =>
-    id ? (branches ?? []).find((b) => b.id === id)?.name ?? `#${id}` : '—';
+    id ? ((branches ?? []).find((b) => b.id === id)?.name ?? `#${id}`) : '—';
 
   const closeDrawer = () => {
     setOpen(false);
@@ -164,13 +169,21 @@ export default function StoresPage() {
         </span>
       ),
     },
-    { key: 'branch', header: 'Branch', accessor: (r) => branchName(r.branchId) },
+    {
+      key: 'branch',
+      header: 'Branch',
+      accessor: (r) => branchName(r.branchId),
+    },
     { key: 'address', header: 'Address', accessor: (r) => r.address ?? '—' },
     {
       key: 'isDefault',
       header: 'Default',
       render: (r) =>
-        r.isDefault ? <Badge color="blue">Default</Badge> : <span className="text-slate-400">—</span>,
+        r.isDefault ? (
+          <Badge color="blue">Default</Badge>
+        ) : (
+          <span className="text-slate-400">—</span>
+        ),
     },
     {
       key: 'isActive',
@@ -251,7 +264,12 @@ export default function StoresPage() {
         <ReadOnlyFieldset readOnly={view}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {editing && (
-              <Input label="Code" value={editing.code} disabled wrapClassName="sm:col-span-2" />
+              <Input
+                label="Code"
+                value={editing.code}
+                disabled
+                wrapClassName="sm:col-span-2"
+              />
             )}
             <Input
               label="Store name"
@@ -271,14 +289,18 @@ export default function StoresPage() {
               <Checkbox
                 label="Default store (auto-selected for this branch in stock forms)"
                 checked={form.isDefault}
-                onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
+                onChange={(e) =>
+                  setForm({ ...form, isDefault: e.target.checked })
+                }
               />
             </div>
             <div className="sm:col-span-2">
               <Checkbox
                 label="Active"
                 checked={form.isActive}
-                onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+                onChange={(e) =>
+                  setForm({ ...form, isActive: e.target.checked })
+                }
               />
             </div>
           </div>

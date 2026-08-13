@@ -41,7 +41,11 @@ export const fmtDate = (iso?: string | null) => {
  * after an await is a pop-up as far as the browser is concerned, and is blocked.
  * Returns false where it was blocked anyway, for the caller to say so.
  */
-export function openPrintWindow(html: string, width = 900, height = 1000): boolean {
+export function openPrintWindow(
+  html: string,
+  width = 900,
+  height = 1000,
+): boolean {
   const w = window.open('', '_blank', `width=${width},height=${height}`);
   if (!w) return false;
   w.document.open();

@@ -185,7 +185,11 @@ export default function AccountGroupsReportPage() {
   const filterNote = [
     primary ? PRIMARY_GROUPS.find((p) => p.key === primary)?.label : null,
     main ? mainGroupLabel(main) : null,
-    level === 'top' ? 'Blocks only' : level === 'child' ? 'Sub-groups only' : null,
+    level === 'top'
+      ? 'Blocks only'
+      : level === 'child'
+        ? 'Sub-groups only'
+        : null,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -249,7 +253,10 @@ export default function AccountGroupsReportPage() {
               // old primary would filter everything away.
               setMain('');
             }}
-            options={PRIMARY_GROUPS.map((p) => ({ value: p.key, label: p.label }))}
+            options={PRIMARY_GROUPS.map((p) => ({
+              value: p.key,
+              label: p.label,
+            }))}
             placeholder="All primary groups"
             className="w-48"
           />
@@ -272,7 +279,10 @@ export default function AccountGroupsReportPage() {
           />
           <div className="ml-auto flex items-center gap-2">
             <ColumnToggle
-              columns={ALL_COLUMNS.map((c) => ({ key: c.key, label: c.header }))}
+              columns={ALL_COLUMNS.map((c) => ({
+                key: c.key,
+                label: c.header,
+              }))}
               hidden={hidden}
               onToggle={toggle}
             />

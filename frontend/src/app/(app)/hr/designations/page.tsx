@@ -13,16 +13,16 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { StatusToggle } from '@/components/ui/StatusToggle';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import type {
-  HrDesignation,
-  HrCategory,
-  HrGroup,
-  Company,
-} from '@/lib/types';
+import type { HrDesignation, HrCategory, HrGroup, Company } from '@/lib/types';
 
 const ROUTE = '/hr/designations';
 
@@ -41,17 +41,19 @@ export default function HrDesignationsPage() {
   const { can } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
-  const { data, loading, refetch } = useFetch<HrDesignation[]>('/hr-designations');
+  const { data, loading, refetch } =
+    useFetch<HrDesignation[]>('/hr-designations');
   const { data: categories } = useFetch<HrCategory[]>('/hr-categories');
   const { data: groups } = useFetch<HrGroup[]>('/hr-groups');
   const { data: companies } = useFetch<Company[]>('/companies');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<HrDesignation>({
-    endpoint: '/hr-designations',
-    route: ROUTE,
-    noun: 'designation',
-    nameOf: (d) => d.name,
-    reload: refetch,
-  });
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
+    useLock<HrDesignation>({
+      endpoint: '/hr-designations',
+      route: ROUTE,
+      noun: 'designation',
+      nameOf: (d) => d.name,
+      reload: refetch,
+    });
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<HrDesignation | null>(null);
@@ -143,7 +145,9 @@ export default function HrDesignationsPage() {
       return;
     }
     if (!form.groupId) {
-      toast.error('Select a group — every designation belongs to a leaf group.');
+      toast.error(
+        'Select a group — every designation belongs to a leaf group.',
+      );
       return;
     }
     if (!form.allCompanies && form.companyIds.length === 0) {
@@ -166,7 +170,10 @@ export default function HrDesignationsPage() {
     try {
       let saved: HrDesignation;
       if (editing) {
-        saved = await api.patch<HrDesignation>(`/hr-designations/${editing.id}`, payload);
+        saved = await api.patch<HrDesignation>(
+          `/hr-designations/${editing.id}`,
+          payload,
+        );
         toast.success('Designation updated.');
       } else {
         saved = await api.post<HrDesignation>('/hr-designations', payload);
@@ -261,7 +268,11 @@ export default function HrDesignationsPage() {
         </span>
       ),
     },
-    { key: 'category', header: 'Category', accessor: (r) => r.category?.name ?? '-' },
+    {
+      key: 'category',
+      header: 'Category',
+      accessor: (r) => r.category?.name ?? '-',
+    },
     { key: 'group', header: 'Group', accessor: (r) => r.group?.name ?? '-' },
     {
       key: 'ratePerHour',
@@ -296,7 +307,11 @@ export default function HrDesignationsPage() {
     },
   ];
 
-  const title = view ? 'View Designation' : editing ? 'Edit Designation' : 'New Designation';
+  const title = view
+    ? 'View Designation'
+    : editing
+      ? 'Edit Designation'
+      : 'New Designation';
 
   return (
     <div className="mx-auto flex h-full max-w-7xl flex-col">
@@ -448,7 +463,11 @@ export default function HrDesignationsPage() {
                   value={form.categoryId}
                   onChange={(e) =>
                     // changing category clears a now-invalid group
-                    setForm({ ...form, categoryId: e.target.value, groupId: '' })
+                    setForm({
+                      ...form,
+                      categoryId: e.target.value,
+                      groupId: '',
+                    })
                   }
                   placeholder="— None —"
                   options={(categories ?? [])
@@ -459,7 +478,9 @@ export default function HrDesignationsPage() {
                   label="Group"
                   required
                   value={form.groupId}
-                  onChange={(e) => setForm({ ...form, groupId: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, groupId: e.target.value })
+                  }
                   placeholder={
                     form.categoryId
                       ? 'Select a leaf group'
@@ -501,7 +522,9 @@ export default function HrDesignationsPage() {
               {!form.allCompanies && (
                 <div className="mt-1 max-h-52 space-y-1.5 overflow-y-auto rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                   {companyList.length === 0 ? (
-                    <p className="text-sm text-slate-400">No companies found.</p>
+                    <p className="text-sm text-slate-400">
+                      No companies found.
+                    </p>
                   ) : (
                     companyList.map((co) => (
                       <Checkbox

@@ -12,11 +12,14 @@ export class ModuleMasterService {
   constructor(private prisma: PrismaService) {}
 
   // Attach the list of company ids a (non-core) module is enabled for.
-  private withCompanyIds<T extends { companyModules?: { companyId: number }[] }>(
-    m: T,
-  ) {
+  private withCompanyIds<
+    T extends { companyModules?: { companyId: number }[] },
+  >(m: T) {
     const { companyModules, ...rest } = m;
-    return { ...rest, companyIds: (companyModules ?? []).map((c) => c.companyId) };
+    return {
+      ...rest,
+      companyIds: (companyModules ?? []).map((c) => c.companyId),
+    };
   }
 
   async findAll() {

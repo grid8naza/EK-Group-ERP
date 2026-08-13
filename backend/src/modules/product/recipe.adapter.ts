@@ -113,7 +113,8 @@ export class RecipeAdapter implements RecipePort {
       productId: p.id,
       productName: p.name,
       unitId: p.unitId,
-      primaryGroupId: p.groupId != null ? (primaryOf.get(p.groupId) ?? null) : null,
+      primaryGroupId:
+        p.groupId != null ? (primaryOf.get(p.groupId) ?? null) : null,
       costCenterId: costingOf.get(p.id)?.costCenterId ?? null,
       costObjectId: costingOf.get(p.id)?.costObjectId ?? null,
     }));
@@ -236,7 +237,11 @@ export class RecipeAdapter implements RecipePort {
     for (const start of [...new Set(groupIds)]) {
       let cur = await load(start);
       // Guard against a malformed cycle with a depth cap (hierarchy ≤ 5 levels).
-      for (let depth = 0; cur && cur.parentGroupId != null && depth < 10; depth++) {
+      for (
+        let depth = 0;
+        cur && cur.parentGroupId != null && depth < 10;
+        depth++
+      ) {
         cur = await load(cur.parentGroupId);
       }
       if (cur) result.set(start, cur.id);

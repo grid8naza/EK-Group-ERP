@@ -153,11 +153,10 @@ const stripMoney = (text: string) => {
   return rest.length ? `${whole}.${rest.join('').slice(0, 2)}` : whole;
 };
 
-interface MoneyInputProps
-  extends Omit<
-    React.InputHTMLAttributes<HTMLInputElement>,
-    'value' | 'onChange' | 'type'
-  > {
+interface MoneyInputProps extends Omit<
+  React.InputHTMLAttributes<HTMLInputElement>,
+  'value' | 'onChange' | 'type'
+> {
   label?: string;
   required?: boolean;
   error?: string;
@@ -651,10 +650,15 @@ export function Select({
             setOpen(true);
           }}
           onKeyDown={onKeyDown}
-          className={cn('input-base flex w-full items-center gap-2 text-left', className)}
+          className={cn(
+            'input-base flex w-full items-center gap-2 text-left',
+            className,
+          )}
         >
-          <span className={cn('flex-1 truncate', !selected && 'text-slate-400')}>
-            {selected ? selected.label : placeholder ?? ''}
+          <span
+            className={cn('flex-1 truncate', !selected && 'text-slate-400')}
+          >
+            {selected ? selected.label : (placeholder ?? '')}
           </span>
           <ChevronDown
             className={cn(
@@ -664,89 +668,95 @@ export function Select({
           />
         </button>
 
-        {open && menuPos &&
+        {open &&
+          menuPos &&
           createPortal(
-          <div
-            ref={menuRef}
-            style={{
-              position: 'fixed',
-              left: menuPos.left,
-              width: menuPos.width,
-              top: menuPos.top,
-              bottom: menuPos.bottom,
-            }}
-            className="z-[60] min-w-[15rem] overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
-            {showSearch && (
-              <div className="relative border-b border-slate-100 p-2 dark:border-slate-800">
-                <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  ref={searchRef}
-                  autoFocus
-                  value={query}
-                  onChange={(e) => {
-                    setQuery(e.target.value);
-                    setHighlight(0);
-                  }}
-                  onKeyDown={onKeyDown}
-                  placeholder="Search..."
-                  className="input-base w-full pl-9"
-                />
+            <div
+              ref={menuRef}
+              style={{
+                position: 'fixed',
+                left: menuPos.left,
+                width: menuPos.width,
+                top: menuPos.top,
+                bottom: menuPos.bottom,
+              }}
+              className="z-[60] min-w-[15rem] overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
+            >
+              {showSearch && (
+                <div className="relative border-b border-slate-100 p-2 dark:border-slate-800">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    ref={searchRef}
+                    autoFocus
+                    value={query}
+                    onChange={(e) => {
+                      setQuery(e.target.value);
+                      setHighlight(0);
+                    }}
+                    onKeyDown={onKeyDown}
+                    placeholder="Search..."
+                    className="input-base w-full pl-9"
+                  />
+                </div>
+              )}
+              <div ref={listRef} className="max-h-60 overflow-y-auto p-1">
+                {placeholder !== undefined && !q && (
+                  <button
+                    type="button"
+                    onClick={() => choose('')}
+                    className={cn(
+                      'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-400 transition hover:bg-slate-100 dark:hover:bg-slate-800',
+                    )}
+                  >
+                    <span className="flex-1 truncate text-left">
+                      {placeholder}
+                    </span>
+                    {!selected && <Check className="h-4 w-4 flex-none" />}
+                  </button>
+                )}
+                {filtered.length === 0 ? (
+                  <p className="px-3 py-4 text-center text-sm text-slate-400">
+                    No matches
+                  </p>
+                ) : (
+                  filtered.map((o, i) => {
+                    const active = String(o.value) === String(value);
+                    return (
+                      <button
+                        key={o.value}
+                        type="button"
+                        onMouseEnter={() => setHighlight(i)}
+                        onClick={() => choose(o.value)}
+                        className={cn(
+                          'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition',
+                          i === highlight && 'bg-slate-100 dark:bg-slate-800',
+                          // Bold the cursored (hovered/arrowed) row and the current
+                          // selection (plain selections stay normal until cursored).
+                          (i === highlight || (active && !plainSelected)) &&
+                            'font-semibold',
+                          // Colour: the current selection is green; the cursored row
+                          // is brand; everything else neutral.
+                          active
+                            ? 'text-emerald-600 dark:text-emerald-400'
+                            : i === highlight
+                              ? 'text-brand-700 dark:text-brand-300'
+                              : 'text-slate-700 dark:text-slate-200',
+                        )}
+                      >
+                        <span className="flex-1 truncate text-left">
+                          {o.label}
+                        </span>
+                        {active && (
+                          <Check className="h-4 w-4 flex-none text-emerald-600 dark:text-emerald-400" />
+                        )}
+                      </button>
+                    );
+                  })
+                )}
               </div>
-            )}
-            <div ref={listRef} className="max-h-60 overflow-y-auto p-1">
-              {placeholder !== undefined && !q && (
-                <button
-                  type="button"
-                  onClick={() => choose('')}
-                  className={cn(
-                    'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-400 transition hover:bg-slate-100 dark:hover:bg-slate-800',
-                  )}
-                >
-                  <span className="flex-1 truncate text-left">{placeholder}</span>
-                  {!selected && <Check className="h-4 w-4 flex-none" />}
-                </button>
-              )}
-              {filtered.length === 0 ? (
-                <p className="px-3 py-4 text-center text-sm text-slate-400">
-                  No matches
-                </p>
-              ) : (
-                filtered.map((o, i) => {
-                  const active = String(o.value) === String(value);
-                  return (
-                    <button
-                      key={o.value}
-                      type="button"
-                      onMouseEnter={() => setHighlight(i)}
-                      onClick={() => choose(o.value)}
-                      className={cn(
-                        'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition',
-                        i === highlight && 'bg-slate-100 dark:bg-slate-800',
-                        // Bold the cursored (hovered/arrowed) row and the current
-                        // selection (plain selections stay normal until cursored).
-                        (i === highlight || (active && !plainSelected)) &&
-                          'font-semibold',
-                        // Colour: the current selection is green; the cursored row
-                        // is brand; everything else neutral.
-                        active
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : i === highlight
-                            ? 'text-brand-700 dark:text-brand-300'
-                            : 'text-slate-700 dark:text-slate-200',
-                      )}
-                    >
-                      <span className="flex-1 truncate text-left">{o.label}</span>
-                      {active && (
-                        <Check className="h-4 w-4 flex-none text-emerald-600 dark:text-emerald-400" />
-                      )}
-                    </button>
-                  );
-                })
-              )}
-            </div>
-          </div>,
-          document.body,
-        )}
+            </div>,
+            document.body,
+          )}
       </div>
     </FieldWrap>
   );
@@ -832,7 +842,8 @@ export function HelpTip({ text }: { text: string }) {
     const margin = 8;
     const clip = clippingRect(el);
     const min = Math.max(clip?.left ?? 0, 0) + margin;
-    const max = Math.min(clip?.right ?? window.innerWidth, window.innerWidth) - margin;
+    const max =
+      Math.min(clip?.right ?? window.innerWidth, window.innerWidth) - margin;
     const { left, right } = el.getBoundingClientRect();
     // Left wins where the bubble is wider than the space it has: a sentence
     // read from its first word is worth more than one centred and clipped

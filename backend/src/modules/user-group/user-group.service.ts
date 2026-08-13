@@ -209,7 +209,9 @@ export class UserGroupService {
 
     const mainMap = new Map(mainAccess.map((a) => [a.mainMenuId, a]));
     const subMap = new Map(subPrivs.map((p) => [p.subMenuId, p]));
-    const selectedDashboards = new Set(groupDashboards.map((d) => d.dashboardId));
+    const selectedDashboards = new Set(
+      groupDashboards.map((d) => d.dashboardId),
+    );
 
     const buildNode = (mainMenu: (typeof mainMenus)[number]) => ({
       mainMenu: {

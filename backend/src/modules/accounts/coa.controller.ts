@@ -64,9 +64,7 @@ export class CoaController {
   /** The next free code in a group, so the form can propose one. */
   @Get('groups/:id/next-account-code')
   nextAccountCode(@Param('id', ParseIntPipe) id: number) {
-    return this.service
-      .nextAccountCode(id)
-      .then((code) => ({ code }));
+    return this.service.nextAccountCode(id).then((code) => ({ code }));
   }
 
   @Post('groups')
@@ -75,7 +73,10 @@ export class CoaController {
   }
 
   @Patch('groups/:id')
-  updateGroup(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateGroupDto) {
+  updateGroup(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateGroupDto,
+  ) {
     return this.service.updateGroup(id, dto);
   }
 

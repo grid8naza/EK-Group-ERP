@@ -52,7 +52,9 @@ export async function installDefaultLoginScreen(
   }
 
   // 2) Install the default config only when nothing has been configured yet.
-  const existing = await prisma.loginScreenConfig.findUnique({ where: { id: 1 } });
+  const existing = await prisma.loginScreenConfig.findUnique({
+    where: { id: 1 },
+  });
   const mediaCount = await prisma.loginMedia.count();
   if ((existing && existing.config) || mediaCount > 0) return false;
   if (!assetsPresent) return false;

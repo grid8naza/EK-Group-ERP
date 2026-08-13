@@ -1,12 +1,6 @@
 'use client';
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   CheckCheck,
@@ -117,9 +111,9 @@ export function ChatScreen() {
   const [pending, setPending] = useState<ChatAttachmentRef[]>([]);
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
-  const [typers, setTypers] = useState<Record<number, { name: string; at: number }>>(
-    {},
-  );
+  const [typers, setTypers] = useState<
+    Record<number, { name: string; at: number }>
+  >({});
   const [picker, setPicker] = useState<'none' | 'direct' | 'group'>('none');
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -155,23 +149,20 @@ export function ChatScreen() {
     }
   }, []);
 
-  const loadThread = useCallback(
-    async (conversationId: number) => {
-      setLoadingThread(true);
-      try {
-        const page = await api.get<ChatMessagePage>(
-          `/chat/conversations/${conversationId}/messages`,
-        );
-        setMessages(page.messages);
-        setHasMore(page.hasMore);
-      } catch {
-        toastRef.current.error('Could not open that conversation.');
-      } finally {
-        setLoadingThread(false);
-      }
-    },
-    [],
-  );
+  const loadThread = useCallback(async (conversationId: number) => {
+    setLoadingThread(true);
+    try {
+      const page = await api.get<ChatMessagePage>(
+        `/chat/conversations/${conversationId}/messages`,
+      );
+      setMessages(page.messages);
+      setHasMore(page.hasMore);
+    } catch {
+      toastRef.current.error('Could not open that conversation.');
+    } finally {
+      setLoadingThread(false);
+    }
+  }, []);
 
   useEffect(() => {
     void loadConversations();
@@ -284,7 +275,12 @@ export function ChatScreen() {
           setMessages((list) =>
             list.map((m) =>
               m.id === messageId
-                ? { ...m, deletedAt: new Date().toISOString(), body: null, attachments: [] }
+                ? {
+                    ...m,
+                    deletedAt: new Date().toISOString(),
+                    body: null,
+                    attachments: [],
+                  }
                 : m,
             ),
           );
@@ -306,7 +302,7 @@ export function ChatScreen() {
                       ...c.participants
                         .filter((p) => p.id !== myId && !p.hasLeft)
                         .map((p) =>
-                          p.id === who ? upTo : p.lastReadMessageId ?? 0,
+                          p.id === who ? upTo : (p.lastReadMessageId ?? 0),
                         ),
                     ),
                   }
@@ -409,7 +405,9 @@ export function ChatScreen() {
         setEditing(null);
         setDraft('');
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Could not save the edit.');
+        toast.error(
+          e instanceof Error ? e.message : 'Could not save the edit.',
+        );
       } finally {
         setSending(false);
       }
@@ -466,7 +464,12 @@ export function ChatScreen() {
       setMessages((list) =>
         list.map((m) =>
           m.id === message.id
-            ? { ...m, deletedAt: new Date().toISOString(), body: null, attachments: [] }
+            ? {
+                ...m,
+                deletedAt: new Date().toISOString(),
+                body: null,
+                attachments: [],
+              }
             : m,
         ),
       );
@@ -513,7 +516,9 @@ export function ChatScreen() {
     );
   }, [conversations, search]);
 
-  const typingNames = Object.values(typers).map((t) => t.name).filter(Boolean);
+  const typingNames = Object.values(typers)
+    .map((t) => t.name)
+    .filter(Boolean);
 
   return (
     <div className="flex h-full min-h-0 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">

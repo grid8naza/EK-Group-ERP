@@ -11,7 +11,12 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Checkbox, Textarea } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -87,7 +92,9 @@ export default function DocumentsPage() {
     name: d.name,
     description: d.description ?? '',
     transactionTypeId: d.transactionTypeId ? String(d.transactionTypeId) : '',
-    transactionSubtypeId: d.transactionSubtypeId ? String(d.transactionSubtypeId) : '',
+    transactionSubtypeId: d.transactionSubtypeId
+      ? String(d.transactionSubtypeId)
+      : '',
     isActive: d.isActive,
   });
   const openAdd = () => {
@@ -129,7 +136,9 @@ export default function DocumentsPage() {
     const payload = {
       name: form.name.trim(),
       description: form.description.trim() || null,
-      transactionTypeId: form.transactionTypeId ? Number(form.transactionTypeId) : null,
+      transactionTypeId: form.transactionTypeId
+        ? Number(form.transactionTypeId)
+        : null,
       transactionSubtypeId: form.transactionSubtypeId
         ? Number(form.transactionSubtypeId)
         : null,
@@ -139,7 +148,10 @@ export default function DocumentsPage() {
     try {
       let saved: DocumentMaster;
       if (editing) {
-        saved = await api.patch<DocumentMaster>(`/documents/${editing.id}`, payload);
+        saved = await api.patch<DocumentMaster>(
+          `/documents/${editing.id}`,
+          payload,
+        );
         toast.success('Document updated.');
       } else {
         saved = await api.post<DocumentMaster>('/documents', payload);
@@ -193,7 +205,11 @@ export default function DocumentsPage() {
       ),
     },
     { key: 'code', header: 'Code', accessor: (r) => r.code },
-    { key: 'description', header: 'Description', accessor: (r) => r.description ?? '—' },
+    {
+      key: 'description',
+      header: 'Description',
+      accessor: (r) => r.description ?? '—',
+    },
     {
       key: 'transactionType',
       header: 'Transaction Type',
@@ -215,7 +231,11 @@ export default function DocumentsPage() {
     },
   ];
 
-  const title = view ? 'View Document' : editing ? 'Edit Document' : 'New Document';
+  const title = view
+    ? 'View Document'
+    : editing
+      ? 'Edit Document'
+      : 'New Document';
 
   return (
     <div className="mx-auto flex h-full max-w-7xl flex-col">
@@ -227,7 +247,9 @@ export default function DocumentsPage() {
           canAdd && (
             <button className="btn-primary" onClick={openAdd}>
               <Plus className="h-4 w-4" /> Add New
-              <span className="ml-1 hidden text-[10px] opacity-70 sm:inline">Alt+A</span>
+              <span className="ml-1 hidden text-[10px] opacity-70 sm:inline">
+                Alt+A
+              </span>
             </button>
           )
         }
@@ -269,15 +291,18 @@ export default function DocumentsPage() {
           view ? (
             <CloseFooter onClose={closeDrawer} />
           ) : (
-            <DrawerFooter onCancel={closeDrawer} onSave={save} saving={saving} dataEntry />
+            <DrawerFooter
+              onCancel={closeDrawer}
+              onSave={save}
+              saving={saving}
+              dataEntry
+            />
           )
         }
       >
         <ReadOnlyFieldset readOnly={view}>
           <div className="grid grid-cols-1 gap-4">
-            {editing && (
-              <Input label="Code" value={editing.code} disabled />
-            )}
+            {editing && <Input label="Code" value={editing.code} disabled />}
             <Input
               label="Document name"
               required
@@ -289,7 +314,9 @@ export default function DocumentsPage() {
               <Select
                 label="Transaction Type"
                 value={form.transactionTypeId}
-                onChange={(e) => setForm({ ...form, transactionTypeId: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, transactionTypeId: e.target.value })
+                }
                 placeholder="— None —"
                 options={typeOptions}
               />
@@ -312,7 +339,9 @@ export default function DocumentsPage() {
             <Textarea
               label="Description"
               value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
             />
           </div>
         </ReadOnlyFieldset>

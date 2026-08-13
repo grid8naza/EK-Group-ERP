@@ -18,7 +18,12 @@ import { CreateProductionPlanDto } from './production-plan.dto';
 const PRODUCTION_PLAN_DOCUMENT_CODE = 'PRODUCTION_PLAN';
 
 const withDetail = {
-  lines: { orderBy: [{ costObjectName: 'asc' as const }, { productName: 'asc' as const }] },
+  lines: {
+    orderBy: [
+      { costObjectName: 'asc' as const },
+      { productName: 'asc' as const },
+    ],
+  },
   materials: { orderBy: { itemName: 'asc' as const } },
 };
 
@@ -62,7 +67,9 @@ export class ProductionPlanService {
   }
 
   /** How many pending work orders are waiting to be planned (drives the button). */
-  async pendingCount(companyId: number | undefined): Promise<{ count: number }> {
+  async pendingCount(
+    companyId: number | undefined,
+  ): Promise<{ count: number }> {
     if (!companyId) return { count: 0 };
     const count = await this.prisma.workOrder.count({
       where: { companyId, status: 'PENDING', productionPlanId: null },
@@ -137,9 +144,15 @@ export class ProductionPlanService {
         unitId: d.unitId,
         primaryGroupId: planned?.primaryGroupId ?? null,
         costCenterId,
-        costCenterName: costCenterId != null ? (costNames.centres.get(costCenterId) ?? null) : null,
+        costCenterName:
+          costCenterId != null
+            ? (costNames.centres.get(costCenterId) ?? null)
+            : null,
         costObjectId,
-        costObjectName: costObjectId != null ? (costNames.objects.get(costObjectId) ?? null) : null,
+        costObjectName:
+          costObjectId != null
+            ? (costNames.objects.get(costObjectId) ?? null)
+            : null,
       };
     });
 
@@ -196,12 +209,22 @@ export class ProductionPlanService {
    * Cost centres live in Cpanel, hence plain id lookups here — no relation to
    * traverse from the production side.
    */
-  private async costingNames(products: { costCenterId: number | null; costObjectId: number | null }[]) {
+  private async costingNames(
+    products: { costCenterId: number | null; costObjectId: number | null }[],
+  ) {
     const centreIds = [
-      ...new Set(products.map((p) => p.costCenterId).filter((n): n is number => n != null)),
+      ...new Set(
+        products
+          .map((p) => p.costCenterId)
+          .filter((n): n is number => n != null),
+      ),
     ];
     const objectIds = [
-      ...new Set(products.map((p) => p.costObjectId).filter((n): n is number => n != null)),
+      ...new Set(
+        products
+          .map((p) => p.costObjectId)
+          .filter((n): n is number => n != null),
+      ),
     ];
     const [centres, objects] = await Promise.all([
       this.prisma.costCenter.findMany({

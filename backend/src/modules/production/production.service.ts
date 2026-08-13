@@ -7,10 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import {
-  USER_LOOKUP,
-  UserLookupPort,
-} from '../../contracts/user-lookup.port';
+import { USER_LOOKUP, UserLookupPort } from '../../contracts/user-lookup.port';
 import { assertUnlocked } from '../../common/assert-unlocked';
 import {
   CreateProductionOrderDto,
@@ -122,7 +119,10 @@ export class ProductionService {
   // --- helpers ---
 
   // Validate the assignee through the User module's port, WITHOUT importing it.
-  private async validateAssignedUser(companyId: number, userId?: number | null) {
+  private async validateAssignedUser(
+    companyId: number,
+    userId?: number | null,
+  ) {
     if (userId == null) return;
     const ok = await this.users.canAccessCompany(userId, companyId);
     if (!ok) {

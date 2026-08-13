@@ -50,7 +50,8 @@ export async function resolveControlAccount(
       },
     },
   });
-  if (!account) throw new BadRequestException('That main ledger does not exist.');
+  if (!account)
+    throw new BadRequestException('That main ledger does not exist.');
 
   const noun = kind.toLowerCase();
   // Everything below names the account, because "invalid main ledger" on a list

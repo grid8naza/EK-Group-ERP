@@ -21,7 +21,12 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Textarea, Checkbox, Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -41,8 +46,18 @@ import type {
 const ROUTE = '/cpanel/companies';
 
 const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ];
 
 const empty = {
@@ -80,13 +95,14 @@ export default function CompaniesPage() {
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<Company[]>('/companies');
   const { data: currencies } = useFetch<Currency[]>('/currencies');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<Company>({
-    endpoint: '/companies',
-    route: ROUTE,
-    noun: 'company',
-    nameOf: (c) => c.name,
-    reload: refetch,
-  });
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
+    useLock<Company>({
+      endpoint: '/companies',
+      route: ROUTE,
+      noun: 'company',
+      nameOf: (c) => c.name,
+      reload: refetch,
+    });
 
   // Lock/unlock for branches (inside the Branches drawer).
   const {
@@ -245,7 +261,9 @@ export default function CompaniesPage() {
     state: c.state ?? '',
     country: c.country ?? '',
     financialYearStartMonth:
-      c.financialYearStartMonth != null ? String(c.financialYearStartMonth) : '',
+      c.financialYearStartMonth != null
+        ? String(c.financialYearStartMonth)
+        : '',
     financialYearEndMonth:
       c.financialYearEndMonth != null ? String(c.financialYearEndMonth) : '',
     booksStartDate: c.booksStartDate ? c.booksStartDate.slice(0, 10) : '',
@@ -362,7 +380,9 @@ export default function CompaniesPage() {
       for (const m of data) map[m.id] = m.isCore || m.enabled;
       setModEnabled(map);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Failed to load modules.');
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to load modules.',
+      );
     } finally {
       setModLoading(false);
     }
@@ -384,7 +404,9 @@ export default function CompaniesPage() {
       toast.success('Modules updated.');
       setModOpen(false);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Failed to save modules.');
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to save modules.',
+      );
     } finally {
       setModSaving(false);
     }
@@ -407,7 +429,9 @@ export default function CompaniesPage() {
       const data = await api.get<Branch[]>(`/branches?companyId=${companyId}`);
       setBranchList(data ?? []);
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Failed to load branches.');
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to load branches.',
+      );
     } finally {
       setBrLoading(false);
     }
@@ -476,7 +500,9 @@ export default function CompaniesPage() {
       if (brCompany) await reloadBranches(brCompany.id);
       if (brCompany && brCompany.id === activeCompanyId) await refreshProfile();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Failed to delete branch.');
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to delete branch.',
+      );
     }
   };
 
@@ -597,7 +623,9 @@ export default function CompaniesPage() {
       const data = await api.get<CostCentreCategory[]>(
         '/coa/cost-centre-categories',
       );
-      setCoCategories((data ?? []).filter((c) => c.isActive && c.code !== 'BRANCH'));
+      setCoCategories(
+        (data ?? []).filter((c) => c.isActive && c.code !== 'BRANCH'),
+      );
     } catch {
       // The category is optional analysis; the form still works without it.
     }
@@ -821,240 +849,245 @@ export default function CompaniesPage() {
       >
         <ReadOnlyFieldset readOnly={view}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Input
-            label="Code"
-            required
-            value={form.code}
-            onChange={(e) => setForm({ ...form, code: e.target.value })}
-          />
-          <Input
-            label="Name"
-            required
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-          />
-          <Input
-            label="Short Name"
-            value={form.shortName}
-            onChange={(e) => setForm({ ...form, shortName: e.target.value })}
-            placeholder="Shown in the sidebar (e.g. Regency)"
-          />
-          <Input
-            label="Legal Name"
-            wrapClassName="sm:col-span-2"
-            value={form.legalName}
-            onChange={(e) => setForm({ ...form, legalName: e.target.value })}
-          />
-          <Input
-            label="Email"
-            type="email"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-          />
-          <Input
-            label="Phone"
-            value={form.phone}
-            onChange={(e) => setForm({ ...form, phone: e.target.value })}
-          />
-          <Textarea
-            label="Address"
-            wrapClassName="sm:col-span-2"
-            value={form.address}
-            onChange={(e) => setForm({ ...form, address: e.target.value })}
-          />
-          <Input
-            label="City"
-            value={form.city}
-            onChange={(e) => setForm({ ...form, city: e.target.value })}
-          />
-          <Input
-            label="State"
-            value={form.state}
-            onChange={(e) => setForm({ ...form, state: e.target.value })}
-          />
-          <Input
-            label="Country"
-            value={form.country}
-            onChange={(e) => setForm({ ...form, country: e.target.value })}
-          />
-          <div className="sm:col-span-2">
-            <label className="label">Logo</label>
-            <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
-                {form.logo ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={mediaUrl(form.logo)} alt="Logo" className="h-full w-full object-contain" />
-                ) : (
-                  <ImageIcon className="h-6 w-6 text-slate-300" />
-                )}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className="btn-secondary inline-flex items-center gap-2"
-                  onClick={() => logoInput.current?.click()}
-                  disabled={logoUploading}
-                >
-                  <Upload className="h-4 w-4" />
-                  {logoUploading ? 'Uploading…' : 'Upload'}
-                </button>
-                {form.logo && (
+            <Input
+              label="Code"
+              required
+              value={form.code}
+              onChange={(e) => setForm({ ...form, code: e.target.value })}
+            />
+            <Input
+              label="Name"
+              required
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+            <Input
+              label="Short Name"
+              value={form.shortName}
+              onChange={(e) => setForm({ ...form, shortName: e.target.value })}
+              placeholder="Shown in the sidebar (e.g. Regency)"
+            />
+            <Input
+              label="Legal Name"
+              wrapClassName="sm:col-span-2"
+              value={form.legalName}
+              onChange={(e) => setForm({ ...form, legalName: e.target.value })}
+            />
+            <Input
+              label="Email"
+              type="email"
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+            />
+            <Input
+              label="Phone"
+              value={form.phone}
+              onChange={(e) => setForm({ ...form, phone: e.target.value })}
+            />
+            <Textarea
+              label="Address"
+              wrapClassName="sm:col-span-2"
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+            />
+            <Input
+              label="City"
+              value={form.city}
+              onChange={(e) => setForm({ ...form, city: e.target.value })}
+            />
+            <Input
+              label="State"
+              value={form.state}
+              onChange={(e) => setForm({ ...form, state: e.target.value })}
+            />
+            <Input
+              label="Country"
+              value={form.country}
+              onChange={(e) => setForm({ ...form, country: e.target.value })}
+            />
+            <div className="sm:col-span-2">
+              <label className="label">Logo</label>
+              <div className="flex items-center gap-4">
+                <div className="flex h-16 w-16 flex-none items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
+                  {form.logo ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={mediaUrl(form.logo)}
+                      alt="Logo"
+                      className="h-full w-full object-contain"
+                    />
+                  ) : (
+                    <ImageIcon className="h-6 w-6 text-slate-300" />
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    className="btn-secondary inline-flex items-center gap-2 text-rose-600"
-                    onClick={() => setForm({ ...form, logo: '' })}
+                    className="btn-secondary inline-flex items-center gap-2"
+                    onClick={() => logoInput.current?.click()}
+                    disabled={logoUploading}
                   >
-                    <Trash2 className="h-4 w-4" /> Remove
+                    <Upload className="h-4 w-4" />
+                    {logoUploading ? 'Uploading…' : 'Upload'}
                   </button>
-                )}
-                <input
-                  ref={logoInput}
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) void uploadCompanyLogo(f);
-                    e.target.value = '';
-                  }}
-                />
+                  {form.logo && (
+                    <button
+                      type="button"
+                      className="btn-secondary inline-flex items-center gap-2 text-rose-600"
+                      onClick={() => setForm({ ...form, logo: '' })}
+                    >
+                      <Trash2 className="h-4 w-4" /> Remove
+                    </button>
+                  )}
+                  <input
+                    ref={logoInput}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void uploadCompanyLogo(f);
+                      e.target.value = '';
+                    }}
+                  />
+                </div>
               </div>
+              <p className="mt-1 text-xs text-slate-400">
+                PNG, JPG, WEBP, GIF or SVG — up to 5 MB. Shown in the sidebar
+                for this company.
+              </p>
             </div>
-            <p className="mt-1 text-xs text-slate-400">
-              PNG, JPG, WEBP, GIF or SVG — up to 5 MB. Shown in the sidebar for this company.
-            </p>
-          </div>
-          <div className="mt-1 border-t border-slate-200 pt-3 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300 sm:col-span-2">
-            Financial &amp; statutory
-          </div>
-          <Select
-            label="Currency"
-            placeholder="Select currency"
-            value={form.currencyId}
-            onChange={(e) => setForm({ ...form, currencyId: e.target.value })}
-            options={(currencies ?? []).map((c) => ({
-              value: c.id,
-              label: `${c.code} — ${c.name} (${c.symbol})`,
-            }))}
-          />
-          <Select
-            label="Financial Year Start Month"
-            placeholder="Select month"
-            value={form.financialYearStartMonth}
-            onChange={(e) =>
-              setForm({ ...form, financialYearStartMonth: e.target.value })
-            }
-            options={MONTHS.map((m, i) => ({ value: i + 1, label: m }))}
-          />
-          <Select
-            label="Financial Year End Month"
-            placeholder="Select month"
-            value={form.financialYearEndMonth}
-            onChange={(e) =>
-              setForm({ ...form, financialYearEndMonth: e.target.value })
-            }
-            options={MONTHS.map((m, i) => ({ value: i + 1, label: m }))}
-          />
-          <Input
-            label="Books of Accounts Start From"
-            type="date"
-            value={form.booksStartDate}
-            onChange={(e) =>
-              setForm({ ...form, booksStartDate: e.target.value })
-            }
-          />
-          <Select
-            label="Cost Center Applicable"
-            value={form.costCenterApplicable ? 'yes' : 'no'}
-            onChange={(e) => {
-              const on = e.target.value === 'yes';
-              setForm({
-                ...form,
-                costCenterApplicable: on,
-                // Cost objects require cost centers — turning this off clears it.
-                costObjectApplicable: on ? form.costObjectApplicable : false,
-              });
-            }}
-            options={[
-              { value: 'no', label: 'No' },
-              { value: 'yes', label: 'Yes' },
-            ]}
-          />
-          <Select
-            label="Cost Object Applicable"
-            value={form.costObjectApplicable ? 'yes' : 'no'}
-            disabled={!form.costCenterApplicable}
-            onChange={(e) =>
-              setForm({
-                ...form,
-                costObjectApplicable: e.target.value === 'yes',
-              })
-            }
-            options={[
-              { value: 'no', label: 'No' },
-              { value: 'yes', label: 'Yes' },
-            ]}
-          />
-          <Select
-            label="Branch Applicable"
-            value={form.branchApplicable ? 'yes' : 'no'}
-            onChange={(e) =>
-              setForm({ ...form, branchApplicable: e.target.value === 'yes' })
-            }
-            options={[
-              { value: 'no', label: 'No' },
-              { value: 'yes', label: 'Yes' },
-            ]}
-          />
-          <Input
-            label="CIN"
-            labelTitle="Corporate Identification Number"
-            maxLength={21}
-            value={form.cin}
-            onChange={(e) =>
-              setForm({ ...form, cin: e.target.value.toUpperCase() })
-            }
-          />
-          <Input
-            label="GSTIN"
-            maxLength={15}
-            value={form.gstin}
-            onChange={(e) =>
-              setForm({ ...form, gstin: e.target.value.toUpperCase() })
-            }
-          />
-          <Input
-            label="PAN"
-            maxLength={12}
-            value={form.pan}
-            onChange={(e) =>
-              setForm({ ...form, pan: e.target.value.toUpperCase() })
-            }
-          />
-          <Input
-            label="TAN"
-            maxLength={10}
-            value={form.tan}
-            onChange={(e) =>
-              setForm({ ...form, tan: e.target.value.toUpperCase() })
-            }
-          />
-          <Input
-            label="PTRN"
-            maxLength={12}
-            value={form.ptrn}
-            onChange={(e) =>
-              setForm({ ...form, ptrn: e.target.value.toUpperCase() })
-            }
-          />
-          <Input
-            label="PTEC"
-            maxLength={12}
-            value={form.ptec}
-            onChange={(e) =>
-              setForm({ ...form, ptec: e.target.value.toUpperCase() })
-            }
-          />
+            <div className="mt-1 border-t border-slate-200 pt-3 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300 sm:col-span-2">
+              Financial &amp; statutory
+            </div>
+            <Select
+              label="Currency"
+              placeholder="Select currency"
+              value={form.currencyId}
+              onChange={(e) => setForm({ ...form, currencyId: e.target.value })}
+              options={(currencies ?? []).map((c) => ({
+                value: c.id,
+                label: `${c.code} — ${c.name} (${c.symbol})`,
+              }))}
+            />
+            <Select
+              label="Financial Year Start Month"
+              placeholder="Select month"
+              value={form.financialYearStartMonth}
+              onChange={(e) =>
+                setForm({ ...form, financialYearStartMonth: e.target.value })
+              }
+              options={MONTHS.map((m, i) => ({ value: i + 1, label: m }))}
+            />
+            <Select
+              label="Financial Year End Month"
+              placeholder="Select month"
+              value={form.financialYearEndMonth}
+              onChange={(e) =>
+                setForm({ ...form, financialYearEndMonth: e.target.value })
+              }
+              options={MONTHS.map((m, i) => ({ value: i + 1, label: m }))}
+            />
+            <Input
+              label="Books of Accounts Start From"
+              type="date"
+              value={form.booksStartDate}
+              onChange={(e) =>
+                setForm({ ...form, booksStartDate: e.target.value })
+              }
+            />
+            <Select
+              label="Cost Center Applicable"
+              value={form.costCenterApplicable ? 'yes' : 'no'}
+              onChange={(e) => {
+                const on = e.target.value === 'yes';
+                setForm({
+                  ...form,
+                  costCenterApplicable: on,
+                  // Cost objects require cost centers — turning this off clears it.
+                  costObjectApplicable: on ? form.costObjectApplicable : false,
+                });
+              }}
+              options={[
+                { value: 'no', label: 'No' },
+                { value: 'yes', label: 'Yes' },
+              ]}
+            />
+            <Select
+              label="Cost Object Applicable"
+              value={form.costObjectApplicable ? 'yes' : 'no'}
+              disabled={!form.costCenterApplicable}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  costObjectApplicable: e.target.value === 'yes',
+                })
+              }
+              options={[
+                { value: 'no', label: 'No' },
+                { value: 'yes', label: 'Yes' },
+              ]}
+            />
+            <Select
+              label="Branch Applicable"
+              value={form.branchApplicable ? 'yes' : 'no'}
+              onChange={(e) =>
+                setForm({ ...form, branchApplicable: e.target.value === 'yes' })
+              }
+              options={[
+                { value: 'no', label: 'No' },
+                { value: 'yes', label: 'Yes' },
+              ]}
+            />
+            <Input
+              label="CIN"
+              labelTitle="Corporate Identification Number"
+              maxLength={21}
+              value={form.cin}
+              onChange={(e) =>
+                setForm({ ...form, cin: e.target.value.toUpperCase() })
+              }
+            />
+            <Input
+              label="GSTIN"
+              maxLength={15}
+              value={form.gstin}
+              onChange={(e) =>
+                setForm({ ...form, gstin: e.target.value.toUpperCase() })
+              }
+            />
+            <Input
+              label="PAN"
+              maxLength={12}
+              value={form.pan}
+              onChange={(e) =>
+                setForm({ ...form, pan: e.target.value.toUpperCase() })
+              }
+            />
+            <Input
+              label="TAN"
+              maxLength={10}
+              value={form.tan}
+              onChange={(e) =>
+                setForm({ ...form, tan: e.target.value.toUpperCase() })
+              }
+            />
+            <Input
+              label="PTRN"
+              maxLength={12}
+              value={form.ptrn}
+              onChange={(e) =>
+                setForm({ ...form, ptrn: e.target.value.toUpperCase() })
+              }
+            />
+            <Input
+              label="PTEC"
+              maxLength={12}
+              value={form.ptec}
+              onChange={(e) =>
+                setForm({ ...form, ptec: e.target.value.toUpperCase() })
+              }
+            />
             <div className="sm:col-span-2">
               <Checkbox
                 label="Active"
@@ -1259,10 +1292,7 @@ export default function CompaniesPage() {
           ) : (
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
               {branchList.map((b) => (
-                <div
-                  key={b.id}
-                  className="flex items-center gap-3 py-3"
-                >
+                <div key={b.id} className="flex items-center gap-3 py-3">
                   <span className="mt-0.5 text-brand-600">
                     <GitBranch className="h-5 w-5" />
                   </span>

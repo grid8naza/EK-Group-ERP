@@ -174,7 +174,9 @@ export class GroupService {
           description: dto.description?.trim() || null,
           allCompanies,
           isActive: dto.isActive ?? true,
-          categories: { create: categoryIds.map((categoryId) => ({ categoryId })) },
+          categories: {
+            create: categoryIds.map((categoryId) => ({ categoryId })),
+          },
           companies: { create: companyIds.map((companyId) => ({ companyId })) },
         },
         include: withRelations,
@@ -203,7 +205,8 @@ export class GroupService {
       dto.categoryIds !== undefined
         ? await this.resolveCategories(dto.categoryIds)
         : null;
-    if (categoryIds) await this.assertCategoriesStillCover(existing, categoryIds);
+    if (categoryIds)
+      await this.assertCategoriesStillCover(existing, categoryIds);
 
     // Validate any change to whether this group holds sub-groups.
     let subGroupApplicable = existing.subGroupApplicable;
@@ -235,7 +238,10 @@ export class GroupService {
       dto.allCompanies !== undefined || dto.companyIds !== undefined;
     const existingCompanyIds = existing.companies.map((c) => c.companyId);
     const companyIds = wantsLinkChange
-      ? this.resolveCompanies(allCompanies, dto.companyIds ?? existingCompanyIds)
+      ? this.resolveCompanies(
+          allCompanies,
+          dto.companyIds ?? existingCompanyIds,
+        )
       : null;
 
     const updated = await this.prisma.group.update({
@@ -330,7 +336,10 @@ export class GroupService {
    * columns must not be retried — the second attempt would fail the same way and
    * then surface as a raw P2002, so they are rethrown at once.
    */
-  private async withCodeRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
+  private async withCodeRetry<T>(
+    fn: () => Promise<T>,
+    attempts = 5,
+  ): Promise<T> {
     for (let i = 0; ; i++) {
       try {
         return await fn();
@@ -359,7 +368,9 @@ export class GroupService {
       select: { id: true },
     });
     if (found.length !== wanted.length) {
-      throw new BadRequestException('One of the selected categories does not exist.');
+      throw new BadRequestException(
+        'One of the selected categories does not exist.',
+      );
     }
     return wanted;
   }
@@ -435,7 +446,12 @@ export class GroupService {
     T extends {
       companies: { companyId: number }[];
       categories: {
-        category: { id: number; code: string; name: string; kind: CategoryKind };
+        category: {
+          id: number;
+          code: string;
+          name: string;
+          kind: CategoryKind;
+        };
       }[];
     },
   >(row: T) {

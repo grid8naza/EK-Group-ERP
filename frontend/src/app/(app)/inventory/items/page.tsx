@@ -13,12 +13,24 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { StatusToggle } from '@/components/ui/StatusToggle';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import { ITEM_KINDS } from '@/lib/types';
-import type { Item, Category, Group, Unit, HsnCode, Company } from '@/lib/types';
+import type {
+  Item,
+  Category,
+  Group,
+  Unit,
+  HsnCode,
+  Company,
+} from '@/lib/types';
 
 const ROUTE = '/inventory/items';
 
@@ -57,13 +69,14 @@ export default function ItemsPage() {
   const { data: units } = useFetch<Unit[]>('/units');
   const { data: hsnCodes } = useFetch<HsnCode[]>('/hsn-codes');
   const { data: companies } = useFetch<Company[]>('/companies');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<Item>({
-    endpoint: '/items',
-    route: ROUTE,
-    noun: 'item',
-    nameOf: (i) => i.name,
-    reload: refetch,
-  });
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
+    useLock<Item>({
+      endpoint: '/items',
+      route: ROUTE,
+      noun: 'item',
+      nameOf: (i) => i.name,
+      reload: refetch,
+    });
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Item | null>(null);
@@ -298,10 +311,14 @@ export default function ItemsPage() {
     if (categoryFilter)
       rows = rows.filter((r) => String(r.categoryId) === categoryFilter);
     if (primaryFilter) {
-      const primary = (groups ?? []).find((g) => String(g.id) === primaryFilter);
+      const primary = (groups ?? []).find(
+        (g) => String(g.id) === primaryFilter,
+      );
       if (primary) {
         const prefix = primary.code.slice(0, 4);
-        rows = rows.filter((r) => groupById.get(r.groupId ?? -1)?.code.startsWith(prefix));
+        rows = rows.filter((r) =>
+          groupById.get(r.groupId ?? -1)?.code.startsWith(prefix),
+        );
       }
     }
     if (parentFilter) {
@@ -312,14 +329,26 @@ export default function ItemsPage() {
     if (status === 'active') rows = rows.filter((r) => r.isActive);
     else if (status === 'inactive') rows = rows.filter((r) => !r.isActive);
     return rows;
-  }, [data, categoryFilter, status, primaryFilter, parentFilter, groups, groupById]);
+  }, [
+    data,
+    categoryFilter,
+    status,
+    primaryFilter,
+    parentFilter,
+    groups,
+    groupById,
+  ]);
 
   const availabilityText = (i: Item) =>
     i.companyIds.map((id) => companyNameById.get(id) ?? `#${id}`).join(', ');
 
   const columns: Column<Item>[] = [
     { key: 'code', header: 'Code', accessor: (r) => r.code },
-    { key: 'category', header: 'Category', accessor: (r) => r.category?.name ?? '-' },
+    {
+      key: 'category',
+      header: 'Category',
+      accessor: (r) => r.category?.name ?? '-',
+    },
     { key: 'group', header: 'Group', accessor: (r) => r.group?.name ?? '-' },
     {
       key: 'name',
@@ -563,7 +592,11 @@ export default function ItemsPage() {
                   value={form.categoryId}
                   onChange={(e) =>
                     // changing category clears a now-invalid group
-                    setForm({ ...form, categoryId: e.target.value, groupId: '' })
+                    setForm({
+                      ...form,
+                      categoryId: e.target.value,
+                      groupId: '',
+                    })
                   }
                   placeholder="— Select —"
                   options={(categories ?? [])
@@ -575,7 +608,9 @@ export default function ItemsPage() {
                   label="Group"
                   required
                   value={form.groupId}
-                  onChange={(e) => setForm({ ...form, groupId: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, groupId: e.target.value })
+                  }
                   placeholder={
                     form.categoryId
                       ? 'Select a leaf group'
@@ -631,7 +666,12 @@ export default function ItemsPage() {
                   setForm((f) =>
                     e.target.checked
                       ? { ...f, boxApplicable: true }
-                      : { ...f, boxApplicable: false, boxQty: '', boxUnitId: '' },
+                      : {
+                          ...f,
+                          boxApplicable: false,
+                          boxQty: '',
+                          boxUnitId: '',
+                        },
                   )
                 }
               />
@@ -659,13 +699,13 @@ export default function ItemsPage() {
                   }))}
                 />
                 <p className="-mt-1 text-xs text-slate-500 dark:text-slate-400 sm:col-span-2">
-                {form.boxQty && form.boxUnitId && form.unitId
-                  ? `1 ${unitName(form.boxUnitId)} = ${form.boxQty} ${unitName(
-                      form.unitId,
-                    )} — goods are received in this pack, while stock, issues and balances stay in ${unitName(
-                      form.unitId,
-                    )}.`
-                  : 'How much stock one pack holds — pack unit Bottle with a box qty of 200 against a stock unit of Gram means one bottle is 200 g.'}
+                  {form.boxQty && form.boxUnitId && form.unitId
+                    ? `1 ${unitName(form.boxUnitId)} = ${form.boxQty} ${unitName(
+                        form.unitId,
+                      )} — goods are received in this pack, while stock, issues and balances stay in ${unitName(
+                        form.unitId,
+                      )}.`
+                    : 'How much stock one pack holds — pack unit Bottle with a box qty of 200 against a stock unit of Gram means one bottle is 200 g.'}
                 </p>
               </>
             )}
@@ -727,7 +767,12 @@ export default function ItemsPage() {
               onChange={(e) =>
                 setForm({ ...form, lastPurchasePrice: e.target.value })
               }
-              onBlur={() => setForm((f) => ({ ...f, lastPurchasePrice: dec2(f.lastPurchasePrice) }))}
+              onBlur={() =>
+                setForm((f) => ({
+                  ...f,
+                  lastPurchasePrice: dec2(f.lastPurchasePrice),
+                }))
+              }
             />
 
             {/* Shelf Life on its own row below the purchase pair */}
@@ -752,7 +797,9 @@ export default function ItemsPage() {
               {!form.allCompanies && (
                 <div className="mt-1 max-h-52 space-y-1.5 overflow-y-auto rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                   {companyList.length === 0 ? (
-                    <p className="text-sm text-slate-400">No companies found.</p>
+                    <p className="text-sm text-slate-400">
+                      No companies found.
+                    </p>
                   ) : (
                     companyList.map((co) => (
                       <Checkbox

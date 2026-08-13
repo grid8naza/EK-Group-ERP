@@ -51,9 +51,15 @@ export function CostBreakdownDrawer({
                   {money(row.breakdown.productCost)}
                 </Row>
               )}
-              <Row label="Material Cost">{money(row.breakdown.materialCost)}</Row>
-              <Row label="Equipment Cost">{money(row.breakdown.equipmentCost)}</Row>
-              <Row label="Manpower Cost">{money(row.breakdown.manpowerCost)}</Row>
+              <Row label="Material Cost">
+                {money(row.breakdown.materialCost)}
+              </Row>
+              <Row label="Equipment Cost">
+                {money(row.breakdown.equipmentCost)}
+              </Row>
+              <Row label="Manpower Cost">
+                {money(row.breakdown.manpowerCost)}
+              </Row>
               <Row label="Fuel Cost">{money(row.breakdown.fuelCost)}</Row>
               <Row label="Overheads">{money(row.breakdown.overheadCost)}</Row>
               <Row label="Cost Price" strong>
@@ -121,7 +127,10 @@ export function CostBreakdownDrawer({
                 </thead>
                 <tbody>
                   {row.prices.map((p) => {
-                    const tone = varianceTone(p.variancePct, row.maxVariancePct);
+                    const tone = varianceTone(
+                      p.variancePct,
+                      row.maxVariancePct,
+                    );
                     return (
                       <tr
                         key={p.key}
@@ -193,7 +202,12 @@ function Row({
       >
         {label}
       </td>
-      <td className={cn('py-1.5 text-right tabular-nums', strong && 'font-semibold')}>
+      <td
+        className={cn(
+          'py-1.5 text-right tabular-nums',
+          strong && 'font-semibold',
+        )}
+      >
         {children}
       </td>
     </tr>

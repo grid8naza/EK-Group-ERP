@@ -8,7 +8,7 @@ fail `npm run lint:boundaries`.
 
 The whole backend ships as a single NestJS deployment (a modular monolith), but
 every module must stay **independently extractable** into its own service later
-*without rewriting its internal logic*. The thing that makes that possible is
+_without rewriting its internal logic_. The thing that makes that possible is
 keeping modules decoupled at the import level: a module never reaches into
 another module's services or entities — it depends on a small, stable
 **interface** (a "port") instead.

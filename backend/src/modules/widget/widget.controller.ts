@@ -18,7 +18,11 @@ import { CompanyId } from '../../auth/company.decorator';
 import { BranchId } from '../../auth/branch.decorator';
 import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
 import { LockDto } from '../../common/lock.dto';
-import { CreateWidgetDto, MetricValuesDto, UpdateWidgetDto } from './widget.dto';
+import {
+  CreateWidgetDto,
+  MetricValuesDto,
+  UpdateWidgetDto,
+} from './widget.dto';
 
 function requireCompany(companyId?: number): number {
   if (!companyId) throw new BadRequestException('No active company selected');
@@ -35,7 +39,10 @@ export class WidgetController {
   ) {}
 
   @Get()
-  findAll(@CompanyId() companyId?: number, @Query('moduleId') moduleId?: string) {
+  findAll(
+    @CompanyId() companyId?: number,
+    @Query('moduleId') moduleId?: string,
+  ) {
     return this.service.findAll(
       requireCompany(companyId),
       moduleId ? Number(moduleId) : undefined,
@@ -86,10 +93,7 @@ export class WidgetController {
   // Lock / unlock a widget (must be unlocked before edit or delete).
   @UseGuards(LockPrivilegeGuard('/cpanel/widgets'))
   @Patch(':id/lock')
-  setLock(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: LockDto,
-  ) {
+  setLock(@Param('id', ParseIntPipe) id: number, @Body() dto: LockDto) {
     return this.service.setLock(id, dto.locked);
   }
 }

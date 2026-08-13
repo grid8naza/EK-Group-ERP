@@ -9,9 +9,5 @@ export function moduleLandingRoute(mod: NavModule | null | undefined): string {
   if (!mod) return '/';
   const defaultDashboard = (mod.dashboards ?? []).find((d) => d.isDefault);
   if (defaultDashboard) return defaultDashboard.route;
-  return (
-    mod.menus?.[0]?.items?.[0]?.route ??
-    mod.dashboards?.[0]?.route ??
-    '/'
-  );
+  return mod.menus?.[0]?.items?.[0]?.route ?? mod.dashboards?.[0]?.route ?? '/';
 }

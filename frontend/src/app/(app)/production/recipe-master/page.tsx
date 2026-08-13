@@ -73,12 +73,15 @@ export default function RecipeMasterPage() {
           : null;
       writeRecipeToWindow(
         w,
-        buildRecipeHtml({ ...full, selling }, {
-          items: items ?? [],
-          units: units ?? [],
-          assets: assets ?? [],
-          designations: designations ?? [],
-        }),
+        buildRecipeHtml(
+          { ...full, selling },
+          {
+            items: items ?? [],
+            units: units ?? [],
+            assets: assets ?? [],
+            designations: designations ?? [],
+          },
+        ),
       );
     } catch {
       w.close();
@@ -100,9 +103,7 @@ export default function RecipeMasterPage() {
    * wrong rather than a feature.
    */
   const weProduce = (p: Product) =>
-    !!p.companies?.some(
-      (c) => c.companyId === activeCompanyId && c.canProduce,
-    );
+    !!p.companies?.some((c) => c.companyId === activeCompanyId && c.canProduce);
 
   /**
    * Empty because this company makes none of it, rather than because nothing
@@ -138,7 +139,9 @@ export default function RecipeMasterPage() {
   );
   const primaryGroups = productGroups.filter((g) => g.level === 1);
   const primaryPrefix = primaryFilter
-    ? primaryGroups.find((g) => String(g.id) === primaryFilter)?.code.slice(0, 4)
+    ? primaryGroups
+        .find((g) => String(g.id) === primaryFilter)
+        ?.code.slice(0, 4)
     : undefined;
   // Name of the primary a group sits under. Read from the full group list, not
   // the category-filtered pool, so it resolves for the picker too.
@@ -192,20 +195,23 @@ export default function RecipeMasterPage() {
   const canView = can(ROUTE, 'view');
   // The recipe lock is the product's lock (governed by the Products - Unpacked
   // screen), so locking here also blocks editing the product under Inventory.
-  const { canLock, canUnlock, toggleLock, guardEdit, bulkLock } = useLock<Product>({
-    endpoint: '/products',
-    route: '/inventory/products-unpacked',
-    noun: 'Recipe',
-    nameOf: (p) => p.name,
-    reload: refetch,
-  });
+  const { canLock, canUnlock, toggleLock, guardEdit, bulkLock } =
+    useLock<Product>({
+      endpoint: '/products',
+      route: '/inventory/products-unpacked',
+      noun: 'Recipe',
+      nameOf: (p) => p.name,
+      reload: refetch,
+    });
 
   // The recipe is edited/viewed on a dedicated full-screen page.
   const openRecipe = (p: Product, view: boolean) =>
     router.push(`${ROUTE}/${p.id}${view ? '?view=1' : ''}`);
   const editRecipe = (p: Product) => {
     if (p.isLocked) {
-      toast.error('This product is locked. Unlock it first (Inventory) to edit the recipe.');
+      toast.error(
+        'This product is locked. Unlock it first (Inventory) to edit the recipe.',
+      );
       return;
     }
     openRecipe(p, false);
@@ -226,7 +232,9 @@ export default function RecipeMasterPage() {
   );
   const pickerPrimaries = pickerGroupPool.filter((g) => g.level === 1);
   const pickPrimaryPrefix = pickPrimary
-    ? pickerPrimaries.find((g) => String(g.id) === pickPrimary)?.code.slice(0, 4)
+    ? pickerPrimaries
+        .find((g) => String(g.id) === pickPrimary)
+        ?.code.slice(0, 4)
     : undefined;
   const pickerLeaves = pickerGroupPool.filter(
     (g) =>
@@ -274,7 +282,11 @@ export default function RecipeMasterPage() {
         </span>
       ),
     },
-    { key: 'category', header: 'Category', accessor: (r) => r.category?.name ?? '-' },
+    {
+      key: 'category',
+      header: 'Category',
+      accessor: (r) => r.category?.name ?? '-',
+    },
     {
       key: 'productQty',
       header: 'Product Qty',
@@ -419,7 +431,10 @@ export default function RecipeMasterPage() {
         width="sm"
         footer={
           <div className="flex justify-end gap-2">
-            <button className="btn-secondary" onClick={() => setPickerOpen(false)}>
+            <button
+              className="btn-secondary"
+              onClick={() => setPickerOpen(false)}
+            >
               Cancel
             </button>
             <button className="btn-primary" onClick={confirmPick}>

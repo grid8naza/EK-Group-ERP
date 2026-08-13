@@ -79,7 +79,8 @@ export function wholeInWords(n: number): string {
   const rest = n % 1000;
   // Beyond a hundred crore the word simply repeats — "One Thousand Crore" —
   // which is how it is said, so the crore group is written as a number itself.
-  if (crore) parts.push(`${crore > 999 ? wholeInWords(crore) : under1000(crore)} Crore`);
+  if (crore)
+    parts.push(`${crore > 999 ? wholeInWords(crore) : under1000(crore)} Crore`);
   if (lakh) parts.push(`${under100(lakh)} Lakh`);
   if (thousand) parts.push(`${under100(thousand)} Thousand`);
   if (rest) parts.push(under1000(rest));
@@ -113,8 +114,6 @@ export function amountInWords(
   const whole = Math.floor(paise / 100);
   const fraction = paise % 100;
   const head = `${currency.major} ${wholeInWords(whole)}`;
-  const tail = fraction
-    ? ` and ${under100(fraction)} ${currency.minor}`
-    : '';
+  const tail = fraction ? ` and ${under100(fraction)} ${currency.minor}` : '';
   return `${negative ? 'Minus ' : ''}${head}${tail} Only`;
 }

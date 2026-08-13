@@ -37,10 +37,7 @@ export class CategoryService {
   ) {
     const scopeFilter: Prisma.CategoryWhereInput = companyId
       ? {
-          OR: [
-            { allCompanies: true },
-            { companies: { some: { companyId } } },
-          ],
+          OR: [{ allCompanies: true }, { companies: { some: { companyId } } }],
         }
       : { allCompanies: true };
     const rows = await this.prisma.category.findMany({
@@ -102,7 +99,9 @@ export class CategoryService {
 
   /** Lowest free 2-digit category number (1..99). */
   private async nextCategoryNumber(): Promise<number> {
-    const rows = await this.prisma.category.findMany({ select: { code: true } });
+    const rows = await this.prisma.category.findMany({
+      select: { code: true },
+    });
     const used = rows.map((r) => categoryNumberOf(r.code));
     const n = lowestFree(used, MAX_CATEGORY);
     if (n == null) {
@@ -114,7 +113,10 @@ export class CategoryService {
   }
 
   /** Re-run an allocate+insert if it loses the code-uniqueness race. */
-  private async withCodeRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
+  private async withCodeRetry<T>(
+    fn: () => Promise<T>,
+    attempts = 5,
+  ): Promise<T> {
     for (let i = 0; ; i++) {
       try {
         return await fn();
@@ -131,7 +133,11 @@ export class CategoryService {
     }
   }
 
-  async update(companyId: number | undefined, id: number, dto: UpdateCategoryDto) {
+  async update(
+    companyId: number | undefined,
+    id: number,
+    dto: UpdateCategoryDto,
+  ) {
     const existing = await this.findOne(companyId, id);
     assertUnlocked(existing, 'category', 'editing');
 

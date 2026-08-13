@@ -177,7 +177,10 @@ export class ProductController {
   }
 
   @UseGuards(
-    LockPrivilegeGuard(['/inventory/products-unpacked', '/inventory/products-packed']),
+    LockPrivilegeGuard([
+      '/inventory/products-unpacked',
+      '/inventory/products-packed',
+    ]),
   )
   @Patch(':id/lock')
   setLock(

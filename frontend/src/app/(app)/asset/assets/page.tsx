@@ -13,7 +13,12 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { StatusToggle } from '@/components/ui/StatusToggle';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -85,13 +90,14 @@ export default function AssetsPage() {
   const { data: units } = useFetch<Unit[]>('/units');
   const { data: companies } = useFetch<Company[]>('/companies');
   const { data: lookups } = useFetch<Lookup[]>('/lookups');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<Asset>({
-    endpoint: '/assets',
-    route: ROUTE,
-    noun: 'asset',
-    nameOf: (a) => a.name,
-    reload: refetch,
-  });
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
+    useLock<Asset>({
+      endpoint: '/assets',
+      route: ROUTE,
+      noun: 'asset',
+      nameOf: (a) => a.name,
+      reload: refetch,
+    });
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Asset | null>(null);
@@ -158,13 +164,16 @@ export default function AssetsPage() {
     .map((b) => ({ value: b.value, label: b.label }));
   const brandOptions =
     form.brand && !brandChoices.some((o) => o.value === form.brand)
-      ? [...brandChoices, { value: form.brand, label: `${form.brand} (not in list)` }]
+      ? [
+          ...brandChoices,
+          { value: form.brand, label: `${form.brand} (not in list)` },
+        ]
       : brandChoices;
   // Assets store the lookup value (a stable key); resolve it to the current
   // label for display so a renamed brand shows its new name in the list.
   const brandLabelByValue = new Map(brands.map((b) => [b.value, b.label]));
   const brandLabel = (v?: string | null) =>
-    v ? brandLabelByValue.get(v) ?? v : '-';
+    v ? (brandLabelByValue.get(v) ?? v) : '-';
 
   const closeDrawer = () => {
     setOpen(false);
@@ -369,8 +378,10 @@ export default function AssetsPage() {
     const min = a.minCapacity ?? 0;
     const max = a.maxCapacity ?? 0;
     const range = max > 0 ? `${min}–${max}` : String(min);
-    const capUnit = a.capacityUnitId != null ? unitCodeById.get(a.capacityUnitId) : undefined;
-    const perUnit = a.perUnitId != null ? unitCodeById.get(a.perUnitId) : undefined;
+    const capUnit =
+      a.capacityUnitId != null ? unitCodeById.get(a.capacityUnitId) : undefined;
+    const perUnit =
+      a.perUnitId != null ? unitCodeById.get(a.perUnitId) : undefined;
     let text = capUnit ? `${range} ${capUnit}` : range;
     if (perUnit) text += ` / ${perUnit}`;
     return text;
@@ -388,7 +399,11 @@ export default function AssetsPage() {
         </span>
       ),
     },
-    { key: 'category', header: 'Category', accessor: (r) => r.category?.name ?? '-' },
+    {
+      key: 'category',
+      header: 'Category',
+      accessor: (r) => r.category?.name ?? '-',
+    },
     { key: 'group', header: 'Group', accessor: (r) => r.group?.name ?? '-' },
     {
       key: 'capacity',
@@ -397,7 +412,11 @@ export default function AssetsPage() {
       sortAccessor: (r) => r.minCapacity ?? 0,
     },
     { key: 'brand', header: 'Brand', accessor: (r) => brandLabel(r.brand) },
-    { key: 'serialNumber', header: 'Serial Number', accessor: (r) => r.serialNumber ?? '-' },
+    {
+      key: 'serialNumber',
+      header: 'Serial Number',
+      accessor: (r) => r.serialNumber ?? '-',
+    },
     {
       key: 'purchaseDate',
       header: 'Purchase Date',
@@ -588,7 +607,11 @@ export default function AssetsPage() {
                   value={form.categoryId}
                   onChange={(e) =>
                     // changing category clears a now-invalid group
-                    setForm({ ...form, categoryId: e.target.value, groupId: '' })
+                    setForm({
+                      ...form,
+                      categoryId: e.target.value,
+                      groupId: '',
+                    })
                   }
                   placeholder="— None —"
                   options={(categories ?? [])
@@ -599,7 +622,9 @@ export default function AssetsPage() {
                   label="Group"
                   required
                   value={form.groupId}
-                  onChange={(e) => setForm({ ...form, groupId: e.target.value })}
+                  onChange={(e) =>
+                    setForm({ ...form, groupId: e.target.value })
+                  }
                   placeholder={
                     form.categoryId
                       ? 'Select a leaf group'
@@ -649,7 +674,9 @@ export default function AssetsPage() {
               <Select
                 label="Per Unit"
                 value={form.perUnitId}
-                onChange={(e) => setForm({ ...form, perUnitId: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, perUnitId: e.target.value })
+                }
                 placeholder="— None —"
                 options={unitList.map((u) => ({ value: u.id, label: u.name }))}
               />
@@ -737,7 +764,9 @@ export default function AssetsPage() {
               {!form.allCompanies && (
                 <div className="mt-1 max-h-52 space-y-1.5 overflow-y-auto rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                   {companyList.length === 0 ? (
-                    <p className="text-sm text-slate-400">No companies found.</p>
+                    <p className="text-sm text-slate-400">
+                      No companies found.
+                    </p>
                   ) : (
                     companyList.map((co) => (
                       <Checkbox

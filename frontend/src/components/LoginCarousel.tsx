@@ -29,7 +29,10 @@ export function LoginCarousel({
 
   useEffect(() => {
     if (media.length <= 1) return;
-    const t = setInterval(() => setI((x) => (x + 1) % media.length), intervalMs);
+    const t = setInterval(
+      () => setI((x) => (x + 1) % media.length),
+      intervalMs,
+    );
     return () => clearInterval(t);
   }, [media.length, intervalMs]);
 
@@ -58,7 +61,10 @@ export function LoginCarousel({
           />
         )
       ) : (
-        <div className="absolute inset-0" style={{ backgroundColor: fallbackColor }} />
+        <div
+          className="absolute inset-0"
+          style={{ backgroundColor: fallbackColor }}
+        />
       )}
 
       {current && (
@@ -66,7 +72,9 @@ export function LoginCarousel({
       )}
 
       {children && (
-        <div className="absolute inset-0 flex flex-col justify-end p-8 sm:p-10">{children}</div>
+        <div className="absolute inset-0 flex flex-col justify-end p-8 sm:p-10">
+          {children}
+        </div>
       )}
 
       {showDots && media.length > 1 && (
@@ -79,7 +87,9 @@ export function LoginCarousel({
               onClick={() => setI(idx)}
               className={cn(
                 'h-2 w-2 rounded-full transition',
-                idx === i % media.length ? 'bg-white' : 'bg-white/50 hover:bg-white/80',
+                idx === i % media.length
+                  ? 'bg-white'
+                  : 'bg-white/50 hover:bg-white/80',
               )}
             />
           ))}

@@ -11,7 +11,12 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -42,13 +47,14 @@ export default function UnitsPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<Unit[]>('/units');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<Unit>({
-    endpoint: '/units',
-    route: ROUTE,
-    noun: 'unit',
-    nameOf: (u) => u.name,
-    reload: refetch,
-  });
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
+    useLock<Unit>({
+      endpoint: '/units',
+      route: ROUTE,
+      noun: 'unit',
+      nameOf: (u) => u.name,
+      reload: refetch,
+    });
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Unit | null>(null);
@@ -80,24 +86,36 @@ export default function UnitsPage() {
     symbol: u.symbol ?? '',
     type: u.type,
     baseUnitId: u.baseUnitId != null ? String(u.baseUnitId) : '',
-    conversionFactor: u.conversionFactor != null ? String(u.conversionFactor) : '',
+    conversionFactor:
+      u.conversionFactor != null ? String(u.conversionFactor) : '',
     chainLinks: (u.chainLinks ?? [])
       .slice()
       .sort((a, b) => a.sequence - b.sequence)
-      .map((l) => ({ unitId: String(l.linkUnitId), quantity: String(l.quantity) })),
+      .map((l) => ({
+        unitId: String(l.linkUnitId),
+        quantity: String(l.quantity),
+      })),
     decimalPlaces: String(u.decimalPlaces ?? 0),
     isActive: u.isActive,
   });
 
   // --- chaining rung editors (mutate form.chainLinks) ---
   const addRung = () =>
-    setForm((f) => ({ ...f, chainLinks: [...f.chainLinks, { unitId: '', quantity: '' }] }));
+    setForm((f) => ({
+      ...f,
+      chainLinks: [...f.chainLinks, { unitId: '', quantity: '' }],
+    }));
   const removeRung = (i: number) =>
-    setForm((f) => ({ ...f, chainLinks: f.chainLinks.filter((_, idx) => idx !== i) }));
+    setForm((f) => ({
+      ...f,
+      chainLinks: f.chainLinks.filter((_, idx) => idx !== i),
+    }));
   const setRung = (i: number, patch: Partial<ChainRung>) =>
     setForm((f) => ({
       ...f,
-      chainLinks: f.chainLinks.map((r, idx) => (idx === i ? { ...r, ...patch } : r)),
+      chainLinks: f.chainLinks.map((r, idx) =>
+        idx === i ? { ...r, ...patch } : r,
+      ),
     }));
 
   // Resolved factor (product of rung quantities) and the bottom unit, for the
@@ -108,7 +126,8 @@ export default function UnitsPage() {
   );
   const chainBase = form.chainLinks.length
     ? linkUnits.find(
-        (u) => String(u.id) === form.chainLinks[form.chainLinks.length - 1].unitId,
+        (u) =>
+          String(u.id) === form.chainLinks[form.chainLinks.length - 1].unitId,
       )
     : undefined;
 
@@ -389,8 +408,14 @@ export default function UnitsPage() {
               }
               options={[
                 { value: 'SIMPLE', label: 'Simple' },
-                { value: 'COMPOUND', label: 'Compound (derived from a base unit)' },
-                { value: 'CHAINING', label: 'Chaining (nested packaging ladder)' },
+                {
+                  value: 'COMPOUND',
+                  label: 'Compound (derived from a base unit)',
+                },
+                {
+                  value: 'CHAINING',
+                  label: 'Chaining (nested packaging ladder)',
+                },
               ]}
             />
             <Input
@@ -457,8 +482,8 @@ export default function UnitsPage() {
                   )}
                 </div>
                 <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">
-                  Each rung: how many of the chosen unit make up one of the level
-                  above it. The last rung must be a simple unit.
+                  Each rung: how many of the chosen unit make up one of the
+                  level above it. The last rung must be a simple unit.
                 </p>
 
                 {form.chainLinks.length === 0 ? (

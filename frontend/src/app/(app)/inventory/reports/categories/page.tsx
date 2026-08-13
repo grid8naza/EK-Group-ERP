@@ -30,7 +30,13 @@ const appliesTo = (c: Category) => CATEGORY_KIND_LABEL[c.kind] ?? '-';
 
 const ALL_COLUMNS: ReportColumn<Category>[] = [
   { key: 'code', header: 'Code', weight: 16, cell: (c) => c.code },
-  { key: 'name', header: 'Category', weight: 24, bold: true, cell: (c) => c.name },
+  {
+    key: 'name',
+    header: 'Category',
+    weight: 24,
+    bold: true,
+    cell: (c) => c.name,
+  },
   {
     key: 'description',
     header: 'Description',
@@ -71,7 +77,8 @@ export default function CategoryReportPage() {
   // from the visible columns.
   const rows = useMemo(() => {
     let cats = data ?? [];
-    if (applies === 'item') cats = cats.filter((c) => ITEM_KINDS.includes(c.kind));
+    if (applies === 'item')
+      cats = cats.filter((c) => ITEM_KINDS.includes(c.kind));
     else if (applies === 'product')
       cats = cats.filter((c) => PRODUCT_KINDS.includes(c.kind));
     return [...cats]
@@ -136,7 +143,10 @@ export default function CategoryReportPage() {
           />
           <div className="ml-auto flex items-center gap-2">
             <ColumnToggle
-              columns={ALL_COLUMNS.map((c) => ({ key: c.key, label: c.header }))}
+              columns={ALL_COLUMNS.map((c) => ({
+                key: c.key,
+                label: c.header,
+              }))}
               hidden={hidden}
               onToggle={toggle}
             />

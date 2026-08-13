@@ -38,7 +38,11 @@ export class WidgetService {
   async create(dto: CreateWidgetDto, companyId: number) {
     const { code, ...rest } = dto;
     const scoped = await this.scopedCompany(dto.moduleId, companyId);
-    const finalCode = await this.uniqueCode(scoped, dto.moduleId, code || dto.name);
+    const finalCode = await this.uniqueCode(
+      scoped,
+      dto.moduleId,
+      code || dto.name,
+    );
     return this.prisma.widget.create({
       data: {
         ...rest,

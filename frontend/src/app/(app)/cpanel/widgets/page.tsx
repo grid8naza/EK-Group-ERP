@@ -1,7 +1,15 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Box, BarChart3, Link2, StickyNote, Globe, Sigma } from 'lucide-react';
+import {
+  Plus,
+  Box,
+  BarChart3,
+  Link2,
+  StickyNote,
+  Globe,
+  Sigma,
+} from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -40,11 +48,34 @@ const TYPE_OPTIONS = [
   { value: 'EMBED', label: 'Embed — external page (URL)' },
 ];
 
-const TYPE_META: Record<WidgetType, { label: string; color: 'blue' | 'violet' | 'amber' | 'green' | 'slate'; icon: React.ReactNode }> = {
-  METRIC: { label: 'Metric', color: 'green', icon: <Sigma className="h-4 w-4" /> },
-  LINKS: { label: 'Links', color: 'violet', icon: <Link2 className="h-4 w-4" /> },
-  NOTE: { label: 'Note', color: 'amber', icon: <StickyNote className="h-4 w-4" /> },
-  EMBED: { label: 'Embed', color: 'slate', icon: <Globe className="h-4 w-4" /> },
+const TYPE_META: Record<
+  WidgetType,
+  {
+    label: string;
+    color: 'blue' | 'violet' | 'amber' | 'green' | 'slate';
+    icon: React.ReactNode;
+  }
+> = {
+  METRIC: {
+    label: 'Metric',
+    color: 'green',
+    icon: <Sigma className="h-4 w-4" />,
+  },
+  LINKS: {
+    label: 'Links',
+    color: 'violet',
+    icon: <Link2 className="h-4 w-4" />,
+  },
+  NOTE: {
+    label: 'Note',
+    color: 'amber',
+    icon: <StickyNote className="h-4 w-4" />,
+  },
+  EMBED: {
+    label: 'Embed',
+    color: 'slate',
+    icon: <Globe className="h-4 w-4" />,
+  },
 };
 
 const empty = {
@@ -115,7 +146,9 @@ export default function WidgetsPage() {
     }
     setLoading(true);
     try {
-      const res = await api.get<WidgetCatalogItem[]>(`/widgets?moduleId=${moduleId}`);
+      const res = await api.get<WidgetCatalogItem[]>(
+        `/widgets?moduleId=${moduleId}`,
+      );
       setWidgets(res ?? []);
     } catch (e) {
       if (!(e instanceof ApiError && e.status === 401))
@@ -353,7 +386,11 @@ export default function WidgetsPage() {
                 )}
                 <div className="mt-4 flex items-center justify-end gap-1">
                   <RowActions
-                    before={!w.isActive ? <Badge color="slate">Inactive</Badge> : undefined}
+                    before={
+                      !w.isActive ? (
+                        <Badge color="slate">Inactive</Badge>
+                      ) : undefined
+                    }
                     onView={() => openView(w)}
                     onEdit={() => guardEdit(w, () => openEdit(w))}
                     onDelete={() => guardDelete(w, () => remove(w))}
@@ -386,244 +423,295 @@ export default function WidgetsPage() {
           view ? (
             <CloseFooter onClose={closeDrawer} />
           ) : (
-            <DrawerFooter onCancel={closeDrawer} onSave={save} saving={saving} />
+            <DrawerFooter
+              onCancel={closeDrawer}
+              onSave={save}
+              saving={saving}
+            />
           )
         }
       >
         <ReadOnlyFieldset readOnly={view}>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Input
-            label="Name"
-            required
-            wrapClassName="sm:col-span-2"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-          />
-          <Select label="Module" value={moduleId} disabled options={moduleOptions} />
-          <Select
-            label="Type"
-            value={form.type}
-            onChange={(e) =>
-              setForm({ ...form, type: e.target.value as WidgetType })
-            }
-            options={TYPE_OPTIONS}
-          />
-
-          {/* Type-specific config */}
-          {form.type === 'METRIC' && (
-            <>
-              <Select
-                label="Metric"
-                required
-                value={form.metric}
-                onChange={(e) => setForm({ ...form, metric: e.target.value })}
-                placeholder={
-                  metricOptions.length ? 'Select a metric' : 'No metrics for this module'
-                }
-                options={metricOptions.map((m) => ({ value: m.key, label: m.label }))}
-              />
-              <Input
-                label="Hint (subtitle)"
-                value={form.hint}
-                onChange={(e) => setForm({ ...form, hint: e.target.value })}
-                placeholder="e.g. This month"
-              />
-              <p className="text-xs text-slate-400 sm:col-span-2">
-                Pulls a live value (or calculation) from this module&apos;s data,
-                scoped to the active company. The list comes from the module&apos;s
-                metric registry.
-              </p>
-            </>
-          )}
-          {form.type === 'NOTE' && (
-            <Textarea
-              label="Text"
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Input
+              label="Name"
+              required
               wrapClassName="sm:col-span-2"
-              value={form.text}
-              onChange={(e) => setForm({ ...form, text: e.target.value })}
-              placeholder="Anything you want to show on the dashboard…"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
-          )}
-          {form.type === 'EMBED' && (
-            <>
-              <Input
-                label="URL"
+            <Select
+              label="Module"
+              value={moduleId}
+              disabled
+              options={moduleOptions}
+            />
+            <Select
+              label="Type"
+              value={form.type}
+              onChange={(e) =>
+                setForm({ ...form, type: e.target.value as WidgetType })
+              }
+              options={TYPE_OPTIONS}
+            />
+
+            {/* Type-specific config */}
+            {form.type === 'METRIC' && (
+              <>
+                <Select
+                  label="Metric"
+                  required
+                  value={form.metric}
+                  onChange={(e) => setForm({ ...form, metric: e.target.value })}
+                  placeholder={
+                    metricOptions.length
+                      ? 'Select a metric'
+                      : 'No metrics for this module'
+                  }
+                  options={metricOptions.map((m) => ({
+                    value: m.key,
+                    label: m.label,
+                  }))}
+                />
+                <Input
+                  label="Hint (subtitle)"
+                  value={form.hint}
+                  onChange={(e) => setForm({ ...form, hint: e.target.value })}
+                  placeholder="e.g. This month"
+                />
+                <p className="text-xs text-slate-400 sm:col-span-2">
+                  Pulls a live value (or calculation) from this module&apos;s
+                  data, scoped to the active company. The list comes from the
+                  module&apos;s metric registry.
+                </p>
+              </>
+            )}
+            {form.type === 'NOTE' && (
+              <Textarea
+                label="Text"
                 wrapClassName="sm:col-span-2"
-                value={form.url}
-                onChange={(e) => setForm({ ...form, url: e.target.value })}
-                placeholder="https://example.com/report"
+                value={form.text}
+                onChange={(e) => setForm({ ...form, text: e.target.value })}
+                placeholder="Anything you want to show on the dashboard…"
               />
-              <Input
-                label="Height (px)"
-                type="number"
-                value={form.height}
+            )}
+            {form.type === 'EMBED' && (
+              <>
+                <Input
+                  label="URL"
+                  wrapClassName="sm:col-span-2"
+                  value={form.url}
+                  onChange={(e) => setForm({ ...form, url: e.target.value })}
+                  placeholder="https://example.com/report"
+                />
+                <Input
+                  label="Height (px)"
+                  type="number"
+                  value={form.height}
+                  onChange={(e) =>
+                    setForm({ ...form, height: Number(e.target.value) })
+                  }
+                />
+              </>
+            )}
+            {form.type === 'LINKS' && (
+              <p className="text-xs text-slate-400 sm:col-span-2">
+                Shows quick links to the current module&apos;s screens. No extra
+                configuration needed.
+              </p>
+            )}
+
+            <div className="flex items-end pb-2">
+              <Checkbox
+                label="Active"
+                checked={form.isActive}
                 onChange={(e) =>
-                  setForm({ ...form, height: Number(e.target.value) })
+                  setForm({ ...form, isActive: e.target.checked })
                 }
               />
-            </>
-          )}
-          {form.type === 'LINKS' && (
-            <p className="text-xs text-slate-400 sm:col-span-2">
-              Shows quick links to the current module&apos;s screens. No extra
-              configuration needed.
-            </p>
-          )}
+            </div>
 
-          <div className="flex items-end pb-2">
-            <Checkbox
-              label="Active"
-              checked={form.isActive}
-              onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
-            />
-          </div>
+            {/* ---- Appearance: colours, fonts, shape ---- */}
+            <div className="mt-2 rounded-xl border border-slate-200 p-4 dark:border-slate-800 sm:col-span-2">
+              <p className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                Appearance
+              </p>
 
-          {/* ---- Appearance: colours, fonts, shape ---- */}
-          <div className="mt-2 rounded-xl border border-slate-200 p-4 dark:border-slate-800 sm:col-span-2">
-            <p className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
-              Appearance
-            </p>
-
-            {/* Live preview */}
-            <div className="mb-4">
-              <div className={cn(pr.containerClass, 'max-w-sm')} style={pr.containerStyle}>
-                {isValueType ? (
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                        {form.name || 'Widget'}
-                      </p>
-                      <p
-                        className={cn('mt-1 text-slate-900 dark:text-white', pr.valueClass)}
-                        style={pr.valueStyle}
+              {/* Live preview */}
+              <div className="mb-4">
+                <div
+                  className={cn(pr.containerClass, 'max-w-sm')}
+                  style={pr.containerStyle}
+                >
+                  {isValueType ? (
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                          {form.name || 'Widget'}
+                        </p>
+                        <p
+                          className={cn(
+                            'mt-1 text-slate-900 dark:text-white',
+                            pr.valueClass,
+                          )}
+                          style={pr.valueStyle}
+                        >
+                          1,234
+                        </p>
+                        {form.hint && (
+                          <p className="mt-1 text-xs text-slate-400">
+                            {form.hint}
+                          </p>
+                        )}
+                      </div>
+                      <div
+                        className={cn(
+                          'flex h-12 w-12 flex-none items-center justify-center rounded-xl',
+                          pr.accentChip,
+                        )}
                       >
-                        1,234
-                      </p>
-                      {form.hint && (
-                        <p className="mt-1 text-xs text-slate-400">{form.hint}</p>
-                      )}
+                        <BarChart3 className="h-6 w-6" />
+                      </div>
                     </div>
-                    <div
-                      className={cn(
-                        'flex h-12 w-12 flex-none items-center justify-center rounded-xl',
-                        pr.accentChip,
+                  ) : (
+                    <>
+                      <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+                        {form.name || 'Widget'}
+                      </h2>
+                      {form.type === 'NOTE' && (
+                        <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300">
+                          {form.text || 'Empty note.'}
+                        </p>
                       )}
-                    >
-                      <BarChart3 className="h-6 w-6" />
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-                      {form.name || 'Widget'}
-                    </h2>
-                    {form.type === 'NOTE' && (
-                      <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600 dark:text-slate-300">
-                        {form.text || 'Empty note.'}
-                      </p>
-                    )}
-                  </>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Select
+                  label="Accent"
+                  value={form.accent}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      accent: e.target.value as WidgetStyle['accent'],
+                    })
+                  }
+                  options={WIDGET_ACCENTS.map((a) => ({
+                    value: a.key,
+                    label: a.label,
+                  }))}
+                />
+                <Select
+                  label="Shape"
+                  value={form.shape}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      shape: e.target.value as WidgetStyle['shape'],
+                    })
+                  }
+                  options={WIDGET_SHAPES.map((s) => ({
+                    value: s.key,
+                    label: s.label,
+                  }))}
+                />
+                <Select
+                  label="Font"
+                  value={form.fontFamily}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      fontFamily: e.target.value as WidgetStyle['fontFamily'],
+                    })
+                  }
+                  options={FONT_FAMILIES.map((f) => ({
+                    value: f.key,
+                    label: f.label,
+                  }))}
+                />
+                {isValueType && (
+                  <Select
+                    label="Value size"
+                    value={form.fontSize}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        fontSize: e.target.value as WidgetStyle['fontSize'],
+                      })
+                    }
+                    options={VALUE_SIZES.map((s) => ({
+                      value: s.key,
+                      label: s.label,
+                    }))}
+                  />
+                )}
+                {isValueType && (
+                  <Select
+                    label="Value weight"
+                    value={form.fontWeight}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        fontWeight: e.target.value as WidgetStyle['fontWeight'],
+                      })
+                    }
+                    options={VALUE_WEIGHTS.map((w) => ({
+                      value: w.key,
+                      label: w.label,
+                    }))}
+                  />
                 )}
               </div>
-            </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Select
-                label="Accent"
-                value={form.accent}
-                onChange={(e) =>
-                  setForm({ ...form, accent: e.target.value as WidgetStyle['accent'] })
-                }
-                options={WIDGET_ACCENTS.map((a) => ({ value: a.key, label: a.label }))}
-              />
-              <Select
-                label="Shape"
-                value={form.shape}
-                onChange={(e) =>
-                  setForm({ ...form, shape: e.target.value as WidgetStyle['shape'] })
-                }
-                options={WIDGET_SHAPES.map((s) => ({ value: s.key, label: s.label }))}
-              />
-              <Select
-                label="Font"
-                value={form.fontFamily}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    fontFamily: e.target.value as WidgetStyle['fontFamily'],
-                  })
-                }
-                options={FONT_FAMILIES.map((f) => ({ value: f.key, label: f.label }))}
-              />
-              {isValueType && (
-                <Select
-                  label="Value size"
-                  value={form.fontSize}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      fontSize: e.target.value as WidgetStyle['fontSize'],
-                    })
-                  }
-                  options={VALUE_SIZES.map((s) => ({ value: s.key, label: s.label }))}
-                />
-              )}
-              {isValueType && (
-                <Select
-                  label="Value weight"
-                  value={form.fontWeight}
-                  onChange={(e) =>
-                    setForm({
-                      ...form,
-                      fontWeight: e.target.value as WidgetStyle['fontWeight'],
-                    })
-                  }
-                  options={VALUE_WEIGHTS.map((w) => ({ value: w.key, label: w.label }))}
-                />
-              )}
-            </div>
-
-            {/* Optional custom colours */}
-            <div className="mt-4 space-y-3">
-              {isValueType && (
+              {/* Optional custom colours */}
+              <div className="mt-4 space-y-3">
+                {isValueType && (
+                  <ColorRow
+                    label="Custom value colour"
+                    on={form.valueColorOn}
+                    color={form.valueColor}
+                    onToggle={(v) => setForm({ ...form, valueColorOn: v })}
+                    onColor={(c) => setForm({ ...form, valueColor: c })}
+                  />
+                )}
                 <ColorRow
-                  label="Custom value colour"
-                  on={form.valueColorOn}
-                  color={form.valueColor}
-                  onToggle={(v) => setForm({ ...form, valueColorOn: v })}
-                  onColor={(c) => setForm({ ...form, valueColor: c })}
+                  label="Custom background"
+                  on={form.bgOn}
+                  color={form.background}
+                  onToggle={(v) => setForm({ ...form, bgOn: v })}
+                  onColor={(c) => setForm({ ...form, background: c })}
                 />
-              )}
-              <ColorRow
-                label="Custom background"
-                on={form.bgOn}
-                color={form.background}
-                onToggle={(v) => setForm({ ...form, bgOn: v })}
-                onColor={(c) => setForm({ ...form, background: c })}
-              />
-              <div className="flex items-center gap-6">
-                <Checkbox
-                  label="Border"
-                  checked={form.border}
-                  onChange={(e) => setForm({ ...form, border: e.target.checked })}
-                />
-                <Checkbox
-                  label="Shadow"
-                  checked={form.shadow}
-                  onChange={(e) => setForm({ ...form, shadow: e.target.checked })}
-                />
+                <div className="flex items-center gap-6">
+                  <Checkbox
+                    label="Border"
+                    checked={form.border}
+                    onChange={(e) =>
+                      setForm({ ...form, border: e.target.checked })
+                    }
+                  />
+                  <Checkbox
+                    label="Shadow"
+                    checked={form.shadow}
+                    onChange={(e) =>
+                      setForm({ ...form, shadow: e.target.checked })
+                    }
+                  />
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Description — kept at the very bottom of the form. */}
-          <Textarea
-            label="Description"
-            wrapClassName="sm:col-span-2"
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-          />
-        </div>
+            {/* Description — kept at the very bottom of the form. */}
+            <Textarea
+              label="Description"
+              wrapClassName="sm:col-span-2"
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
+            />
+          </div>
         </ReadOnlyFieldset>
       </Drawer>
     </div>
@@ -663,9 +751,7 @@ function ColorRow({
         )}
         aria-label={label}
       />
-      {on && (
-        <span className="text-xs text-slate-400">{color}</span>
-      )}
+      {on && <span className="text-xs text-slate-400">{color}</span>}
     </div>
   );
 }

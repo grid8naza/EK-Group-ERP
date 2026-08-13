@@ -20,7 +20,12 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -105,7 +110,9 @@ export default function UsersPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const q = search.trim() ? `?search=${encodeURIComponent(search.trim())}` : '';
+      const q = search.trim()
+        ? `?search=${encodeURIComponent(search.trim())}`
+        : '';
       const res = await api.get<AppUser[]>(`/users${q}`);
       setUsers(res ?? []);
     } catch (e) {
@@ -117,13 +124,14 @@ export default function UsersPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<AppUser>({
-    endpoint: '/users',
-    route: ROUTE,
-    noun: 'user',
-    nameOf: (u) => u.name,
-    reload: load,
-  });
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
+    useLock<AppUser>({
+      endpoint: '/users',
+      route: ROUTE,
+      noun: 'user',
+      nameOf: (u) => u.name,
+      reload: load,
+    });
 
   useEffect(() => {
     const t = setTimeout(load, 300);
@@ -263,19 +271,29 @@ export default function UsersPage() {
         // Keep the default within the (possibly pruned) assigned modules.
         const def = nextDefaults[cid] ?? null;
         const newDef =
-          def != null && pruned.includes(def)
-            ? def
-            : (pruned[0] ?? null);
+          def != null && pruned.includes(def) ? def : (pruned[0] ?? null);
         if (newDef !== def) {
           nextDefaults[cid] = newDef;
           changed = true;
         }
       }
       return changed
-        ? { ...f, moduleAssignments: next, defaultModuleByCompany: nextDefaults }
+        ? {
+            ...f,
+            moduleAssignments: next,
+            defaultModuleByCompany: nextDefaults,
+          }
         : f;
     });
-  }, [open, view, form.groupIds, form.companyIds, groupsByCompany, modulesByCompany, availableModuleIds]);
+  }, [
+    open,
+    view,
+    form.groupIds,
+    form.companyIds,
+    groupsByCompany,
+    modulesByCompany,
+    availableModuleIds,
+  ]);
 
   const openAdd = () => {
     setEditing(null);
@@ -288,9 +306,7 @@ export default function UsersPage() {
     setEditing(u);
     const companyIds = u.companyIds ?? u.companies?.map((c) => c.id) ?? [];
     const defaultCompanyId =
-      u.defaultCompanyId ??
-      u.companies?.find((c) => c.isDefault)?.id ??
-      null;
+      u.defaultCompanyId ?? u.companies?.find((c) => c.isDefault)?.id ?? null;
     const moduleAssignments: Record<number, number[]> = {};
     const defaultModuleByCompany: Record<number, number | null> = {};
     for (const a of u.moduleAssignments ?? []) {
@@ -722,466 +738,465 @@ export default function UsersPage() {
         }
       >
         <ReadOnlyFieldset readOnly={view}>
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Input
-              label="User Code"
-              required
-              value={form.userCode}
-              onChange={(e) =>
-                setForm({ ...form, userCode: e.target.value })
-              }
-            />
-            <Input
-              label="Username"
-              required
-              value={form.username}
-              onChange={(e) =>
-                setForm({ ...form, username: e.target.value })
-              }
-            />
-            <Input
-              label="Name"
-              required
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
-            <Input
-              label="Email"
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-            />
-            <Input
-              label={editing ? 'Password (leave blank to keep)' : 'Password'}
-              type="password"
-              value={form.password}
-              onChange={(e) =>
-                setForm({ ...form, password: e.target.value })
-              }
-              autoComplete="new-password"
-            />
-            <Input
-              label="Mobile"
-              value={form.mobile}
-              onChange={(e) => setForm({ ...form, mobile: e.target.value })}
-            />
-          </div>
-
-          {/* Security */}
-          <div className="card p-4">
-            <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
-              <ShieldCheck className="h-4 w-4 text-brand-600" /> Data Security
-            </h3>
+          <div className="space-y-6">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Select
-                label="Security Type"
-                value={form.securityType}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    securityType: e.target.value as SecurityType,
-                  })
-                }
-                options={[
-                  { value: 'PASSWORD', label: 'Password' },
-                  { value: 'MAC', label: 'MAC' },
-                  { value: 'MACOTP', label: 'MAC + OTP' },
-                ]}
+              <Input
+                label="User Code"
+                required
+                value={form.userCode}
+                onChange={(e) => setForm({ ...form, userCode: e.target.value })}
               />
-              <div className="sm:col-span-2">
-                <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                  <Smartphone className="h-3.5 w-3.5" /> Access Channels
-                </p>
-                <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-                  <Checkbox
-                    label="Web App"
-                    checked={form.webEnabled}
-                    onChange={(e) =>
-                      setForm({ ...form, webEnabled: e.target.checked })
-                    }
-                  />
-                  <Checkbox
-                    label="Mobile App"
-                    checked={form.mobileEnabled}
-                    onChange={(e) =>
-                      setForm({ ...form, mobileEnabled: e.target.checked })
-                    }
-                  />
-                  <span className="h-5 w-px bg-slate-200 dark:bg-slate-700" />
-                  <Checkbox
-                    label="Active"
-                    checked={form.isActive}
-                    onChange={(e) =>
-                      setForm({ ...form, isActive: e.target.checked })
-                    }
-                  />
+              <Input
+                label="Username"
+                required
+                value={form.username}
+                onChange={(e) => setForm({ ...form, username: e.target.value })}
+              />
+              <Input
+                label="Name"
+                required
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+              />
+              <Input
+                label="Email"
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+              />
+              <Input
+                label={editing ? 'Password (leave blank to keep)' : 'Password'}
+                type="password"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                autoComplete="new-password"
+              />
+              <Input
+                label="Mobile"
+                value={form.mobile}
+                onChange={(e) => setForm({ ...form, mobile: e.target.value })}
+              />
+            </div>
+
+            {/* Security */}
+            <div className="card p-4">
+              <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                <ShieldCheck className="h-4 w-4 text-brand-600" /> Data Security
+              </h3>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Select
+                  label="Security Type"
+                  value={form.securityType}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      securityType: e.target.value as SecurityType,
+                    })
+                  }
+                  options={[
+                    { value: 'PASSWORD', label: 'Password' },
+                    { value: 'MAC', label: 'MAC' },
+                    { value: 'MACOTP', label: 'MAC + OTP' },
+                  ]}
+                />
+                <div className="sm:col-span-2">
+                  <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    <Smartphone className="h-3.5 w-3.5" /> Access Channels
+                  </p>
+                  <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                    <Checkbox
+                      label="Web App"
+                      checked={form.webEnabled}
+                      onChange={(e) =>
+                        setForm({ ...form, webEnabled: e.target.checked })
+                      }
+                    />
+                    <Checkbox
+                      label="Mobile App"
+                      checked={form.mobileEnabled}
+                      onChange={(e) =>
+                        setForm({ ...form, mobileEnabled: e.target.checked })
+                      }
+                    />
+                    <span className="h-5 w-px bg-slate-200 dark:bg-slate-700" />
+                    <Checkbox
+                      label="Active"
+                      checked={form.isActive}
+                      onChange={(e) =>
+                        setForm({ ...form, isActive: e.target.checked })
+                      }
+                    />
+                  </div>
+                  <p className="mt-1.5 text-xs text-slate-400">
+                    Web-only users can sign in here; mobile-only users use the
+                    mobile app. Enable both for full access.
+                  </p>
                 </div>
-                <p className="mt-1.5 text-xs text-slate-400">
-                  Web-only users can sign in here; mobile-only users use the
-                  mobile app. Enable both for full access.
-                </p>
+                {showMac && (
+                  <>
+                    <Input
+                      label="Computer MAC"
+                      value={form.computerMac}
+                      onChange={(e) =>
+                        setForm({ ...form, computerMac: e.target.value })
+                      }
+                      placeholder="00:1A:2B:3C:4D:5E"
+                    />
+                    <Input
+                      label="Mobile MAC"
+                      value={form.mobileMac}
+                      onChange={(e) =>
+                        setForm({ ...form, mobileMac: e.target.value })
+                      }
+                    />
+                  </>
+                )}
               </div>
-              {showMac && (
-                <>
-                  <Input
-                    label="Computer MAC"
-                    value={form.computerMac}
-                    onChange={(e) =>
-                      setForm({ ...form, computerMac: e.target.value })
-                    }
-                    placeholder="00:1A:2B:3C:4D:5E"
-                  />
-                  <Input
-                    label="Mobile MAC"
-                    value={form.mobileMac}
-                    onChange={(e) =>
-                      setForm({ ...form, mobileMac: e.target.value })
-                    }
-                  />
-                </>
+            </div>
+
+            {/* Company access + default */}
+            <div className="card p-4">
+              <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                <Building2 className="h-4 w-4 text-brand-600" /> Company Access
+              </h3>
+              <p className="mb-3 text-xs text-slate-400">
+                Select the companies this user can log into. Mark one as the
+                default company that loads automatically at login.
+              </p>
+              {companies.length === 0 ? (
+                <p className="text-sm text-slate-400">No companies available</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {companies.map((c) => {
+                    const active = form.companyIds.includes(c.id);
+                    const isDefault = form.defaultCompanyId === c.id;
+                    return (
+                      <div
+                        key={c.id}
+                        className={cn(
+                          'flex items-center justify-between gap-3 rounded-lg border px-3 py-2 transition',
+                          active
+                            ? 'border-brand-300 bg-brand-50 dark:border-brand-700 dark:bg-brand-950/30'
+                            : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900',
+                        )}
+                      >
+                        <Checkbox
+                          label={`${c.name} (${c.code})`}
+                          checked={active}
+                          onChange={() => toggleCompany(c.id)}
+                        />
+                        {active && (
+                          <label className="inline-flex cursor-pointer select-none items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                            <input
+                              type="radio"
+                              name="defaultCompany"
+                              className="h-3.5 w-3.5 border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
+                              checked={isDefault}
+                              onChange={() => setDefaultCompany(c.id)}
+                            />
+                            Default
+                          </label>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
             </div>
-          </div>
 
-          {/* Company access + default */}
-          <div className="card p-4">
-            <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
-              <Building2 className="h-4 w-4 text-brand-600" /> Company Access
-            </h3>
-            <p className="mb-3 text-xs text-slate-400">
-              Select the companies this user can log into. Mark one as the
-              default company that loads automatically at login.
-            </p>
-            {companies.length === 0 ? (
-              <p className="text-sm text-slate-400">No companies available</p>
-            ) : (
-              <div className="space-y-1.5">
-                {companies.map((c) => {
-                  const active = form.companyIds.includes(c.id);
-                  const isDefault = form.defaultCompanyId === c.id;
-                  return (
-                    <div
-                      key={c.id}
-                      className={cn(
-                        'flex items-center justify-between gap-3 rounded-lg border px-3 py-2 transition',
-                        active
-                          ? 'border-brand-300 bg-brand-50 dark:border-brand-700 dark:bg-brand-950/30'
-                          : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900',
-                      )}
-                    >
-                      <Checkbox
-                        label={`${c.name} (${c.code})`}
-                        checked={active}
-                        onChange={() => toggleCompany(c.id)}
-                      />
-                      {active && (
-                        <label className="inline-flex cursor-pointer select-none items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-                          <input
-                            type="radio"
-                            name="defaultCompany"
-                            className="h-3.5 w-3.5 border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
-                            checked={isDefault}
-                            onChange={() => setDefaultCompany(c.id)}
-                          />
-                          Default
-                        </label>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Access per company: groups + assigned modules (collapsible) */}
-          <div className="card p-4">
-            <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
-              <ShieldCheck className="h-4 w-4 text-brand-600" /> Access per
-              Company
-            </h3>
-            <p className="mb-3 text-xs text-slate-400">
-              For each company, first pick the user&apos;s groups; the modules
-              those groups manage then appear below to assign. The top module
-              dropdown shows the modules selected here. Mark one as
-              &ldquo;Default&rdquo; to load it automatically when the user
-              enters that company.
-            </p>
-            {selectedCompanies.length === 0 ? (
-              <p className="text-sm text-slate-400">
-                Select a company above to configure its access.
+            {/* Access per company: groups + assigned modules (collapsible) */}
+            <div className="card p-4">
+              <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                <ShieldCheck className="h-4 w-4 text-brand-600" /> Access per
+                Company
+              </h3>
+              <p className="mb-3 text-xs text-slate-400">
+                For each company, first pick the user&apos;s groups; the modules
+                those groups manage then appear below to assign. The top module
+                dropdown shows the modules selected here. Mark one as
+                &ldquo;Default&rdquo; to load it automatically when the user
+                enters that company.
               </p>
-            ) : (
-              <div className="space-y-3">
-                {selectedCompanies.map((c) => {
-                  const groups = groupsByCompany[c.id];
-                  const enabledMods = modulesByCompany[c.id];
-                  const hasGroupSelected = (groups ?? []).some((g) =>
-                    form.groupIds.includes(g.id),
-                  );
-                  // Modules offered = enabled ∩ managed by the selected groups.
-                  const mods =
-                    groups === undefined || enabledMods === undefined
-                      ? undefined
-                      : (() => {
-                          const allowed = availableModuleIds(c.id, form.groupIds);
-                          return enabledMods.filter((m) => allowed.has(m.id));
-                        })();
-                  const assigned = form.moduleAssignments[c.id] ?? [];
-                  const isOpen = expanded[c.id] ?? true;
-                  return (
-                    <div
-                      key={c.id}
-                      className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700"
-                    >
-                      {/* Collapsible header */}
-                      <button
-                        type="button"
-                        onClick={() => toggleExpand(c.id)}
-                        className="flex w-full items-center gap-2 bg-slate-50 px-3 py-2.5 text-left transition hover:bg-slate-100 dark:bg-slate-800/50 dark:hover:bg-slate-800"
+              {selectedCompanies.length === 0 ? (
+                <p className="text-sm text-slate-400">
+                  Select a company above to configure its access.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {selectedCompanies.map((c) => {
+                    const groups = groupsByCompany[c.id];
+                    const enabledMods = modulesByCompany[c.id];
+                    const hasGroupSelected = (groups ?? []).some((g) =>
+                      form.groupIds.includes(g.id),
+                    );
+                    // Modules offered = enabled ∩ managed by the selected groups.
+                    const mods =
+                      groups === undefined || enabledMods === undefined
+                        ? undefined
+                        : (() => {
+                            const allowed = availableModuleIds(
+                              c.id,
+                              form.groupIds,
+                            );
+                            return enabledMods.filter((m) => allowed.has(m.id));
+                          })();
+                    const assigned = form.moduleAssignments[c.id] ?? [];
+                    const isOpen = expanded[c.id] ?? true;
+                    return (
+                      <div
+                        key={c.id}
+                        className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700"
                       >
-                        <Building2 className="h-4 w-4 flex-none text-brand-600" />
-                        <span className="flex-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
-                          {c.name}{' '}
-                          <span className="text-xs font-normal text-slate-400">
-                            ({c.code})
+                        {/* Collapsible header */}
+                        <button
+                          type="button"
+                          onClick={() => toggleExpand(c.id)}
+                          className="flex w-full items-center gap-2 bg-slate-50 px-3 py-2.5 text-left transition hover:bg-slate-100 dark:bg-slate-800/50 dark:hover:bg-slate-800"
+                        >
+                          <Building2 className="h-4 w-4 flex-none text-brand-600" />
+                          <span className="flex-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                            {c.name}{' '}
+                            <span className="text-xs font-normal text-slate-400">
+                              ({c.code})
+                            </span>
                           </span>
-                        </span>
-                        <span className="flex items-center gap-1 text-xs text-slate-400">
-                          {assigned.length}/{mods?.length ?? 0} modules
-                        </span>
-                        <ChevronDown
-                          className={cn(
-                            'h-4 w-4 flex-none text-slate-400 transition-transform',
-                            isOpen && 'rotate-180',
-                          )}
-                        />
-                      </button>
-
-                      {isOpen && (
-                        <div className="space-y-4 px-3 py-3">
-                          {/* Groups */}
-                          <div>
-                            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                              <ShieldCheck className="h-3.5 w-3.5" /> User Groups
-                            </p>
-                            {groups === undefined ? (
-                              <p className="text-sm text-slate-400">
-                                Loading...
-                              </p>
-                            ) : groups.length === 0 ? (
-                              <p className="text-sm text-slate-400">
-                                No groups for this company.
-                              </p>
-                            ) : (
-                              <div className="flex flex-wrap gap-2">
-                                {groups.map((g) => {
-                                  const active = form.groupIds.includes(g.id);
-                                  return (
-                                    <button
-                                      key={g.id}
-                                      type="button"
-                                      onClick={() => toggleGroup(g.id)}
-                                      className={cn(
-                                        'rounded-lg border px-3 py-1.5 text-sm font-medium transition',
-                                        active
-                                          ? 'border-brand-600 bg-brand-600 text-white'
-                                          : 'border-slate-300 bg-white text-slate-600 hover:border-brand-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
-                                      )}
-                                    >
-                                      {g.name}
-                                    </button>
-                                  );
-                                })}
-                              </div>
+                          <span className="flex items-center gap-1 text-xs text-slate-400">
+                            {assigned.length}/{mods?.length ?? 0} modules
+                          </span>
+                          <ChevronDown
+                            className={cn(
+                              'h-4 w-4 flex-none text-slate-400 transition-transform',
+                              isOpen && 'rotate-180',
                             )}
-                          </div>
+                          />
+                        </button>
 
-                          {/* Modules */}
-                          <div>
-                            <div className="mb-2 flex items-center justify-between">
-                              <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                <Layers className="h-3.5 w-3.5" /> Modules
-                              </p>
-                              {mods && mods.length > 0 && (
-                                <div className="flex items-center gap-2 text-xs">
-                                  <button
-                                    type="button"
-                                    onClick={() => setAllModules(c.id, true)}
-                                    className="font-medium text-brand-600 hover:underline"
-                                  >
-                                    All
-                                  </button>
-                                  <span className="text-slate-300">|</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => setAllModules(c.id, false)}
-                                    className="font-medium text-slate-500 hover:underline"
-                                  >
-                                    None
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                            {mods === undefined ? (
-                              <p className="text-sm text-slate-400">
-                                Loading...
-                              </p>
-                            ) : !hasGroupSelected ? (
-                              <p className="text-sm text-slate-400">
-                                Select a user group above to choose modules.
-                              </p>
-                            ) : mods.length === 0 ? (
-                              <p className="text-sm text-slate-400">
-                                The selected group(s) manage no modules here.
-                              </p>
-                            ) : (
-                              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                                {mods.map((m) => {
-                                  const MIcon = resolveIcon(m.icon);
-                                  const active = assigned.includes(m.id);
-                                  const isDefault =
-                                    form.defaultModuleByCompany[c.id] === m.id;
-                                  return (
-                                    <div
-                                      key={m.id}
-                                      className={cn(
-                                        'flex items-center gap-2 rounded-lg border px-3 py-2 transition',
-                                        active
-                                          ? 'border-brand-300 bg-brand-50 dark:border-brand-700 dark:bg-brand-950/30'
-                                          : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800/40',
-                                      )}
-                                    >
-                                      <label className="flex flex-1 cursor-pointer items-center gap-2">
-                                        <Checkbox
-                                          checked={active}
-                                          onChange={() =>
-                                            toggleModule(c.id, m.id)
-                                          }
-                                        />
-                                        <MIcon className="h-4 w-4 flex-none text-slate-500 dark:text-slate-400" />
-                                        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                                          {m.name}
-                                        </span>
-                                      </label>
-                                      {active && (
-                                        <label
-                                          className="inline-flex cursor-pointer select-none items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400"
-                                          title="Load this module automatically in this company"
-                                        >
-                                          <input
-                                            type="radio"
-                                            name={`defaultModule-${c.id}`}
-                                            className="h-3.5 w-3.5 border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
-                                            checked={isDefault}
-                                            onChange={() =>
-                                              setDefaultModule(c.id, m.id)
-                                            }
-                                          />
-                                          Default
-                                        </label>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Branches — only for branch-applicable companies */}
-                          {c.branchApplicable && (
+                        {isOpen && (
+                          <div className="space-y-4 px-3 py-3">
+                            {/* Groups */}
                             <div>
                               <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-                                <GitBranch className="h-3.5 w-3.5" /> Branches
+                                <ShieldCheck className="h-3.5 w-3.5" /> User
+                                Groups
                               </p>
-                              {branchesByCompany[c.id] === undefined ? (
+                              {groups === undefined ? (
                                 <p className="text-sm text-slate-400">
                                   Loading...
                                 </p>
-                              ) : branchesByCompany[c.id].length === 0 ? (
+                              ) : groups.length === 0 ? (
                                 <p className="text-sm text-slate-400">
-                                  No branches defined for this company.
+                                  No groups for this company.
                                 </p>
                               ) : (
-                                <>
-                                  <div className="flex flex-wrap gap-2">
-                                    {branchesByCompany[c.id].map((b) => {
-                                      const active = form.branchIds.includes(
-                                        b.id,
-                                      );
-                                      return (
-                                        <button
-                                          key={b.id}
-                                          type="button"
-                                          onClick={() =>
-                                            toggleBranch(b.id, c.id)
-                                          }
-                                          className={cn(
-                                            'rounded-lg border px-3 py-1.5 text-sm font-medium transition',
-                                            active
-                                              ? 'border-brand-600 bg-brand-600 text-white'
-                                              : 'border-slate-300 bg-white text-slate-600 hover:border-brand-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
-                                          )}
-                                        >
-                                          {b.name}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                  {/* Default branch among the selected ones */}
-                                  {(() => {
-                                    const selected = branchesByCompany[
-                                      c.id
-                                    ].filter((b) =>
-                                      form.branchIds.includes(b.id),
-                                    );
-                                    if (selected.length === 0) return null;
+                                <div className="flex flex-wrap gap-2">
+                                  {groups.map((g) => {
+                                    const active = form.groupIds.includes(g.id);
                                     return (
-                                      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-500 dark:text-slate-400">
-                                        <span className="font-medium">
-                                          Default branch:
-                                        </span>
-                                        {selected.map((b) => (
+                                      <button
+                                        key={g.id}
+                                        type="button"
+                                        onClick={() => toggleGroup(g.id)}
+                                        className={cn(
+                                          'rounded-lg border px-3 py-1.5 text-sm font-medium transition',
+                                          active
+                                            ? 'border-brand-600 bg-brand-600 text-white'
+                                            : 'border-slate-300 bg-white text-slate-600 hover:border-brand-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+                                        )}
+                                      >
+                                        {g.name}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Modules */}
+                            <div>
+                              <div className="mb-2 flex items-center justify-between">
+                                <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  <Layers className="h-3.5 w-3.5" /> Modules
+                                </p>
+                                {mods && mods.length > 0 && (
+                                  <div className="flex items-center gap-2 text-xs">
+                                    <button
+                                      type="button"
+                                      onClick={() => setAllModules(c.id, true)}
+                                      className="font-medium text-brand-600 hover:underline"
+                                    >
+                                      All
+                                    </button>
+                                    <span className="text-slate-300">|</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setAllModules(c.id, false)}
+                                      className="font-medium text-slate-500 hover:underline"
+                                    >
+                                      None
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                              {mods === undefined ? (
+                                <p className="text-sm text-slate-400">
+                                  Loading...
+                                </p>
+                              ) : !hasGroupSelected ? (
+                                <p className="text-sm text-slate-400">
+                                  Select a user group above to choose modules.
+                                </p>
+                              ) : mods.length === 0 ? (
+                                <p className="text-sm text-slate-400">
+                                  The selected group(s) manage no modules here.
+                                </p>
+                              ) : (
+                                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                                  {mods.map((m) => {
+                                    const MIcon = resolveIcon(m.icon);
+                                    const active = assigned.includes(m.id);
+                                    const isDefault =
+                                      form.defaultModuleByCompany[c.id] ===
+                                      m.id;
+                                    return (
+                                      <div
+                                        key={m.id}
+                                        className={cn(
+                                          'flex items-center gap-2 rounded-lg border px-3 py-2 transition',
+                                          active
+                                            ? 'border-brand-300 bg-brand-50 dark:border-brand-700 dark:bg-brand-950/30'
+                                            : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800/40',
+                                        )}
+                                      >
+                                        <label className="flex flex-1 cursor-pointer items-center gap-2">
+                                          <Checkbox
+                                            checked={active}
+                                            onChange={() =>
+                                              toggleModule(c.id, m.id)
+                                            }
+                                          />
+                                          <MIcon className="h-4 w-4 flex-none text-slate-500 dark:text-slate-400" />
+                                          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                                            {m.name}
+                                          </span>
+                                        </label>
+                                        {active && (
                                           <label
-                                            key={b.id}
-                                            className="inline-flex cursor-pointer select-none items-center gap-1.5"
+                                            className="inline-flex cursor-pointer select-none items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400"
+                                            title="Load this module automatically in this company"
                                           >
                                             <input
                                               type="radio"
-                                              name={`defaultBranch-${c.id}`}
+                                              name={`defaultModule-${c.id}`}
                                               className="h-3.5 w-3.5 border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
-                                              checked={form.defaultBranchIds.includes(
-                                                b.id,
-                                              )}
+                                              checked={isDefault}
                                               onChange={() =>
-                                                setDefaultBranch(b.id, c.id)
+                                                setDefaultModule(c.id, m.id)
                                               }
                                             />
-                                            {b.name}
+                                            Default
                                           </label>
-                                        ))}
+                                        )}
                                       </div>
                                     );
-                                  })()}
-                                </>
+                                  })}
+                                </div>
                               )}
                             </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
 
-          <Textarea
-            label="Remarks"
-            value={form.remarks}
-            onChange={(e) => setForm({ ...form, remarks: e.target.value })}
-          />
-        </div>
+                            {/* Branches — only for branch-applicable companies */}
+                            {c.branchApplicable && (
+                              <div>
+                                <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                  <GitBranch className="h-3.5 w-3.5" /> Branches
+                                </p>
+                                {branchesByCompany[c.id] === undefined ? (
+                                  <p className="text-sm text-slate-400">
+                                    Loading...
+                                  </p>
+                                ) : branchesByCompany[c.id].length === 0 ? (
+                                  <p className="text-sm text-slate-400">
+                                    No branches defined for this company.
+                                  </p>
+                                ) : (
+                                  <>
+                                    <div className="flex flex-wrap gap-2">
+                                      {branchesByCompany[c.id].map((b) => {
+                                        const active = form.branchIds.includes(
+                                          b.id,
+                                        );
+                                        return (
+                                          <button
+                                            key={b.id}
+                                            type="button"
+                                            onClick={() =>
+                                              toggleBranch(b.id, c.id)
+                                            }
+                                            className={cn(
+                                              'rounded-lg border px-3 py-1.5 text-sm font-medium transition',
+                                              active
+                                                ? 'border-brand-600 bg-brand-600 text-white'
+                                                : 'border-slate-300 bg-white text-slate-600 hover:border-brand-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+                                            )}
+                                          >
+                                            {b.name}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                    {/* Default branch among the selected ones */}
+                                    {(() => {
+                                      const selected = branchesByCompany[
+                                        c.id
+                                      ].filter((b) =>
+                                        form.branchIds.includes(b.id),
+                                      );
+                                      if (selected.length === 0) return null;
+                                      return (
+                                        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-500 dark:text-slate-400">
+                                          <span className="font-medium">
+                                            Default branch:
+                                          </span>
+                                          {selected.map((b) => (
+                                            <label
+                                              key={b.id}
+                                              className="inline-flex cursor-pointer select-none items-center gap-1.5"
+                                            >
+                                              <input
+                                                type="radio"
+                                                name={`defaultBranch-${c.id}`}
+                                                className="h-3.5 w-3.5 border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
+                                                checked={form.defaultBranchIds.includes(
+                                                  b.id,
+                                                )}
+                                                onChange={() =>
+                                                  setDefaultBranch(b.id, c.id)
+                                                }
+                                              />
+                                              {b.name}
+                                            </label>
+                                          ))}
+                                        </div>
+                                      );
+                                    })()}
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <Textarea
+              label="Remarks"
+              value={form.remarks}
+              onChange={(e) => setForm({ ...form, remarks: e.target.value })}
+            />
+          </div>
         </ReadOnlyFieldset>
       </Drawer>
     </div>

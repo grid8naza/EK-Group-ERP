@@ -89,7 +89,11 @@ export function SalesOrderScreen() {
     [statuses],
   );
 
-  const { data: rows, loading, refetch } = useFetch<SalesOrder[]>('/sales-orders');
+  const {
+    data: rows,
+    loading,
+    refetch,
+  } = useFetch<SalesOrder[]>('/sales-orders');
 
   const canDeletePriv = can(ROUTE, 'delete');
 
@@ -113,7 +117,8 @@ export function SalesOrderScreen() {
   const buyerOptions = useMemo(() => {
     const m = new Map<number, string>();
     (rows ?? []).forEach((r) => {
-      if (r.buyerCompanyId) m.set(r.buyerCompanyId, companyName(r.buyerCompanyId));
+      if (r.buyerCompanyId)
+        m.set(r.buyerCompanyId, companyName(r.buyerCompanyId));
     });
     return [...m.entries()].map(([value, label]) => ({ value, label }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -156,11 +161,15 @@ export function SalesOrderScreen() {
   const snapshotOf = (at: string, note: string, ls: DraftLine[]) =>
     JSON.stringify({ at, note, ls });
   useUnsavedChangesGuard(
-    () => mode === 'edit' && snapshotOf(deliveryAt, notes, lines) !== baselineRef.current,
+    () =>
+      mode === 'edit' &&
+      snapshotOf(deliveryAt, notes, lines) !== baselineRef.current,
   );
 
   const setLineQty = (lineId: number, quantity: string) =>
-    setLines((ls) => ls.map((l) => (l.lineId === lineId ? { ...l, quantity } : l)));
+    setLines((ls) =>
+      ls.map((l) => (l.lineId === lineId ? { ...l, quantity } : l)),
+    );
   // Only a balance line (no batch) accepts a price — the backend enforces it too.
   const setLineRate = (lineId: number, rate: string) =>
     setLines((ls) => ls.map((l) => (l.lineId === lineId ? { ...l, rate } : l)));
@@ -437,7 +446,10 @@ export function SalesOrderScreen() {
               title={label}
               className="inline-flex justify-center text-slate-600 dark:text-slate-300"
             >
-              <Icon className="h-5 w-5" style={{ color: st.color || undefined }} />
+              <Icon
+                className="h-5 w-5"
+                style={{ color: st.color || undefined }}
+              />
             </span>
           );
         }
@@ -483,7 +495,11 @@ export function SalesOrderScreen() {
               >
                 Save &amp; Close
               </button>
-              <button className="btn-primary" onClick={doForward} disabled={saving}>
+              <button
+                className="btn-primary"
+                onClick={doForward}
+                disabled={saving}
+              >
                 <Send className="h-4 w-4" /> {submitLabel}
               </button>
             </div>
@@ -745,9 +761,10 @@ function DraftEditor(props: {
         <span className="label !mb-0">Supply</span>
         <p className="mt-1 text-xs text-slate-500">
           One product may appear more than once — a line per batch, each at that
-          batch&apos;s own price. A batch price can&apos;t be changed: the goods carry it.
-          A line with no batch is still to be produced, so its price is only an
-          estimate and stays editable. Set a quantity to 0 to drop a line.
+          batch&apos;s own price. A batch price can&apos;t be changed: the goods
+          carry it. A line with no batch is still to be produced, so its price
+          is only an estimate and stays editable. Set a quantity to 0 to drop a
+          line.
         </p>
       </div>
       <table className="mt-2 w-full text-sm">
@@ -784,7 +801,9 @@ function DraftEditor(props: {
                       To produce
                     </span>
                   ) : (
-                    <span className="whitespace-nowrap font-mono text-slate-500">{src.batchNo}</span>
+                    <span className="whitespace-nowrap font-mono text-slate-500">
+                      {src.batchNo}
+                    </span>
                   )}
                 </td>
                 <td className="px-1 text-right tabular-nums text-slate-500">

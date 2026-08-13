@@ -21,12 +21,54 @@ export const HEADER_THEMES: {
   labelClass: string; // module-label tint
   subClass: string; // subtitle tint
 }[] = [
-  { key: 'blue', label: 'Blue', gradient: 'from-brand-600 to-brand-500', swatch: 'from-brand-600 to-brand-500', labelClass: 'text-brand-100', subClass: 'text-brand-50' },
-  { key: 'emerald', label: 'Emerald', gradient: 'from-emerald-600 to-emerald-500', swatch: 'from-emerald-600 to-emerald-500', labelClass: 'text-emerald-100', subClass: 'text-emerald-50' },
-  { key: 'violet', label: 'Violet', gradient: 'from-violet-600 to-violet-500', swatch: 'from-violet-600 to-violet-500', labelClass: 'text-violet-100', subClass: 'text-violet-50' },
-  { key: 'amber', label: 'Amber', gradient: 'from-amber-500 to-orange-500', swatch: 'from-amber-500 to-orange-500', labelClass: 'text-amber-50', subClass: 'text-amber-50' },
-  { key: 'rose', label: 'Rose', gradient: 'from-rose-600 to-rose-500', swatch: 'from-rose-600 to-rose-500', labelClass: 'text-rose-100', subClass: 'text-rose-50' },
-  { key: 'slate', label: 'Slate', gradient: 'from-slate-700 to-slate-600', swatch: 'from-slate-700 to-slate-600', labelClass: 'text-slate-300', subClass: 'text-slate-200' },
+  {
+    key: 'blue',
+    label: 'Blue',
+    gradient: 'from-brand-600 to-brand-500',
+    swatch: 'from-brand-600 to-brand-500',
+    labelClass: 'text-brand-100',
+    subClass: 'text-brand-50',
+  },
+  {
+    key: 'emerald',
+    label: 'Emerald',
+    gradient: 'from-emerald-600 to-emerald-500',
+    swatch: 'from-emerald-600 to-emerald-500',
+    labelClass: 'text-emerald-100',
+    subClass: 'text-emerald-50',
+  },
+  {
+    key: 'violet',
+    label: 'Violet',
+    gradient: 'from-violet-600 to-violet-500',
+    swatch: 'from-violet-600 to-violet-500',
+    labelClass: 'text-violet-100',
+    subClass: 'text-violet-50',
+  },
+  {
+    key: 'amber',
+    label: 'Amber',
+    gradient: 'from-amber-500 to-orange-500',
+    swatch: 'from-amber-500 to-orange-500',
+    labelClass: 'text-amber-50',
+    subClass: 'text-amber-50',
+  },
+  {
+    key: 'rose',
+    label: 'Rose',
+    gradient: 'from-rose-600 to-rose-500',
+    swatch: 'from-rose-600 to-rose-500',
+    labelClass: 'text-rose-100',
+    subClass: 'text-rose-50',
+  },
+  {
+    key: 'slate',
+    label: 'Slate',
+    gradient: 'from-slate-700 to-slate-600',
+    swatch: 'from-slate-700 to-slate-600',
+    labelClass: 'text-slate-300',
+    subClass: 'text-slate-200',
+  },
 ];
 
 export const HEADER_THEME_OPTIONS = [
@@ -86,7 +128,9 @@ export function resolveDashboardHeader(
     return {
       containerClass: 'relative text-white',
       containerStyle: {
-        background: h?.solid ? from : `linear-gradient(to right, ${from}, ${to})`,
+        background: h?.solid
+          ? from
+          : `linear-gradient(to right, ${from}, ${to})`,
       },
       labelClass: 'text-white/80',
       subtitleClass: 'text-white/90',

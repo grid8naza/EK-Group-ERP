@@ -37,7 +37,9 @@ export function ComingSoon({
           <h2 className="mb-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
             Not built yet
           </h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{building}</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {building}
+          </p>
           {requirement && (
             <p className="mt-3 text-xs text-slate-400">
               Software Requirements Specification · {requirement}

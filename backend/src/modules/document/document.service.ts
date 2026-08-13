@@ -97,7 +97,11 @@ const TXN_TAXONOMY: { type: string; subtypes: string[] }[] = [
   },
   {
     type: 'Sale Return',
-    subtypes: ['Intercompany Sale Return', 'B2B Sale Return', 'B2C Sale Return'],
+    subtypes: [
+      'Intercompany Sale Return',
+      'B2B Sale Return',
+      'B2C Sale Return',
+    ],
   },
   { type: 'Material Issue', subtypes: ['Consumption'] },
   { type: 'Adjustment', subtypes: ['Missing'] },
@@ -119,7 +123,10 @@ const DOC_TXN_MAP: Record<string, { type: string; subtype: string }> = {
   STOCK_TRANSFER: { type: 'Stock Transfer', subtype: 'Intercompany Transfer' },
   GOODS_RECEIPT_NOTE: { type: 'Purchase', subtype: 'Intercompany Purchase' },
   DELIVERY_NOTE: { type: 'Sale', subtype: 'Intercompany Sale' },
-  PURCHASE_RETURN: { type: 'Purchase Return', subtype: 'Intercompany Purchase Return' },
+  PURCHASE_RETURN: {
+    type: 'Purchase Return',
+    subtype: 'Intercompany Purchase Return',
+  },
   SALES_RETURN: { type: 'Sale Return', subtype: 'Intercompany Sale Return' },
   GOODS_ISSUE_NOTE: { type: 'Material Issue', subtype: 'Consumption' },
   STOCK_JOURNAL: { type: 'Adjustment', subtype: 'Missing' },
@@ -164,7 +171,11 @@ export class DocumentService implements OnApplicationBootstrap {
     // Both lookups began life owned by Inventory. Rename in place rather than
     // create afresh: documents point at their VALUES by id, and a second pair
     // would leave those pointing at a list nothing maintains.
-    const claim = async (l: { code: string; name: string; legacyCode: string }) => {
+    const claim = async (l: {
+      code: string;
+      name: string;
+      legacyCode: string;
+    }) => {
       const [legacy, current] = await Promise.all([
         this.prisma.lookup.findUnique({
           where: { code: l.legacyCode },
@@ -309,8 +320,13 @@ export class DocumentService implements OnApplicationBootstrap {
         include: this.txnInclude,
       });
     } catch (e) {
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
-        throw new ConflictException(`A document with code "${code}" already exists.`);
+      if (
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          `A document with code "${code}" already exists.`,
+        );
       }
       throw e;
     }
@@ -324,11 +340,17 @@ export class DocumentService implements OnApplicationBootstrap {
       data: {
         name: dto.name?.trim(),
         description:
-          dto.description !== undefined ? dto.description?.trim() || null : undefined,
+          dto.description !== undefined
+            ? dto.description?.trim() || null
+            : undefined,
         transactionTypeId:
-          dto.transactionTypeId !== undefined ? dto.transactionTypeId : undefined,
+          dto.transactionTypeId !== undefined
+            ? dto.transactionTypeId
+            : undefined,
         transactionSubtypeId:
-          dto.transactionSubtypeId !== undefined ? dto.transactionSubtypeId : undefined,
+          dto.transactionSubtypeId !== undefined
+            ? dto.transactionSubtypeId
+            : undefined,
         isActive: dto.isActive,
       },
       include: this.txnInclude,

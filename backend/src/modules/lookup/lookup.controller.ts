@@ -31,8 +31,11 @@ export class LookupController {
   // Parsed with Number() rather than ParseIntPipe so an absent param is allowed.
   @Get()
   findAll(@Query('moduleId') moduleId?: string) {
-    const scoped = moduleId != null && moduleId !== '' ? Number(moduleId) : undefined;
-    return this.service.findAll(Number.isNaN(scoped as number) ? undefined : scoped);
+    const scoped =
+      moduleId != null && moduleId !== '' ? Number(moduleId) : undefined;
+    return this.service.findAll(
+      Number.isNaN(scoped as number) ? undefined : scoped,
+    );
   }
 
   @Get(':id')
@@ -58,10 +61,7 @@ export class LookupController {
   // Lock / unlock a lookup (must be unlocked before edit or delete).
   @UseGuards(LockPrivilegeGuard('/cpanel/lookups'))
   @Patch(':id/lock')
-  setLock(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: LockDto,
-  ) {
+  setLock(@Param('id', ParseIntPipe) id: number, @Body() dto: LockDto) {
     return this.service.setLock(id, dto.locked);
   }
 
@@ -111,10 +111,7 @@ export class LookupValueController {
   // Lock / unlock a lookup value (must be unlocked before edit or delete).
   @UseGuards(LockPrivilegeGuard('/cpanel/lookups'))
   @Patch(':id/lock')
-  setLock(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: LockDto,
-  ) {
+  setLock(@Param('id', ParseIntPipe) id: number, @Body() dto: LockDto) {
     return this.service.setLockValue(id, dto.locked);
   }
 }

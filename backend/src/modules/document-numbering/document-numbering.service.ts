@@ -302,61 +302,68 @@ export class DocumentNumberingService implements NumberingPort {
       orderBy: { name: 'asc' },
     });
     const rules = companyId
-      ? await this.prisma.documentNumberingRule.findMany({ where: { companyId } })
+      ? await this.prisma.documentNumberingRule.findMany({
+          where: { companyId },
+        })
       : [];
     const byDoc = new Map(rules.map((r) => [r.documentId, r]));
     const now = new Date();
     const branch = companyId ? await this.branchToken(companyId, branchId) : '';
     return Promise.all(
       docs.map(async (d) => {
-      const r = byDoc.get(d.id);
-      const shape: RuleState = {
-        prefixEnabled: r?.prefixEnabled ?? true,
-        prefixValue: r?.prefixValue ?? null,
-        startingNo: r?.startingNo ?? 1,
-        suffixEnabled: r?.suffixEnabled ?? false,
-        suffixValue: r?.suffixValue ?? null,
-        paddingLength: r?.paddingLength ?? 5,
-        renumber: (r?.renumber ?? 'NEVER') as NumberingRenumber,
-        periodPosition: (r?.periodPosition ??
-          'BEFORE_SUFFIX') as NumberingPeriodPosition,
-      };
-      // Read back what has actually been issued rather than a stored counter,
-      // and show the number this rule would hand out next.
-      const issued =
-        companyId != null
-          ? await this.maxIssued(companyId, d.code, shape, now, branch)
-          : null;
-      const nextNo = Math.max(issued == null ? shape.startingNo : issued + 1, shape.startingNo);
-      return {
-        documentId: d.id,
-        documentName: d.name,
-        documentCode: d.code,
-        isSystem: d.isSystem,
-        configured: !!r,
-        prefixEnabled: r?.prefixEnabled ?? true,
-        prefixValue: r?.prefixValue ?? null,
-        startingNo: r?.startingNo ?? 1,
-        suffixEnabled: r?.suffixEnabled ?? false,
-        suffixValue: r?.suffixValue ?? null,
-        paddingLength: r?.paddingLength ?? 5,
-        renumber: r?.renumber ?? 'NEVER',
-        periodPosition: r?.periodPosition ?? 'BEFORE_SUFFIX',
-        isLocked: r?.isLocked ?? false,
-        /** Highest number issued in the current period (0 when none yet). */
-        lastNumber: issued ?? 0,
-        // The number this document would actually take next.
-        preview: this.format(shape, nextNo, now, branch),
-        /** Which branch the two numbers above belong to ('' = company-wide). */
-        branchCode: branch,
-      };
+        const r = byDoc.get(d.id);
+        const shape: RuleState = {
+          prefixEnabled: r?.prefixEnabled ?? true,
+          prefixValue: r?.prefixValue ?? null,
+          startingNo: r?.startingNo ?? 1,
+          suffixEnabled: r?.suffixEnabled ?? false,
+          suffixValue: r?.suffixValue ?? null,
+          paddingLength: r?.paddingLength ?? 5,
+          renumber: (r?.renumber ?? 'NEVER') as NumberingRenumber,
+          periodPosition: (r?.periodPosition ??
+            'BEFORE_SUFFIX') as NumberingPeriodPosition,
+        };
+        // Read back what has actually been issued rather than a stored counter,
+        // and show the number this rule would hand out next.
+        const issued =
+          companyId != null
+            ? await this.maxIssued(companyId, d.code, shape, now, branch)
+            : null;
+        const nextNo = Math.max(
+          issued == null ? shape.startingNo : issued + 1,
+          shape.startingNo,
+        );
+        return {
+          documentId: d.id,
+          documentName: d.name,
+          documentCode: d.code,
+          isSystem: d.isSystem,
+          configured: !!r,
+          prefixEnabled: r?.prefixEnabled ?? true,
+          prefixValue: r?.prefixValue ?? null,
+          startingNo: r?.startingNo ?? 1,
+          suffixEnabled: r?.suffixEnabled ?? false,
+          suffixValue: r?.suffixValue ?? null,
+          paddingLength: r?.paddingLength ?? 5,
+          renumber: r?.renumber ?? 'NEVER',
+          periodPosition: r?.periodPosition ?? 'BEFORE_SUFFIX',
+          isLocked: r?.isLocked ?? false,
+          /** Highest number issued in the current period (0 when none yet). */
+          lastNumber: issued ?? 0,
+          // The number this document would actually take next.
+          preview: this.format(shape, nextNo, now, branch),
+          /** Which branch the two numbers above belong to ('' = company-wide). */
+          branchCode: branch,
+        };
       }),
     );
   }
 
   async save(companyId: number | undefined, dto: SaveNumberingRuleDto) {
     if (!companyId) {
-      throw new BadRequestException('Select a company before setting numbering.');
+      throw new BadRequestException(
+        'Select a company before setting numbering.',
+      );
     }
     const doc = await this.prisma.document.findUnique({
       where: { id: dto.documentId },
@@ -364,7 +371,9 @@ export class DocumentNumberingService implements NumberingPort {
     if (!doc) throw new BadRequestException('Choose a valid document.');
 
     const current = await this.prisma.documentNumberingRule.findUnique({
-      where: { companyId_documentId: { companyId, documentId: dto.documentId } },
+      where: {
+        companyId_documentId: { companyId, documentId: dto.documentId },
+      },
     });
     if (current?.isLocked) {
       throw new BadRequestException(
@@ -386,7 +395,9 @@ export class DocumentNumberingService implements NumberingPort {
         'BEFORE_SUFFIX') as NumberingPeriodPosition,
     };
     return this.prisma.documentNumberingRule.upsert({
-      where: { companyId_documentId: { companyId, documentId: dto.documentId } },
+      where: {
+        companyId_documentId: { companyId, documentId: dto.documentId },
+      },
       create: { companyId, documentId: dto.documentId, ...data },
       update: data,
     });
@@ -441,7 +452,14 @@ export class DocumentNumberingService implements NumberingPort {
     const rule = await this.ruleFor(companyId, documentCode);
     if (!rule) return null;
     const branch = await this.branchToken(companyId, scope.branchId);
-    const n = await this.nextSeq(companyId, documentCode, rule, date, 0, branch);
+    const n = await this.nextSeq(
+      companyId,
+      documentCode,
+      rule,
+      date,
+      0,
+      branch,
+    );
     return this.format(rule, n, date, branch);
   }
 
@@ -508,7 +526,13 @@ export class DocumentNumberingService implements NumberingPort {
     attempt: number,
     branch: string,
   ): Promise<number> {
-    const max = await this.maxIssued(companyId, documentCode, rule, date, branch);
+    const max = await this.maxIssued(
+      companyId,
+      documentCode,
+      rule,
+      date,
+      branch,
+    );
     // Nothing issued yet — the rule's "Starting no" decides where to begin, so
     // a company that sets 100 gets 00100 first, not 00001. It is also a FLOOR:
     // raising the starting number later moves the sequence up to it.
@@ -595,8 +619,8 @@ export class DocumentNumberingService implements NumberingPort {
         ? String(num).padStart(rule.paddingLength || 5, '0')
         : num;
     const head = branch ? `${branch}/` : '';
-    const prefix = head + (rule.prefixEnabled ? rule.prefixValue ?? '' : '');
-    const suffix = rule.suffixEnabled ? rule.suffixValue ?? '' : '';
+    const prefix = head + (rule.prefixEnabled ? (rule.prefixValue ?? '') : '');
+    const suffix = rule.suffixEnabled ? (rule.suffixValue ?? '') : '';
     const period = this.periodToken(rule.renumber, date);
     if (!period) return `${prefix}${body}${suffix}`;
     // The month/year token sits before or after the configured suffix, joined

@@ -20,7 +20,10 @@ export type PrintLine = {
 };
 
 const money = (v: number) =>
-  v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  v.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 const qtyText = (v: number) =>
   v.toLocaleString(undefined, { maximumFractionDigits: 4 });
 
@@ -94,9 +97,7 @@ export function StockDocumentPrint({
             {inbound && <th className="py-1.5 pr-2">Expiry</th>}
             <th className="w-20 py-1.5 text-right">Qty</th>
             <th className="w-16 py-1.5 pl-2">Unit</th>
-            {anyPacked && (
-              <th className="w-28 py-1.5 text-right">Stock Qty</th>
-            )}
+            {anyPacked && <th className="w-28 py-1.5 text-right">Stock Qty</th>}
             {showRate && <th className="w-24 py-1.5 text-right">Rate</th>}
             {showRate && <th className="w-28 py-1.5 text-right">Amount</th>}
           </tr>
@@ -114,7 +115,9 @@ export function StockDocumentPrint({
               {inbound && (
                 <td className="py-1.5 pr-2 text-xs">{fmtDate(l.expiry)}</td>
               )}
-              <td className="py-1.5 text-right tabular-nums">{qtyText(l.qty)}</td>
+              <td className="py-1.5 text-right tabular-nums">
+                {qtyText(l.qty)}
+              </td>
               <td className="py-1.5 pl-2">{l.unit}</td>
               {anyPacked && (
                 <td className="py-1.5 text-right tabular-nums">
@@ -144,13 +147,7 @@ export function StockDocumentPrint({
             <tr className="border-t-2 border-slate-300 font-semibold">
               <td
                 className="py-2"
-                colSpan={
-                  2 +
-                  (inbound ? 2 : 0) +
-                  2 +
-                  (anyPacked ? 1 : 0) +
-                  1
-                }
+                colSpan={2 + (inbound ? 2 : 0) + 2 + (anyPacked ? 1 : 0) + 1}
               >
                 Total
               </td>

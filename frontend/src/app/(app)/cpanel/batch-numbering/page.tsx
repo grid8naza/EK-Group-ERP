@@ -53,9 +53,8 @@ export default function BatchNumberingPage() {
   const { can } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
-  const { data, loading, refetch } = useFetch<BatchNumberingRow[]>(
-    '/batch-numbering',
-  );
+  const { data, loading, refetch } =
+    useFetch<BatchNumberingRow[]>('/batch-numbering');
 
   const canAdd = can(ROUTE, 'add');
   const canEditPriv = can(ROUTE, 'edit');
@@ -226,8 +225,16 @@ export default function BatchNumberingPage() {
         </span>
       ),
     },
-    { key: 'prefix', header: 'Prefix', accessor: (r) => (r.prefixEnabled ? 'Yes' : 'No') },
-    { key: 'prefixValue', header: 'Prefix Val', accessor: (r) => r.prefixValue ?? '—' },
+    {
+      key: 'prefix',
+      header: 'Prefix',
+      accessor: (r) => (r.prefixEnabled ? 'Yes' : 'No'),
+    },
+    {
+      key: 'prefixValue',
+      header: 'Prefix Val',
+      accessor: (r) => r.prefixValue ?? '—',
+    },
     { key: 'dateFormat', header: 'Date', accessor: (r) => r.dateFormat },
     {
       key: 'startingNo',
@@ -263,7 +270,9 @@ export default function BatchNumberingPage() {
           canAdd && (
             <button className="btn-primary" onClick={openNew}>
               <Plus className="h-4 w-4" /> Add New
-              <span className="ml-1 hidden text-[10px] opacity-70 sm:inline">Alt+A</span>
+              <span className="ml-1 hidden text-[10px] opacity-70 sm:inline">
+                Alt+A
+              </span>
             </button>
           )
         }
@@ -279,8 +288,12 @@ export default function BatchNumberingPage() {
         onRefresh={refetch}
         searchPlaceholder="Search branches..."
         onView={openView}
-        onEdit={canEditPriv ? (r) => guardLocked(r, () => openEdit(r)) : undefined}
-        onDelete={canDeletePriv ? (r) => guardLocked(r, () => removeRule(r)) : undefined}
+        onEdit={
+          canEditPriv ? (r) => guardLocked(r, () => openEdit(r)) : undefined
+        }
+        onDelete={
+          canDeletePriv ? (r) => guardLocked(r, () => removeRule(r)) : undefined
+        }
         canView={canViewPriv}
         canEdit={canEditPriv}
         canDelete={canDeletePriv}
@@ -306,7 +319,11 @@ export default function BatchNumberingPage() {
           view ? (
             <CloseFooter onClose={closeDrawer} />
           ) : (
-            <DrawerFooter onCancel={closeDrawer} onSave={save} saving={saving} />
+            <DrawerFooter
+              onCancel={closeDrawer}
+              onSave={save}
+              saving={saving}
+            />
           )
         }
       >
@@ -347,7 +364,9 @@ export default function BatchNumberingPage() {
               label="Date format"
               wrapClassName="sm:col-span-2"
               value={form.dateFormat}
-              onChange={(e) => patch({ dateFormat: e.target.value as BatchDateFormat })}
+              onChange={(e) =>
+                patch({ dateFormat: e.target.value as BatchDateFormat })
+              }
               options={DATE_FORMAT}
             />
             <Input
@@ -369,7 +388,9 @@ export default function BatchNumberingPage() {
               label="Renumber"
               wrapClassName="sm:col-span-2"
               value={form.renumber}
-              onChange={(e) => patch({ renumber: e.target.value as BatchRenumber })}
+              onChange={(e) =>
+                patch({ renumber: e.target.value as BatchRenumber })
+              }
               options={RENUMBER}
             />
           </div>
@@ -377,7 +398,7 @@ export default function BatchNumberingPage() {
         <p className="mt-3 text-xs text-slate-400">
           Batch number = prefix + date + counter, e.g.{' '}
           <span className="font-mono">
-            {(form.prefixEnabled === 'yes' ? form.prefixValue || '' : '')}
+            {form.prefixEnabled === 'yes' ? form.prefixValue || '' : ''}
             {form.dateFormat === 'YYYYMMDD' ? '20260710' : '260710'}-
             {String(Number(form.startingNo) || 1).padStart(
               Number(form.paddingLength) || 4,

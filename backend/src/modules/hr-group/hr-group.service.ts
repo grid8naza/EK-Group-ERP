@@ -37,7 +37,11 @@ export class HrGroupService {
    */
   async findAll(
     companyId: number | undefined,
-    opts: { search?: string; primaryGroupId?: number; parentGroupId?: number } = {},
+    opts: {
+      search?: string;
+      primaryGroupId?: number;
+      parentGroupId?: number;
+    } = {},
   ) {
     const scopeFilter: Prisma.HrGroupWhereInput = companyId
       ? { OR: [{ allCompanies: true }, { companies: { some: { companyId } } }] }
@@ -101,7 +105,12 @@ export class HrGroupService {
     if (parentGroupId != null) {
       const parent = await this.prisma.hrGroup.findUnique({
         where: { id: parentGroupId },
-        select: { categoryId: true, level: true, code: true, subGroupApplicable: true },
+        select: {
+          categoryId: true,
+          level: true,
+          code: true,
+          subGroupApplicable: true,
+        },
       });
       if (!parent) {
         throw new BadRequestException('Selected parent group does not exist.');
@@ -125,7 +134,9 @@ export class HrGroupService {
         select: { code: true },
       });
       if (!category) {
-        throw new BadRequestException('Selected manpower category does not exist.');
+        throw new BadRequestException(
+          'Selected manpower category does not exist.',
+        );
       }
       parentCode = category.code;
     }
@@ -161,7 +172,11 @@ export class HrGroupService {
     });
   }
 
-  async update(companyId: number | undefined, id: number, dto: UpdateHrGroupDto) {
+  async update(
+    companyId: number | undefined,
+    id: number,
+    dto: UpdateHrGroupDto,
+  ) {
     const existing = await this.prisma.hrGroup.findUnique({
       where: { id },
       include: {
@@ -202,7 +217,10 @@ export class HrGroupService {
       dto.allCompanies !== undefined || dto.companyIds !== undefined;
     const existingCompanyIds = existing.companies.map((c) => c.companyId);
     const companyIds = wantsLinkChange
-      ? this.resolveCompanies(allCompanies, dto.companyIds ?? existingCompanyIds)
+      ? this.resolveCompanies(
+          allCompanies,
+          dto.companyIds ?? existingCompanyIds,
+        )
       : null;
 
     const updated = await this.prisma.hrGroup.update({
@@ -282,7 +300,10 @@ export class HrGroupService {
   }
 
   /** Re-run an allocate+insert if it loses the code-uniqueness race. */
-  private async withCodeRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
+  private async withCodeRetry<T>(
+    fn: () => Promise<T>,
+    attempts = 5,
+  ): Promise<T> {
     for (let i = 0; ; i++) {
       try {
         return await fn();

@@ -50,7 +50,8 @@ export class ObjectMasterController {
       page: page ? Number(page) : undefined,
       pageSize: pageSize ? Number(pageSize) : undefined,
       sortBy,
-      sortDir: sortDir === 'asc' ? 'asc' : sortDir === 'desc' ? 'desc' : undefined,
+      sortDir:
+        sortDir === 'asc' ? 'asc' : sortDir === 'desc' ? 'desc' : undefined,
     });
   }
 
@@ -85,10 +86,7 @@ export class ObjectMasterController {
   // Super-admin only, matching every other cpanel master's lock endpoint.
   @UseGuards(LockPrivilegeGuard('/cpanel/objects'))
   @Patch(':id/lock')
-  setLock(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: LockObjectDto,
-  ) {
+  setLock(@Param('id', ParseIntPipe) id: number, @Body() dto: LockObjectDto) {
     return this.service.setLock(id, dto.locked);
   }
 

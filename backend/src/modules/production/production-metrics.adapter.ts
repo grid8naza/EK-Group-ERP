@@ -24,7 +24,11 @@ export class ProductionMetricsAdapter implements MetricProviderPort {
   }
 
   metrics(): MetricDef[] {
-    const M = (key: string, label: string, rest: Partial<MetricDef>): MetricDef => ({
+    const M = (
+      key: string,
+      label: string,
+      rest: Partial<MetricDef>,
+    ): MetricDef => ({
       key,
       label,
       moduleCode: 'PRODUCTION',
@@ -55,7 +59,10 @@ export class ProductionMetricsAdapter implements MetricProviderPort {
         compute: async (ctx) => {
           const r = await this.prisma.productionOrder.aggregate({
             _sum: { quantity: true },
-            where: { companyId: ctx.companyId, status: ProductionStatus.PLANNED },
+            where: {
+              companyId: ctx.companyId,
+              status: ProductionStatus.PLANNED,
+            },
           });
           return r._sum.quantity ?? 0;
         },
@@ -66,7 +73,10 @@ export class ProductionMetricsAdapter implements MetricProviderPort {
         compute: async (ctx) => {
           const [completed, total] = await Promise.all([
             this.prisma.productionOrder.count({
-              where: { companyId: ctx.companyId, status: ProductionStatus.COMPLETED },
+              where: {
+                companyId: ctx.companyId,
+                status: ProductionStatus.COMPLETED,
+              },
             }),
             this.prisma.productionOrder.count({
               where: { companyId: ctx.companyId },

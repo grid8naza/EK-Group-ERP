@@ -4,7 +4,10 @@ import { join, extname } from 'path';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SaveSoftwareInfoDto } from './software-info.dto';
-import { SOFTWARE_UPLOAD_DIR, SOFTWARE_URL_PREFIX } from './software-info.constants';
+import {
+  SOFTWARE_UPLOAD_DIR,
+  SOFTWARE_URL_PREFIX,
+} from './software-info.constants';
 
 /** Minimal multer file shape (avoids needing @types/multer). */
 interface UploadedFile {

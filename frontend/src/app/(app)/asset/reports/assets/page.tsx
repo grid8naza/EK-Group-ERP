@@ -44,7 +44,9 @@ const STATUS_LABEL: Record<AssetStatus, string> = {
 
 // "min–max" when a maximum is set, otherwise just the minimum.
 const capacityText = (a: Asset) =>
-  a.maxCapacity > 0 ? `${a.minCapacity}–${a.maxCapacity}` : String(a.minCapacity);
+  a.maxCapacity > 0
+    ? `${a.minCapacity}–${a.maxCapacity}`
+    : String(a.minCapacity);
 
 export default function AssetListReportPage() {
   const { can, activeCompany, activeCompanyId } = useAuth();
@@ -74,7 +76,13 @@ export default function AssetListReportPage() {
   const allColumns = useMemo<ReportColumn<Asset>[]>(
     () => [
       { key: 'code', header: 'Code', weight: 17, cell: (a) => a.code },
-      { key: 'name', header: 'Machine', weight: 20, bold: true, cell: (a) => a.name },
+      {
+        key: 'name',
+        header: 'Machine',
+        weight: 20,
+        bold: true,
+        cell: (a) => a.name,
+      },
       { key: 'capacity', header: 'Capacity', weight: 9, cell: capacityText },
       {
         key: 'unit',
@@ -85,7 +93,12 @@ export default function AssetListReportPage() {
             ? (unitCodeById.get(a.capacityUnitId) ?? '-')
             : '-',
       },
-      { key: 'brand', header: 'Brand', weight: 11, cell: (a) => a.brand ?? '-' },
+      {
+        key: 'brand',
+        header: 'Brand',
+        weight: 11,
+        cell: (a) => a.brand ?? '-',
+      },
       {
         key: 'serial',
         header: 'Serial No',
@@ -220,7 +233,10 @@ export default function AssetListReportPage() {
             onPrint={onPrint}
             onPdf={() => pdfReport(spec)}
             onExcel={() =>
-              excelReport(spec, { headingLabel: 'Category', subheadingLabel: 'Group' })
+              excelReport(spec, {
+                headingLabel: 'Category',
+                subheadingLabel: 'Group',
+              })
             }
             disabled={!has}
           />

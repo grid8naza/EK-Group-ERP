@@ -168,7 +168,11 @@ export function useUnsavedChangesGuard(isDirty: () => boolean) {
       if (e.defaultPrevented || e.button !== 0) return;
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       const anchor = (e.target as HTMLElement | null)?.closest?.('a');
-      if (!anchor || anchor.target === '_blank' || anchor.hasAttribute('download')) {
+      if (
+        !anchor ||
+        anchor.target === '_blank' ||
+        anchor.hasAttribute('download')
+      ) {
         return;
       }
       const href = anchor.getAttribute('href');

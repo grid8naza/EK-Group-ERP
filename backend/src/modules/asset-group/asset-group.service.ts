@@ -37,7 +37,11 @@ export class AssetGroupService {
    */
   async findAll(
     companyId: number | undefined,
-    opts: { search?: string; primaryGroupId?: number; parentGroupId?: number } = {},
+    opts: {
+      search?: string;
+      primaryGroupId?: number;
+      parentGroupId?: number;
+    } = {},
   ) {
     const scopeFilter: Prisma.AssetGroupWhereInput = companyId
       ? { OR: [{ allCompanies: true }, { companies: { some: { companyId } } }] }
@@ -101,7 +105,12 @@ export class AssetGroupService {
     if (parentGroupId != null) {
       const parent = await this.prisma.assetGroup.findUnique({
         where: { id: parentGroupId },
-        select: { categoryId: true, level: true, code: true, subGroupApplicable: true },
+        select: {
+          categoryId: true,
+          level: true,
+          code: true,
+          subGroupApplicable: true,
+        },
       });
       if (!parent) {
         throw new BadRequestException('Selected parent group does not exist.');
@@ -125,7 +134,9 @@ export class AssetGroupService {
         select: { code: true },
       });
       if (!category) {
-        throw new BadRequestException('Selected asset category does not exist.');
+        throw new BadRequestException(
+          'Selected asset category does not exist.',
+        );
       }
       parentCode = category.code;
     }
@@ -161,7 +172,11 @@ export class AssetGroupService {
     });
   }
 
-  async update(companyId: number | undefined, id: number, dto: UpdateAssetGroupDto) {
+  async update(
+    companyId: number | undefined,
+    id: number,
+    dto: UpdateAssetGroupDto,
+  ) {
     const existing = await this.prisma.assetGroup.findUnique({
       where: { id },
       include: {
@@ -202,7 +217,10 @@ export class AssetGroupService {
       dto.allCompanies !== undefined || dto.companyIds !== undefined;
     const existingCompanyIds = existing.companies.map((c) => c.companyId);
     const companyIds = wantsLinkChange
-      ? this.resolveCompanies(allCompanies, dto.companyIds ?? existingCompanyIds)
+      ? this.resolveCompanies(
+          allCompanies,
+          dto.companyIds ?? existingCompanyIds,
+        )
       : null;
 
     const updated = await this.prisma.assetGroup.update({
@@ -282,7 +300,10 @@ export class AssetGroupService {
   }
 
   /** Re-run an allocate+insert if it loses the code-uniqueness race. */
-  private async withCodeRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
+  private async withCodeRetry<T>(
+    fn: () => Promise<T>,
+    attempts = 5,
+  ): Promise<T> {
     for (let i = 0; ; i++) {
       try {
         return await fn();

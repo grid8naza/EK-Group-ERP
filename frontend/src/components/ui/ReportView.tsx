@@ -103,7 +103,8 @@ interface ReportViewProps {
   collapsible?: boolean;
 }
 
-const fmt = (v: Cell) => (typeof v === 'number' ? v.toLocaleString() : String(v));
+const fmt = (v: Cell) =>
+  typeof v === 'number' ? v.toLocaleString() : String(v);
 
 // shadcn-style column header: no filled band — just muted text on a white
 // (sticky-safe) surface with a single hairline underneath.
@@ -163,7 +164,10 @@ function Fold({
       className="flex items-center gap-1 rounded text-left hover:text-brand-600 dark:hover:text-brand-400"
     >
       <ChevronDown
-        className={cn('h-4 w-4 shrink-0 transition-transform', shut && '-rotate-90')}
+        className={cn(
+          'h-4 w-4 shrink-0 transition-transform',
+          shut && '-rotate-90',
+        )}
       />
       {children}
     </button>
@@ -225,8 +229,9 @@ export function ReportView({
   ) => `${blockKey}/${t.subheading ?? ti}`;
   // "Collapse all" folds the TOP tier — the sections where a report has them,
   // otherwise the block headings — which takes it down to a handful of lines.
-  const sections = [...new Set(blocks.map((b) => b.section).filter(Boolean))] as
-    string[];
+  const sections = [
+    ...new Set(blocks.map((b) => b.section).filter(Boolean)),
+  ] as string[];
   const topKeys = sections.length
     ? sections.map(keyOfSection)
     : blocks.map(keyOfBlock);
@@ -248,9 +253,8 @@ export function ReportView({
   const darkColX = darkCol == null ? undefined : darkCol + shift;
   // Output column indices to right-align: flagged numeric columns plus any
   // whose first data cell is a raw number.
-  const firstRow = blocks
-    .flatMap((b) => b.tables)
-    .find((t) => t.rows.length)?.rows[0];
+  const firstRow = blocks.flatMap((b) => b.tables).find((t) => t.rows.length)
+    ?.rows[0];
   const numericColX = new Set(
     [
       ...(numericCols ?? []),
@@ -416,7 +420,10 @@ export function ReportView({
         const innerShut =
           innerKeys.length > 0 && innerKeys.every((k) => folded.has(k));
         return (
-          <div key={bi} className={cn(newSection ? 'mb-6 mt-6 first:mt-0' : 'mb-6')}>
+          <div
+            key={bi}
+            className={cn(newSection ? 'mb-6 mt-6 first:mt-0' : 'mb-6')}
+          >
             {newSection && b.section && (
               // The banner above the block headings. Deliberately not sticky —
               // the block heading below it already is, and two stacked sticky
@@ -436,7 +443,9 @@ export function ReportView({
                     onClick={() => foldAll(sectionInner, !sectionInnerShut)}
                     className="text-xs font-normal normal-case tracking-normal text-slate-400 hover:text-brand-600 dark:text-slate-500"
                   >
-                    {sectionInnerShut ? 'Expand schedules' : 'Collapse schedules'}
+                    {sectionInnerShut
+                      ? 'Expand schedules'
+                      : 'Collapse schedules'}
                   </button>
                 )}
               </div>

@@ -28,30 +28,43 @@ export type AttributeFilters = Partial<Record<AttributeKey, AttributeState>>;
  * Named and worded exactly as the drawer words them, so a tick there and a
  * filter here are plainly the same thing.
  */
-export const ATTRIBUTES: { key: AttributeKey; label: string; hint: string }[] = [
-  { key: 'isContra', label: 'Contra', hint: 'Offsets its own group' },
-  { key: 'isControl', label: 'Control', hint: 'Aged by a party' },
-  { key: 'isGstRelevant', label: 'GST relevant', hint: 'Feeds the GST returns' },
-  { key: 'isCash', label: 'Cash', hint: 'Money in hand — a till, a petty cash box' },
-  { key: 'isBank', label: 'Bank', hint: 'Money at a bank' },
-  {
-    key: 'isPdcIssued',
-    label: 'PDC issued',
-    hint: 'Holds cheques we wrote, until they are presented',
-  },
-  {
-    key: 'isPdcReceived',
-    label: 'PDC received',
-    hint: 'Holds cheques we were given, until they clear',
-  },
-  { key: 'isReconcilable', label: 'Reconcilable', hint: 'Agreed to an outside statement' },
-  {
-    key: 'allowManualJe',
-    label: 'Allow manual journal',
-    hint: 'May be named on a hand-written voucher',
-  },
-  { key: 'isActive', label: 'Active', hint: 'Still offered on new entries' },
-];
+export const ATTRIBUTES: { key: AttributeKey; label: string; hint: string }[] =
+  [
+    { key: 'isContra', label: 'Contra', hint: 'Offsets its own group' },
+    { key: 'isControl', label: 'Control', hint: 'Aged by a party' },
+    {
+      key: 'isGstRelevant',
+      label: 'GST relevant',
+      hint: 'Feeds the GST returns',
+    },
+    {
+      key: 'isCash',
+      label: 'Cash',
+      hint: 'Money in hand — a till, a petty cash box',
+    },
+    { key: 'isBank', label: 'Bank', hint: 'Money at a bank' },
+    {
+      key: 'isPdcIssued',
+      label: 'PDC issued',
+      hint: 'Holds cheques we wrote, until they are presented',
+    },
+    {
+      key: 'isPdcReceived',
+      label: 'PDC received',
+      hint: 'Holds cheques we were given, until they clear',
+    },
+    {
+      key: 'isReconcilable',
+      label: 'Reconcilable',
+      hint: 'Agreed to an outside statement',
+    },
+    {
+      key: 'allowManualJe',
+      label: 'Allow manual journal',
+      hint: 'May be named on a hand-written voucher',
+    },
+    { key: 'isActive', label: 'Active', hint: 'Still offered on new entries' },
+  ];
 
 /** Does this account satisfy every attribute that has been asked for? */
 export const matchesAttributes = (a: CoaAccount, f: AttributeFilters) =>
@@ -81,7 +94,8 @@ export function AttributeFilter({
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
     };
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);

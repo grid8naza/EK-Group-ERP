@@ -56,10 +56,7 @@ export class UserController {
   // Lock / unlock a user (must be unlocked before edit or delete).
   @UseGuards(LockPrivilegeGuard('/cpanel/users'))
   @Patch(':id/lock')
-  setLock(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: LockDto,
-  ) {
+  setLock(@Param('id', ParseIntPipe) id: number, @Body() dto: LockDto) {
     return this.service.setLock(id, dto.locked);
   }
 }

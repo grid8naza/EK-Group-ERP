@@ -11,19 +11,54 @@ import { ObjectType, Prisma } from '@prisma/client';
 // Inventory sub-menu screens (shared routes; the data they manage is global).
 export const INVENTORY_SUBS = [
   { name: 'Unit Master', route: '/inventory/units', icon: 'ruler', order: 1 },
-  { name: 'Category Master', route: '/inventory/categories', icon: 'tag', order: 2 },
-  { name: 'Group Master', route: '/inventory/groups', icon: 'layers', order: 3 },
-  { name: 'HSN Code Master', route: '/inventory/hsn-codes', icon: 'percent', order: 4 },
+  {
+    name: 'Category Master',
+    route: '/inventory/categories',
+    icon: 'tag',
+    order: 2,
+  },
+  {
+    name: 'Group Master',
+    route: '/inventory/groups',
+    icon: 'layers',
+    order: 3,
+  },
+  {
+    name: 'HSN Code Master',
+    route: '/inventory/hsn-codes',
+    icon: 'percent',
+    order: 4,
+  },
   { name: 'Item Master', route: '/inventory/items', icon: 'box', order: 5 },
   // Products are split across two screens that share the /products backend and
   // are told apart by the packed/unpacked flags on each product.
-  { name: 'Products - Semifinished', route: '/inventory/products-unpacked', icon: 'package-2', order: 6 },
-  { name: 'Products - Finished', route: '/inventory/products-packed', icon: 'package', order: 7 },
+  {
+    name: 'Products - Semifinished',
+    route: '/inventory/products-unpacked',
+    icon: 'package-2',
+    order: 6,
+  },
+  {
+    name: 'Products - Finished',
+    route: '/inventory/products-packed',
+    icon: 'package',
+    order: 7,
+  },
   // Stock locations. The Opening Stock entry screens live in their own main
   // menu (OPENING_STOCK_MENU below), not under the master-data Inventory menu.
-  { name: 'Store Master', route: '/inventory/stores', icon: 'warehouse', order: 8 },
+  {
+    name: 'Store Master',
+    route: '/inventory/stores',
+    icon: 'warehouse',
+    order: 8,
+  },
   // Racks / shelves / bins inside a store — a product's default put-away location.
-  { name: 'Rack Master', route: '/inventory/racks', icon: 'columns-3', order: 9 },
+  {
+    name: 'Rack Master',
+    route: '/inventory/racks',
+    icon: 'columns-3',
+    order: 9,
+  },
   // Per-module reference data. Super-admin-only; isolated from other modules.
   {
     name: 'Lookups',
@@ -41,10 +76,30 @@ export const OPENING_STOCK_MENU = {
   name: 'Opening Stock',
   icon: 'clipboard-list',
   subs: [
-    { name: 'OS - Raw Material', route: '/inventory/opening-stock-raw-material', icon: 'clipboard-list', order: 1 },
-    { name: 'OS - Packing Material', route: '/inventory/opening-stock-packing-material', icon: 'clipboard-list', order: 2 },
-    { name: 'OS - Unpacked Products', route: '/inventory/opening-stock-unpacked-products', icon: 'clipboard-list', order: 3 },
-    { name: 'OS - Packed Products', route: '/inventory/opening-stock-packed-products', icon: 'clipboard-list', order: 4 },
+    {
+      name: 'OS - Raw Material',
+      route: '/inventory/opening-stock-raw-material',
+      icon: 'clipboard-list',
+      order: 1,
+    },
+    {
+      name: 'OS - Packing Material',
+      route: '/inventory/opening-stock-packing-material',
+      icon: 'clipboard-list',
+      order: 2,
+    },
+    {
+      name: 'OS - Unpacked Products',
+      route: '/inventory/opening-stock-unpacked-products',
+      icon: 'clipboard-list',
+      order: 3,
+    },
+    {
+      name: 'OS - Packed Products',
+      route: '/inventory/opening-stock-packed-products',
+      icon: 'clipboard-list',
+      order: 4,
+    },
   ],
 };
 
@@ -56,29 +111,84 @@ export const INVENTORY_TXN_MENU = {
   name: 'Inventory Vouchers',
   icon: 'arrow-left-right',
   subs: [
-    { name: 'Goods Receipt Notes', route: '/inventory/goods-receipt-note', icon: 'package-plus', order: 1 },
-    { name: 'Delivery Notes', route: '/inventory/delivery-note', icon: 'truck', order: 2 },
-    { name: 'Sales Return', route: '/inventory/sales-return', icon: 'undo-2', order: 3 },
-    { name: 'Purchase Return', route: '/inventory/purchase-return', icon: 'redo-2', order: 4 },
-    { name: 'Goods Issue Note', route: '/inventory/goods-issue-note', icon: 'package-minus', order: 5 },
+    {
+      name: 'Goods Receipt Notes',
+      route: '/inventory/goods-receipt-note',
+      icon: 'package-plus',
+      order: 1,
+    },
+    {
+      name: 'Delivery Notes',
+      route: '/inventory/delivery-note',
+      icon: 'truck',
+      order: 2,
+    },
+    {
+      name: 'Sales Return',
+      route: '/inventory/sales-return',
+      icon: 'undo-2',
+      order: 3,
+    },
+    {
+      name: 'Purchase Return',
+      route: '/inventory/purchase-return',
+      icon: 'redo-2',
+      order: 4,
+    },
+    {
+      name: 'Goods Issue Note',
+      route: '/inventory/goods-issue-note',
+      icon: 'package-minus',
+      order: 5,
+    },
   ],
 };
 
 // Production module screens. The recipe (ingredients + packing) for each product
 // is edited here, while the product's master data lives under Inventory.
 export const PRODUCTION_SUBS = [
-  { name: 'Recipe Master', route: '/production/recipe-master', icon: 'list-tree', order: 1 },
-  { name: 'Packing Master', route: '/production/packing-master', icon: 'package-check', order: 2 },
+  {
+    name: 'Recipe Master',
+    route: '/production/recipe-master',
+    icon: 'list-tree',
+    order: 1,
+  },
+  {
+    name: 'Packing Master',
+    route: '/production/packing-master',
+    icon: 'package-check',
+    order: 2,
+  },
   // Packing operations — pack unpacked products into packed ones (consumes source).
   { name: 'Packing', route: '/production/packing', icon: 'box', order: 9 },
   // Work Orders — what must be made to fulfil approved sales orders.
-  { name: 'Work Order', route: '/production/work-orders', icon: 'hammer', order: 4 },
+  {
+    name: 'Work Order',
+    route: '/production/work-orders',
+    icon: 'hammer',
+    order: 4,
+  },
   // Production Plan — clubs pending work orders, grouped by cost centre/object.
-  { name: 'Production Plan', route: '/production/plans', icon: 'clipboard-list', order: 5 },
+  {
+    name: 'Production Plan',
+    route: '/production/plans',
+    icon: 'clipboard-list',
+    order: 5,
+  },
   // Material Request — the store requisition per cost centre/object.
-  { name: 'Material Request', route: '/production/material-requests', icon: 'clipboard-check', order: 6 },
+  {
+    name: 'Material Request',
+    route: '/production/material-requests',
+    icon: 'clipboard-check',
+    order: 6,
+  },
   // Production Receipt — finished goods banked into stock from a work order.
-  { name: 'Production Receipt', route: '/production/receipts', icon: 'package-plus', order: 7 },
+  {
+    name: 'Production Receipt',
+    route: '/production/receipts',
+    icon: 'package-plus',
+    order: 7,
+  },
   // The two review screens live in their own main menu — see
   // PRODUCTION_COSTING_MENU below.
   // Per-module reference data. Super-admin-only; isolated from other modules.
@@ -109,8 +219,18 @@ export const PRODUCTION_COSTING_MENU = {
   name: 'Costing Review',
   icon: 'scale',
   subs: [
-    { name: 'Price Review', route: '/production/price-review', icon: 'tags', order: 1 },
-    { name: 'Cost Review', route: '/production/cost-review', icon: 'scale', order: 2 },
+    {
+      name: 'Price Review',
+      route: '/production/price-review',
+      icon: 'tags',
+      order: 1,
+    },
+    {
+      name: 'Cost Review',
+      route: '/production/cost-review',
+      icon: 'scale',
+      order: 2,
+    },
   ],
 };
 
@@ -246,16 +366,60 @@ const DEFAULT_UNITS: DefaultUnit[] = [
   { code: 'PCS', name: 'Pieces', symbol: 'Pcs', type: 'SIMPLE' },
   // Weight — base is Gram
   { code: 'GM', name: 'Gram', symbol: 'g', type: 'SIMPLE', decimalPlaces: 2 },
-  { code: 'KG', name: 'Kilogram', symbol: 'kg', type: 'COMPOUND', base: 'GM', factor: 1000, decimalPlaces: 3 },
-  { code: 'TON', name: 'Tonne', symbol: 't', type: 'COMPOUND', base: 'GM', factor: 1000000, decimalPlaces: 3 },
+  {
+    code: 'KG',
+    name: 'Kilogram',
+    symbol: 'kg',
+    type: 'COMPOUND',
+    base: 'GM',
+    factor: 1000,
+    decimalPlaces: 3,
+  },
+  {
+    code: 'TON',
+    name: 'Tonne',
+    symbol: 't',
+    type: 'COMPOUND',
+    base: 'GM',
+    factor: 1000000,
+    decimalPlaces: 3,
+  },
   // Volume — base is Millilitre
-  { code: 'ML', name: 'Millilitre', symbol: 'ml', type: 'SIMPLE', decimalPlaces: 2 },
-  { code: 'LTR', name: 'Litre', symbol: 'L', type: 'COMPOUND', base: 'ML', factor: 1000, decimalPlaces: 3 },
+  {
+    code: 'ML',
+    name: 'Millilitre',
+    symbol: 'ml',
+    type: 'SIMPLE',
+    decimalPlaces: 2,
+  },
+  {
+    code: 'LTR',
+    name: 'Litre',
+    symbol: 'L',
+    type: 'COMPOUND',
+    base: 'ML',
+    factor: 1000,
+    decimalPlaces: 3,
+  },
   // Length
   { code: 'MTR', name: 'Metre', symbol: 'm', type: 'SIMPLE', decimalPlaces: 2 },
   // Packaging
-  { code: 'DOZ', name: 'Dozen', symbol: 'Dz', type: 'COMPOUND', base: 'NOS', factor: 12 },
-  { code: 'BOX', name: 'Box (10 pcs)', symbol: 'Box', type: 'COMPOUND', base: 'PCS', factor: 10 },
+  {
+    code: 'DOZ',
+    name: 'Dozen',
+    symbol: 'Dz',
+    type: 'COMPOUND',
+    base: 'NOS',
+    factor: 12,
+  },
+  {
+    code: 'BOX',
+    name: 'Box (10 pcs)',
+    symbol: 'Box',
+    type: 'COMPOUND',
+    base: 'PCS',
+    factor: 10,
+  },
 ];
 
 /**
@@ -408,16 +572,16 @@ export async function backfillInventoryScaffold(
         data: subs
           .filter((sub) => !superAdminRoutes.has(sub.route ?? ''))
           .map((sub) => ({
-          userGroupId: adminGroup.id,
-          subMenuId: sub.id,
-          canMenu: true,
-          canView: true,
-          canAdd: true,
-          canEdit: true,
-          canDelete: true,
-          canLock: true,
-          canUnlock: true,
-        })),
+            userGroupId: adminGroup.id,
+            subMenuId: sub.id,
+            canMenu: true,
+            canView: true,
+            canAdd: true,
+            canEdit: true,
+            canDelete: true,
+            canLock: true,
+            canUnlock: true,
+          })),
         skipDuplicates: true,
       });
     }
@@ -439,9 +603,21 @@ interface DefaultHsn {
 const DEFAULT_HSN_CODES: DefaultHsn[] = [
   // --- Finished bakery products ---
   { code: '1905', description: 'Bread (branded & unbranded)', gst: 0 },
-  { code: '190520', description: 'Rusk, toasted bread & similar toasted products', gst: 5 },
-  { code: '190590', description: 'Pastry, cakes, biscuits & other bakers’ wares', gst: 5 },
-  { code: '1704', description: 'Sugar confectionery (candy, toffee) without cocoa', gst: 5 },
+  {
+    code: '190520',
+    description: 'Rusk, toasted bread & similar toasted products',
+    gst: 5,
+  },
+  {
+    code: '190590',
+    description: 'Pastry, cakes, biscuits & other bakers’ wares',
+    gst: 5,
+  },
+  {
+    code: '1704',
+    description: 'Sugar confectionery (candy, toffee) without cocoa',
+    gst: 5,
+  },
   { code: '1806', description: 'Chocolate & other cocoa preparations', gst: 5 },
   { code: '2105', description: 'Ice cream & other edible ice', gst: 5 },
   // --- Flours, sugars & starches ---
@@ -449,8 +625,17 @@ const DEFAULT_HSN_CODES: DefaultHsn[] = [
   { code: '1108', description: 'Starches (corn / maize starch)', gst: 5 },
   { code: '1701', description: 'Sugar (refined / granulated)', gst: 5 },
   { code: '1702', description: 'Glucose, invert sugar & sugar syrups', gst: 5 },
-  { code: '1901', description: 'Malt extract & flour-based food preparations', gst: 5 },
-  { code: '2106', description: 'Food preparations n.e.s. (baking premixes, custard powder, improvers)', gst: 5 },
+  {
+    code: '1901',
+    description: 'Malt extract & flour-based food preparations',
+    gst: 5,
+  },
+  {
+    code: '2106',
+    description:
+      'Food preparations n.e.s. (baking premixes, custard powder, improvers)',
+    gst: 5,
+  },
   { code: '2102', description: 'Yeast & prepared baking powders', gst: 5 },
   // --- Dairy & fats ---
   { code: '0401', description: 'Fresh & UHT milk', gst: 0 },
@@ -458,13 +643,25 @@ const DEFAULT_HSN_CODES: DefaultHsn[] = [
   { code: '0405', description: 'Butter & ghee (dairy fats)', gst: 5 },
   { code: '0406', description: 'Cheese & paneer', gst: 5 },
   { code: '0407', description: 'Eggs (in shell)', gst: 0 },
-  { code: '1512', description: 'Edible vegetable oil (sunflower / refined)', gst: 5 },
-  { code: '1517', description: 'Margarine, bakery shortening & edible fat mixtures', gst: 5 },
+  {
+    code: '1512',
+    description: 'Edible vegetable oil (sunflower / refined)',
+    gst: 5,
+  },
+  {
+    code: '1517',
+    description: 'Margarine, bakery shortening & edible fat mixtures',
+    gst: 5,
+  },
   // --- Cocoa, fillings, nuts & flavourings ---
   { code: '1805', description: 'Cocoa powder', gst: 5 },
   { code: '2007', description: 'Jam, fruit jelly & marmalade', gst: 5 },
   { code: '0801', description: 'Cashew nuts', gst: 5 },
-  { code: '0802', description: 'Almonds, walnuts, pistachios & other nuts', gst: 5 },
+  {
+    code: '0802',
+    description: 'Almonds, walnuts, pistachios & other nuts',
+    gst: 5,
+  },
   { code: '0806', description: 'Raisins (dried grapes)', gst: 5 },
   { code: '0813', description: 'Mixed dried fruits', gst: 5 },
   { code: '0409', description: 'Natural honey', gst: 5 },
@@ -502,7 +699,10 @@ export async function seedInventoryDefaults(
 }
 
 /** The authority levels a product's discount matrix is keyed by. */
-const DISCOUNT_LEVEL_LOOKUP = { code: 'DISCOUNT_LEVEL', name: 'Discount Level' };
+const DISCOUNT_LEVEL_LOOKUP = {
+  code: 'DISCOUNT_LEVEL',
+  name: 'Discount Level',
+};
 const DEFAULT_DISCOUNT_LEVELS = [
   'Salesman',
   'Branch Manager',

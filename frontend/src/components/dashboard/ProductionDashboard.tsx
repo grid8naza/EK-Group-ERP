@@ -73,9 +73,24 @@ const STATUS = [
 ];
 
 const ORDERS = [
-  { id: 'PO-1042', product: 'Cake - Red Bee 1 Kg', qty: '120 Nos', status: 'In Progress' },
-  { id: 'PO-1041', product: 'Cake - White Chip 1 Kg', qty: '80 Nos', status: 'Completed' },
-  { id: 'PO-1040', product: 'Bun - Classic', qty: '300 Nos', status: 'Planned' },
+  {
+    id: 'PO-1042',
+    product: 'Cake - Red Bee 1 Kg',
+    qty: '120 Nos',
+    status: 'In Progress',
+  },
+  {
+    id: 'PO-1041',
+    product: 'Cake - White Chip 1 Kg',
+    qty: '80 Nos',
+    status: 'Completed',
+  },
+  {
+    id: 'PO-1040',
+    product: 'Bun - Classic',
+    qty: '300 Nos',
+    status: 'Planned',
+  },
   { id: 'PO-1039', product: 'Loaf Bread', qty: '150 Nos', status: 'Completed' },
 ];
 
@@ -91,7 +106,8 @@ const RECIPES = [
 const BADGE_TONES: Record<'slate' | 'amber' | 'green', string> = {
   slate: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300',
   amber: 'bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400',
-  green: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+  green:
+    'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
 };
 
 function Sparkline({ color, points }: { color: string; points: number[] }) {
@@ -102,7 +118,10 @@ function Sparkline({ color, points }: { color: string; points: number[] }) {
   const range = max - min || 1;
   const step = w / (points.length - 1);
   const d = points
-    .map((p, i) => `${(i * step).toFixed(1)},${(h - ((p - min) / range) * h).toFixed(1)}`)
+    .map(
+      (p, i) =>
+        `${(i * step).toFixed(1)},${(h - ((p - min) / range) * h).toFixed(1)}`,
+    )
     .join(' ');
   return (
     <svg
@@ -127,10 +146,19 @@ function Sparkline({ color, points }: { color: string; points: number[] }) {
 function StatusPill({ status }: { status: string }) {
   const tone =
     status === 'Completed'
-      ? { dot: 'bg-emerald-500', chip: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' }
+      ? {
+          dot: 'bg-emerald-500',
+          chip: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300',
+        }
       : status === 'In Progress'
-        ? { dot: 'bg-amber-500', chip: 'bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400' }
-        : { dot: 'bg-slate-400', chip: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300' };
+        ? {
+            dot: 'bg-amber-500',
+            chip: 'bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400',
+          }
+        : {
+            dot: 'bg-slate-400',
+            chip: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300',
+          };
   return (
     <span
       className={cn(

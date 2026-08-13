@@ -15,7 +15,11 @@ export class InventoryMetricsAdapter implements MetricProviderPort {
   constructor(private readonly prisma: PrismaService) {}
 
   metrics(): MetricDef[] {
-    const M = (key: string, label: string, compute: MetricDef['compute']): MetricDef => ({
+    const M = (
+      key: string,
+      label: string,
+      compute: MetricDef['compute'],
+    ): MetricDef => ({
       key,
       label,
       moduleCode: 'INVENTORY',

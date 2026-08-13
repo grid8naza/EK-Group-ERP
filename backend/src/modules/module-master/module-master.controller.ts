@@ -49,10 +49,7 @@ export class ModuleMasterController {
   // Lock / unlock a module (must be unlocked before edit or delete).
   @UseGuards(LockPrivilegeGuard('/cpanel/modules'))
   @Patch(':id/lock')
-  setLock(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: LockDto,
-  ) {
+  setLock(@Param('id', ParseIntPipe) id: number, @Body() dto: LockDto) {
     return this.service.setLock(id, dto.locked);
   }
 }

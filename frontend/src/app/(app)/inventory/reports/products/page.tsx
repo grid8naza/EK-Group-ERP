@@ -61,7 +61,13 @@ export default function ProductsReportPage() {
   const allColumns = useMemo<ReportColumn<Product>[]>(
     () => [
       { key: 'code', header: 'Code', weight: 11, cell: (p) => p.code },
-      { key: 'name', header: 'Name', weight: 20, bold: true, cell: (p) => p.name },
+      {
+        key: 'name',
+        header: 'Name',
+        weight: 20,
+        bold: true,
+        cell: (p) => p.name,
+      },
       {
         key: 'cost',
         header: 'Cost Price',
@@ -69,7 +75,12 @@ export default function ProductsReportPage() {
         numeric: true,
         cell: (p) => money(p.costPrice ?? 0),
       },
-      { key: 'unit', header: 'Unit', weight: 7, cell: (p) => p.unit?.symbol ?? p.unit?.code ?? '-' },
+      {
+        key: 'unit',
+        header: 'Unit',
+        weight: 7,
+        cell: (p) => p.unit?.symbol ?? p.unit?.code ?? '-',
+      },
       {
         key: 'source',
         header: 'Source',

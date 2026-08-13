@@ -11,7 +11,12 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Textarea, Checkbox } from '@/components/ui/Field';
 import { IconPicker } from '@/components/ui/IconPicker';
@@ -37,13 +42,14 @@ export default function ModulesPage() {
   const toast = useToast();
   const confirm = useConfirm();
   const { data, loading, refetch } = useFetch<Module[]>('/modules');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<Module>({
-    endpoint: '/modules',
-    route: ROUTE,
-    noun: 'module',
-    nameOf: (m) => m.name,
-    reload: refetch,
-  });
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
+    useLock<Module>({
+      endpoint: '/modules',
+      route: ROUTE,
+      noun: 'module',
+      nameOf: (m) => m.name,
+      reload: refetch,
+    });
   const [companies, setCompanies] = useState<Company[]>([]);
 
   const [open, setOpen] = useState(false);
@@ -293,110 +299,112 @@ export default function ModulesPage() {
       >
         <ReadOnlyFieldset readOnly={view}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Input
-            label="Code"
-            required
-            value={form.code}
-            onChange={(e) => setForm({ ...form, code: e.target.value })}
-            placeholder="e.g. CPANEL"
-          />
-          <Input
-            label="Name"
-            required
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="e.g. Control Panel"
-          />
-          <IconPicker
-            label="Icon"
-            value={form.icon}
-            onChange={(icon) => setForm({ ...form, icon })}
-          />
-          <Input
-            label="Sort Order"
-            type="number"
-            value={form.sortOrder}
-            onChange={(e) =>
-              setForm({ ...form, sortOrder: Number(e.target.value) })
-            }
-          />
-          <div className="sm:col-span-2">
-            <Checkbox
-              label="Active"
-              checked={form.isActive}
+            <Input
+              label="Code"
+              required
+              value={form.code}
+              onChange={(e) => setForm({ ...form, code: e.target.value })}
+              placeholder="e.g. CPANEL"
+            />
+            <Input
+              label="Name"
+              required
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. Control Panel"
+            />
+            <IconPicker
+              label="Icon"
+              value={form.icon}
+              onChange={(icon) => setForm({ ...form, icon })}
+            />
+            <Input
+              label="Sort Order"
+              type="number"
+              value={form.sortOrder}
               onChange={(e) =>
-                setForm({ ...form, isActive: e.target.checked })
+                setForm({ ...form, sortOrder: Number(e.target.value) })
               }
             />
-          </div>
-
-          {/* Module type — Core (universal, super-admin only) vs User
-              (available only to the selected companies). Mutually exclusive. */}
-          <div className="sm:col-span-2">
-            <label className="label">Module type</label>
-            <div className="flex items-center gap-6">
-              <Checkbox
-                label="Core module"
-                checked={form.isCore}
-                onChange={() => setForm({ ...form, isCore: true })}
-              />
-              <Checkbox
-                label="User module"
-                checked={!form.isCore}
-                onChange={() => setForm({ ...form, isCore: false })}
-              />
-            </div>
-            <p className="mt-1 text-xs text-slate-400">
-              {form.isCore
-                ? 'Core modules are available to all companies and accessible only to super admins.'
-                : 'User modules are available only to the companies selected below.'}
-            </p>
-          </div>
-
-          {!form.isCore && (
             <div className="sm:col-span-2">
-              <label className="label flex items-center gap-1.5">
-                <Building2 className="h-4 w-4 text-slate-400" /> Companies
-              </label>
-              <p className="mb-2 text-xs text-slate-400">
-                This module will be available only for the selected companies.
-              </p>
-              {companies.length === 0 ? (
-                <p className="text-sm text-slate-400">No companies available</p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {companies.map((c) => {
-                    const active = form.companyIds.includes(c.id);
-                    return (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => toggleCompany(c.id)}
-                        className={cn(
-                          'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition',
-                          active
-                            ? 'border-brand-600 bg-brand-600 text-white'
-                            : 'border-slate-300 bg-white text-slate-600 hover:border-brand-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
-                        )}
-                      >
-                        {c.name}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+              <Checkbox
+                label="Active"
+                checked={form.isActive}
+                onChange={(e) =>
+                  setForm({ ...form, isActive: e.target.checked })
+                }
+              />
             </div>
-          )}
 
-          {/* Description — kept at the very bottom of the form. */}
-          <Textarea
-            label="Description"
-            wrapClassName="sm:col-span-2"
-            value={form.description}
-            onChange={(e) =>
-              setForm({ ...form, description: e.target.value })
-            }
-          />
+            {/* Module type — Core (universal, super-admin only) vs User
+              (available only to the selected companies). Mutually exclusive. */}
+            <div className="sm:col-span-2">
+              <label className="label">Module type</label>
+              <div className="flex items-center gap-6">
+                <Checkbox
+                  label="Core module"
+                  checked={form.isCore}
+                  onChange={() => setForm({ ...form, isCore: true })}
+                />
+                <Checkbox
+                  label="User module"
+                  checked={!form.isCore}
+                  onChange={() => setForm({ ...form, isCore: false })}
+                />
+              </div>
+              <p className="mt-1 text-xs text-slate-400">
+                {form.isCore
+                  ? 'Core modules are available to all companies and accessible only to super admins.'
+                  : 'User modules are available only to the companies selected below.'}
+              </p>
+            </div>
+
+            {!form.isCore && (
+              <div className="sm:col-span-2">
+                <label className="label flex items-center gap-1.5">
+                  <Building2 className="h-4 w-4 text-slate-400" /> Companies
+                </label>
+                <p className="mb-2 text-xs text-slate-400">
+                  This module will be available only for the selected companies.
+                </p>
+                {companies.length === 0 ? (
+                  <p className="text-sm text-slate-400">
+                    No companies available
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {companies.map((c) => {
+                      const active = form.companyIds.includes(c.id);
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => toggleCompany(c.id)}
+                          className={cn(
+                            'flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition',
+                            active
+                              ? 'border-brand-600 bg-brand-600 text-white'
+                              : 'border-slate-300 bg-white text-slate-600 hover:border-brand-400 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300',
+                          )}
+                        >
+                          {c.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Description — kept at the very bottom of the form. */}
+            <Textarea
+              label="Description"
+              wrapClassName="sm:col-span-2"
+              value={form.description}
+              onChange={(e) =>
+                setForm({ ...form, description: e.target.value })
+              }
+            />
           </div>
         </ReadOnlyFieldset>
       </Drawer>

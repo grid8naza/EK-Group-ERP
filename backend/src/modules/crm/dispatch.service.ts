@@ -101,10 +101,14 @@ export class DispatchService {
     });
     if (!order) throw new NotFoundException('Sales order not found.');
     if (order.companyId !== companyId) {
-      throw new ForbiddenException('Only the selling company can dispatch this order.');
+      throw new ForbiddenException(
+        'Only the selling company can dispatch this order.',
+      );
     }
     if (order.status !== 'APPROVED') {
-      throw new BadRequestException('Only an approved sales order can be dispatched.');
+      throw new BadRequestException(
+        'Only an approved sales order can be dispatched.',
+      );
     }
     const existing = await this.prisma.dispatch.findUnique({
       where: { salesOrderId },
@@ -244,7 +248,8 @@ export class DispatchService {
         where: { id: storeId, companyId },
         select: { id: true, name: true },
       });
-      if (!s) throw new BadRequestException('That store is not in this company.');
+      if (!s)
+        throw new BadRequestException('That store is not in this company.');
       return s;
     }
     return (

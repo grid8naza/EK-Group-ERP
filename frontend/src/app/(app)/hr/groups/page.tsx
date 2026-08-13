@@ -12,7 +12,12 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { StatusToggle } from '@/components/ui/StatusToggle';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -39,13 +44,14 @@ export default function HrGroupsPage() {
   const { data, loading, refetch } = useFetch<HrGroup[]>('/hr-groups');
   const { data: categories } = useFetch<HrCategory[]>('/hr-categories');
   const { data: companies } = useFetch<Company[]>('/companies');
-  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } = useLock<HrGroup>({
-    endpoint: '/hr-groups',
-    route: ROUTE,
-    noun: 'manpower group',
-    nameOf: (g) => g.name,
-    reload: refetch,
-  });
+  const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
+    useLock<HrGroup>({
+      endpoint: '/hr-groups',
+      route: ROUTE,
+      noun: 'manpower group',
+      nameOf: (g) => g.name,
+      reload: refetch,
+    });
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<HrGroup | null>(null);
@@ -93,7 +99,8 @@ export default function HrGroupsPage() {
   // chosen category.
   const formParentOptions = parentCandidates.filter(
     (g) =>
-      g.isActive && (!form.categoryId || String(g.categoryId) === form.categoryId),
+      g.isActive &&
+      (!form.categoryId || String(g.categoryId) === form.categoryId),
   );
 
   const closeDrawer = () => {
@@ -242,7 +249,11 @@ export default function HrGroupsPage() {
     guardEdit(g, async () => {
       try {
         await api.patch(`/hr-groups/${g.id}`, { isActive: !g.isActive });
-        toast.success(g.isActive ? 'Manpower group set inactive.' : 'Manpower group set active.');
+        toast.success(
+          g.isActive
+            ? 'Manpower group set inactive.'
+            : 'Manpower group set active.',
+        );
         refetch();
       } catch (e) {
         toast.error(e instanceof ApiError ? e.message : 'Failed to update.');
@@ -356,7 +367,11 @@ export default function HrGroupsPage() {
     },
   ];
 
-  const title = view ? 'View Manpower Group' : editing ? 'Edit Manpower Group' : 'New Manpower Group';
+  const title = view
+    ? 'View Manpower Group'
+    : editing
+      ? 'Edit Manpower Group'
+      : 'New Manpower Group';
   // Code of the primary group chosen in the filter (used to scope the parent
   // filter to that primary's subtree).
   const primaryGroupCode = primaryFilter
@@ -626,7 +641,9 @@ export default function HrGroupsPage() {
               {!form.allCompanies && (
                 <div className="mt-1 max-h-52 space-y-1.5 overflow-y-auto rounded-lg border border-slate-200 p-3 dark:border-slate-700">
                   {companyList.length === 0 ? (
-                    <p className="text-sm text-slate-400">No companies found.</p>
+                    <p className="text-sm text-slate-400">
+                      No companies found.
+                    </p>
                   ) : (
                     companyList.map((co) => (
                       <Checkbox
@@ -641,8 +658,8 @@ export default function HrGroupsPage() {
               )}
               {!form.allCompanies && (
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {form.companyIds.length} selected — the manpower group is available only
-                  in these companies.
+                  {form.companyIds.length} selected — the manpower group is
+                  available only in these companies.
                 </p>
               )}
             </div>

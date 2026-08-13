@@ -6,14 +6,8 @@ import {
   PAYMENT_MODES,
   PAYMENT_MODE_LOOKUP,
 } from '../../common/instruments';
-import {
-  BANK_ACCOUNT_TYPES,
-  BANK_ACCOUNT_TYPE_LOOKUP,
-} from './bank-details';
-import {
-  COA_MAIN_GROUPS,
-  COA_MAIN_GROUP_CORRECTIONS,
-} from './main-groups';
+import { BANK_ACCOUNT_TYPES, BANK_ACCOUNT_TYPE_LOOKUP } from './bank-details';
+import { COA_MAIN_GROUPS, COA_MAIN_GROUP_CORRECTIONS } from './main-groups';
 import {
   COA_ACCOUNT_RENAMES,
   COA_CLOSED_BLOCKS,
@@ -256,7 +250,9 @@ export class CoaSeedService implements OnApplicationBootstrap {
       ['29010', 'isPdcIssued'],
       ['29011', 'isPdcReceived'],
     ] as const) {
-      const already = await this.prisma.account.count({ where: { [flag]: true } });
+      const already = await this.prisma.account.count({
+        where: { [flag]: true },
+      });
       if (already) continue;
       await this.prisma.account.updateMany({
         where: { code },
@@ -472,7 +468,9 @@ export class CoaSeedService implements OnApplicationBootstrap {
         select: { code: true },
       });
       if (occupied) {
-        this.logger.warn(`Group ${r.from} not moved to ${r.to}: that code is taken.`);
+        this.logger.warn(
+          `Group ${r.from} not moved to ${r.to}: that code is taken.`,
+        );
         continue;
       }
       await this.prisma.accountGroup.update({
@@ -494,7 +492,11 @@ export class CoaSeedService implements OnApplicationBootstrap {
     const wanted = new Map(COA_ACCOUNTS.map((a) => [a.code, a.ccRequirement]));
     const moves = new Map<
       string,
-      { from: ReturnType<typeof ccDefaultsOf>; to: ReturnType<typeof ccDefaultsOf>; codes: string[] }
+      {
+        from: ReturnType<typeof ccDefaultsOf>;
+        to: ReturnType<typeof ccDefaultsOf>;
+        codes: string[];
+      }
     >();
     for (const [code, shipped] of Object.entries(COA_SHIPPED_CC_RULES)) {
       const now = wanted.get(code);
@@ -554,7 +556,15 @@ export class CoaSeedService implements OnApplicationBootstrap {
 
     const resorted = await this.restampFromMaster();
 
-    if (renamed || removed || deactivated || recoded || reruled || resorted || closed) {
+    if (
+      renamed ||
+      removed ||
+      deactivated ||
+      recoded ||
+      reruled ||
+      resorted ||
+      closed
+    ) {
       this.logger.log(
         `Chart of Accounts revised: ${renamed} renamed, ${removed} withdrawn, ` +
           `${deactivated} deactivated, ${recoded} recoded, ${reruled} re-ruled, ` +
@@ -627,7 +637,9 @@ export class CoaSeedService implements OnApplicationBootstrap {
   private async seedGroups(): Promise<number> {
     const existing = new Map(
       (
-        await this.prisma.accountGroup.findMany({ select: { id: true, code: true } })
+        await this.prisma.accountGroup.findMany({
+          select: { id: true, code: true },
+        })
       ).map((g) => [g.code, g.id]),
     );
     // The codes this database ALREADY held, frozen before anything is created.
@@ -645,14 +657,20 @@ export class CoaSeedService implements OnApplicationBootstrap {
     // and the twenty-nine accounts under them were skipped after them.
     const before = new Set(existing.keys());
     let created = 0;
-    for (const g of [...COA_GROUPS].sort((a, b) => a.code.localeCompare(b.code))) {
+    for (const g of [...COA_GROUPS].sort((a, b) =>
+      a.code.localeCompare(b.code),
+    )) {
       if (existing.has(g.code)) continue;
       if (awaitingRecode(COA_RECODED_GROUPS, g.code, before)) continue;
-      const parentId = g.parentCode ? (existing.get(g.parentCode) ?? null) : null;
+      const parentId = g.parentCode
+        ? (existing.get(g.parentCode) ?? null)
+        : null;
       if (g.parentCode && parentId == null) {
         // Cannot happen with the shipped data (the converter checks it), but a
         // silent orphan would be worse than a loud skip.
-        this.logger.warn(`Group ${g.code} skipped: parent ${g.parentCode} missing.`);
+        this.logger.warn(
+          `Group ${g.code} skipped: parent ${g.parentCode} missing.`,
+        );
         continue;
       }
       const row = await this.prisma.accountGroup.create({
@@ -681,7 +699,9 @@ export class CoaSeedService implements OnApplicationBootstrap {
   private async seedAccounts(): Promise<number> {
     const groupIds = new Map(
       (
-        await this.prisma.accountGroup.findMany({ select: { id: true, code: true } })
+        await this.prisma.accountGroup.findMany({
+          select: { id: true, code: true },
+        })
       ).map((g) => [g.code, g.id]),
     );
     const existing = new Set(
@@ -695,7 +715,9 @@ export class CoaSeedService implements OnApplicationBootstrap {
       if (awaitingRecode(COA_RECODED_ACCOUNTS, a.code, existing)) continue;
       const groupId = groupIds.get(a.groupCode);
       if (groupId == null) {
-        this.logger.warn(`Account ${a.code} skipped: group ${a.groupCode} missing.`);
+        this.logger.warn(
+          `Account ${a.code} skipped: group ${a.groupCode} missing.`,
+        );
         continue;
       }
       await this.prisma.account.create({
@@ -744,9 +766,9 @@ export class CoaSeedService implements OnApplicationBootstrap {
       ).map((c) => [c.code, c.id]),
     );
     const accountIds = new Map(
-      (await this.prisma.account.findMany({ select: { id: true, code: true } })).map(
-        (a) => [a.code, a.id],
-      ),
+      (
+        await this.prisma.account.findMany({ select: { id: true, code: true } })
+      ).map((a) => [a.code, a.id]),
     );
     const existing = new Set(
       (
@@ -790,7 +812,9 @@ export class CoaSeedService implements OnApplicationBootstrap {
   private async seedCategories(): Promise<number> {
     const existing = new Set(
       (
-        await this.prisma.costCentreCategory.findMany({ select: { code: true } })
+        await this.prisma.costCentreCategory.findMany({
+          select: { code: true },
+        })
       ).map((c) => c.code),
     );
     const rows = COA_COST_CENTRE_CATEGORIES.filter(

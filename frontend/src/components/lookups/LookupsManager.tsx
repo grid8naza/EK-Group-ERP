@@ -11,7 +11,12 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Textarea, Checkbox, Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -50,7 +55,12 @@ interface Props {
  * only, so a lookup or value can be renamed freely without breaking anything
  * that referenced its stable key.
  */
-export function LookupsManager({ moduleCode, route, title, description }: Props) {
+export function LookupsManager({
+  moduleCode,
+  route,
+  title,
+  description,
+}: Props) {
   const { can } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
@@ -298,10 +308,16 @@ export function LookupsManager({ moduleCode, route, title, description }: Props)
       };
       let saved: LookupValue;
       if (vEditing) {
-        saved = await api.patch<LookupValue>(`/lookup-values/${vEditing.id}`, payload);
+        saved = await api.patch<LookupValue>(
+          `/lookup-values/${vEditing.id}`,
+          payload,
+        );
         toast.success('Value updated.');
       } else {
-        saved = await api.post<LookupValue>(`/lookups/${selected.id}/values`, payload);
+        saved = await api.post<LookupValue>(
+          `/lookups/${selected.id}/values`,
+          payload,
+        );
         toast.success('Value added.');
       }
       await loadValues(selected);
@@ -444,46 +460,48 @@ export function LookupsManager({ moduleCode, route, title, description }: Props)
           </div>
           {selected &&
             (canView || canEdit || canDelete || lookupLock.canToggle) && (
-            <div className="mt-3 flex items-center gap-2">
-              {canView && (
-                <button
-                  onClick={() => openViewLookup(selected)}
-                  className="rounded-lg p-2 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
-                  title="View"
-                >
-                  <Eye className="h-4 w-4" />
-                </button>
-              )}
-              {canEdit && (
-                <button
-                  className="btn-secondary"
-                  onClick={() =>
-                    lookupLock.guardEdit(selected, () => openEditLookup(selected))
-                  }
-                >
-                  Edit Lookup
-                </button>
-              )}
-              {canDelete && !selected.isSystem && (
-                <button
-                  className="btn-danger"
-                  onClick={() =>
-                    lookupLock.guardDelete(selected, () =>
-                      removeLookup(selected),
-                    )
-                  }
-                >
-                  Delete Lookup
-                </button>
-              )}
-              <LockButton
-                locked={selected.isLocked}
-                canLock={lookupLock.canLock}
-                canUnlock={lookupLock.canUnlock}
-                onToggle={() => lookupLock.toggleLock(selected)}
-              />
-            </div>
-          )}
+              <div className="mt-3 flex items-center gap-2">
+                {canView && (
+                  <button
+                    onClick={() => openViewLookup(selected)}
+                    className="rounded-lg p-2 text-slate-500 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950"
+                    title="View"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </button>
+                )}
+                {canEdit && (
+                  <button
+                    className="btn-secondary"
+                    onClick={() =>
+                      lookupLock.guardEdit(selected, () =>
+                        openEditLookup(selected),
+                      )
+                    }
+                  >
+                    Edit Lookup
+                  </button>
+                )}
+                {canDelete && !selected.isSystem && (
+                  <button
+                    className="btn-danger"
+                    onClick={() =>
+                      lookupLock.guardDelete(selected, () =>
+                        removeLookup(selected),
+                      )
+                    }
+                  >
+                    Delete Lookup
+                  </button>
+                )}
+                <LockButton
+                  locked={selected.isLocked}
+                  canLock={lookupLock.canLock}
+                  canUnlock={lookupLock.canUnlock}
+                  onToggle={() => lookupLock.toggleLock(selected)}
+                />
+              </div>
+            )}
         </div>
 
         {/* Values */}
@@ -508,9 +526,7 @@ export function LookupsManager({ moduleCode, route, title, description }: Props)
                 searchPlaceholder="Search values..."
                 onView={openViewValue}
                 onEdit={(r) => valueLock.guardEdit(r, () => openEditValue(r))}
-                onDelete={(r) =>
-                  valueLock.guardDelete(r, () => removeValue(r))
-                }
+                onDelete={(r) => valueLock.guardDelete(r, () => removeValue(r))}
                 canView={canView}
                 canEdit={canEdit}
                 canDelete={canDelete}
@@ -539,7 +555,9 @@ export function LookupsManager({ moduleCode, route, title, description }: Props)
       <Drawer
         open={lkOpen}
         onClose={closeLookupDrawer}
-        title={lkView ? 'View Lookup' : lkEditing ? 'Edit Lookup' : 'New Lookup'}
+        title={
+          lkView ? 'View Lookup' : lkEditing ? 'Edit Lookup' : 'New Lookup'
+        }
         subtitle="Lookup master"
         icon={<List className="h-5 w-5" />}
         footer={

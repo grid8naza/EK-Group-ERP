@@ -101,7 +101,11 @@ type EntryLine = {
   bills: DraftBill[];
 };
 
-const emptyLine = (key: number, side: 'DR' | 'CR' = 'DR', amount = ''): EntryLine => ({
+const emptyLine = (
+  key: number,
+  side: 'DR' | 'CR' = 'DR',
+  amount = '',
+): EntryLine => ({
   key,
   side,
   sideTouched: false,
@@ -423,10 +427,9 @@ export function VoucherEntryScreen({
 
   // The number the next one would take. A preview only — it is settled on save,
   // so it is refetched after every save rather than held.
-  const { data: nextNo, refetch: refetchNextNo } = useFetch<{ voucherNo: string }>(
-    `/vouchers/next-no?typeCode=${encodeURIComponent(typeCode)}`,
-    [typeCode],
-  );
+  const { data: nextNo, refetch: refetchNextNo } = useFetch<{
+    voucherNo: string;
+  }>(`/vouchers/next-no?typeCode=${encodeURIComponent(typeCode)}`, [typeCode]);
 
   const [mode, setMode] = useState<Mode>('list');
   const [editing, setEditing] = useState<Voucher | null>(null);
@@ -608,8 +611,11 @@ export function VoucherEntryScreen({
   // Fetched when a party is named rather than up front: it is per party, and
   // most journals name none. Keyed by party so two lines to the same one share
   // a single read.
-  const [openBills, setOpenBills] = useState<Record<string, OutstandingBill[]>>({});
-  const billsKey = (kind: PartyKind | null, partyId: string) => `${kind}:${partyId}`;
+  const [openBills, setOpenBills] = useState<Record<string, OutstandingBill[]>>(
+    {},
+  );
+  const billsKey = (kind: PartyKind | null, partyId: string) =>
+    `${kind}:${partyId}`;
 
   const loadBills = async (kind: PartyKind | null, partyId: string) => {
     if (!kind || !partyId) return;
@@ -638,7 +644,14 @@ export function VoucherEntryScreen({
    */
   const baselineRef = useRef('');
   const snapshot = () =>
-    JSON.stringify({ date, reference, narration, txnSubtypeId, instrument, lines });
+    JSON.stringify({
+      date,
+      reference,
+      narration,
+      txnSubtypeId,
+      instrument,
+      lines,
+    });
   /** Take what is on the form now as the clean state. */
   const rebaseline = (
     d: string,
@@ -730,7 +743,8 @@ export function VoucherEntryScreen({
     // A saved voucher's parties already have bills on file; load them so the
     // rows read as bills rather than ids.
     for (const l of v.lines) {
-      if (l.partyKind && l.partyId) void loadBills(l.partyKind, String(l.partyId));
+      if (l.partyKind && l.partyId)
+        void loadBills(l.partyKind, String(l.partyId));
     }
   };
 
@@ -748,10 +762,7 @@ export function VoucherEntryScreen({
   // only one of them holds a task on it, and it changes when somebody else acts
   // rather than when this form saves. Re-read after every action, which is what
   // moves the buttons on without a reload.
-  const {
-    data: wf,
-    refetch: refetchWorkflow,
-  } = useFetch<VoucherWorkflowState>(
+  const { data: wf, refetch: refetchWorkflow } = useFetch<VoucherWorkflowState>(
     editing ? `/vouchers/${editing.id}/workflow` : null,
     [editing?.id],
   );
@@ -835,9 +846,9 @@ export function VoucherEntryScreen({
   const billsOfLine = (l: VoucherLine): DocBill[] =>
     (l.billRefs ?? []).map((b) => {
       const against = b.againstId
-        ? (openBills[billsKey(l.partyKind, String(l.partyId ?? ''))] ?? []).find(
-            (x) => x.id === b.againstId,
-          )
+        ? (
+            openBills[billsKey(l.partyKind, String(l.partyId ?? ''))] ?? []
+          ).find((x) => x.id === b.againstId)
         : null;
       return {
         billRef:
@@ -872,7 +883,9 @@ export function VoucherEntryScreen({
 
   /** A cheque is printable only where the instrument actually is one. */
   const canPrintCheque =
-    !!documents?.includes('CHEQUE') && !!editing?.instrument && docMode === 'Cheque';
+    !!documents?.includes('CHEQUE') &&
+    !!editing?.instrument &&
+    docMode === 'Cheque';
   const canPrintAdvice = !!documents?.includes('ADVICE') && !!editing;
 
   /**
@@ -1086,8 +1099,7 @@ export function VoucherEntryScreen({
       // signature on a document nobody has agreed to.
       signatories:
         governed &&
-        (wf?.state.status === 'IN_PROGRESS' ||
-          wf?.state.status === 'APPROVED')
+        (wf?.state.status === 'IN_PROGRESS' || wf?.state.status === 'APPROVED')
           ? [
               ...(wf?.preparedBy
                 ? [
@@ -1109,7 +1121,9 @@ export function VoucherEntryScreen({
           : [],
     });
     if (!openPrintWindow(html)) {
-      toast.error('The browser blocked the print window. Allow pop-ups for this site.');
+      toast.error(
+        'The browser blocked the print window. Allow pop-ups for this site.',
+      );
     }
   };
 
@@ -1138,7 +1152,9 @@ export function VoucherEntryScreen({
       narration: editing.narration,
     });
     if (!openPrintWindow(html)) {
-      toast.error('The browser blocked the print window. Allow pop-ups for this site.');
+      toast.error(
+        'The browser blocked the print window. Allow pop-ups for this site.',
+      );
     }
   };
 
@@ -1158,7 +1174,9 @@ export function VoucherEntryScreen({
       postDated: inst.chequeKind === 'PDC',
     });
     if (!openPrintWindow(html, 980, 560)) {
-      toast.error('The browser blocked the print window. Allow pop-ups for this site.');
+      toast.error(
+        'The browser blocked the print window. Allow pop-ups for this site.',
+      );
     }
   };
 
@@ -1328,11 +1346,7 @@ export function VoucherEntryScreen({
       againstId: String(p.id),
       amount: p.amount,
     }));
-    let next = [
-      ...l.bills.slice(0, bi),
-      ...rows,
-      ...l.bills.slice(bi + 1),
-    ];
+    let next = [...l.bills.slice(0, bi), ...rows, ...l.bills.slice(bi + 1)];
     const last = next[next.length - 1];
     if (last?.refType === 'AGAINST') {
       // No balancing row left to absorb the rest, so open one.
@@ -1437,7 +1451,12 @@ export function VoucherEntryScreen({
    * up to the whole, another row opens for the rest. Only once they agree does
    * the line itself close.
    */
-  const onBillEnd = (i: number, l: EntryLine, bi: number, e: React.KeyboardEvent) => {
+  const onBillEnd = (
+    i: number,
+    l: EntryLine,
+    bi: number,
+    e: React.KeyboardEvent,
+  ) => {
     const enter = e.key === 'Enter';
     const tab = e.key === 'Tab' && !e.shiftKey;
     if (!enter && !tab) return;
@@ -1994,7 +2013,9 @@ export function VoucherEntryScreen({
                 value={instrument.modeValueId}
                 disabled={readOnly}
                 options={modeOptions}
-                placeholder={modeOptions.length ? 'How it moved' : 'None set up'}
+                placeholder={
+                  modeOptions.length ? 'How it moved' : 'None set up'
+                }
                 onChange={(e) =>
                   applyInstrument({
                     ...instrument,
@@ -2011,9 +2032,14 @@ export function VoucherEntryScreen({
                 value={instrument.bankAccountId}
                 disabled={readOnly}
                 options={bankOptions}
-                placeholder={bankOptions.length ? 'Drawn on' : 'No bank account'}
+                placeholder={
+                  bankOptions.length ? 'Drawn on' : 'No bank account'
+                }
                 onChange={(e) =>
-                  applyInstrument({ ...instrument, bankAccountId: e.target.value })
+                  applyInstrument({
+                    ...instrument,
+                    bankAccountId: e.target.value,
+                  })
                 }
               />
               <Input
@@ -2074,8 +2100,8 @@ export function VoucherEntryScreen({
                   />
                   {instrument.chequeKind === 'PDC' && (
                     <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
-                      Post it to Post-dated Cheques Issued, not to the bank — the
-                      bank is credited from the PDC register on the day it
+                      Post it to Post-dated Cheques Issued, not to the bank —
+                      the bank is credited from the PDC register on the day it
                       clears.
                     </p>
                   )}
@@ -2102,7 +2128,8 @@ export function VoucherEntryScreen({
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
               {lines.map((l, i) => {
                 const asks = masters.asksFor(l.accountId);
-                const bills = openBills[billsKey(asks.partyKind, l.partyId)] ?? [];
+                const bills =
+                  openBills[billsKey(asks.partyKind, l.partyId)] ?? [];
                 const showBills = asks.party && !!l.partyId;
                 const allocated = netOf(l.bills, l.side);
                 const wanted = paise(l.amount);
@@ -2118,7 +2145,8 @@ export function VoucherEntryScreen({
                     className="px-3 py-2"
                     onKeyDown={(e) => {
                       // Ctrl+Delete drops the line without leaving the keyboard.
-                      if (e.key !== 'Delete' || !(e.ctrlKey || e.metaKey)) return;
+                      if (e.key !== 'Delete' || !(e.ctrlKey || e.metaKey))
+                        return;
                       if (readOnly) return;
                       e.preventDefault();
                       removeLine(l.key);
@@ -2181,7 +2209,10 @@ export function VoucherEntryScreen({
                                   : [],
                               });
                             }}
-                            options={masters.partyOptions(asks.partyKind, l.accountId)}
+                            options={masters.partyOptions(
+                              asks.partyKind,
+                              l.accountId,
+                            )}
                             placeholder={
                               asks.partyKind === 'SUPPLIER'
                                 ? 'Supplier'
@@ -2220,7 +2251,9 @@ export function VoucherEntryScreen({
                               setLine(l.key, { costObjectId: e.target.value })
                             }
                             options={masters.objectOptions(l.costCenterId)}
-                            placeholder={l.costCenterId ? 'Cost object' : 'Centre first'}
+                            placeholder={
+                              l.costCenterId ? 'Cost object' : 'Centre first'
+                            }
                           />
                         )}
                       </div>
@@ -2244,17 +2277,19 @@ export function VoucherEntryScreen({
                       />
 
                       <div className="pt-1.5 text-center">
-                        {!readOnly && lines.length > 2 && !isFixedLine(l.key) && (
-                          <button
-                            type="button"
-                            tabIndex={-1}
-                            className="rounded p-1 text-slate-300 hover:text-rose-600"
-                            title="Remove this line (Ctrl+Delete)"
-                            onClick={() => removeLine(l.key)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
+                        {!readOnly &&
+                          lines.length > 2 &&
+                          !isFixedLine(l.key) && (
+                            <button
+                              type="button"
+                              tabIndex={-1}
+                              className="rounded p-1 text-slate-300 hover:text-rose-600"
+                              title="Remove this line (Ctrl+Delete)"
+                              onClick={() => removeLine(l.key)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
                       </div>
 
                       {/* The line's own narration, under it. Placed in the
@@ -2294,7 +2329,10 @@ export function VoucherEntryScreen({
                                together, well inside the money columns, so the
                                eye sees a detail of the line rather than another
                                line. */
-                            <div key={bi} className="flex flex-wrap items-center gap-2">
+                            <div
+                              key={bi}
+                              className="flex flex-wrap items-center gap-2"
+                            >
                               {/* Held open even when empty, or the second bill
                                   row would start further left than the first. */}
                               <span className={ROW_LABEL}>
@@ -2367,7 +2405,8 @@ export function VoucherEntryScreen({
                                     })
                                   }
                                   onKeyDown={(e) => {
-                                    if (e.key !== 'Enter' && e.key !== ' ') return;
+                                    if (e.key !== 'Enter' && e.key !== ' ')
+                                      return;
                                     e.preventDefault();
                                     setPicking({
                                       lineKey: l.key,
@@ -2415,7 +2454,9 @@ export function VoucherEntryScreen({
                                 wrapClassName="w-32 flex-none"
                                 className="h-8 text-sm"
                                 onKeyDown={(e) => onBillEnd(i, l, bi, e)}
-                                onChange={(amount) => setBill(l, bi, { amount })}
+                                onChange={(amount) =>
+                                  setBill(l, bi, { amount })
+                                }
                               />
                               {/* Which way this one pulls. Nearly always the
                                   line's own side — the exception is the credit
@@ -2444,7 +2485,9 @@ export function VoucherEntryScreen({
                                     title="Remove this bill"
                                     onClick={() =>
                                       setLine(l.key, {
-                                        bills: l.bills.filter((_, y) => y !== bi),
+                                        bills: l.bills.filter(
+                                          (_, y) => y !== bi,
+                                        ),
                                       })
                                     }
                                   >
@@ -2482,7 +2525,9 @@ export function VoucherEntryScreen({
                                 : left === 0
                                   ? 'Fully allocated'
                                   : `${money(Math.abs(left))} ${
-                                      left > 0 ? 'unallocated' : 'over-allocated'
+                                      left > 0
+                                        ? 'unallocated'
+                                        : 'over-allocated'
                                     }`}
                             </span>
                           </div>
@@ -2668,7 +2713,8 @@ export function VoucherEntryScreen({
                 masters.asksFor(pickingLine.accountId).partyKind,
                 pickingLine.accountId,
               )
-              .find((p) => p.value === pickingLine.partyId)?.label ?? 'This party'
+              .find((p) => p.value === pickingLine.partyId)?.label ??
+            'This party'
           }
           lineAmount={pickingLine.amount}
           lineSide={pickingLine.side}

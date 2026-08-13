@@ -472,7 +472,9 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
   const toggleCancel = (lineId: number) => {
     markDirty();
     setReview((ls) =>
-      ls.map((l) => (l.lineId === lineId ? { ...l, cancelled: !l.cancelled } : l)),
+      ls.map((l) =>
+        l.lineId === lineId ? { ...l, cancelled: !l.cancelled } : l,
+      ),
     );
   };
 
@@ -607,7 +609,9 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
         ? 'Reject'
         : action === 'CANCEL'
           ? 'Cancel order'
-          : (myTask?.buttonText ?? current.viewer?.submitButtonText ?? 'Forward');
+          : (myTask?.buttonText ??
+            current.viewer?.submitButtonText ??
+            'Forward');
     const ok = await confirm({
       title: `${actLabel}?`,
       message:
@@ -717,7 +721,10 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
               title={label}
               className="inline-flex justify-center text-slate-600 dark:text-slate-300"
             >
-              <Icon className="h-5 w-5" style={{ color: st.color || undefined }} />
+              <Icon
+                className="h-5 w-5"
+                style={{ color: st.color || undefined }}
+              />
             </span>
           );
         }
@@ -1097,7 +1104,9 @@ function DraftEditor(props: {
           label="Supplier"
           required
           disabled={!creating}
-          title={!creating ? 'Supplier cannot change after creation' : undefined}
+          title={
+            !creating ? 'Supplier cannot change after creation' : undefined
+          }
           value={supplierId}
           onChange={(e) => onSupplier(e.target.value)}
           placeholder="Select a supplier company"

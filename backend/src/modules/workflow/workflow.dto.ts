@@ -191,7 +191,8 @@ export class StartWorkflowDto {
   fields?: Record<string, number>;
 }
 
-export type WorkflowActInput = 'APPROVE' | 'FORWARD' | 'REJECT' | 'CANCEL' | 'REFERENCE';
+export type WorkflowActInput =
+  'APPROVE' | 'FORWARD' | 'REJECT' | 'CANCEL' | 'REFERENCE';
 
 export class ActOnTaskDto {
   @IsString()

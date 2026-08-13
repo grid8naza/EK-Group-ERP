@@ -84,9 +84,8 @@ export function TaskInbox({
   const toast = useToast();
   const confirm = useConfirm();
   const { activeCompanyId, switchCompany } = useAuth();
-  const { data, loading, refetch } = useFetch<WorkflowTaskItem[]>(
-    '/workflow/my-tasks',
-  );
+  const { data, loading, refetch } =
+    useFetch<WorkflowTaskItem[]>('/workflow/my-tasks');
   const [search, setSearch] = useState('');
 
   const rows = useMemo(() => {

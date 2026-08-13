@@ -605,7 +605,9 @@ async function migrateCrmPurchaseOrderRoutes(
   // renames, and the menu move), and dedupe must see the final set. It also runs
   // outside the move loop — once a company's screen has moved there's no stale
   // row left to key off, so a twin would otherwise survive forever.
-  await dedupeScreenRows(prisma, SENT_ROUTE, { repointToModuleId: purchase.id });
+  await dedupeScreenRows(prisma, SENT_ROUTE, {
+    repointToModuleId: purchase.id,
+  });
   await dedupeScreenRows(prisma, '/crm/icpo-received');
   await dedupeScreenRows(prisma, '/crm/icso');
 

@@ -93,19 +93,13 @@ export class PurchaseOrderController {
   }
 
   @Delete(':id')
-  remove(
-    @CurrentUser() user: AuthUser,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
+  remove(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     return this.service.remove(user.id, id, !!user.isSuperAdmin);
   }
 
   /** Submit a draft into the approval workflow (the creator's forward action). */
   @Post(':id/submit')
-  submit(
-    @CurrentUser() user: AuthUser,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
+  submit(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     return this.service.submit(user.id, id, !!user.isSuperAdmin);
   }
 

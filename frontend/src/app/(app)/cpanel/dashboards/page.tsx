@@ -277,7 +277,9 @@ export default function DashboardsPage() {
       setCatalog(cat ?? []);
       setSelected((detail.widgets ?? []).map((w) => w.widgetId));
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Failed to load widgets.');
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to load widgets.',
+      );
     }
   };
   const toggleWidget = (widgetId: number, checked: boolean) => {
@@ -312,7 +314,9 @@ export default function DashboardsPage() {
       setWOpen(false);
       load();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Failed to save widgets.');
+      toast.error(
+        e instanceof ApiError ? e.message : 'Failed to save widgets.',
+      );
     } finally {
       setWSaving(false);
     }
@@ -468,79 +472,92 @@ export default function DashboardsPage() {
       <Drawer
         open={open}
         onClose={closeDrawer}
-        title={view ? 'View Dashboard' : editing ? 'Edit Dashboard' : 'New Dashboard'}
+        title={
+          view ? 'View Dashboard' : editing ? 'Edit Dashboard' : 'New Dashboard'
+        }
         subtitle="Dashboard"
         icon={<LayoutDashboard className="h-5 w-5" />}
         footer={
           view ? (
             <CloseFooter onClose={closeDrawer} />
           ) : (
-            <DrawerFooter onCancel={closeDrawer} onSave={save} saving={saving} />
+            <DrawerFooter
+              onCancel={closeDrawer}
+              onSave={save}
+              saving={saving}
+            />
           )
         }
       >
         <ReadOnlyFieldset readOnly={view}>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Input
-            label="Name"
-            required
-            wrapClassName="sm:col-span-2"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-          />
-          <Select label="Module" value={moduleId} disabled options={moduleOptions} />
-          {isCoreModule && (
-            <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700 dark:bg-brand-950 dark:text-brand-300 sm:col-span-2">
-              This is a core module — its dashboards are global and shared across
-              all companies.
-            </p>
-          )}
-          {hasBranches && (
-            <Select
-              label="Branch"
-              value={form.branchId}
-              onChange={(e) => setForm({ ...form, branchId: e.target.value })}
-              placeholder="All branches (company-wide)"
-              options={branchOptions}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Input
+              label="Name"
+              required
+              wrapClassName="sm:col-span-2"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
-          )}
-          <IconPicker
-            label="Icon"
-            value={form.icon}
-            onChange={(icon) => setForm({ ...form, icon })}
-          />
-          <div className="pb-2 sm:col-span-2">
-            <div className="flex items-end gap-4">
-              <Checkbox
-                label="Default"
-                checked={form.isDefault}
-                onChange={(e) =>
-                  setForm({ ...form, isDefault: e.target.checked })
-                }
+            <Select
+              label="Module"
+              value={moduleId}
+              disabled
+              options={moduleOptions}
+            />
+            {isCoreModule && (
+              <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700 dark:bg-brand-950 dark:text-brand-300 sm:col-span-2">
+                This is a core module — its dashboards are global and shared
+                across all companies.
+              </p>
+            )}
+            {hasBranches && (
+              <Select
+                label="Branch"
+                value={form.branchId}
+                onChange={(e) => setForm({ ...form, branchId: e.target.value })}
+                placeholder="All branches (company-wide)"
+                options={branchOptions}
               />
-              <Checkbox
-                label="Active"
-                checked={form.isActive}
-                onChange={(e) =>
-                  setForm({ ...form, isActive: e.target.checked })
-                }
-              />
+            )}
+            <IconPicker
+              label="Icon"
+              value={form.icon}
+              onChange={(icon) => setForm({ ...form, icon })}
+            />
+            <div className="pb-2 sm:col-span-2">
+              <div className="flex items-end gap-4">
+                <Checkbox
+                  label="Default"
+                  checked={form.isDefault}
+                  onChange={(e) =>
+                    setForm({ ...form, isDefault: e.target.checked })
+                  }
+                />
+                <Checkbox
+                  label="Active"
+                  checked={form.isActive}
+                  onChange={(e) =>
+                    setForm({ ...form, isActive: e.target.checked })
+                  }
+                />
+              </div>
+              <p className="mt-1.5 text-xs text-slate-400">
+                The default dashboard loads automatically when this module
+                opens. Only one dashboard per module{' '}
+                {hasBranches && 'and branch '}can be the default — marking this
+                one clears it on the others.
+                {hasBranches && (
+                  <>
+                    {' '}
+                    A “company-wide” dashboard shows on every branch — but only
+                    to users who can access all of the company’s branches. Users
+                    with access to just some branches see only that branch’s
+                    dashboards.
+                  </>
+                )}
+              </p>
             </div>
-            <p className="mt-1.5 text-xs text-slate-400">
-              The default dashboard loads automatically when this module opens.
-              Only one dashboard per module {hasBranches && 'and branch '}can be
-              the default — marking this one clears it on the others.
-              {hasBranches && (
-                <>
-                  {' '}
-                  A “company-wide” dashboard shows on every branch — but only to
-                  users who can access all of the company’s branches. Users with
-                  access to just some branches see only that branch’s dashboards.
-                </>
-              )}
-            </p>
           </div>
-        </div>
         </ReadOnlyFieldset>
       </Drawer>
 
@@ -763,7 +780,10 @@ export default function DashboardsPage() {
                   size: e.target.value as DashboardHeaderStyle['size'],
                 })
               }
-              options={HEADER_SIZES.map((s) => ({ value: s.key, label: s.label }))}
+              options={HEADER_SIZES.map((s) => ({
+                value: s.key,
+                label: s.label,
+              }))}
             />
             <Select
               label="Alignment"
@@ -784,9 +804,7 @@ export default function DashboardsPage() {
               wrapClassName="sm:col-span-2"
               placeholder="Drag widgets by their handle to arrange your personal layout."
               value={hForm.subtitle ?? ''}
-              onChange={(e) =>
-                setHForm({ ...hForm, subtitle: e.target.value })
-              }
+              onChange={(e) => setHForm({ ...hForm, subtitle: e.target.value })}
             />
             <div className="sm:col-span-2">
               <div className="flex flex-wrap items-center gap-4">
@@ -808,8 +826,8 @@ export default function DashboardsPage() {
               <p className="mt-1.5 text-xs text-slate-400">
                 Hiding the banner shows the widgets without a header (the layout
                 controls still appear when you rearrange widgets). Leave the
-                subtitle empty to use the default text. Custom colours apply only
-                when the theme is set to “Custom”.
+                subtitle empty to use the default text. Custom colours apply
+                only when the theme is set to “Custom”.
               </p>
             </div>
           </div>
@@ -830,8 +848,14 @@ function WidgetRow({
   type?: WidgetType;
   onRemove: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,

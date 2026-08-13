@@ -170,7 +170,9 @@ export function DataTable<T>({
   fillHeight = true,
   bordered = false,
 }: DataTableProps<T>) {
-  const cellBorder = bordered ? 'border border-slate-200 dark:border-slate-800' : '';
+  const cellBorder = bordered
+    ? 'border border-slate-200 dark:border-slate-800'
+    : '';
   const [internalSearch, setInternalSearch] = useState('');
   const [page, setPage] = useState(1);
   const [sortState, setSortState] = useState<SortState | null>(
@@ -293,9 +295,7 @@ export function DataTable<T>({
     const q = searchValue.toLowerCase();
     return rows.filter((row) =>
       columns.some((c) => {
-        const val = c.accessor
-          ? c.accessor(row)
-          : (row as any)[c.key];
+        const val = c.accessor ? c.accessor(row) : (row as any)[c.key];
         return val != null && String(val).toLowerCase().includes(q);
       }),
     );
@@ -359,7 +359,9 @@ export function DataTable<T>({
     >
       {/* Toolbar */}
       <div className="flex flex-col gap-3 border-b border-slate-200 p-3 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex flex-1 flex-wrap items-center gap-2">{toolbar}</div>
+        <div className="flex flex-1 flex-wrap items-center gap-2">
+          {toolbar}
+        </div>
         {/* Search plus the icon buttons. flex-none throughout: the filters on
             the left may be many, but these must never be squashed. */}
         <div className="flex flex-none items-center gap-2">
@@ -385,7 +387,10 @@ export function DataTable<T>({
           )}
           {showColumnToggle && (
             <ColumnToggle
-              columns={orderedColumns.map((c) => ({ key: c.key, label: c.header }))}
+              columns={orderedColumns.map((c) => ({
+                key: c.key,
+                label: c.header,
+              }))}
               hidden={hiddenCols}
               onToggle={toggleColumn}
             />

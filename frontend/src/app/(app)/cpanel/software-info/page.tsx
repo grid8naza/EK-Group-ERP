@@ -35,7 +35,8 @@ export default function SoftwareInfoPage() {
   const [logoSize, setLogoSize] = useState<number>(LOGO_SIZE_DEFAULT);
   const [logoBroken, setLogoBroken] = useState(false);
   const [symbolLogoUrl, setSymbolLogoUrl] = useState<string | null>(null);
-  const [symbolLogoSize, setSymbolLogoSize] = useState<number>(LOGO_SIZE_DEFAULT);
+  const [symbolLogoSize, setSymbolLogoSize] =
+    useState<number>(LOGO_SIZE_DEFAULT);
   const [symbolBroken, setSymbolBroken] = useState(false);
 
   const close = () => router.back();
@@ -144,7 +145,10 @@ export default function SoftwareInfoPage() {
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const res = await api.post<SoftwareInfo>('/software-info/symbol-logo', fd);
+      const res = await api.post<SoftwareInfo>(
+        '/software-info/symbol-logo',
+        fd,
+      );
       setSymbolLogoUrl(res.symbolLogoUrl ?? null);
       setSymbolBroken(false);
       toast.success('Symbol logo updated.');
@@ -202,7 +206,9 @@ export default function SoftwareInfoPage() {
                   <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
                     Logo
                   </p>
-                  <p className="text-xs text-slate-400">Full logo — expanded sidebar.</p>
+                  <p className="text-xs text-slate-400">
+                    Full logo — expanded sidebar.
+                  </p>
                 </div>
                 <input
                   ref={fileRef}
@@ -226,7 +232,9 @@ export default function SoftwareInfoPage() {
 
                 {/* Full-logo display size */}
                 <div className="flex items-center justify-center gap-3">
-                  <label className="text-xs font-medium text-slate-500">Size</label>
+                  <label className="text-xs font-medium text-slate-500">
+                    Size
+                  </label>
                   <input
                     type="range"
                     min={LOGO_SIZE_MIN}
@@ -287,7 +295,9 @@ export default function SoftwareInfoPage() {
 
                 {/* Symbol-logo display size */}
                 <div className="flex items-center justify-center gap-3">
-                  <label className="text-xs font-medium text-slate-500">Size</label>
+                  <label className="text-xs font-medium text-slate-500">
+                    Size
+                  </label>
                   <input
                     type="range"
                     min={LOGO_SIZE_MIN}
@@ -368,11 +378,19 @@ export default function SoftwareInfoPage() {
             </div>
 
             <div className="flex justify-end gap-2">
-              <button className="btn-secondary" onClick={close} disabled={saving}>
+              <button
+                className="btn-secondary"
+                onClick={close}
+                disabled={saving}
+              >
                 Close
               </button>
               {!readOnly && (
-                <button className="btn-primary" onClick={save} disabled={saving}>
+                <button
+                  className="btn-primary"
+                  onClick={save}
+                  disabled={saving}
+                >
                   {saving ? 'Saving…' : 'Save'}
                 </button>
               )}

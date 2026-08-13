@@ -184,10 +184,7 @@ export class ChatController {
   }
 
   @Delete('messages/:id')
-  remove(
-    @CurrentUser() user: AuthUser,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
+  remove(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     return this.service.deleteMessage(user.id, id);
   }
 
@@ -203,10 +200,7 @@ export class ChatController {
   }
 
   @Post('conversations/:id/typing')
-  typing(
-    @CurrentUser() user: AuthUser,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
+  typing(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     return this.service.typing(user.id, id);
   }
 

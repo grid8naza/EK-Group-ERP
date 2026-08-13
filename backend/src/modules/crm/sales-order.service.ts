@@ -132,28 +132,28 @@ export class SalesOrderService {
     const order = await this.withOrderNoRetry(
       { companyId, branchId },
       (orderNo) =>
-      this.prisma.salesOrder.create({
-        data: {
-          companyId,
-          branchId: branchId ?? null,
-          buyerCompanyId: po.orderingCompanyId,
-          buyerBranchId: po.orderingBranchId,
-          purchaseOrderId: po.id,
-          // Snapshot the origin PO. The sales order is our record of what was
-          // asked for, and must keep saying so even if the ICPO is later edited.
-          poNumber: po.orderNo,
-          poDate: po.orderDate,
-          poDeliveryAt: po.deliveryAt,
-          poNotes: po.notes,
-          orderNo,
-          // Start from the buyer's requested date; the seller can commit to another.
-          deliveryAt: po.deliveryAt,
-          createdByUserId: userId,
-          status: 'DRAFT',
-          lines: { create: lines.map((l, i) => ({ sequence: i, ...l })) },
-        },
-        include: withLines,
-      }),
+        this.prisma.salesOrder.create({
+          data: {
+            companyId,
+            branchId: branchId ?? null,
+            buyerCompanyId: po.orderingCompanyId,
+            buyerBranchId: po.orderingBranchId,
+            purchaseOrderId: po.id,
+            // Snapshot the origin PO. The sales order is our record of what was
+            // asked for, and must keep saying so even if the ICPO is later edited.
+            poNumber: po.orderNo,
+            poDate: po.orderDate,
+            poDeliveryAt: po.deliveryAt,
+            poNotes: po.notes,
+            orderNo,
+            // Start from the buyer's requested date; the seller can commit to another.
+            deliveryAt: po.deliveryAt,
+            createdByUserId: userId,
+            status: 'DRAFT',
+            lines: { create: lines.map((l, i) => ({ sequence: i, ...l })) },
+          },
+          include: withLines,
+        }),
     );
     return this.findOne(userId, order.id, true);
   }
@@ -484,7 +484,9 @@ export class SalesOrderService {
     const masterPrice = new Map(
       (
         await this.prisma.product.findMany({
-          where: { id: { in: [...new Set(supplying.map((l) => l.productId))] } },
+          where: {
+            id: { in: [...new Set(supplying.map((l) => l.productId))] },
+          },
           select: { id: true, intercompanyPrice: true },
         })
       ).map((p) => [p.id, p.intercompanyPrice]),
@@ -616,7 +618,9 @@ export class SalesOrderService {
       }),
     ]);
     if (!mod || !obj) {
-      throw new BadRequestException('The ICSO document type is not registered.');
+      throw new BadRequestException(
+        'The ICSO document type is not registered.',
+      );
     }
     return { moduleId: mod.id, objectId: obj.id };
   }

@@ -32,7 +32,9 @@ export default function HomePage() {
       <div className="mx-auto max-w-3xl">
         <div className="card flex flex-col items-center justify-center gap-2 p-12 text-center text-slate-400">
           <LayoutDashboard className="h-8 w-8" />
-          <p className="text-sm">No dashboards are configured for this module.</p>
+          <p className="text-sm">
+            No dashboards are configured for this module.
+          </p>
           {!user?.isSuperAdmin && (
             <p className="text-xs">
               Ask an administrator to set up a default dashboard for your user

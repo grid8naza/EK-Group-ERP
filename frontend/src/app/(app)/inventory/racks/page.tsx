@@ -11,7 +11,12 @@ import { useLock } from '@/lib/useLock';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
-import { Drawer, DrawerFooter, CloseFooter, type SaveMode } from '@/components/ui/Drawer';
+import {
+  Drawer,
+  DrawerFooter,
+  CloseFooter,
+  type SaveMode,
+} from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { Input, Checkbox, Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
@@ -176,7 +181,11 @@ export default function RacksPage() {
       key: 'isDefault',
       header: 'Default',
       render: (r) =>
-        r.isDefault ? <Badge color="blue">Default</Badge> : <span className="text-slate-400">—</span>,
+        r.isDefault ? (
+          <Badge color="blue">Default</Badge>
+        ) : (
+          <span className="text-slate-400">—</span>
+        ),
     },
     {
       key: 'isActive',
@@ -257,7 +266,12 @@ export default function RacksPage() {
         <ReadOnlyFieldset readOnly={view}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {editing && (
-              <Input label="Code" value={editing.code} disabled wrapClassName="sm:col-span-2" />
+              <Input
+                label="Code"
+                value={editing.code}
+                disabled
+                wrapClassName="sm:col-span-2"
+              />
             )}
             <Select
               label="Store"
@@ -282,14 +296,18 @@ export default function RacksPage() {
               <Checkbox
                 label="Default rack (auto-selected for this store in stock forms)"
                 checked={form.isDefault}
-                onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
+                onChange={(e) =>
+                  setForm({ ...form, isDefault: e.target.checked })
+                }
               />
             </div>
             <div className="sm:col-span-2">
               <Checkbox
                 label="Active"
                 checked={form.isActive}
-                onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+                onChange={(e) =>
+                  setForm({ ...form, isActive: e.target.checked })
+                }
               />
             </div>
           </div>

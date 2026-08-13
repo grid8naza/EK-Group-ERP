@@ -40,7 +40,9 @@ export default function PackingPage() {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'view' | 'new'>('view');
   const [current, setCurrent] = useState<Packing | null>(null);
-  const [lines, setLines] = useState<DraftLine[]>([{ productId: '', quantity: '' }]);
+  const [lines, setLines] = useState<DraftLine[]>([
+    { productId: '', quantity: '' },
+  ]);
   const [saving, setSaving] = useState(false);
 
   const canAdd = can(ROUTE, 'add');
@@ -89,9 +91,7 @@ export default function PackingPage() {
     setLines((ls) => ls.filter((_, idx) => idx !== i));
 
   const save = async () => {
-    const clean = lines.filter(
-      (l) => l.productId && Number(l.quantity) > 0,
-    );
+    const clean = lines.filter((l) => l.productId && Number(l.quantity) > 0);
     if (!clean.length) {
       toast.error('Add at least one product with a quantity.');
       return;
@@ -191,8 +191,8 @@ export default function PackingPage() {
         {mode === 'new' ? (
           <div className="flex flex-col gap-3">
             <p className="text-sm text-slate-500">
-              Choose the products to pack. Each consumes its source products
-              and packing materials from the default store.
+              Choose the products to pack. Each consumes its source products and
+              packing materials from the default store.
             </p>
             {lines.map((l, i) => (
               <div key={i} className="flex items-end gap-2">

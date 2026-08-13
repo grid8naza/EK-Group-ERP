@@ -51,8 +51,19 @@ export default function ItemsReportPage() {
   const allColumns = useMemo<ReportColumn<Item>[]>(
     () => [
       { key: 'code', header: 'Code', weight: 9, cell: (i) => i.code },
-      { key: 'name', header: 'Item', weight: 26, bold: true, cell: (i) => i.name },
-      { key: 'unit', header: 'Unit', weight: 7, cell: (i) => i.unit?.symbol ?? i.unit?.code ?? '-' },
+      {
+        key: 'name',
+        header: 'Item',
+        weight: 26,
+        bold: true,
+        cell: (i) => i.name,
+      },
+      {
+        key: 'unit',
+        header: 'Unit',
+        weight: 7,
+        cell: (i) => i.unit?.symbol ?? i.unit?.code ?? '-',
+      },
       {
         key: 'lastPrice',
         header: 'Last Price',
@@ -60,16 +71,32 @@ export default function ItemsReportPage() {
         numeric: true,
         cell: (i) => money(i.lastPurchasePrice ?? 0),
       },
-      { key: 'hsn', header: 'HSN', weight: 9, cell: (i) => i.hsnCode?.code ?? '-' },
+      {
+        key: 'hsn',
+        header: 'HSN',
+        weight: 9,
+        cell: (i) => i.hsnCode?.code ?? '-',
+      },
       {
         key: 'reorder',
         header: 'Reorder',
         weight: 10,
         numeric: true,
-        cell: (i) => qty(i.reorderLevel ?? 0, unitDecimalsById.get(i.unitId) ?? 0),
+        cell: (i) =>
+          qty(i.reorderLevel ?? 0, unitDecimalsById.get(i.unitId) ?? 0),
       },
-      { key: 'leadTime', header: 'Lead Time', weight: 11, cell: (i) => i.leadTime ?? 0 },
-      { key: 'shelfLife', header: 'Shelf Life', weight: 11, cell: (i) => i.shelfLife ?? 0 },
+      {
+        key: 'leadTime',
+        header: 'Lead Time',
+        weight: 11,
+        cell: (i) => i.leadTime ?? 0,
+      },
+      {
+        key: 'shelfLife',
+        header: 'Shelf Life',
+        weight: 11,
+        cell: (i) => i.shelfLife ?? 0,
+      },
       {
         key: 'status',
         header: 'Status',
@@ -194,7 +221,10 @@ export default function ItemsReportPage() {
             onPrint={onPrint}
             onPdf={() => pdfReport(spec)}
             onExcel={() =>
-              excelReport(spec, { headingLabel: 'Category', subheadingLabel: 'Group' })
+              excelReport(spec, {
+                headingLabel: 'Category',
+                subheadingLabel: 'Group',
+              })
             }
             disabled={!has}
           />

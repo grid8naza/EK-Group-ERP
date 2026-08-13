@@ -121,7 +121,9 @@ export function MailboxScreen({ box }: { box: 'inbox' | 'sent' }) {
         );
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'That mail could not be opened.');
+      toast.error(
+        e instanceof Error ? e.message : 'That mail could not be opened.',
+      );
       setOpenId(null);
     }
   };
@@ -172,9 +174,7 @@ export function MailboxScreen({ box }: { box: 'inbox' | 'sent' }) {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={
-                isInbox ? 'Search inbox…' : 'Search sent mail…'
-              }
+              placeholder={isInbox ? 'Search inbox…' : 'Search sent mail…'}
               className="input-base w-full pl-8"
             />
           </div>
@@ -207,9 +207,7 @@ export function MailboxScreen({ box }: { box: 'inbox' | 'sent' }) {
             const lead = isInbox
               ? { id: m.senderId, name: m.senderName }
               : (m.to[0] ?? m.cc[0] ?? { id: 0, name: 'Nobody' });
-            const extra = isInbox
-              ? 0
-              : m.recipientCount - 1;
+            const extra = isInbox ? 0 : m.recipientCount - 1;
             return (
               <button
                 key={m.id}

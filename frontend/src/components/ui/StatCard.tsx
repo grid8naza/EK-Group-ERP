@@ -14,9 +14,11 @@ interface StatCardProps {
 // evergreen system and the reference dashboard's quiet accents.
 const ACCENTS: Record<NonNullable<StatCardProps['accent']>, string> = {
   blue: 'bg-brand-50 text-brand-600 dark:bg-brand-950 dark:text-brand-300',
-  emerald: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400',
+  emerald:
+    'bg-emerald-50 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400',
   amber: 'bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-400',
-  violet: 'bg-violet-50 text-violet-600 dark:bg-violet-950 dark:text-violet-400',
+  violet:
+    'bg-violet-50 text-violet-600 dark:bg-violet-950 dark:text-violet-400',
   rose: 'bg-rose-50 text-rose-600 dark:bg-rose-950 dark:text-rose-400',
   slate: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
 };

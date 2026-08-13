@@ -16,7 +16,6 @@ import { formatDate, isoDate } from '@/lib/utils';
 import { money } from '@/components/accounts/voucher-common';
 import type { PdcStatus, VoucherInstrument } from '@/lib/types';
 
-
 type Tone = 'amber' | 'green' | 'slate' | 'violet' | 'blue' | 'red';
 
 /**
@@ -31,11 +30,31 @@ const STATUS: Record<
   PdcStatus,
   { label: string; tone: Tone; moves: PdcStatus[] }
 > = {
-  ISSUED: { label: 'Issued', tone: 'amber', moves: ['CLEARED', 'REPLACED', 'CANCELLED'] },
-  IN_HAND: { label: 'In hand', tone: 'amber', moves: ['SUBMITTED', 'REPLACED', 'CANCELLED'] },
-  SUBMITTED: { label: 'Submitted', tone: 'blue', moves: ['CLEARED', 'BOUNCED'] },
-  BOUNCED: { label: 'Bounced', tone: 'red', moves: ['RESUBMITTED', 'REPLACED', 'CANCELLED'] },
-  RESUBMITTED: { label: 'Resubmitted', tone: 'blue', moves: ['CLEARED', 'BOUNCED'] },
+  ISSUED: {
+    label: 'Issued',
+    tone: 'amber',
+    moves: ['CLEARED', 'REPLACED', 'CANCELLED'],
+  },
+  IN_HAND: {
+    label: 'In hand',
+    tone: 'amber',
+    moves: ['SUBMITTED', 'REPLACED', 'CANCELLED'],
+  },
+  SUBMITTED: {
+    label: 'Submitted',
+    tone: 'blue',
+    moves: ['CLEARED', 'BOUNCED'],
+  },
+  BOUNCED: {
+    label: 'Bounced',
+    tone: 'red',
+    moves: ['RESUBMITTED', 'REPLACED', 'CANCELLED'],
+  },
+  RESUBMITTED: {
+    label: 'Resubmitted',
+    tone: 'blue',
+    moves: ['CLEARED', 'BOUNCED'],
+  },
   CLEARED: { label: 'Cleared', tone: 'green', moves: [] },
   REPLACED: { label: 'Replaced', tone: 'violet', moves: [] },
   CANCELLED: { label: 'Cancelled', tone: 'slate', moves: [] },
@@ -126,7 +145,10 @@ export function PdcRegister({
 
   const canEdit = can(route, 'edit');
 
-  const [acting, setActing] = useState<{ row: VoucherInstrument; to: PdcStatus } | null>(null);
+  const [acting, setActing] = useState<{
+    row: VoucherInstrument;
+    to: PdcStatus;
+  } | null>(null);
   const [history, setHistory] = useState<VoucherInstrument | null>(null);
   const [date, setDate] = useState('');
   const [remark, setRemark] = useState('');
@@ -150,8 +172,12 @@ export function PdcRegister({
   const run = async () => {
     if (!acting) return;
     const spec = MOVES[acting.to];
-    if (!date) return toast.error(`Give the date it was ${spec.dateLabel.toLowerCase()}.`);
-    if (spec.needsRemark && !remark.trim()) return toast.error('Say why, in a word or two.');
+    if (!date)
+      return toast.error(
+        `Give the date it was ${spec.dateLabel.toLowerCase()}.`,
+      );
+    if (spec.needsRemark && !remark.trim())
+      return toast.error('Say why, in a word or two.');
     setSaving(true);
     try {
       await api.patch(`/vouchers/pdc/${acting.row.id}`, {
@@ -186,8 +212,16 @@ export function PdcRegister({
           </span>
         ),
       },
-      { key: 'instrumentNo', header: 'Cheque no', accessor: (r) => r.instrumentNo ?? '—' },
-      { key: 'bank', header: 'Bank', accessor: (r) => r.bankAccount?.name ?? '—' },
+      {
+        key: 'instrumentNo',
+        header: 'Cheque no',
+        accessor: (r) => r.instrumentNo ?? '—',
+      },
+      {
+        key: 'bank',
+        header: 'Bank',
+        accessor: (r) => r.bankAccount?.name ?? '—',
+      },
       { key: 'party', header: 'Against', accessor: partyLine },
       {
         key: 'amount',
@@ -307,7 +341,9 @@ export function PdcRegister({
       >
         <ReadOnlyFieldset readOnly={false}>
           <div className="space-y-4">
-            <p className="text-xs text-slate-500 dark:text-slate-400">{spec?.hint}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {spec?.hint}
+            </p>
             <DateInput
               label={spec?.dateLabel ?? 'Date'}
               required
@@ -346,7 +382,9 @@ export function PdcRegister({
                 {formatDate(e.date)}
               </span>
               <span className="min-w-0">
-                <Badge color={STATUS[e.status].tone}>{STATUS[e.status].label}</Badge>
+                <Badge color={STATUS[e.status].tone}>
+                  {STATUS[e.status].label}
+                </Badge>
                 {e.remark && (
                   <span className="mt-1 block text-xs text-slate-500 dark:text-slate-400">
                     {e.remark}

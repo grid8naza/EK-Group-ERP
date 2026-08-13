@@ -61,7 +61,9 @@ const messageInclude = {
   },
 } satisfies Prisma.ChatMessageInclude;
 
-type MessageRow = Prisma.ChatMessageGetPayload<{ include: typeof messageInclude }>;
+type MessageRow = Prisma.ChatMessageGetPayload<{
+  include: typeof messageInclude;
+}>;
 
 const conversationInclude = {
   participants: true,
@@ -138,7 +140,9 @@ export class ChatService {
     );
 
     return conversations
-      .map((c) => this.viewConversation(c, userId, names, unread.get(c.id) ?? 0))
+      .map((c) =>
+        this.viewConversation(c, userId, names, unread.get(c.id) ?? 0),
+      )
       .sort((a, b) => {
         // Threads that have never been used sort by creation, not to the bottom
         // for ever — a group just created is the one you are about to type in.
@@ -249,7 +253,10 @@ export class ChatService {
   }
 
   async renameGroup(userId: number, conversationId: number, title: string) {
-    const { conversation } = await this.assertGroupAdmin(userId, conversationId);
+    const { conversation } = await this.assertGroupAdmin(
+      userId,
+      conversationId,
+    );
     const clean = title.trim();
     await this.prisma.conversation.update({
       where: { id: conversation.id },
@@ -268,7 +275,10 @@ export class ChatService {
     conversationId: number,
     dto: AddParticipantsDto,
   ) {
-    const { conversation } = await this.assertGroupAdmin(userId, conversationId);
+    const { conversation } = await this.assertGroupAdmin(
+      userId,
+      conversationId,
+    );
     const toAdd = await this.resolvePeers(userId, dto.userIds);
 
     for (const person of toAdd) {
@@ -418,9 +428,7 @@ export class ChatService {
           kind,
           body,
           replyToId: dto.replyToId ?? null,
-          attachments: attachments.length
-            ? { create: attachments }
-            : undefined,
+          attachments: attachments.length ? { create: attachments } : undefined,
         },
         include: messageInclude,
       });
@@ -456,7 +464,8 @@ export class ChatService {
       throw new BadRequestException('That message was deleted.');
     }
     const body = dto.body.trim();
-    if (!body) throw new BadRequestException('An edited message cannot be empty.');
+    if (!body)
+      throw new BadRequestException('An edited message cannot be empty.');
 
     const updated = await this.prisma.chatMessage.update({
       where: { id: messageId },
@@ -504,7 +513,11 @@ export class ChatService {
   // ------------------------------------------------------- receipts & live --
 
   /** Move this reader's high-water mark, and tell the others they were read. */
-  async markRead(userId: number, conversationId: number, lastMessageId: number) {
+  async markRead(
+    userId: number,
+    conversationId: number,
+    lastMessageId: number,
+  ) {
     const { participant, conversation } = await this.assertMember(
       userId,
       conversationId,
@@ -604,7 +617,12 @@ export class ChatService {
   private async ownMessage(userId: number, messageId: number) {
     const message = await this.prisma.chatMessage.findUnique({
       where: { id: messageId },
-      select: { id: true, senderId: true, conversationId: true, deletedAt: true },
+      select: {
+        id: true,
+        senderId: true,
+        conversationId: true,
+        deletedAt: true,
+      },
     });
     if (!message) throw new NotFoundException('No such message.');
     await this.assertMember(userId, message.conversationId);
@@ -787,7 +805,7 @@ export class ChatService {
     }));
 
     const isDirect = conversation.kind === ConversationKind.DIRECT;
-    const counterpart = isDirect ? others[0] ?? null : null;
+    const counterpart = isDirect ? (others[0] ?? null) : null;
 
     return {
       id: conversation.id,
@@ -795,8 +813,8 @@ export class ChatService {
       // A one-to-one thread is titled by whoever you are talking to, so it is
       // resolved per viewer here rather than stored on the row.
       title: isDirect
-        ? (counterpart && names.get(counterpart.userId)?.name) ?? 'Chat'
-        : conversation.title ?? 'Group',
+        ? ((counterpart && names.get(counterpart.userId)?.name) ?? 'Chat')
+        : (conversation.title ?? 'Group'),
       companyId: conversation.companyId,
       branchId: conversation.branchId,
       counterpartId: counterpart?.userId ?? null,
@@ -824,7 +842,8 @@ export class ChatService {
       id: message.id,
       conversationId: message.conversationId,
       senderId: message.senderId,
-      senderName: names.get(message.senderId)?.name ?? `User #${message.senderId}`,
+      senderName:
+        names.get(message.senderId)?.name ?? `User #${message.senderId}`,
       kind: message.kind,
       body: message.body,
       createdAt: message.createdAt.toISOString(),
@@ -833,8 +852,7 @@ export class ChatService {
       replyTo: message.replyTo
         ? {
             id: message.replyTo.id,
-            senderName:
-              names.get(message.replyTo.senderId)?.name ?? 'Someone',
+            senderName: names.get(message.replyTo.senderId)?.name ?? 'Someone',
             body: message.replyTo.deletedAt ? null : message.replyTo.body,
             deleted: message.replyTo.deletedAt !== null,
           }
@@ -856,9 +874,7 @@ export class ChatService {
     return `${Math.min(a, b)}:${Math.max(a, b)}`;
   }
 
-  private static kindOf(
-    attachments: ChatAttachmentRefDto[],
-  ): ChatMessageKind {
+  private static kindOf(attachments: ChatAttachmentRefDto[]): ChatMessageKind {
     if (attachments.length === 0) return ChatMessageKind.TEXT;
     return attachments.every((a) => a.mimeType.startsWith('image/'))
       ? ChatMessageKind.IMAGE

@@ -19,7 +19,8 @@ const statusColor = (s: LocalPurchaseOrderStatus) =>
           ? 'blue'
           : 'amber';
 
-const fmt = (iso?: string | null) => (iso ? new Date(iso).toLocaleString() : '—');
+const fmt = (iso?: string | null) =>
+  iso ? new Date(iso).toLocaleString() : '—';
 const fmtDate = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleDateString() : '—';
 const money = (n: number) =>
@@ -59,7 +60,9 @@ export function LocalPurchaseOrderDoc({
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
             Local Purchase Order
           </h1>
-          <p className="mt-1 font-mono text-sm text-slate-500">{order.orderNo}</p>
+          <p className="mt-1 font-mono text-sm text-slate-500">
+            {order.orderNo}
+          </p>
         </div>
         <div className="text-right">
           <Badge color={statusColor(order.status)}>
@@ -98,7 +101,9 @@ export function LocalPurchaseOrderDoc({
                 key={l.id ?? i}
                 className="border-b border-slate-100 dark:border-slate-800/60"
               >
-                <td className="py-2 pr-2 tabular-nums text-slate-400">{i + 1}</td>
+                <td className="py-2 pr-2 tabular-nums text-slate-400">
+                  {i + 1}
+                </td>
                 <td className="whitespace-nowrap py-2 pr-2 font-medium text-slate-800 dark:text-slate-100">
                   {targetName(l)}
                   <span className="ml-2 text-xs font-normal text-slate-400">
@@ -108,8 +113,12 @@ export function LocalPurchaseOrderDoc({
                 <td className="py-2 text-right tabular-nums">
                   {l.quantity.toLocaleString()}
                 </td>
-                <td className="py-2 pl-2 text-slate-500">{unitLabel(l.unitId)}</td>
-                <td className="py-2 text-right tabular-nums">{money(l.rate)}</td>
+                <td className="py-2 pl-2 text-slate-500">
+                  {unitLabel(l.unitId)}
+                </td>
+                <td className="py-2 text-right tabular-nums">
+                  {money(l.rate)}
+                </td>
                 <td className="py-2 text-right tabular-nums">
                   {money(l.quantity * l.rate)}
                 </td>

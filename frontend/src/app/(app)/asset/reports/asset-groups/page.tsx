@@ -107,7 +107,10 @@ export default function AssetGroupReportPage() {
     const levels = [...byLevel.keys()].sort((a, b) => a - b);
     return [
       { label: 'Total Categories', value: blocks.length },
-      ...levels.map((l) => ({ label: `Group - L${l}`, value: byLevel.get(l)! })),
+      ...levels.map((l) => ({
+        label: `Group - L${l}`,
+        value: byLevel.get(l)!,
+      })),
     ];
   }, [filteredGroups, blocks.length]);
 
@@ -167,7 +170,10 @@ export default function AssetGroupReportPage() {
           />
           <div className="ml-auto flex items-center gap-2">
             <ColumnToggle
-              columns={ALL_COLUMNS.map((c) => ({ key: c.key, label: c.header }))}
+              columns={ALL_COLUMNS.map((c) => ({
+                key: c.key,
+                label: c.header,
+              }))}
               hidden={hidden}
               onToggle={toggle}
             />

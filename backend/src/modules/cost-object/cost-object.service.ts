@@ -35,7 +35,10 @@ export class CostObjectService {
     // company must be cost-object-applicable.
     const costCenter = await this.prisma.costCenter.findUnique({
       where: { id: dto.costCenterId },
-      select: { companyId: true, company: { select: { costObjectApplicable: true } } },
+      select: {
+        companyId: true,
+        company: { select: { costObjectApplicable: true } },
+      },
     });
     if (!costCenter) throw new NotFoundException('Cost center not found');
     if (!costCenter.company.costObjectApplicable) {

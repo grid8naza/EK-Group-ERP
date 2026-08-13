@@ -39,7 +39,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="absolute inset-0 animate-spin rounded-full border-[3px] border-brand-100 border-t-brand-600 dark:border-slate-800 dark:border-t-brand-500" />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={!logoBroken && logoUrl ? mediaUrl(logoUrl) : '/brand-logo.png'}
+              src={
+                !logoBroken && logoUrl ? mediaUrl(logoUrl) : '/brand-logo.png'
+              }
               alt="Logo"
               onError={() => setLogoBroken(true)}
               className="h-12 w-12 rounded-lg object-contain"

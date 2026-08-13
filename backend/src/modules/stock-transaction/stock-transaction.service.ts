@@ -138,7 +138,8 @@ export class StockTransactionService {
   constructor(
     private prisma: PrismaService,
     @Inject(NUMBERING) private readonly numbering: NumberingPort,
-    @Inject(BATCH_NUMBERING) private readonly batchNumbering: BatchNumberingPort,
+    @Inject(BATCH_NUMBERING)
+    private readonly batchNumbering: BatchNumberingPort,
     // Batches are regenerated on every edit and dropped on delete, so this
     // service must ask whether anything is holding them first.
     @Inject(STOCK) private readonly stock: StockPort,
@@ -177,7 +178,10 @@ export class StockTransactionService {
     if (type !== 'PURCHASE') return;
     const paid = lines
       .filter((l) => l.itemId != null && (l.unitPrice ?? 0) > 0)
-      .map((l) => ({ itemId: l.itemId as number, unitPrice: l.unitPrice as number }));
+      .map((l) => ({
+        itemId: l.itemId as number,
+        unitPrice: l.unitPrice as number,
+      }));
     if (!paid.length) return;
     try {
       const raised = await this.purchasePrice.raiseLastPurchasePrice(paid);
@@ -217,8 +221,15 @@ export class StockTransactionService {
   async postProductionReceipt(
     input: ProductionReceiptPosting,
   ): Promise<ProducedBatch[]> {
-    const { companyId, branchId, storeId, documentId, documentNo, date, lines } =
-      input;
+    const {
+      companyId,
+      branchId,
+      storeId,
+      documentId,
+      documentNo,
+      date,
+      lines,
+    } = input;
     if (!lines.length) return [];
 
     const docDate = new Date(date);
@@ -482,8 +493,15 @@ export class StockTransactionService {
    * whole requisition or none of it.
    */
   async postMaterialIssue(input: MaterialIssuePosting): Promise<void> {
-    const { companyId, branchId, storeId, documentId, documentNo, date, lines } =
-      input;
+    const {
+      companyId,
+      branchId,
+      storeId,
+      documentId,
+      documentNo,
+      date,
+      lines,
+    } = input;
     if (!lines.length) return;
     const docDate = new Date(date);
     // Items have no costing of their own — it rides in from the requisition.
@@ -515,8 +533,15 @@ export class StockTransactionService {
    * store, availability-checked. Atomic.
    */
   async postDispatch(input: DispatchPosting): Promise<void> {
-    const { companyId, branchId, storeId, documentId, documentNo, date, lines } =
-      input;
+    const {
+      companyId,
+      branchId,
+      storeId,
+      documentId,
+      documentNo,
+      date,
+      lines,
+    } = input;
     if (!lines.length) return;
     const docDate = new Date(date);
     // A sale is traced against the selling company's own costing for the
@@ -635,8 +660,9 @@ export class StockTransactionService {
       orderBy: { id: 'desc' },
     });
 
-    const uniq = <T>(xs: (T | null | undefined)[]) =>
-      [...new Set(xs.filter((x): x is T => x != null))];
+    const uniq = <T>(xs: (T | null | undefined)[]) => [
+      ...new Set(xs.filter((x): x is T => x != null)),
+    ];
     const itemIds = uniq(filtered.map((r) => r.itemId));
     const productIds = uniq(filtered.map((r) => r.productId));
     const catIds = uniq(filtered.map((r) => r.categoryId));
@@ -650,25 +676,46 @@ export class StockTransactionService {
 
     const [its, prs, cats, grps, uns, sts, docs] = await Promise.all([
       itemIds.length
-        ? this.prisma.item.findMany({ where: { id: { in: itemIds } }, select: { id: true, name: true } })
+        ? this.prisma.item.findMany({
+            where: { id: { in: itemIds } },
+            select: { id: true, name: true },
+          })
         : [],
       productIds.length
-        ? this.prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, name: true } })
+        ? this.prisma.product.findMany({
+            where: { id: { in: productIds } },
+            select: { id: true, name: true },
+          })
         : [],
       catIds.length
-        ? this.prisma.category.findMany({ where: { id: { in: catIds } }, select: { id: true, name: true } })
+        ? this.prisma.category.findMany({
+            where: { id: { in: catIds } },
+            select: { id: true, name: true },
+          })
         : [],
       groupIds.length
-        ? this.prisma.group.findMany({ where: { id: { in: groupIds } }, select: { id: true, name: true } })
+        ? this.prisma.group.findMany({
+            where: { id: { in: groupIds } },
+            select: { id: true, name: true },
+          })
         : [],
       unitIds.length
-        ? this.prisma.unit.findMany({ where: { id: { in: unitIds } }, select: { id: true, symbol: true, code: true } })
+        ? this.prisma.unit.findMany({
+            where: { id: { in: unitIds } },
+            select: { id: true, symbol: true, code: true },
+          })
         : [],
       storeIds.length
-        ? this.prisma.store.findMany({ where: { id: { in: storeIds } }, select: { id: true, name: true } })
+        ? this.prisma.store.findMany({
+            where: { id: { in: storeIds } },
+            select: { id: true, name: true },
+          })
         : [],
       docIds.length
-        ? this.prisma.stockTransaction.findMany({ where: { id: { in: docIds } }, select: { id: true, isLocked: true } })
+        ? this.prisma.stockTransaction.findMany({
+            where: { id: { in: docIds } },
+            select: { id: true, isLocked: true },
+          })
         : [],
     ]);
 
@@ -676,7 +723,9 @@ export class StockTransactionService {
     const prodMap = new Map(prs.map((x) => [x.id, x.name] as const));
     const catMap = new Map(cats.map((x) => [x.id, x.name] as const));
     const grpMap = new Map(grps.map((x) => [x.id, x.name] as const));
-    const unitMap = new Map(uns.map((x) => [x.id, x.symbol ?? x.code] as const));
+    const unitMap = new Map(
+      uns.map((x) => [x.id, x.symbol ?? x.code] as const),
+    );
     const storeMap = new Map(sts.map((x) => [x.id, x.name] as const));
     const lockMap = new Map(docs.map((x) => [x.id, x.isLocked] as const));
 
@@ -691,16 +740,20 @@ export class StockTransactionService {
       itemId: r.itemId,
       productId: r.productId,
       name: r.itemId
-        ? itemMap.get(r.itemId) ?? ''
+        ? (itemMap.get(r.itemId) ?? '')
         : r.productId
-          ? prodMap.get(r.productId) ?? ''
+          ? (prodMap.get(r.productId) ?? '')
           : '',
       categoryId: r.categoryId,
-      categoryName: r.categoryId ? catMap.get(r.categoryId) ?? null : null,
+      categoryName: r.categoryId ? (catMap.get(r.categoryId) ?? null) : null,
       primaryGroupId: r.primaryGroupId,
-      primaryGroupName: r.primaryGroupId ? grpMap.get(r.primaryGroupId) ?? null : null,
+      primaryGroupName: r.primaryGroupId
+        ? (grpMap.get(r.primaryGroupId) ?? null)
+        : null,
       parentGroupId: r.parentGroupId,
-      parentGroupName: r.parentGroupId ? grpMap.get(r.parentGroupId) ?? null : null,
+      parentGroupName: r.parentGroupId
+        ? (grpMap.get(r.parentGroupId) ?? null)
+        : null,
       batchNo1: r.batchNo1,
       batchNo2: r.batchNo2,
       expiryDate: r.expiryDate,
@@ -782,8 +835,9 @@ export class StockTransactionService {
       orderBy: [{ date: 'desc' }, { id: 'asc' }],
     });
 
-    const uniq = <T>(xs: (T | null | undefined)[]) =>
-      [...new Set(xs.filter((x): x is T => x != null))];
+    const uniq = <T>(xs: (T | null | undefined)[]) => [
+      ...new Set(xs.filter((x): x is T => x != null)),
+    ];
     const [items, products, cats, groups, units, stores, suppliers] =
       await Promise.all([
         this.byId(this.prisma.item, uniq(rows.map((r) => r.itemId))),
@@ -798,7 +852,12 @@ export class StockTransactionService {
         ),
         this.prisma.unit.findMany({
           where: {
-            id: { in: uniq([...rows.map((r) => r.unitId), ...rows.map((r) => r.enteredUnitId)]) },
+            id: {
+              in: uniq([
+                ...rows.map((r) => r.unitId),
+                ...rows.map((r) => r.enteredUnitId),
+              ]),
+            },
           },
           select: { id: true, symbol: true, code: true },
         }),
@@ -807,14 +866,15 @@ export class StockTransactionService {
         // Accounts module's, and this only ever reads a name off it.
         this.byId(this.prisma.supplier, uniq(headers.map((h) => h.supplierId))),
       ]);
-    const unitOf = new Map(units.map((u) => [u.id, u.symbol ?? u.code] as const));
+    const unitOf = new Map(
+      units.map((u) => [u.id, u.symbol ?? u.code] as const),
+    );
 
     return rows.map((r) => {
       const doc = byDoc.get(r.documentId);
       const qty = r.qtyIn;
       const taxable = qty * r.unitPrice;
-      const tax =
-        r.cgstAmount + r.sgstAmount + r.igstAmount + r.cessAmount;
+      const tax = r.cgstAmount + r.sgstAmount + r.igstAmount + r.cessAmount;
       return {
         id: r.id,
         documentId: r.documentId,
@@ -822,26 +882,26 @@ export class StockTransactionService {
         date: r.date,
         supplierId: doc?.supplierId ?? null,
         supplierName: doc?.supplierId
-          ? suppliers.get(doc.supplierId) ?? null
+          ? (suppliers.get(doc.supplierId) ?? null)
           : null,
         poRef: doc?.purchaseOrderRef ?? null,
         reference: doc?.reference ?? null,
-        storeName: doc ? stores.get(doc.storeId) ?? null : null,
+        storeName: doc ? (stores.get(doc.storeId) ?? null) : null,
         branchId: doc?.branchId ?? null,
         itemId: r.itemId,
         productId: r.productId,
         name: r.itemId
-          ? items.get(r.itemId) ?? ''
+          ? (items.get(r.itemId) ?? '')
           : r.productId
-            ? products.get(r.productId) ?? ''
+            ? (products.get(r.productId) ?? '')
             : '',
         categoryId: r.categoryId,
-        categoryName: r.categoryId ? cats.get(r.categoryId) ?? null : null,
+        categoryName: r.categoryId ? (cats.get(r.categoryId) ?? null) : null,
         primaryGroupName: r.primaryGroupId
-          ? groups.get(r.primaryGroupId) ?? null
+          ? (groups.get(r.primaryGroupId) ?? null)
           : null,
         parentGroupName: r.parentGroupId
-          ? groups.get(r.parentGroupId) ?? null
+          ? (groups.get(r.parentGroupId) ?? null)
           : null,
         batchNo1: r.batchNo1,
         batchNo2: r.batchNo2,
@@ -865,7 +925,7 @@ export class StockTransactionService {
         // show what the supplier billed next to what stock is valued at.
         enteredQty: r.enteredQty,
         enteredUnitSymbol: r.enteredUnitId
-          ? unitOf.get(r.enteredUnitId) ?? ''
+          ? (unitOf.get(r.enteredUnitId) ?? '')
           : '',
         enteredRate: r.enteredUnitPrice,
       };
@@ -951,8 +1011,9 @@ export class StockTransactionService {
     const noteBy = new Map(notes.map((n) => [n.docNo, n]));
     const dispatchBy = new Map(dispatches.map((d) => [d.dispatchNo, d]));
 
-    const uniq = <T>(xs: (T | null | undefined)[]) =>
-      [...new Set(xs.filter((x): x is T => x != null))];
+    const uniq = <T>(xs: (T | null | undefined)[]) => [
+      ...new Set(xs.filter((x): x is T => x != null)),
+    ];
     const [items, products, cats, groups, units, stores, customers, companies] =
       await Promise.all([
         this.byId(this.prisma.item, uniq(rows.map((r) => r.itemId))),
@@ -983,7 +1044,9 @@ export class StockTransactionService {
           uniq(dispatches.map((d) => d.buyerCompanyId)),
         ),
       ]);
-    const unitOf = new Map(units.map((u) => [u.id, u.symbol ?? u.code] as const));
+    const unitOf = new Map(
+      units.map((u) => [u.id, u.symbol ?? u.code] as const),
+    );
 
     const mapped = rows.map((r) => {
       const note = noteBy.get(r.documentNo);
@@ -1008,9 +1071,9 @@ export class StockTransactionService {
         date: r.date,
         customerId,
         customerName: customerId
-          ? customers.get(customerId) ?? null
+          ? (customers.get(customerId) ?? null)
           : buyerCompanyId
-            ? companies.get(buyerCompanyId) ?? null
+            ? (companies.get(buyerCompanyId) ?? null)
             : null,
         isIntercompany: !!buyerCompanyId,
         orderRef: note?.salesOrderRef ?? dispatch?.soNumber ?? null,
@@ -1020,17 +1083,17 @@ export class StockTransactionService {
         itemId: r.itemId,
         productId: r.productId,
         name: r.itemId
-          ? items.get(r.itemId) ?? ''
+          ? (items.get(r.itemId) ?? '')
           : r.productId
-            ? products.get(r.productId) ?? ''
+            ? (products.get(r.productId) ?? '')
             : '',
         categoryId: r.categoryId,
-        categoryName: r.categoryId ? cats.get(r.categoryId) ?? null : null,
+        categoryName: r.categoryId ? (cats.get(r.categoryId) ?? null) : null,
         primaryGroupName: r.primaryGroupId
-          ? groups.get(r.primaryGroupId) ?? null
+          ? (groups.get(r.primaryGroupId) ?? null)
           : null,
         parentGroupName: r.parentGroupId
-          ? groups.get(r.parentGroupId) ?? null
+          ? (groups.get(r.parentGroupId) ?? null)
           : null,
         batchNo1: r.batchNo1,
         expiryDate: r.expiryDate,
@@ -1047,7 +1110,7 @@ export class StockTransactionService {
         total: Math.round((taxable + tax) * 100) / 100,
         enteredQty: r.enteredQty,
         enteredUnitSymbol: r.enteredUnitId
-          ? unitOf.get(r.enteredUnitId) ?? ''
+          ? (unitOf.get(r.enteredUnitId) ?? '')
           : '',
         enteredRate: r.enteredUnitPrice,
       };
@@ -1062,7 +1125,9 @@ export class StockTransactionService {
 
   /** id -> name for any master, skipping the query when nothing needs it. */
   private async byId(
-    model: { findMany: (args: unknown) => Promise<{ id: number; name: string }[]> },
+    model: {
+      findMany: (args: unknown) => Promise<{ id: number; name: string }[]>;
+    },
     ids: number[],
   ): Promise<Map<number, string>> {
     if (!ids.length) return new Map();
@@ -1091,8 +1156,16 @@ export class StockTransactionService {
     const ids = headers.map((h) => h.id);
     const ledger = ids.length
       ? await this.prisma.stockLedger.findMany({
-          where: { transactionType: type as StockTxnType, documentId: { in: ids } },
-          select: { documentId: true, qtyIn: true, qtyOut: true, unitPrice: true },
+          where: {
+            transactionType: type as StockTxnType,
+            documentId: { in: ids },
+          },
+          select: {
+            documentId: true,
+            qtyIn: true,
+            qtyOut: true,
+            unitPrice: true,
+          },
         })
       : [];
     const amountByDoc = new Map<number, number>();
@@ -1104,20 +1177,30 @@ export class StockTransactionService {
       );
     }
 
-    const uniq = <T>(xs: (T | null | undefined)[]) =>
-      [...new Set(xs.filter((x): x is T => x != null))];
+    const uniq = <T>(xs: (T | null | undefined)[]) => [
+      ...new Set(xs.filter((x): x is T => x != null)),
+    ];
     const companyIds = uniq(headers.map((h) => h.companyId));
     const branchIds = uniq(headers.map((h) => h.branchId));
     const storeIds = uniq(headers.map((h) => h.storeId));
     const [companies, branches, stores] = await Promise.all([
       companyIds.length
-        ? this.prisma.company.findMany({ where: { id: { in: companyIds } }, select: { id: true, name: true } })
+        ? this.prisma.company.findMany({
+            where: { id: { in: companyIds } },
+            select: { id: true, name: true },
+          })
         : [],
       branchIds.length
-        ? this.prisma.branch.findMany({ where: { id: { in: branchIds } }, select: { id: true, name: true } })
+        ? this.prisma.branch.findMany({
+            where: { id: { in: branchIds } },
+            select: { id: true, name: true },
+          })
         : [],
       storeIds.length
-        ? this.prisma.store.findMany({ where: { id: { in: storeIds } }, select: { id: true, name: true } })
+        ? this.prisma.store.findMany({
+            where: { id: { in: storeIds } },
+            select: { id: true, name: true },
+          })
         : [],
     ]);
     const companyMap = new Map(companies.map((x) => [x.id, x.name] as const));
@@ -1143,7 +1226,7 @@ export class StockTransactionService {
       companyId: h.companyId,
       companyName: companyMap.get(h.companyId) ?? '',
       branchId: h.branchId,
-      branchName: h.branchId ? branchMap.get(h.branchId) ?? null : null,
+      branchName: h.branchId ? (branchMap.get(h.branchId) ?? null) : null,
       storeId: h.storeId,
       storeName: storeMap.get(h.storeId) ?? '',
       reference: h.reference,
@@ -1163,7 +1246,9 @@ export class StockTransactionService {
     dto: CreateStockTransactionDto,
   ) {
     if (!companyId) {
-      throw new BadRequestException('Select a company before entering a transaction.');
+      throw new BadRequestException(
+        'Select a company before entering a transaction.',
+      );
     }
     const companyCode = await this.companyCode(companyId);
     // Company + branch scoped: with an active branch, the store must belong to
@@ -1189,7 +1274,12 @@ export class StockTransactionService {
     const ymd = this.ymd(dto.docDate);
     // Only IN types create batches → only they need rule batch numbers.
     const ruleBatchNos = isInbound(type)
-      ? await this.ruleBatchNumbers(companyId, txnBranchId, dto.lines.length, docDate)
+      ? await this.ruleBatchNumbers(
+          companyId,
+          txnBranchId,
+          dto.lines.length,
+          docDate,
+        )
       : null;
 
     // The document number is derived, so an entry posted at the same instant can
@@ -1204,7 +1294,11 @@ export class StockTransactionService {
         ),
       (docNo) =>
         this.prisma.$transaction(async (tx) => {
-          const base = await maxBatchSeq(tx, companyId, `${companyCode}-${ymd}-`);
+          const base = await maxBatchSeq(
+            tx,
+            companyId,
+            `${companyCode}-${ymd}-`,
+          );
           const created = await tx.stockTransaction.create({
             data: {
               companyId,
@@ -1217,12 +1311,12 @@ export class StockTransactionService {
               // Delivery Note. Cleared on every other type rather than carried:
               // a counterparty on a stock journal would be a fact nobody put
               // there, and the registers read these columns.
-              supplierId: type === 'PURCHASE' ? dto.supplierId ?? null : null,
+              supplierId: type === 'PURCHASE' ? (dto.supplierId ?? null) : null,
               purchaseOrderRef:
                 type === 'PURCHASE'
                   ? dto.purchaseOrderRef?.trim() || null
                   : null,
-              customerId: type === 'SALE' ? dto.customerId ?? null : null,
+              customerId: type === 'SALE' ? (dto.customerId ?? null) : null,
               salesOrderRef:
                 type === 'SALE' ? dto.salesOrderRef?.trim() || null : null,
               dispatchId: incoming?.id ?? null,
@@ -1278,7 +1372,9 @@ export class StockTransactionService {
     branchId: number | undefined,
     dto: UpdateStockTransactionDto,
   ) {
-    const existing = await this.prisma.stockTransaction.findUnique({ where: { id } });
+    const existing = await this.prisma.stockTransaction.findUnique({
+      where: { id },
+    });
     if (!existing) throw new NotFoundException('Stock transaction not found');
     assertUnlocked(existing, 'stock transaction', 'editing');
     const effCompany = existing.companyId;
@@ -1301,7 +1397,12 @@ export class StockTransactionService {
 
     // A receipt against a dispatch stays bounded by it, however it is re-edited.
     if (dto.lines && existing.dispatchId) {
-      await this.assertReceivable(existing.dispatchId, effCompany, dto.lines, true);
+      await this.assertReceivable(
+        existing.dispatchId,
+        effCompany,
+        dto.lines,
+        true,
+      );
     }
 
     const docDate = dto.docDate ? new Date(dto.docDate) : existing.docDate;
@@ -1329,7 +1430,12 @@ export class StockTransactionService {
         };
     const ruleBatchNos =
       dto.lines && isInbound(existing.type as TxnType)
-        ? await this.ruleBatchNumbers(effCompany, txnBranchId, dto.lines.length, docDate)
+        ? await this.ruleBatchNumbers(
+            effCompany,
+            txnBranchId,
+            dto.lines.length,
+            docDate,
+          )
         : null;
 
     const saved = await this.prisma.$transaction(async (tx) => {
@@ -1360,8 +1466,11 @@ export class StockTransactionService {
             ? headerCosting.costObjectId
             : undefined,
           reference:
-            dto.reference !== undefined ? dto.reference?.trim() || null : undefined,
-          notes: dto.notes !== undefined ? dto.notes?.trim() || null : undefined,
+            dto.reference !== undefined
+              ? dto.reference?.trim() || null
+              : undefined,
+          notes:
+            dto.notes !== undefined ? dto.notes?.trim() || null : undefined,
         },
       });
 
@@ -1421,7 +1530,9 @@ export class StockTransactionService {
   }
 
   async remove(id: number) {
-    const existing = await this.prisma.stockTransaction.findUnique({ where: { id } });
+    const existing = await this.prisma.stockTransaction.findUnique({
+      where: { id },
+    });
     if (!existing) throw new NotFoundException('Stock transaction not found');
     assertUnlocked(existing, 'stock transaction', 'deleting');
     await this.prisma.$transaction(async (tx) => {
@@ -1451,7 +1562,9 @@ export class StockTransactionService {
   }
 
   async setLock(id: number, locked: boolean) {
-    const existing = await this.prisma.stockTransaction.findUnique({ where: { id } });
+    const existing = await this.prisma.stockTransaction.findUnique({
+      where: { id },
+    });
     if (!existing) throw new NotFoundException('Stock transaction not found');
     return this.prisma.stockTransaction.update({
       where: { id },
@@ -1470,7 +1583,9 @@ export class StockTransactionService {
   async incomingDispatches(
     companyId: number | undefined,
     branchId: number | undefined,
-  ): Promise<(IncomingDispatch & { lines: { expiryDate: string | null }[] })[]> {
+  ): Promise<
+    (IncomingDispatch & { lines: { expiryDate: string | null }[] })[]
+  > {
     if (!companyId) return [];
     const dispatches = await this.dispatch.incomingFor(
       companyId,
@@ -1514,7 +1629,9 @@ export class StockTransactionService {
   ): Promise<IncomingDispatch> {
     const incoming = await this.dispatch.findIncoming(dispatchId, companyId);
     if (!incoming) {
-      throw new BadRequestException('That dispatch was not shipped to this company.');
+      throw new BadRequestException(
+        'That dispatch was not shipped to this company.',
+      );
     }
     // On a re-edit the dispatch is already closed by this very receipt.
     if (incoming.received && !reopening) {
@@ -1742,10 +1859,14 @@ export class StockTransactionService {
     const out: LineClass[] = [];
     for (const l of lines) {
       if (!l.itemId && !l.productId) {
-        throw new BadRequestException('Each line must have an item or a product.');
+        throw new BadRequestException(
+          'Each line must have an item or a product.',
+        );
       }
       if (l.itemId && l.productId) {
-        throw new BadRequestException('A line cannot be both an item and a product.');
+        throw new BadRequestException(
+          'A line cannot be both an item and a product.',
+        );
       }
       out.push(await this.classify(l.itemId ?? null, l.productId ?? null));
     }

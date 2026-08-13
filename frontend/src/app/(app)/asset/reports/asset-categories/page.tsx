@@ -31,14 +31,25 @@ const availability = (c: AssetCategory) =>
 
 const ALL_COLUMNS: ReportColumn<AssetCategory>[] = [
   { key: 'code', header: 'Code', weight: 16, cell: (c) => c.code },
-  { key: 'name', header: 'Category', weight: 26, bold: true, cell: (c) => c.name },
+  {
+    key: 'name',
+    header: 'Category',
+    weight: 26,
+    bold: true,
+    cell: (c) => c.name,
+  },
   {
     key: 'description',
     header: 'Description',
     weight: 34,
     cell: (c) => c.description ?? '-',
   },
-  { key: 'availability', header: 'Availability', weight: 12, cell: availability },
+  {
+    key: 'availability',
+    header: 'Availability',
+    weight: 12,
+    cell: availability,
+  },
   {
     key: 'status',
     header: 'Status',
@@ -118,7 +129,10 @@ export default function AssetCategoryReportPage() {
         <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 p-4 dark:border-slate-800">
           <div className="ml-auto flex items-center gap-2">
             <ColumnToggle
-              columns={ALL_COLUMNS.map((c) => ({ key: c.key, label: c.header }))}
+              columns={ALL_COLUMNS.map((c) => ({
+                key: c.key,
+                label: c.header,
+              }))}
               hidden={hidden}
               onToggle={toggle}
             />

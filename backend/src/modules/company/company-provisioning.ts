@@ -11,30 +11,100 @@ import { ObjectType, Prisma } from '@prisma/client';
 // "Company Setup" hosts everything company/user/document related.
 // CPANEL_SUBS = the Admin Setup menu.
 export const CPANEL_SUBS = [
-  { name: 'Object Master', route: '/cpanel/objects', icon: 'database', order: 1 },
+  {
+    name: 'Object Master',
+    route: '/cpanel/objects',
+    icon: 'database',
+    order: 1,
+  },
   { name: 'Module Master', route: '/cpanel/modules', icon: 'layers', order: 2 },
   { name: 'Menu Setup', route: '/cpanel/menus', icon: 'menu', order: 3 },
   { name: 'Lookups', route: '/cpanel/lookups', icon: 'list', order: 4 },
-  { name: 'Backup & Restore', route: '/cpanel/backup', icon: 'database-backup', order: 5 },
-  { name: 'Login Screen Setup', route: '/cpanel/login-screen', icon: 'image', order: 6 },
-  { name: 'Software Information', route: '/cpanel/software-info', icon: 'info', order: 7 },
+  {
+    name: 'Backup & Restore',
+    route: '/cpanel/backup',
+    icon: 'database-backup',
+    order: 5,
+  },
+  {
+    name: 'Login Screen Setup',
+    route: '/cpanel/login-screen',
+    icon: 'image',
+    order: 6,
+  },
+  {
+    name: 'Software Information',
+    route: '/cpanel/software-info',
+    icon: 'info',
+    order: 7,
+  },
 ];
 
 // CPANEL_COMPANY_SUBS = the Company Setup menu (all other Cpanel screens). Order
 // mirrors the screens' former positions so a migrated DB and a fresh install
 // render the same list.
 export const CPANEL_COMPANY_SUBS = [
-  { name: 'User Groups', route: '/cpanel/user-groups', icon: 'shield', order: 1 },
-  { name: 'Dashboards', route: '/cpanel/dashboards', icon: 'layout-dashboard', order: 2 },
+  {
+    name: 'User Groups',
+    route: '/cpanel/user-groups',
+    icon: 'shield',
+    order: 1,
+  },
+  {
+    name: 'Dashboards',
+    route: '/cpanel/dashboards',
+    icon: 'layout-dashboard',
+    order: 2,
+  },
   { name: 'Widgets', route: '/cpanel/widgets', icon: 'box', order: 3 },
-  { name: 'Company Master', route: '/cpanel/companies', icon: 'building', order: 4 },
-  { name: 'Currency Master', route: '/cpanel/currencies', icon: 'wallet', order: 5 },
-  { name: 'Users & Data Security', route: '/cpanel/users', icon: 'users', order: 6 },
-  { name: 'Workflow Setup', route: '/cpanel/workflows', icon: 'git-branch', order: 7 },
-  { name: 'Approval Statuses', route: '/cpanel/approval-statuses', icon: 'shieldcheck', order: 8 },
-  { name: 'Document Master', route: '/cpanel/documents', icon: 'file-text', order: 9 },
-  { name: 'Document Numbering', route: '/cpanel/document-numbering', icon: 'hash', order: 10 },
-  { name: 'Batch Numbering', route: '/cpanel/batch-numbering', icon: 'boxes', order: 11 },
+  {
+    name: 'Company Master',
+    route: '/cpanel/companies',
+    icon: 'building',
+    order: 4,
+  },
+  {
+    name: 'Currency Master',
+    route: '/cpanel/currencies',
+    icon: 'wallet',
+    order: 5,
+  },
+  {
+    name: 'Users & Data Security',
+    route: '/cpanel/users',
+    icon: 'users',
+    order: 6,
+  },
+  {
+    name: 'Workflow Setup',
+    route: '/cpanel/workflows',
+    icon: 'git-branch',
+    order: 7,
+  },
+  {
+    name: 'Approval Statuses',
+    route: '/cpanel/approval-statuses',
+    icon: 'shieldcheck',
+    order: 8,
+  },
+  {
+    name: 'Document Master',
+    route: '/cpanel/documents',
+    icon: 'file-text',
+    order: 9,
+  },
+  {
+    name: 'Document Numbering',
+    route: '/cpanel/document-numbering',
+    icon: 'hash',
+    order: 10,
+  },
+  {
+    name: 'Batch Numbering',
+    route: '/cpanel/batch-numbering',
+    icon: 'boxes',
+    order: 11,
+  },
 ];
 
 export interface ProvisionResult {

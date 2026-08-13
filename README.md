@@ -7,13 +7,13 @@ company master, lookups, and users / data security.
 
 ## Stack
 
-| Layer     | Tech                                  |
-| --------- | ------------------------------------- |
-| Frontend  | Next.js 14 (App Router) + Tailwind CSS |
-| Backend   | NestJS (TypeScript)                   |
-| ORM       | Prisma                                |
-| Database  | PostgreSQL 16                         |
-| Runtime   | Docker + docker-compose               |
+| Layer    | Tech                                   |
+| -------- | -------------------------------------- |
+| Frontend | Next.js 14 (App Router) + Tailwind CSS |
+| Backend  | NestJS (TypeScript)                    |
+| ORM      | Prisma                                 |
+| Database | PostgreSQL 16                          |
+| Runtime  | Docker + docker-compose                |
 
 Design: modern / minimalistic, neutral **slate + blue** accent, light **and**
 dark mode. Forms open in **side drawers** (never modals).
@@ -39,8 +39,8 @@ docker compose up --build
 This starts Postgres, runs Prisma migrations, seeds the database (super admin +
 sample Cpanel menus), then launches the API and the web app.
 
-- Web:  http://localhost:3000
-- API:  http://localhost:4000/api
+- Web: http://localhost:3000
+- API: http://localhost:4000/api
 - API docs (Swagger): http://localhost:4000/api/docs
 
 ### Default login

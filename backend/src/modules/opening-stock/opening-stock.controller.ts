@@ -21,7 +21,8 @@ import {
   UpdateOpeningStockDto,
 } from './opening-stock.dto';
 
-type OsType = 'ITEM_RAW' | 'ITEM_PACKING' | 'PRODUCT_PACKED' | 'PRODUCT_UNPACKED';
+type OsType =
+  'ITEM_RAW' | 'ITEM_PACKING' | 'PRODUCT_PACKED' | 'PRODUCT_UNPACKED';
 const OS_TYPES: readonly string[] = [
   'ITEM_RAW',
   'ITEM_PACKING',

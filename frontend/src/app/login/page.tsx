@@ -32,7 +32,14 @@ function RichOrPlain({
   className?: string;
 }) {
   const clean = html ? sanitizeHtml(html) : '';
-  if (clean) return <div className={className} style={style} dangerouslySetInnerHTML={{ __html: clean }} />;
+  if (clean)
+    return (
+      <div
+        className={className}
+        style={style}
+        dangerouslySetInnerHTML={{ __html: clean }}
+      />
+    );
   if (!text) return null;
   return (
     <div className={className} style={style}>
@@ -44,10 +51,22 @@ function RichOrPlain({
 function GoogleIcon() {
   return (
     <svg className="h-4 w-4" viewBox="0 0 48 48" aria-hidden>
-      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.4 29.3 35 24 35c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.2-.1-2.3-.4-3.5z" />
-      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 5.1 29.6 3 24 3 16 3 9.1 7.6 6.3 14.7z" />
-      <path fill="#4CAF50" d="M24 45c5.2 0 10-2 13.6-5.2l-6.3-5.3C29.2 35.9 26.7 37 24 37c-5.3 0-9.7-3.6-11.3-8.4l-6.5 5C9.1 40.4 16 45 24 45z" />
-      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4 5.5l6.3 5.3C41.4 36.3 45 30.7 45 24c0-1.2-.1-2.3-.4-3.5z" />
+      <path
+        fill="#FFC107"
+        d="M43.6 20.5H42V20H24v8h11.3C33.7 32.4 29.3 35 24 35c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 5.1 29.6 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21 21-9.4 21-21c0-1.2-.1-2.3-.4-3.5z"
+      />
+      <path
+        fill="#FF3D00"
+        d="M6.3 14.7l6.6 4.8C14.7 16 19 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.6 5.1 29.6 3 24 3 16 3 9.1 7.6 6.3 14.7z"
+      />
+      <path
+        fill="#4CAF50"
+        d="M24 45c5.2 0 10-2 13.6-5.2l-6.3-5.3C29.2 35.9 26.7 37 24 37c-5.3 0-9.7-3.6-11.3-8.4l-6.5 5C9.1 40.4 16 45 24 45z"
+      />
+      <path
+        fill="#1976D2"
+        d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.1-4 5.5l6.3 5.3C41.4 36.3 45 30.7 45 24c0-1.2-.1-2.3-.4-3.5z"
+      />
     </svg>
   );
 }
@@ -71,7 +90,10 @@ export default function LoginPage() {
       try {
         const res = await fetch(`${API_URL}/login-screen/public`);
         if (!res.ok) return;
-        const data = (await res.json()) as { config: LoginScreenConfig | null; media: LoginMedia[] };
+        const data = (await res.json()) as {
+          config: LoginScreenConfig | null;
+          media: LoginMedia[];
+        };
         if (!active) return;
         setCfg(withDefaults(data.config));
         setMedia(data.media ?? []);
@@ -101,7 +123,8 @@ export default function LoginPage() {
     try {
       await login(username.trim(), password);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) setError('Invalid username or password.');
+      if (err instanceof ApiError && err.status === 401)
+        setError('Invalid username or password.');
       else if (err instanceof ApiError) setError(err.message);
       else setError('Something went wrong. Please try again.');
       setLoading(false);
@@ -117,7 +140,9 @@ export default function LoginPage() {
   const renderLogo = () => (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={!logoBroken && cfg.logoUrl ? mediaUrl(cfg.logoUrl) : '/brand-logo.png'}
+      src={
+        !logoBroken && cfg.logoUrl ? mediaUrl(cfg.logoUrl) : '/brand-logo.png'
+      }
       alt="Logo"
       onError={() => setLogoBroken(true)}
       style={{ height: logoSize }}
@@ -168,7 +193,11 @@ export default function LoginPage() {
             className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
             tabIndex={-1}
           >
-            {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {showPw ? (
+              <EyeOff className="h-4 w-4" />
+            ) : (
+              <Eye className="h-4 w-4" />
+            )}
           </button>
         </div>
       </div>
@@ -189,7 +218,10 @@ export default function LoginPage() {
             <span />
           )}
           {cfg.forgotPassword?.show && (
-            <a href={cfg.forgotPassword.url || '#'} className="text-sm font-medium text-brand-600 hover:underline">
+            <a
+              href={cfg.forgotPassword.url || '#'}
+              className="text-sm font-medium text-brand-600 hover:underline"
+            >
               {cfg.forgotPassword.label || 'Forgot your password?'}
             </a>
           )}
@@ -199,7 +231,9 @@ export default function LoginPage() {
       <button
         type="submit"
         className="btn-primary w-full"
-        style={cfg.buttonColor ? { backgroundColor: cfg.buttonColor } : undefined}
+        style={
+          cfg.buttonColor ? { backgroundColor: cfg.buttonColor } : undefined
+        }
         disabled={loading}
       >
         {loading && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -219,7 +253,10 @@ export default function LoginPage() {
       {cfg.signUp?.show && (
         <p className="text-center text-sm text-slate-500 dark:text-slate-400">
           {cfg.signUp.prompt || "Don't have an account?"}{' '}
-          <a href={cfg.signUp.url || '#'} className="font-medium text-slate-800 underline dark:text-slate-100">
+          <a
+            href={cfg.signUp.url || '#'}
+            className="font-medium text-slate-800 underline dark:text-slate-100"
+          >
             {cfg.signUp.label || 'Sign up'}
           </a>
         </p>
@@ -267,7 +304,11 @@ export default function LoginPage() {
           <div className="w-full max-w-sm">
             <div className="mb-6 flex flex-col items-center text-center">
               <div className="mb-3 flex justify-center">{renderLogo()}</div>
-              <RichOrPlain html={cfg.headingHtml} text={cfg.heading} style={resolveTextStyle(cfg.headingStyle)} />
+              <RichOrPlain
+                html={cfg.headingHtml}
+                text={cfg.heading}
+                style={resolveTextStyle(cfg.headingStyle)}
+              />
               <RichOrPlain
                 className="mt-1"
                 html={cfg.descriptionHtml}
@@ -277,7 +318,10 @@ export default function LoginPage() {
             </div>
             {formInner}
             {cfg.copyright && (
-              <p className="mt-6 text-center" style={resolveTextStyle(cfg.copyrightStyle)}>
+              <p
+                className="mt-6 text-center"
+                style={resolveTextStyle(cfg.copyrightStyle)}
+              >
                 {formatCopyright(cfg.copyright, year)}
               </p>
             )}
@@ -291,13 +335,27 @@ export default function LoginPage() {
   const bg = media.find((m) => m.id === cfg.backgroundMediaId);
   const ctaButtons = (cfg.buttons ?? []).filter((b) => b.label);
   return (
-    <div className="relative flex min-h-screen items-center justify-center p-4" style={{ backgroundColor: cfg.pageColor }}>
+    <div
+      className="relative flex min-h-screen items-center justify-center p-4"
+      style={{ backgroundColor: cfg.pageColor }}
+    >
       {bg &&
         (bg.kind === 'VIDEO' ? (
-          <video src={mediaUrl(bg.url)} autoPlay muted loop playsInline className="pointer-events-none absolute inset-0 h-full w-full object-cover" />
+          <video
+            src={mediaUrl(bg.url)}
+            autoPlay
+            muted
+            loop
+            playsInline
+            className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+          />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={mediaUrl(bg.url)} alt="" className="pointer-events-none absolute inset-0 h-full w-full object-cover" />
+          <img
+            src={mediaUrl(bg.url)}
+            alt=""
+            className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+          />
         ))}
 
       {!bg && (
@@ -309,8 +367,14 @@ export default function LoginPage() {
 
       <div className="relative w-full max-w-md">
         <div className="mb-6 flex flex-col items-center text-center">
-          <div className="mb-3 flex items-center justify-center">{renderLogo()}</div>
-          <RichOrPlain html={cfg.headingHtml} text={cfg.heading} style={resolveTextStyle(cfg.headingStyle)} />
+          <div className="mb-3 flex items-center justify-center">
+            {renderLogo()}
+          </div>
+          <RichOrPlain
+            html={cfg.headingHtml}
+            text={cfg.heading}
+            style={resolveTextStyle(cfg.headingStyle)}
+          />
           <RichOrPlain
             className="mt-1"
             html={cfg.descriptionHtml}
@@ -319,7 +383,10 @@ export default function LoginPage() {
           />
         </div>
 
-        <div className="card p-6" style={{ backgroundColor: withAlpha(cfg.cardColor, cfg.cardOpacity) }}>
+        <div
+          className="card p-6"
+          style={{ backgroundColor: withAlpha(cfg.cardColor, cfg.cardOpacity) }}
+        >
           {cfg.formTitle && (
             <div className="mb-3" style={resolveTextStyle(cfg.formTitleStyle)}>
               {cfg.formTitle}
@@ -343,7 +410,10 @@ export default function LoginPage() {
         )}
 
         {cfg.copyright && (
-          <p className="mt-6 text-center" style={resolveTextStyle(cfg.copyrightStyle)}>
+          <p
+            className="mt-6 text-center"
+            style={resolveTextStyle(cfg.copyrightStyle)}
+          >
             {formatCopyright(cfg.copyright, year)}
           </p>
         )}

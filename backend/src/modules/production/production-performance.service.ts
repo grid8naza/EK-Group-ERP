@@ -64,7 +64,9 @@ export class ProductionPerformanceService {
       where: {
         companyId,
         ...(branchId ? { branchId } : {}),
-        transactionType: { in: Object.keys(BUCKETS) as (keyof typeof BUCKETS)[] },
+        transactionType: {
+          in: Object.keys(BUCKETS) as (keyof typeof BUCKETS)[],
+        },
         ...(from || toEnd
           ? {
               date: {
@@ -89,10 +91,14 @@ export class ProductionPerformanceService {
 
     // Resolve the names once, from the ids actually present.
     const centreIds = [
-      ...new Set(rows.map((r) => r.costCenterId).filter((n): n is number => n != null)),
+      ...new Set(
+        rows.map((r) => r.costCenterId).filter((n): n is number => n != null),
+      ),
     ];
     const objectIds = [
-      ...new Set(rows.map((r) => r.costObjectId).filter((n): n is number => n != null)),
+      ...new Set(
+        rows.map((r) => r.costObjectId).filter((n): n is number => n != null),
+      ),
     ];
     const [centres, objects] = await Promise.all([
       this.prisma.costCenter.findMany({
@@ -107,7 +113,10 @@ export class ProductionPerformanceService {
     const centreName = new Map(centres.map((c) => [c.id, c.name]));
     const objectName = new Map(objects.map((o) => [o.id, o.name]));
 
-    const byKey = new Map<string, CostObjectPerformance & { docs: Set<string> }>();
+    const byKey = new Map<
+      string,
+      CostObjectPerformance & { docs: Set<string> }
+    >();
     for (const r of rows) {
       const key = `${r.costCenterId ?? 'x'}:${r.costObjectId ?? 'x'}`;
       let acc = byKey.get(key);

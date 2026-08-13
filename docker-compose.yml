@@ -7,11 +7,15 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-erpgrip}
       POSTGRES_DB: ${POSTGRES_DB:-erpgrip}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - '${POSTGRES_PORT:-5432}:5432'
     volumes:
       - erpgrip_db:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-erpgrip} -d ${POSTGRES_DB:-erpgrip}"]
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${POSTGRES_USER:-erpgrip} -d ${POSTGRES_DB:-erpgrip}',
+        ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -40,7 +44,7 @@ services:
       # Persist uploaded files (login logo / background media) across rebuilds.
       - erpgrip_uploads:/app/uploads
     ports:
-      - "${BACKEND_PORT:-4000}:4000"
+      - '${BACKEND_PORT:-4000}:4000'
 
   frontend:
     build:
@@ -51,7 +55,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - '${FRONTEND_PORT:-3000}:3000'
 
 volumes:
   erpgrip_db:

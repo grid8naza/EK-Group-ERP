@@ -187,7 +187,10 @@ export class AssetService {
     return n;
   }
 
-  private async withCodeRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
+  private async withCodeRetry<T>(
+    fn: () => Promise<T>,
+    attempts = 5,
+  ): Promise<T> {
     for (let i = 0; ; i++) {
       try {
         return await fn();
@@ -213,7 +216,10 @@ export class AssetService {
     const wantsLinkChange =
       dto.allCompanies !== undefined || dto.companyIds !== undefined;
     const companyIds = wantsLinkChange
-      ? this.resolveCompanies(allCompanies, dto.companyIds ?? existing.companyIds)
+      ? this.resolveCompanies(
+          allCompanies,
+          dto.companyIds ?? existing.companyIds,
+        )
       : null;
 
     try {
@@ -227,8 +233,10 @@ export class AssetService {
           maxCapacity: dto.maxCapacity,
           capacityUnitId: dto.capacityUnitId,
           perUnitId: dto.perUnitId,
-          brand: dto.brand !== undefined ? dto.brand?.trim() || null : undefined,
-          model: dto.model !== undefined ? dto.model?.trim() || null : undefined,
+          brand:
+            dto.brand !== undefined ? dto.brand?.trim() || null : undefined,
+          model:
+            dto.model !== undefined ? dto.model?.trim() || null : undefined,
           serialNumber:
             dto.serialNumber !== undefined
               ? dto.serialNumber?.trim() || null

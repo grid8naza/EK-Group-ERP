@@ -41,10 +41,7 @@ export interface DocumentRef {
 
 /** The instance status after a workflow operation (maps to the doc's status). */
 export type WorkflowStatus =
-  | 'IN_PROGRESS'
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'CANCELLED';
+  'IN_PROGRESS' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
 
 /** The viewer's pending action on a document (null = nothing to do). */
 export interface WorkflowViewerTask {
@@ -123,9 +120,7 @@ export interface WorkflowPort {
    * acts on that step (create+forward) so it lands at the next level. Returns
    * the instance id + resulting status, or null when no workflow is configured.
    */
-  submitAsCreator(
-    input: StartWorkflowInput,
-  ): Promise<{
+  submitAsCreator(input: StartWorkflowInput): Promise<{
     instanceId: number;
     status: WorkflowStatus;
     statusLabel: string | null;

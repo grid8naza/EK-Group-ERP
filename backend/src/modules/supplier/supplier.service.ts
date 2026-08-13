@@ -47,7 +47,9 @@ export class SupplierService {
 
   async create(companyId: number | undefined, dto: CreateSupplierDto) {
     if (!companyId) {
-      throw new BadRequestException('Select a company before adding a supplier.');
+      throw new BadRequestException(
+        'Select a company before adding a supplier.',
+      );
     }
     const controlAccountId = await resolveControlAccount(
       this.prisma,
@@ -116,7 +118,8 @@ export class SupplierService {
         gstNumber: norm(dto.gstNumber),
         address: norm(dto.address),
         creditDays: dto.creditDays !== undefined ? dto.creditDays : undefined,
-        creditLimit: dto.creditLimit !== undefined ? dto.creditLimit : undefined,
+        creditLimit:
+          dto.creditLimit !== undefined ? dto.creditLimit : undefined,
         controlAccountId,
         isActive: dto.isActive,
       },

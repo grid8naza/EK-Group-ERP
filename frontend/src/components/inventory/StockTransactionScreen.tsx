@@ -129,7 +129,11 @@ export function StockTransactionScreen({
   const toast = useToast();
   const confirm = useConfirm();
 
-  const { data: rows, loading, refetch } = useFetch<StockDocumentRow[]>(
+  const {
+    data: rows,
+    loading,
+    refetch,
+  } = useFetch<StockDocumentRow[]>(
     `/stock-transactions/documents?type=${type}`,
   );
   const { data: stores } = useFetch<Store[]>('/stores');
@@ -150,9 +154,9 @@ export function StockTransactionScreen({
   const { data: customers } = useFetch<Customer[]>(
     showCustomer ? '/customers' : null,
   );
-  const { data: incoming, refetch: refetchIncoming } = useFetch<IncomingDispatch[]>(
-    showIncomingDispatch ? '/stock-transactions/incoming-dispatches' : null,
-  );
+  const { data: incoming, refetch: refetchIncoming } = useFetch<
+    IncomingDispatch[]
+  >(showIncomingDispatch ? '/stock-transactions/incoming-dispatches' : null);
   const { data: companies } = useFetch<Company[]>(
     showIncomingDispatch ? '/companies' : null,
   );
@@ -234,7 +238,11 @@ export function StockTransactionScreen({
   );
 
   const storeOptions = useMemo(
-    () => (stores ?? []).map((s) => ({ value: s.id, label: `${s.name} (${s.code})` })),
+    () =>
+      (stores ?? []).map((s) => ({
+        value: s.id,
+        label: `${s.name} (${s.code})`,
+      })),
     [stores],
   );
   // The active branch's default store (stores are already branch-scoped), used
@@ -299,7 +307,9 @@ export function StockTransactionScreen({
   const hsnRateOf = (key: string): { gst: string; cess: string } => {
     const pick = key ? pickById.get(key) : undefined;
     const hsnId = pick && 'hsnCodeId' in pick ? pick.hsnCodeId : null;
-    const hsn = hsnId ? (hsnCodes ?? []).find((h) => h.id === hsnId) : undefined;
+    const hsn = hsnId
+      ? (hsnCodes ?? []).find((h) => h.id === hsnId)
+      : undefined;
     if (!hsn) return { gst: '', cess: '' };
     const rate = hsn.igst || hsn.cgst + hsn.sgst;
     return {
@@ -393,7 +403,9 @@ export function StockTransactionScreen({
   };
 
   const loadDoc = async (documentId: number) => {
-    const full = await api.get<StockTransaction>(`/stock-transactions/${documentId}`);
+    const full = await api.get<StockTransaction>(
+      `/stock-transactions/${documentId}`,
+    );
     setEditingDoc(full);
     setStoreId(String(full.storeId));
     setDocDate(dateInput(full.docDate));
@@ -467,7 +479,9 @@ export function StockTransactionScreen({
   // The pack unit's id for a line, stamped on the saved document.
   const boxUnitIdOf = (l: DraftLine) => {
     const pick = l.key ? pickById.get(l.key) : undefined;
-    return pick && 'boxUnitId' in pick ? (pick.boxUnitId as number) ?? null : null;
+    return pick && 'boxUnitId' in pick
+      ? ((pick.boxUnitId as number) ?? null)
+      : null;
   };
 
   // How many stock units one pack holds for a line (1 when it isn't packed).
@@ -483,7 +497,8 @@ export function StockTransactionScreen({
    * The server recomputes both from the stock figures it stores; this is the
    * same arithmetic shown while typing.
    */
-  const lineBase = (l: DraftLine) => Number(l.quantity || 0) * Number(l.unitPrice || 0);
+  const lineBase = (l: DraftLine) =>
+    Number(l.quantity || 0) * Number(l.unitPrice || 0);
   const lineTax = (l: DraftLine) =>
     Math.round(lineBase(l) * (Number(l.gst || 0) / 100) * 100) / 100;
   const lineCess = (l: DraftLine) =>
@@ -512,7 +527,8 @@ export function StockTransactionScreen({
           // Packs are an entry convenience; stock is always posted in stock
           // units, and the rate follows it — 1 bottle at 50 is 200 g at 0.25,
           // so the line total is the same either way.
-          quantity: Number(l.quantity) * (l.unitMode === 'box' ? boxQtyOf(l) : 1),
+          quantity:
+            Number(l.quantity) * (l.unitMode === 'box' ? boxQtyOf(l) : 1),
           unitPrice: l.unitPrice
             ? l.unitMode === 'box'
               ? round6(Number(l.unitPrice) / boxQtyOf(l))
@@ -692,7 +708,8 @@ export function StockTransactionScreen({
   const showDispatched =
     showIncomingDispatch && lines.some((l) => l.dispatchedQty !== undefined);
   const shortLines = lines.filter(
-    (l) => l.dispatchedQty !== undefined && Number(l.quantity) < l.dispatchedQty,
+    (l) =>
+      l.dispatchedQty !== undefined && Number(l.quantity) < l.dispatchedQty,
   );
   // The GRN hides rates normally, but a received shipment came priced — that is
   // what the goods cost this company, so it is shown (read-only: the seller set it).
@@ -740,7 +757,11 @@ export function StockTransactionScreen({
         <span className="text-slate-800 dark:text-slate-100">{r.docNo}</span>
       ),
     },
-    { key: 'reference', header: 'Reference', accessor: (r) => r.reference ?? '—' },
+    {
+      key: 'reference',
+      header: 'Reference',
+      accessor: (r) => r.reference ?? '—',
+    },
     { key: 'company', header: 'Company', accessor: (r) => r.companyName },
     { key: 'branch', header: 'Branch', accessor: (r) => r.branchName ?? '—' },
     { key: 'store', header: 'Store', accessor: (r) => r.storeName },
@@ -748,14 +769,25 @@ export function StockTransactionScreen({
       key: 'amount',
       header: 'Amount',
       accessor: (r) =>
-        r.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+        r.amount.toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        }),
       className: 'text-right tabular-nums',
       headerClassName: 'text-right',
       sortable: true,
       sortAccessor: (r) => r.amount,
     },
-    { key: 'txnType', header: 'Transaction Type', accessor: (r) => r.transactionType ?? '—' },
-    { key: 'txnSubtype', header: 'Transaction Subtype', accessor: (r) => r.transactionSubtype ?? '—' },
+    {
+      key: 'txnType',
+      header: 'Transaction Type',
+      accessor: (r) => r.transactionType ?? '—',
+    },
+    {
+      key: 'txnSubtype',
+      header: 'Transaction Subtype',
+      accessor: (r) => r.transactionSubtype ?? '—',
+    },
   ];
 
   return (
@@ -903,7 +935,10 @@ export function StockTransactionScreen({
                     value={interState ? 'inter' : 'intra'}
                     onChange={(e) => setInterState(e.target.value === 'inter')}
                     options={[
-                      { value: 'intra', label: 'Within the state — CGST + SGST' },
+                      {
+                        value: 'intra',
+                        label: 'Within the state — CGST + SGST',
+                      },
                       { value: 'inter', label: 'Interstate — IGST' },
                     ]}
                   />
@@ -937,7 +972,10 @@ export function StockTransactionScreen({
                     value={interState ? 'inter' : 'intra'}
                     onChange={(e) => setInterState(e.target.value === 'inter')}
                     options={[
-                      { value: 'intra', label: 'Within the state — CGST + SGST' },
+                      {
+                        value: 'intra',
+                        label: 'Within the state — CGST + SGST',
+                      },
                       { value: 'inter', label: 'Interstate — IGST' },
                     ]}
                   />
@@ -1014,9 +1052,15 @@ export function StockTransactionScreen({
                   <tr className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-900">
                     <th className="w-10 py-2 pl-3 pr-1 text-right">#</th>
                     <th className="py-2 pr-2">Item / Product</th>
-                    {showClassification && <th className="py-2 px-1">Category</th>}
-                    {showClassification && <th className="py-2 px-1">Parent Group</th>}
-                    {inbound && viewMode && <th className="py-2 px-1">Batch No</th>}
+                    {showClassification && (
+                      <th className="py-2 px-1">Category</th>
+                    )}
+                    {showClassification && (
+                      <th className="py-2 px-1">Parent Group</th>
+                    )}
+                    {inbound && viewMode && (
+                      <th className="py-2 px-1">Batch No</th>
+                    )}
                     {inbound && <th className="py-2 px-1">Supplier Batch</th>}
                     {inbound && <th className="w-32 py-2 px-1">Expiry</th>}
                     {showDispatched && (
@@ -1045,7 +1089,10 @@ export function StockTransactionScreen({
                 <tbody>
                   {lines.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="py-4 text-center text-xs text-slate-400">
+                      <td
+                        colSpan={12}
+                        className="py-4 text-center text-xs text-slate-400"
+                      >
                         No lines.
                       </td>
                     </tr>
@@ -1066,7 +1113,10 @@ export function StockTransactionScreen({
                       const inBoxes = !!boxed && l.unitMode === 'box';
                       const docLine = editingDoc?.lines?.[i];
                       return (
-                        <tr key={i} className="border-b border-slate-100 dark:border-slate-800/60">
+                        <tr
+                          key={i}
+                          className="border-b border-slate-100 dark:border-slate-800/60"
+                        >
                           <td className="py-1.5 pl-3 pr-1 text-right text-xs tabular-nums text-slate-400">
                             {i + 1}
                           </td>
@@ -1093,12 +1143,15 @@ export function StockTransactionScreen({
                                     !!pick && 'boxQty' in pick && !!pick.boxQty;
                                   setLine(i, {
                                     key: e.target.value,
-                                    unitMode: inbound && isBoxed ? 'box' : 'stock',
+                                    unitMode:
+                                      inbound && isBoxed ? 'box' : 'stock',
                                     // The master's rate, offered rather than
                                     // imposed: what the supplier billed is what
                                     // goes on the line, and the field stays
                                     // editable for the day they differ.
-                                    ...(showTax ? hsnRateOf(e.target.value) : {}),
+                                    ...(showTax
+                                      ? hsnRateOf(e.target.value)
+                                      : {}),
                                   });
                                 }}
                                 placeholder="Select item / product"
@@ -1107,10 +1160,14 @@ export function StockTransactionScreen({
                             )}
                           </td>
                           {showClassification && (
-                            <td className="px-1 text-slate-500">{p?.category ?? '—'}</td>
+                            <td className="px-1 text-slate-500">
+                              {p?.category ?? '—'}
+                            </td>
                           )}
                           {showClassification && (
-                            <td className="px-1 text-slate-500">{p?.group ?? '—'}</td>
+                            <td className="px-1 text-slate-500">
+                              {p?.group ?? '—'}
+                            </td>
                           )}
                           {inbound && viewMode && (
                             <td className="px-1 font-mono text-xs text-slate-500">
@@ -1120,12 +1177,16 @@ export function StockTransactionScreen({
                           {inbound && (
                             <td className="px-1">
                               {viewMode ? (
-                                <span className="text-slate-600">{l.batchNo2 || '—'}</span>
+                                <span className="text-slate-600">
+                                  {l.batchNo2 || '—'}
+                                </span>
                               ) : (
                                 <Input
                                   id={`stl-${i}-batch`}
                                   value={l.batchNo2}
-                                  onChange={(e) => setLine(i, { batchNo2: e.target.value })}
+                                  onChange={(e) =>
+                                    setLine(i, { batchNo2: e.target.value })
+                                  }
                                   onKeyDown={enterTo(`stl-${i}-expiry`)}
                                   placeholder="Supplier batch"
                                 />
@@ -1142,7 +1203,9 @@ export function StockTransactionScreen({
                                 <DateInput
                                   id={`stl-${i}-expiry`}
                                   value={l.expiry}
-                                  onChange={(iso) => setLine(i, { expiry: iso })}
+                                  onChange={(iso) =>
+                                    setLine(i, { expiry: iso })
+                                  }
                                   onKeyDown={enterTo(`stl-${i}-qty`)}
                                 />
                               )}
@@ -1165,7 +1228,9 @@ export function StockTransactionScreen({
                                 min={0}
                                 step="any"
                                 value={l.quantity}
-                                onChange={(e) => setLine(i, { quantity: e.target.value })}
+                                onChange={(e) =>
+                                  setLine(i, { quantity: e.target.value })
+                                }
                                 onKeyDown={
                                   showRateCol && l.dispatchedQty === undefined
                                     ? enterTo(`stl-${i}-rate`)
@@ -1194,7 +1259,9 @@ export function StockTransactionScreen({
                                 ]}
                               />
                             ) : (
-                              <span>{inBoxes ? boxed?.boxUnit : (p?.unit ?? '')}</span>
+                              <span>
+                                {inBoxes ? boxed?.boxUnit : (p?.unit ?? '')}
+                              </span>
                             )}
                           </td>
                           {anyInPacks && (
@@ -1220,19 +1287,26 @@ export function StockTransactionScreen({
                                   min={0}
                                   step="any"
                                   value={l.unitPrice}
-                                  onChange={(e) => setLine(i, { unitPrice: e.target.value })}
+                                  onChange={(e) =>
+                                    setLine(i, { unitPrice: e.target.value })
+                                  }
                                   // The rate AS INVOICED is money, so it settles
                                   // to two decimals. The derived per-stock-unit
                                   // rate shown beneath keeps its 6 dp — that one
                                   // is a division, not a price anyone quoted.
-                                  onBlur={() => setLine(i, { unitPrice: dec2(l.unitPrice) })}
+                                  onBlur={() =>
+                                    setLine(i, { unitPrice: dec2(l.unitPrice) })
+                                  }
                                   onKeyDown={enterNextLine(i)}
                                   className="text-right tabular-nums"
                                 />
                               )}
                               {inBoxes && Number(l.unitPrice) > 0 && (
                                 <span className="mt-0.5 block text-right text-[11px] tabular-nums text-slate-400">
-                                  = {round6(Number(l.unitPrice) / boxed.boxQty).toLocaleString()}{' '}
+                                  ={' '}
+                                  {round6(
+                                    Number(l.unitPrice) / boxed.boxQty,
+                                  ).toLocaleString()}{' '}
                                   / {p?.unit}
                                 </span>
                               )}
@@ -1253,7 +1327,9 @@ export function StockTransactionScreen({
                                     max={100}
                                     step="any"
                                     value={l.gst ?? ''}
-                                    onChange={(e) => setLine(i, { gst: e.target.value })}
+                                    onChange={(e) =>
+                                      setLine(i, { gst: e.target.value })
+                                    }
                                     onKeyDown={enterNextLine(i)}
                                     className="text-right tabular-nums"
                                   />
@@ -1272,7 +1348,9 @@ export function StockTransactionScreen({
                                     max={100}
                                     step="any"
                                     value={l.cess ?? ''}
-                                    onChange={(e) => setLine(i, { cess: e.target.value })}
+                                    onChange={(e) =>
+                                      setLine(i, { cess: e.target.value })
+                                    }
                                     onKeyDown={enterNextLine(i)}
                                     className="text-right tabular-nums"
                                   />
@@ -1349,7 +1427,8 @@ export function StockTransactionScreen({
             {showDispatched && shortLines.length > 0 && (
               <p className="mt-2 text-xs text-amber-600 dark:text-amber-500">
                 {shortLines.length} line{shortLines.length > 1 ? 's' : ''} short
-                of what was dispatched — only the accepted quantity enters stock.
+                of what was dispatched — only the accepted quantity enters
+                stock.
               </p>
             )}
             {!viewMode && (
