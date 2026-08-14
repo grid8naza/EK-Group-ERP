@@ -8,9 +8,11 @@ import {
   Trash2,
   Phone,
   Mail,
+  X,
   User as UserIcon,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
+import { cn } from '@/lib/utils';
 import { useFetch } from '@/lib/hooks';
 import { mediaUrl } from '@/lib/login-screen';
 import { useToast } from '@/providers/ToastProvider';
@@ -124,6 +126,8 @@ export default function EmployeesPage() {
   const [form, setForm] = useState<Form>({ ...empty });
   const [saving, setSaving] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
+  /** The photograph, shown full size over the drawer. */
+  const [photoOpen, setPhotoOpen] = useState(false);
   const photoInput = useRef<HTMLInputElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
 
@@ -207,6 +211,7 @@ export default function EmployeesPage() {
   const closeDrawer = () => {
     setOpen(false);
     setView(false);
+    setPhotoOpen(false);
   };
 
   const formFrom = (e: Employee): Form => ({
@@ -270,6 +275,19 @@ export default function EmployeesPage() {
     return () => document.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canAdd, open]);
+
+  // Escape closes the enlarged photograph before the drawer sees it.
+  useEffect(() => {
+    if (!photoOpen) return;
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key === 'Escape') {
+        ev.stopPropagation();
+        setPhotoOpen(false);
+      }
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => document.removeEventListener('keydown', onKey, true);
+  }, [photoOpen]);
 
   const uploadPhoto = async (file: File) => {
     setPhotoUploading(true);
@@ -643,7 +661,20 @@ export default function EmployeesPage() {
                 more plainly than the word "Photograph" ever did. */}
             <div className="sm:col-span-2">
               <div className="flex items-center gap-4">
-                <div className="flex h-20 w-20 flex-none items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-800">
+                {/*
+                  A div rather than a button on purpose: in View mode this whole
+                  form sits inside a disabled fieldset, which would make a button
+                  inert — and looking at somebody's photograph is exactly what
+                  view mode is for.
+                */}
+                <div
+                  className={cn(
+                    'flex h-28 w-28 flex-none items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-800',
+                    form.photoUrl && 'cursor-zoom-in',
+                  )}
+                  onClick={() => form.photoUrl && setPhotoOpen(true)}
+                  title={form.photoUrl ? 'Click to enlarge' : undefined}
+                >
                   {form.photoUrl ? (
                     // contain, not cover: the whole photograph fits in the box
                     // rather than being cropped to fill it.
@@ -654,7 +685,7 @@ export default function EmployeesPage() {
                       className="h-full w-full rounded-lg object-contain"
                     />
                   ) : (
-                    <UserIcon className="h-8 w-8 text-slate-300" />
+                    <UserIcon className="h-10 w-10 text-slate-300" />
                   )}
                 </div>
                 <div className="min-w-0 flex-1 space-y-0.5">
@@ -1003,6 +1034,46 @@ export default function EmployeesPage() {
           </div>
         </ReadOnlyFieldset>
       </Drawer>
+
+      {/*
+        The photograph, full size. Rendered OUTSIDE the drawer: in view mode the
+        form sits in a disabled fieldset, and a close button inside it would be
+        inert. Above the drawer's own z-50, and any click anywhere dismisses it.
+      */}
+      {photoOpen && form.photoUrl && (
+        <div
+          className="fixed inset-0 z-[70] flex cursor-zoom-out items-center justify-center bg-slate-900/80 p-6 backdrop-blur-sm"
+          onClick={() => setPhotoOpen(false)}
+        >
+          <div
+            className="relative max-h-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={mediaUrl(form.photoUrl)}
+              alt={form.name.trim() || 'Photograph'}
+              className="max-h-[85vh] max-w-[85vw] rounded-xl object-contain"
+            />
+            <div
+              className="absolute -right-3 -top-3 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full bg-white text-slate-600 hover:text-slate-900 dark:bg-slate-800 dark:text-slate-300 dark:hover:text-white"
+              onClick={() => setPhotoOpen(false)}
+              title="Close (Esc)"
+            >
+              <X className="h-4 w-4" />
+            </div>
+            <p className="mt-3 text-center text-sm font-semibold text-white">
+              {form.name.trim()}
+              {designationName(form.designationId) && (
+                <span className="font-normal text-slate-300">
+                  {' '}
+                  — {designationName(form.designationId)}
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
