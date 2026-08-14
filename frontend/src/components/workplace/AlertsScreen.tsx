@@ -68,6 +68,12 @@ export function AlertsScreen() {
   const [loading, setLoading] = useState(true);
   /** Ticked rows, by id. Cleared whenever the list underneath them changes. */
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  /**
+   * The kinds THIS person receives, which is what the filter offers. An admin
+   * decides them on Users & Data Security; offering a kind that was switched
+   * off would be a choice that can never match anything.
+   */
+  const [kinds, setKinds] = useState<AlertCategory[]>([]);
 
   /**
    * The toast helpers, reachable from `load` without being a dependency of it —
@@ -108,6 +114,24 @@ export function AlertsScreen() {
     // A tick means "this row", so it cannot survive the rows changing under it.
     setSelected(new Set());
   }, [load]);
+
+  // What this person is set to receive. Fetched once — an admin changing it is
+  // not something that happens while somebody is reading their alerts.
+  useEffect(() => {
+    let alive = true;
+    api
+      .get<AlertCategory[]>('/notifications/categories')
+      .then((rows) => alive && setKinds(rows))
+      .catch(() => {
+        // Fall back to the full list rather than an empty filter: a reader who
+        // cannot narrow their alerts is worse off than one offered a kind they
+        // happen to have none of.
+        if (alive) setKinds(CATEGORY_ORDER);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Anything arriving or being taken back while the screen is open. The version
   // counter is bumped by the provider's stream, so this stays in step with the
@@ -179,7 +203,13 @@ export function AlertsScreen() {
       await alerts?.refresh();
       void load({ page: 1, append: false });
 
-      if (res.skipped) {
+      if (res.skipped && !res.count) {
+        // Nothing moved. Said as a failure, not as a cheerful "0 done" —
+        // because to the reader nothing happened.
+        toastRef.current.error(
+          `None could be moved back: what they were about has already been dealt with.`,
+        );
+      } else if (res.skipped) {
         toastRef.current.success(
           `${res.count} ${label}. ${res.skipped} could not be — already dealt with.`,
         );
@@ -190,6 +220,16 @@ export function AlertsScreen() {
       toastRef.current.error('That could not be applied to all of them.');
     }
   };
+
+  /**
+   * How many of the ticked rows could actually go back to waiting — the ones the
+   * READER cleared. An alert the module resolved is over, and offering a live
+   * button that will refuse it is how somebody ends up thinking the screen is
+   * broken.
+   */
+  const restorable = items.filter(
+    (a) => selected.has(a.id) && a.dismissedAt && !a.resolvedAt,
+  ).length;
 
   const companyName = (id?: number | null) =>
     companies.find((c) => c.id === id)?.name ?? null;
@@ -218,7 +258,7 @@ export function AlertsScreen() {
           className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
         >
           <option value="ALL">All kinds</option>
-          {CATEGORY_ORDER.map((c) => (
+          {kinds.map((c) => (
             <option key={c} value={c}>
               {categoryMeta(c).label}
             </option>
@@ -279,10 +319,24 @@ export function AlertsScreen() {
           {view === 'cleared' ? (
             <button
               onClick={() => void runBulk('restore', 'moved back to waiting')}
-              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-white dark:text-slate-200 dark:hover:bg-slate-800"
+              disabled={!restorable}
+              title={
+                restorable
+                  ? undefined
+                  : 'None of these can go back: what they were about has already been dealt with.'
+              }
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent dark:text-slate-200 dark:hover:bg-slate-800"
             >
               <Undo2 className="h-4 w-4" />
               Move back to waiting
+              {/* Says how many of the ticked rows it will actually move, when
+                  that is not all of them — so a partial result is expected
+                  rather than discovered afterwards. */}
+              {restorable > 0 && restorable < selected.size && (
+                <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                  ({restorable} of {selected.size})
+                </span>
+              )}
             </button>
           ) : (
             <button
@@ -411,10 +465,29 @@ export function AlertsScreen() {
                             {elsewhere}
                           </span>
                         )}
-                        {a.resolvedAt && (
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                        {/*
+                          WHY it is off the waiting list, which the reader
+                          otherwise has no way to tell — and the two reasons
+                          behave differently. One they did themselves and can
+                          undo; the other happened to them and cannot be undone,
+                          because what it was about is over.
+                        */}
+                        {a.resolvedAt ? (
+                          <span
+                            title="What this was about has been dealt with — the document was approved, or the task finished or deleted. It cannot go back to waiting."
+                            className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                          >
                             No longer waiting
                           </span>
+                        ) : (
+                          a.dismissedAt && (
+                            <span
+                              title="You cleared this yourself. It can be moved back to waiting."
+                              className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+                            >
+                              Cleared by you
+                            </span>
+                          )
                         )}
                       </span>
                       <span className="mt-0.5 block text-sm text-slate-600 dark:text-slate-400">

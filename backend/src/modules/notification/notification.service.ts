@@ -417,6 +417,20 @@ export class NotificationService {
   }
 
   /**
+   * The kinds of alert this person actually receives — the reader's own view of
+   * their settings, and the only part of them they may see.
+   *
+   * Readable by the person themselves, unlike everything else in this section:
+   * knowing WHICH kinds reach you is not the same as being able to change them,
+   * and a filter listing kinds that were switched off for you would offer eight
+   * choices where five can never match anything.
+   */
+  async myCategories(userId: number): Promise<NotificationCategory[]> {
+    const prefs = await this.preferences(userId);
+    return prefs.filter((p) => p.inApp).map((p) => p.category);
+  }
+
+  /**
    * Set one or more categories for one person, in a single call.
    *
    * A whole set rather than one at a time, because the editor that drives this

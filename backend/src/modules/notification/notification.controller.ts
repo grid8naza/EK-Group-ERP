@@ -100,6 +100,19 @@ export class NotificationController {
     return this.service.unreadCount(user.id);
   }
 
+  /**
+   * The kinds of alert this person receives — what their filter offers.
+   *
+   * The one part of the preferences a reader may see for themselves. Setting
+   * them is an admin's job (see below); knowing which ones reach you is not,
+   * and a filter listing kinds that were switched off for you would offer
+   * choices that can never match anything.
+   */
+  @Get('categories')
+  myCategories(@CurrentUser() user: AuthUser) {
+    return this.service.myCategories(user.id);
+  }
+
   @Post('read-all')
   markAllRead(@CurrentUser() user: AuthUser) {
     return this.service.markAllRead(user.id);
