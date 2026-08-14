@@ -214,33 +214,70 @@ export class HrDesignationService {
         )
       : null;
 
+    /**
+     * MOVING it to another group.
+     *
+     * The group used to be immutable, because the code is positional and a move
+     * changes it. But a designation put under the wrong group is an ordinary
+     * mistake, and the alternative — delete and re-create — is the one thing
+     * that would actually break something: every recipe and packing process
+     * that has manpower on it points at this row by `designationId`, so a new
+     * row means a new id and a silently emptied labour line.
+     *
+     * A move keeps the id and re-derives the code, which is exactly the right
+     * way round: the ID is the identity everything else holds, and the CODE is
+     * a description of where the row sits. When the place changes, the
+     * description has to change with it or it starts lying.
+     *
+     * The category follows the group, as it does on create — a group belongs to
+     * one category, so naming both would be a second answer to the same
+     * question.
+     */
+    const movingTo =
+      dto.groupId !== undefined && dto.groupId !== existing.groupId
+        ? await this.assertLeafGroup(dto.groupId)
+        : null;
+
     try {
-      const updated = await this.prisma.hrDesignation.update({
-        where: { id },
-        data: {
-          // code, categoryId and groupId are part of the hierarchy code and are
-          // immutable after creation.
-          name: dto.name?.trim(),
-          description:
-            dto.description !== undefined
-              ? dto.description?.trim() || null
-              : undefined,
-          ratePerHour: dto.ratePerHour,
-          allCompanies,
-          isActive: dto.isActive,
-          ...(companyIds
-            ? {
-                companies: {
-                  deleteMany: {},
-                  create: companyIds.map((cid) => ({ companyId: cid })),
-                },
-              }
-            : {}),
-        },
-        include: withRelations,
+      const updated = await this.withCodeRetry(async () => {
+        const moved = movingTo
+          ? {
+              groupId: movingTo.id,
+              categoryId: movingTo.categoryId,
+              code: itemCode(
+                movingTo.code,
+                await this.nextLeafSeq(movingTo.id),
+              ),
+            }
+          : {};
+
+        return this.prisma.hrDesignation.update({
+          where: { id },
+          data: {
+            ...moved,
+            name: dto.name?.trim(),
+            description:
+              dto.description !== undefined
+                ? dto.description?.trim() || null
+                : undefined,
+            ratePerHour: dto.ratePerHour,
+            allCompanies,
+            isActive: dto.isActive,
+            ...(companyIds
+              ? {
+                  companies: {
+                    deleteMany: {},
+                    create: companyIds.map((cid) => ({ companyId: cid })),
+                  },
+                }
+              : {}),
+          },
+          include: withRelations,
+        });
       });
-      // Only when the rate actually moved — renaming a designation or changing
-      // its company links must not touch a single product cost.
+      // Only when the rate actually moved — renaming a designation, moving it to
+      // another group or changing its company links must not touch a single
+      // product cost. A move changes where it SITS, not what it costs.
       if (
         dto.ratePerHour !== undefined &&
         dto.ratePerHour !== existing.ratePerHour

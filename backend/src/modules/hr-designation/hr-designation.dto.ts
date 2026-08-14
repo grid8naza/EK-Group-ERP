@@ -55,11 +55,19 @@ export class CreateHrDesignationDto {
 }
 
 export class UpdateHrDesignationDto {
-  // Code / groupId / categoryId are immutable (part of the code) and ignored.
+  // The code itself is system-generated and ignored if sent — but the GROUP can
+  // now be changed, which re-derives it. See the service: the row keeps its id,
+  // so every recipe and packing process holding `designationId` is untouched.
+  // The category is not accepted, because it follows the group.
   @IsOptional()
   @IsString()
   @MaxLength(30)
   code?: string;
+
+  /** Move it to another leaf group. Its code is re-derived from that group. */
+  @IsOptional()
+  @IsInt()
+  groupId?: number;
 
   @IsOptional()
   @IsString()

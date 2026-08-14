@@ -440,58 +440,55 @@ export default function HrDesignationsPage() {
               placeholder="e.g. CNC Machine Operator"
             />
 
-            {/* Classification — immutable after creation (the code encodes it),
-                so it's read-only when editing. To move a designation, inactivate
-                it and create a new one under the right group. */}
-            {editing ? (
-              <>
-                <Input
-                  label="Category"
-                  value={editing.category?.name ?? '-'}
-                  disabled
-                />
-                <Input
-                  label="Group"
-                  value={editing.group?.name ?? '-'}
-                  disabled
-                />
-              </>
-            ) : (
-              <>
-                <Select
-                  label="Category"
-                  value={form.categoryId}
-                  onChange={(e) =>
-                    // changing category clears a now-invalid group
-                    setForm({
-                      ...form,
-                      categoryId: e.target.value,
-                      groupId: '',
-                    })
-                  }
-                  placeholder="— None —"
-                  options={(categories ?? [])
-                    .filter((c) => c.isActive)
-                    .map((c) => ({ value: c.id, label: c.name }))}
-                />
-                <Select
-                  label="Group"
-                  required
-                  value={form.groupId}
-                  onChange={(e) =>
-                    setForm({ ...form, groupId: e.target.value })
-                  }
-                  placeholder={
-                    form.categoryId
-                      ? 'Select a leaf group'
-                      : 'Pick a category first'
-                  }
-                  options={groupOptions.map((g) => ({
-                    value: g.id,
-                    label: g.name,
-                  }))}
-                />
-              </>
+            {/*
+              Classification — editable, including when editing.
+
+              It used to be read-only, on the reasoning that the code encodes it,
+              with the advice to "inactivate it and create a new one under the
+              right group". That advice was the dangerous half: every recipe and
+              packing process with manpower on it points at the designation BY
+              ID, so a new row is a new id and a silently emptied labour line.
+              Moving the row keeps the id and re-derives the code, which is the
+              right way round — the id is the identity, the code only describes
+              where it sits.
+            */}
+            <Select
+              label="Category"
+              value={form.categoryId}
+              onChange={(e) =>
+                // changing category clears a now-invalid group
+                setForm({
+                  ...form,
+                  categoryId: e.target.value,
+                  groupId: '',
+                })
+              }
+              placeholder="— None —"
+              options={(categories ?? [])
+                .filter((c) => c.isActive)
+                .map((c) => ({ value: c.id, label: c.name }))}
+            />
+            <Select
+              label="Group"
+              required
+              value={form.groupId}
+              onChange={(e) => setForm({ ...form, groupId: e.target.value })}
+              placeholder={
+                form.categoryId
+                  ? 'Select a leaf group'
+                  : 'Pick a category first'
+              }
+              options={groupOptions.map((g) => ({
+                value: g.id,
+                label: g.name,
+              }))}
+            />
+            {editing && String(editing.groupId ?? '') !== form.groupId && (
+              <p className="-mt-2 text-xs text-amber-600 dark:text-amber-400">
+                Moving it re-numbers the code from {editing.code}. Recipes and
+                packing keep their manpower — they hold the designation itself,
+                not its code.
+              </p>
             )}
 
             <Input
