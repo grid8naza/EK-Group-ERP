@@ -212,7 +212,9 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     autoEnable: true, // on for every company so approvers see their inbox
     // Documents is the PRIMARY menu (matched by module), so the module's
     // existing main menu row is reused and relabelled rather than left behind
-    // beside a new one. The other four are extras, matched by name.
+    // beside a new one. The other five are extras, matched by name — and one of
+    // them, My Day, is moved above this one by `orderWorkplaceMenus`, since the
+    // dashboard is what a login should open on.
     menu: { name: 'Documents', icon: 'file-text' },
     subs: WORKFLOW_SUBS,
     extraMenus: WORKFLOW_EXTRA_MENUS,

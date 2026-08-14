@@ -35,6 +35,21 @@ import { PurchasePriceAdapter } from '../modules/item/purchase-price.adapter';
 import { RECOST } from './recost.port';
 import { RecostAdapter } from '../modules/product/recost.adapter';
 import { CostingService } from '../modules/product/costing.service';
+import { NOTIFICATION } from './notification.port';
+import { NotificationAdapter } from '../modules/notification/notification.adapter';
+import { NotificationService } from '../modules/notification/notification.service';
+import { NotificationEventsService } from '../modules/notification/notification-events.service';
+import { ALERT_SOURCE } from './alert-source.port';
+import { StockAlertsAdapter } from '../modules/stock/stock-alerts.adapter';
+import { TaskAlertsAdapter } from '../modules/task/task-alerts.adapter';
+import { WORKPLACE_SUMMARY } from './workplace-summary.port';
+import { WorkflowSummaryAdapter } from '../modules/workflow/workflow-summary.adapter';
+import { TaskSummaryAdapter } from '../modules/task/task-summary.adapter';
+import { MailSummaryAdapter } from '../modules/mail/mail-summary.adapter';
+import { ChatSummaryAdapter } from '../modules/chat/chat-summary.adapter';
+import { CircularSummaryAdapter } from '../modules/circular/circular-summary.adapter';
+import { BroadcastSummaryAdapter } from '../modules/broadcast/broadcast-summary.adapter';
+import { NotificationSummaryAdapter } from '../modules/notification/notification-summary.adapter';
 
 /**
  * Composition root for cross-module contracts (ports & adapters).
@@ -110,6 +125,60 @@ import { CostingService } from '../modules/product/costing.service';
     // CostingService instance here (stateless), so no module import is needed.
     CostingService,
     { provide: RECOST, useClass: RecostAdapter },
+    // Alerts. The service and its SSE hub are provided HERE rather than in the
+    // notification module, and exported, so there is exactly ONE of each: the
+    // instance a publisher raises an alert through must be the instance the
+    // reader's open stream is subscribed to, or a bell would only ever update
+    // when the reader's own tab caused the alert. The controller injects them
+    // from here (this module is @Global).
+    NotificationEventsService,
+    NotificationService,
+    { provide: NOTIFICATION, useClass: NotificationAdapter },
+    // Conditions nothing triggers — stock under its level, a batch going off, a
+    // task falling due. Same multi-provider shape as METRIC_PROVIDER above; the
+    // notification module's scanner injects the ARRAY and runs each on a timer.
+    StockAlertsAdapter,
+    TaskAlertsAdapter,
+    {
+      provide: ALERT_SOURCE,
+      useFactory: (stock: StockAlertsAdapter, task: TaskAlertsAdapter) => [
+        stock,
+        task,
+      ],
+      inject: [StockAlertsAdapter, TaskAlertsAdapter],
+    },
+    // What is waiting for one PERSON, asked of each module that knows part of
+    // the answer. Same multi-provider shape again; the Workplace dashboard
+    // service injects the array and merges it. Every module answers with its own
+    // visibility rules, which is the point — see workplace-summary.port.ts.
+    WorkflowSummaryAdapter,
+    TaskSummaryAdapter,
+    MailSummaryAdapter,
+    ChatSummaryAdapter,
+    CircularSummaryAdapter,
+    BroadcastSummaryAdapter,
+    NotificationSummaryAdapter,
+    {
+      provide: WORKPLACE_SUMMARY,
+      useFactory: (
+        approvals: WorkflowSummaryAdapter,
+        tasks: TaskSummaryAdapter,
+        mail: MailSummaryAdapter,
+        chat: ChatSummaryAdapter,
+        circulars: CircularSummaryAdapter,
+        broadcasts: BroadcastSummaryAdapter,
+        alerts: NotificationSummaryAdapter,
+      ) => [approvals, tasks, mail, chat, circulars, broadcasts, alerts],
+      inject: [
+        WorkflowSummaryAdapter,
+        TaskSummaryAdapter,
+        MailSummaryAdapter,
+        ChatSummaryAdapter,
+        CircularSummaryAdapter,
+        BroadcastSummaryAdapter,
+        NotificationSummaryAdapter,
+      ],
+    },
     CpanelMetricsAdapter,
     ProductionMetricsAdapter,
     InventoryMetricsAdapter,
@@ -142,6 +211,14 @@ import { CostingService } from '../modules/product/costing.service';
     LABOUR_RATE,
     PURCHASE_PRICE,
     RECOST,
+    NOTIFICATION,
+    ALERT_SOURCE,
+    WORKPLACE_SUMMARY,
+    // Exported as classes, not just as tokens: the notification module's own
+    // controller and scanner inject them, and @Global only shares what is
+    // exported.
+    NotificationService,
+    NotificationEventsService,
   ],
 })
 export class ContractsModule {}

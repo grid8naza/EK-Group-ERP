@@ -1,6 +1,9 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useAlerts } from '@/providers/AlertProvider';
+import { categoryMeta, PRIORITY_ROW } from '@/components/workplace/alert-ui';
+import { listTime } from '@/components/workplace/people';
 import { useRouter } from 'next/navigation';
 import {
   Menu as MenuIcon,
@@ -20,10 +23,9 @@ import { DOC_PARAM } from '@/lib/hooks';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { resolveIcon } from '@/lib/icons';
 import { mediaUrl } from '@/lib/login-screen';
-import { initials, cn, formatDate } from '@/lib/utils';
+import { initials, cn } from '@/lib/utils';
 import { moduleLandingRoute } from '@/lib/nav';
-import { api } from '@/lib/api';
-import type { WorkflowNotification } from '@/lib/types';
+import type { Alert } from '@/lib/types';
 
 interface TopbarProps {
   onToggleSidebar: () => void;
@@ -62,68 +64,31 @@ export function Topbar({
   const brRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
-  // Workflow notifications: unread count polls every 30s; the list is loaded
-  // lazily when the bell dropdown is opened.
-  const [unread, setUnread] = useState(0);
-  const [notifs, setNotifs] = useState<WorkflowNotification[]>([]);
-
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      try {
-        const res = await api.get<{ count: number }>(
-          '/workflow/notifications/unread-count',
-        );
-        if (alive) setUnread(res.count);
-      } catch {
-        // ignore — transient/unauthorized fetches shouldn't disrupt the topbar
-      }
-    };
-    void load();
-    const id = setInterval(load, 30000);
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
-  }, []);
+  // Alerts of every kind, from one feed (SRS §8.11, FR-COM-05). The provider
+  // owns the stream, the badge and the optimistic marking — the bell only
+  // renders what it is given, which is what keeps it agreeing with the Alerts
+  // screen below.
+  const alerts = useAlerts();
+  const unread = alerts?.unread ?? 0;
+  const notifs = alerts?.alerts ?? [];
 
   // Retry the company logo image whenever the active company changes.
   useEffect(() => {
     setCoLogoBroken(false);
   }, [activeCompany?.logo]);
 
-  const openNotifications = async () => {
-    const next = !notifOpen;
-    setNotifOpen(next);
-    if (!next) return;
-    try {
-      const list = await api.get<WorkflowNotification[]>(
-        '/workflow/notifications',
-      );
-      setNotifs(list);
-    } catch {
-      // ignore
-    }
-  };
-
-  const openNotification = async (n: WorkflowNotification) => {
+  const openNotification = (n: Alert) => {
     setNotifOpen(false);
-    if (!n.isRead) {
-      try {
-        await api.post(`/workflow/notifications/${n.id}/read`);
-        setUnread((c) => Math.max(0, c - 1));
-      } catch {
-        // ignore
-      }
-    }
-    // Straight to the document the alert is about. The approvals inbox is where
-    // you go when you have not been told which one — and the bell has just told
-    // you. Falls back to it for an alert with no screen behind it.
+    if (!n.readAt) void alerts?.markRead(n.id);
+    // Straight to the thing the alert is about. A list is where you go when you
+    // have not been told which one — and the bell has just told you. An alert
+    // that names no screen falls back to the Alerts page, where the whole of it
+    // is readable.
     if (n.route && n.documentId) {
       router.push(`${n.route}?${DOC_PARAM}=${n.documentId}`);
       return;
     }
-    router.push('/workflow/approvals');
+    router.push(n.route || '/workplace/alerts');
   };
 
   useEffect(() => {
@@ -392,10 +357,10 @@ export function Topbar({
           </div>
         )}
 
-        {/* Notification bell — workflow approvals awaiting the user */}
+        {/* Notification bell — every kind of alert raised for this user */}
         <div className="relative" ref={notifRef}>
           <button
-            onClick={openNotifications}
+            onClick={() => setNotifOpen((v) => !v)}
             className="relative rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
             title="Notifications"
             aria-label="Notifications"
@@ -409,60 +374,92 @@ export function Topbar({
           </button>
 
           {notifOpen && (
-            <div className="absolute right-0 mt-2 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-              <p className="border-b border-slate-100 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-slate-800">
-                Notifications
-              </p>
-              <div className="max-h-80 overflow-y-auto py-1">
+            <div className="absolute right-0 mt-2 w-[22rem] overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2 dark:border-slate-800">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                  Alerts
+                </p>
+                {unread > 0 && (
+                  <button
+                    onClick={() => void alerts?.markAllRead()}
+                    className="text-[11px] font-medium text-brand-600 hover:underline dark:text-brand-400"
+                  >
+                    Mark all read
+                  </button>
+                )}
+              </div>
+              <div className="max-h-96 overflow-y-auto py-1">
                 {notifs.length === 0 ? (
                   <p className="px-4 py-6 text-center text-sm text-slate-400">
-                    No notifications.
+                    Nothing waiting for you.
                   </p>
                 ) : (
-                  notifs.map((n) => (
-                    <button
-                      key={n.id}
-                      onClick={() => openNotification(n)}
-                      className={cn(
-                        'flex w-full flex-col gap-0.5 px-4 py-2.5 text-left transition hover:bg-slate-100 dark:hover:bg-slate-800',
-                        !n.isRead && 'bg-brand-50/60 dark:bg-brand-950/40',
-                      )}
-                    >
-                      <span className="flex items-center gap-2">
-                        {!n.isRead && (
-                          <span className="h-1.5 w-1.5 flex-none rounded-full bg-brand-500" />
+                  notifs.map((n) => {
+                    const meta = categoryMeta(n.category);
+                    return (
+                      <div
+                        key={n.id}
+                        className={cn(
+                          'group flex items-start gap-2.5 px-3 py-2.5 transition hover:bg-slate-100 dark:hover:bg-slate-800',
+                          PRIORITY_ROW[n.priority],
+                          !n.readAt && 'bg-brand-50/60 dark:bg-brand-950/40',
                         )}
+                      >
                         <span
                           className={cn(
-                            'flex-1 truncate text-sm',
-                            n.isRead
-                              ? 'text-slate-600 dark:text-slate-300'
-                              : 'font-medium text-slate-800 dark:text-slate-100',
+                            'mt-0.5 flex h-7 w-7 flex-none items-center justify-center rounded-lg',
+                            meta.tint,
                           )}
                         >
-                          {n.title}
+                          <meta.Icon className="h-4 w-4" />
                         </span>
-                      </span>
-                      {n.body && (
-                        <span className="line-clamp-2 text-xs text-slate-500 dark:text-slate-400">
-                          {n.body}
-                        </span>
-                      )}
-                      <span className="text-[11px] text-slate-400">
-                        {formatDate(n.createdAt)}
-                      </span>
-                    </button>
-                  ))
+                        <button
+                          onClick={() => openNotification(n)}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <span
+                            className={cn(
+                              'block truncate text-sm',
+                              n.readAt
+                                ? 'text-slate-600 dark:text-slate-300'
+                                : 'font-semibold text-slate-800 dark:text-slate-100',
+                            )}
+                          >
+                            {n.title}
+                          </span>
+                          {n.body && (
+                            <span className="mt-0.5 line-clamp-2 block text-xs text-slate-500 dark:text-slate-400">
+                              {n.body}
+                            </span>
+                          )}
+                          <span className="mt-0.5 block text-[11px] text-slate-400">
+                            {listTime(n.createdAt)}
+                          </span>
+                        </button>
+                        {/* Putting one down without opening it. Only on hover:
+                            a dismiss button on every row would compete with the
+                            row itself for the eye. */}
+                        <button
+                          onClick={() => void alerts?.dismiss(n.id)}
+                          title="Dismiss"
+                          aria-label="Dismiss"
+                          className="mt-0.5 rounded-md p-1 text-slate-300 opacity-0 transition hover:bg-slate-200 hover:text-slate-600 focus:opacity-100 group-hover:opacity-100 dark:hover:bg-slate-700"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })
                 )}
               </div>
               <button
                 onClick={() => {
                   setNotifOpen(false);
-                  router.push('/workflow/approvals');
+                  router.push('/workplace/alerts');
                 }}
                 className="block w-full border-t border-slate-100 px-4 py-2.5 text-center text-sm font-medium text-brand-600 hover:bg-slate-50 dark:border-slate-800 dark:text-brand-400 dark:hover:bg-slate-800"
               >
-                View all approvals
+                View all alerts
               </button>
             </div>
           )}

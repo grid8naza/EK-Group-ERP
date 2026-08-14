@@ -13,6 +13,10 @@ import {
   UserSummary,
 } from '../../contracts/user-lookup.port';
 import {
+  NOTIFICATION,
+  NotificationPort,
+} from '../../contracts/notification.port';
+import {
   ChecklistItemDto,
   CommentDto,
   CreateTaskDto,
@@ -30,6 +34,33 @@ const taskInclude = {
 } satisfies Prisma.TaskInclude;
 
 type TaskRow = Prisma.TaskGetPayload<{ include: typeof taskInclude }>;
+
+/**
+ * Where the two sides of a task read it. An alert opens the board the reader
+ * actually uses: an assignee's task is on Assigned to Me, the raiser's on
+ * Assigned by Me, and sending either to the other's screen would show them a
+ * board their task is not on.
+ */
+export const TASK_ROUTE_TO_ME = '/workplace/tasks/assigned-to-me';
+export const TASK_ROUTE_BY_ME = '/workplace/tasks/assigned-by-me';
+
+/**
+ * Alerts raised BY something somebody did — assigned, commented, finished,
+ * blocked — all live under this prefix, so finishing or deleting a task clears
+ * the lot in one call. See contracts/notification.port.ts (resolveMissing).
+ */
+export const taskAlertPrefix = (taskId: number) => `task:${taskId}:`;
+
+/**
+ * Due and overdue alerts live in a namespace of their own, because they are
+ * swept for rather than raised (TaskAlertsAdapter). Keeping them apart is what
+ * lets that sweep resolve everything under its prefix that is no longer true
+ * without wiping the alerts this service raised — resolveMissing works by
+ * exclusion, and two owners sharing one prefix would each clear the other's.
+ */
+export const TASK_DUE_NAMESPACE = 'task-due:';
+export const taskDuePrefix = (taskId: number) =>
+  `${TASK_DUE_NAMESPACE}${taskId}:`;
 
 /**
  * Task management (SRS §8.12) — work one person hands to another, with due
@@ -58,6 +89,7 @@ export class TaskService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(USER_LOOKUP) private readonly users: UserLookupPort,
+    @Inject(NOTIFICATION) private readonly notifications: NotificationPort,
   ) {}
 
   // ---------------------------------------------------------------- people --
@@ -225,6 +257,11 @@ export class TaskService {
       },
       include: taskInclude,
     });
+
+    // FR-TSK-03: work handed to somebody has to reach them. The assignees are
+    // told, the raiser is not — they are the one who just did it.
+    await this.alertAssigned(created, userId);
+
     return this.view(created, userId);
   }
 
@@ -262,6 +299,14 @@ export class TaskService {
         data: [...wanted].map((uid) => ({ taskId: task.id, userId: uid })),
         skipDuplicates: true,
       });
+      // Somebody added to a task afterwards is being handed work just as much
+      // as somebody named at the start. The people who were already on it hold
+      // the alert already, so the dedupe key means they are not told twice.
+      const after = await this.prisma.task.findUnique({
+        where: { id: task.id },
+        include: taskInclude,
+      });
+      if (after) await this.alertAssigned(after, userId);
     }
 
     return this.get(userId, task.id);
@@ -286,12 +331,57 @@ export class TaskService {
         completedById: closing ? userId : null,
       },
     });
+
+    if (closing || dto.status === 'CANCELLED') {
+      // Work that is over asks nothing of anybody: the assignment, every comment
+      // alert and the due warning go together. Cleared BEFORE the finished-alert
+      // is raised, so it is not swept up with them. (The sweep would drop the
+      // due one on its next pass anyway; waiting a quarter of an hour to stop
+      // telling somebody a finished task is late is not good enough.)
+      await this.notifications.resolveMissing(taskAlertPrefix(task.id), []);
+      await this.notifications.resolveMissing(taskDuePrefix(task.id), []);
+    }
+
+    if (closing && task.createdById !== userId) {
+      // The raiser is the one waiting on it. Nobody else is told: an assignee
+      // finishing their part is not news to the other assignees.
+      await this.notifications.publish({
+        audience: { userIds: [task.createdById] },
+        category: 'TASK',
+        title: 'Task completed',
+        body: `"${task.title}" has been marked done.`,
+        route: TASK_ROUTE_BY_ME,
+        documentId: task.id,
+        companyId: task.companyId,
+        branchId: task.branchId,
+        sourceKey: `${taskAlertPrefix(task.id)}done`,
+      });
+    }
+
+    if (dto.status === 'BLOCKED' && task.createdById !== userId) {
+      await this.notifications.publish({
+        audience: { userIds: [task.createdById] },
+        category: 'TASK',
+        priority: 'IMPORTANT',
+        title: 'Task blocked',
+        body: `"${task.title}" has been marked blocked.`,
+        route: TASK_ROUTE_BY_ME,
+        documentId: task.id,
+        companyId: task.companyId,
+        branchId: task.branchId,
+        sourceKey: `${taskAlertPrefix(task.id)}blocked`,
+      });
+    }
+
     return this.get(userId, task.id);
   }
 
   async remove(userId: number, id: number) {
     const task = await this.assertCreator(userId, id);
     await this.prisma.task.delete({ where: { id: task.id } });
+    // A deleted task's alerts would point at a board row that no longer exists.
+    await this.notifications.resolveMissing(taskAlertPrefix(task.id), []);
+    await this.notifications.resolveMissing(taskDuePrefix(task.id), []);
     return { ok: true };
   }
 
@@ -351,10 +441,61 @@ export class TaskService {
 
   async comment(userId: number, id: number, dto: CommentDto) {
     const task = await this.assertVisible(userId, id);
-    await this.prisma.taskComment.create({
-      data: { taskId: task.id, userId, body: dto.body.trim() },
+    const body = dto.body.trim();
+    const comment = await this.prisma.taskComment.create({
+      data: { taskId: task.id, userId, body },
     });
+
+    // Everybody on the task except whoever just wrote. Keyed by the COMMENT, so
+    // a second remark raises a second alert — unlike the assignment, which is
+    // one standing fact.
+    const author = await this.users.findById(userId);
+    const others = [
+      task.createdById,
+      ...task.assignees.map((a) => a.userId),
+    ].filter((uid) => uid !== userId);
+    await this.notifications.publish({
+      audience: { userIds: [...new Set(others)] },
+      category: 'TASK',
+      title: `${author?.name || 'Somebody'} commented`,
+      body: `On "${task.title}": ${body.length > 140 ? `${body.slice(0, 137)}…` : body}`,
+      // Assignees outnumber raisers, and a raiser opening the wrong board still
+      // finds the task listed; sending the many to a board without their task
+      // would be the worse half of the trade.
+      route: TASK_ROUTE_TO_ME,
+      documentId: task.id,
+      companyId: task.companyId,
+      branchId: task.branchId,
+      sourceKey: `${taskAlertPrefix(task.id)}comment:${comment.id}`,
+    });
+
     return this.get(userId, task.id);
+  }
+
+  /**
+   * Tell the assignees a task is theirs. One standing alert per task per
+   * person — the key is the task, so re-saving it, adding a seventh assignee or
+   * a scan running twice never rings the same bell again.
+   */
+  private async alertAssigned(task: TaskRow, raisedBy: number) {
+    const assignees = task.assignees.map((a) => a.userId);
+    if (!assignees.length) return;
+    const due = task.dueAt
+      ? ` Due ${task.dueAt.toISOString().slice(0, 10)}.`
+      : '';
+    await this.notifications.publish({
+      audience: { userIds: assignees },
+      category: 'TASK',
+      priority: task.priority === 'URGENT' ? 'URGENT' : 'NORMAL',
+      title: 'Task assigned to you',
+      body: `"${task.title}".${due}`,
+      route: TASK_ROUTE_TO_ME,
+      documentId: task.id,
+      companyId: task.companyId,
+      branchId: task.branchId,
+      sourceKey: `${taskAlertPrefix(task.id)}assigned`,
+      excludeUserId: raisedBy,
+    });
   }
 
   // ---------------------------------------------------------------- guards --

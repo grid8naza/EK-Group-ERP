@@ -48,6 +48,29 @@ export const WORKFLOW_SUBS = [
  */
 export const WORKFLOW_EXTRA_MENUS = [
   {
+    /**
+     * The module's overview, and the page a login LANDS on — Workplace is the
+     * landing module for everybody (see grantWorkplaceToEveryone), so this is
+     * the first screen of the working day.
+     *
+     * It sits in a menu of its own rather than under Documents because it is not
+     * a kind of thing waiting for anybody: it is the view OF everything waiting.
+     * The `workplace-dashboard-first` migration in scaffold.sync puts it at the
+     * top of the module, which is also what makes it the landing route (the nav
+     * takes the first item of the first menu).
+     */
+    name: 'My Day',
+    icon: 'layout-dashboard',
+    subs: [
+      {
+        name: 'Dashboard',
+        route: '/workplace/dashboard',
+        icon: 'layout-dashboard',
+        order: 1,
+      },
+    ],
+  },
+  {
     name: 'Communication',
     icon: 'mail',
     subs: [
@@ -82,6 +105,18 @@ export const WORKFLOW_EXTRA_MENUS = [
         route: '/workplace/chat',
         icon: 'message-circle',
         order: 5,
+      },
+      {
+        // Alerts (FR-COM-05). Under Communication because that is where the SRS
+        // puts it — the Communication Suite covers mail, chat, broadcasts,
+        // circulars AND alerts — and because a menu of its own for one screen
+        // would be a heading with nothing under it. What arrives here is not
+        // written by anybody: it is raised by things happening. The bell in the
+        // topbar is the same feed, shortened.
+        name: 'Alerts',
+        route: '/workplace/alerts',
+        icon: 'bell',
+        order: 6,
       },
     ],
   },

@@ -310,4 +310,83 @@ export class UserLookupAdapter implements UserLookupPort {
     });
     return own.length === 0 || own.some((m) => m.moduleId === moduleId);
   }
+
+  /**
+   * Everybody `canAccessModule` would say yes to, worked out in one pass rather
+   * than by asking it per user — the notification service asks this for every
+   * alert a scanner raises, and a per-user loop over a company's staff is a
+   * query per person, every fifteen minutes, forever.
+   *
+   * The rule is the same one, in the same order: the module must be active; a
+   * core module belongs to super admins alone; otherwise the company must have
+   * it enabled, and a person reaches it through a group of THIS company that
+   * manages it — narrowed by their own module pinning where they have any. Super
+   * admins reach every enabled module.
+   */
+  async usersWithModuleAccess(
+    companyId: number,
+    moduleCode: string,
+  ): Promise<number[]> {
+    const module = await this.prisma.module.findFirst({
+      where: { code: moduleCode },
+      select: { id: true, isActive: true, isCore: true },
+    });
+    if (!module?.isActive) return [];
+
+    const superAdmins = (
+      await this.prisma.user.findMany({
+        where: { isSuperAdmin: true, isActive: true },
+        select: { id: true },
+      })
+    ).map((u) => u.id);
+
+    // A core module is enabled everywhere and belongs to super admins alone.
+    if (module.isCore) return superAdmins;
+
+    const enabled = await this.prisma.companyModule.findFirst({
+      where: { companyId, moduleId: module.id, isActive: true },
+      select: { id: true },
+    });
+    if (!enabled) return [];
+
+    // Groups of THIS company that manage the module, and who is in them.
+    const groups = await this.prisma.userGroupModule.findMany({
+      where: { moduleId: module.id, userGroup: { companyId } },
+      select: { userGroupId: true },
+    });
+    const memberIds = groups.length
+      ? (
+          await this.prisma.userGroupAssignment.findMany({
+            where: {
+              userGroupId: { in: groups.map((g) => g.userGroupId) },
+              user: { isActive: true, isSuperAdmin: false },
+            },
+            select: { userId: true },
+          })
+        ).map((a) => a.userId)
+      : [];
+
+    if (memberIds.length === 0) return superAdmins;
+
+    // A UserModule row NARROWS what its owner may reach; somebody with no rows
+    // is not restricted at all. So only the pinned users need filtering, and
+    // only their own rows can exclude them.
+    const pinned = await this.prisma.userModule.findMany({
+      where: { userId: { in: memberIds }, companyId },
+      select: { userId: true, moduleId: true },
+    });
+    const pinnedTo = new Map<number, Set<number>>();
+    for (const row of pinned) {
+      const set = pinnedTo.get(row.userId) ?? new Set<number>();
+      set.add(row.moduleId);
+      pinnedTo.set(row.userId, set);
+    }
+
+    const allowed = memberIds.filter((id) => {
+      const own = pinnedTo.get(id);
+      return !own || own.has(module.id);
+    });
+
+    return [...new Set([...allowed, ...superAdmins])];
+  }
 }

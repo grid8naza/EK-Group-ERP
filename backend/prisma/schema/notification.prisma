@@ -1,0 +1,188 @@
+// Notification domain — event-driven alerts and push delivery (SRS §8.11,
+// FR-COM-05 and FR-COM-06).
+//
+// This is the one table in the system nobody addresses. A mail, a circular, a
+// broadcast are all WRITTEN by a person to other people; an alert is raised by
+// something HAPPENING — a document reaching an approver, a task falling due,
+// stock dropping under its reorder level, a batch nearing expiry. Which is why
+// it is a service every module publishes to rather than a screen anybody
+// composes on: the Inventory module must be able to say "this is running out"
+// without knowing who cares, what a bell looks like, or whether the person is
+// logged in.
+//
+// One row per RECIPIENT, not per event — the same event reaching six people is
+// six rows, because read, dismissed and delivered are each one person's fact.
+// Same rule as MailRecipient and CircularRecipient.
+//
+// Cross-domain rule: every reference to a Cpanel row (user, company, branch) is
+// a plain `Int` id with NO @relation — real relations stay inside this domain
+// file. (Enforced by npm run lint:boundaries.)
+
+/// What KIND of thing happened. Not which module raised it — the reader does not
+/// think in modules, they think "an approval", "something is running out". It is
+/// also the grain a person mutes at, so it has to be meaningful to them.
+enum NotificationCategory {
+  /// A document is waiting for this person's decision.
+  APPROVAL
+  /// A task assigned, commented on, or falling due.
+  TASK
+  /// An item or product at or under its reorder level.
+  STOCK
+  /// A batch approaching (or past) its expiry date.
+  EXPIRY
+  /// A payment or receipt coming due. (Accounts — no publisher yet.)
+  PAYMENT
+  /// A leave request or approval. (HR — no publisher yet.)
+  LEAVE
+  /// Somebody wrote to this person — mail, circular, broadcast.
+  MESSAGE
+  /// Anything the application itself has to say.
+  SYSTEM
+}
+
+/// How loudly it asks to be seen. NORMAL is the default, and most alerts are
+/// NORMAL — a feed where everything is URGENT ranks nothing.
+enum NotificationPriority {
+  NORMAL
+  IMPORTANT
+  URGENT
+}
+
+/// Where a push notification is delivered, for the device table below.
+///
+/// WEB_PUSH is the browser (FR-COM-06); FCM and APNS are declared now because
+/// phase 2 is a mobile app, and a devices table that assumed the browser would
+/// have to be rebuilt for it. Nothing sends on the mobile transports yet.
+enum PushTransport {
+  WEB_PUSH
+  FCM
+  APNS
+}
+
+/// One alert, for one person.
+model Notification {
+  id     Int @id @default(autoincrement())
+  userId Int
+
+  category NotificationCategory
+  priority NotificationPriority @default(NORMAL)
+
+  title String
+  /// One or two sentences of plain text — never HTML. An alert is generated, so
+  /// there is no author to have formatted anything, and the bell renders it
+  /// inside a dropdown where markup would only fight the layout.
+  body  String
+
+  /// Where the alert LANDS: the screen route and the row on it. An alert that
+  /// knows which document it is about should open it, not drop the reader on a
+  /// list they then have to search. Null route = nothing to open.
+  route      String?
+  documentId Int?
+
+  /// Where it happened. A stamp for display and grouping, NOT a filter — an
+  /// alert follows the person, so switching company must not hide what is
+  /// waiting for them elsewhere (same rule as mail, chat and approvals).
+  companyId Int?
+  branchId  Int?
+
+  /// Stable identity of the THING the alert is about, e.g. `workflow:task:412`,
+  /// `stock:low:3:item:88`, `task:due:57:9`. Two jobs, both essential:
+  ///
+  ///  - **Dedupe.** The scanner re-runs every few minutes and republishes what
+  ///    is still true. Without a key, "flour is below reorder level" would be a
+  ///    fresh alert every run and the bell would be worthless by lunchtime.
+  ///  - **Revocation.** When the condition ends — the document is approved, the
+  ///    stock is replenished — the publisher calls resolve() with the same key
+  ///    and the alert leaves the bell. This replaces the old WorkflowNotification
+  ///    trick of joining to the task's status, which only ever worked because
+  ///    there was exactly one kind of alert.
+  ///
+  /// Null for a one-off announcement that is true once and never untrue.
+  sourceKey String?
+
+  /// Opened (or marked read). Read is not resolved: an approval you have looked
+  /// at is still waiting for you.
+  readAt DateTime?
+  /// Put down by the reader — gone from their feed whether or not it is still
+  /// true. The reader's own decision, and it never returns: republishing checks
+  /// dismissed rows too, or a dismissed stock alert would come back in 15
+  /// minutes.
+  dismissedAt DateTime?
+  /// The condition ended. Set by resolve(), never by the reader.
+  resolvedAt DateTime?
+
+  /// Whether a push transport has taken this one (FR-COM-06). Stamped rather
+  /// than inferred so a device that comes online later does not re-deliver
+  /// everything it missed as a fresh buzz.
+  pushedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  /// The bell's query: this person's live alerts, newest first.
+  @@index([userId, resolvedAt, dismissedAt, createdAt])
+  /// The unread badge.
+  @@index([userId, readAt])
+  /// Dedupe and revocation both look a key up.
+  @@index([sourceKey])
+  @@map("notifications")
+}
+
+/// What one person wants to be told about, per category.
+///
+/// A row exists only where somebody has changed something — no row means both
+/// channels are on, so a new category starts switched on for everybody and a
+/// new user needs no seeding.
+///
+/// Switching a category off in-app means the alert is never raised for that
+/// person — no row, nothing in the Alerts screen, nothing to find later. That
+/// is what people mean by muting, and the alternative (write it, hide it) leaves
+/// a feed that is silently lying about how much is in it.
+model NotificationPreference {
+  id       Int                  @id @default(autoincrement())
+  userId   Int
+  category NotificationCategory
+
+  inApp Boolean @default(true)
+  push  Boolean @default(true)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, category])
+  @@index([userId])
+  @@map("notification_preferences")
+}
+
+/// One place a person can be reached by push (FR-COM-06).
+///
+/// Registered by the client, not by an admin: a browser subscription or a mobile
+/// token belongs to the device, and the same person has several. The transport
+/// is stored rather than assumed so the phase-2 mobile client is a new row here
+/// instead of a second table.
+model PushDevice {
+  id        Int           @id @default(autoincrement())
+  userId    Int
+  transport PushTransport @default(WEB_PUSH)
+
+  /// WEB_PUSH: the subscription endpoint URL. FCM / APNS: the device token.
+  /// Unique across transports — the same endpoint registered twice by two tabs
+  /// is one device, and re-registering must update rather than duplicate.
+  address String
+
+  /// Web-push encryption material (RFC 8291). Null on the mobile transports,
+  /// which carry their own credentials at the gateway instead.
+  p256dh String?
+  auth   String?
+
+  /// What registered it, for a "signed in on" list the user can revoke from.
+  userAgent String?
+
+  /// Last time the device confirmed itself. A push transport that gets a 404 or
+  /// 410 from the gateway deletes the row instead — an endpoint the browser has
+  /// discarded is dead, and retrying it every alert is how a queue backs up.
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@unique([transport, address])
+  @@index([userId])
+  @@map("push_devices")
+}

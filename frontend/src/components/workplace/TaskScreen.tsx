@@ -14,6 +14,7 @@ import {
   Search,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useDocumentLink } from '@/lib/hooks';
 import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { Badge } from '@/components/ui/Badge';
@@ -56,6 +57,11 @@ export function TaskScreen({ side }: { side: TaskSide }) {
   const [openId, setOpenId] = useState<number | null>(null);
   const [composing, setComposing] = useState(false);
   const [dragId, setDragId] = useState<number | null>(null);
+
+  // A task alert lands here naming its task, so open it rather than leaving the
+  // reader to find the card on a board of forty. The drawer loads the task by
+  // id itself, so nothing needs the row to have arrived first.
+  useDocumentLink(useCallback((id: number) => setOpenId(id), []));
 
   // See components/workplace/MailboxScreen for why the toast helpers are held
   // in a ref rather than depended on: the provider's value is not memoized.
@@ -109,7 +115,35 @@ export function TaskScreen({ side }: { side: TaskSide }) {
     }
   };
 
-  const open = tasks.find((t) => t.id === openId) ?? null;
+  /**
+   * The task the drawer is showing. Normally one off this board — but an alert
+   * can name a task that is NOT on it (raised in another company, or filtered
+   * out by the search), and dropping the reader on an unchanged board would say
+   * nothing about why. So one that is not here is fetched by id.
+   */
+  const [fetched, setFetched] = useState<Task | null>(null);
+  useEffect(() => {
+    if (!openId || tasks.some((t) => t.id === openId)) {
+      setFetched(null);
+      return;
+    }
+    let alive = true;
+    api
+      .get<Task>(`/tasks/${openId}`)
+      .then((t) => alive && setFetched(t))
+      .catch(() => {
+        // 404 means it is not this person's task (or is gone): close rather
+        // than leave an empty drawer explaining nothing.
+        if (alive) setOpenId(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [openId, tasks]);
+
+  const open =
+    tasks.find((t) => t.id === openId) ??
+    (fetched?.id === openId ? fetched : null);
   const isMineSide = side === 'by-me';
 
   return (

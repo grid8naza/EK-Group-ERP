@@ -44,6 +44,8 @@ import { ChatModule } from './modules/chat/chat.module';
 import { MailModule } from './modules/mail/mail.module';
 import { TaskModule } from './modules/task/task.module';
 import { CircularModule } from './modules/circular/circular.module';
+import { NotificationModule } from './modules/notification/notification.module';
+import { WorkplaceModule } from './modules/workplace/workplace.module';
 import { BroadcastModule } from './modules/broadcast/broadcast.module';
 import { CrmModule } from './modules/crm/crm.module';
 import { PurchaseModule } from './modules/purchase/purchase.module';
@@ -101,6 +103,8 @@ import { MasterDataModule } from './master-data/master-data.module';
     MailModule,
     TaskModule,
     CircularModule,
+    NotificationModule,
+    WorkplaceModule,
     BroadcastModule,
     CrmModule,
     PurchaseModule,

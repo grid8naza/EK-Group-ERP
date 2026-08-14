@@ -1091,6 +1091,50 @@ export async function syncScaffold(
   // 3) Workplace belongs to everyone. Runs LAST: it hands out the module row,
   //    the per-company menus and the screens the steps above have just created.
   await grantWorkplaceToEveryone(prisma);
+  await orderWorkplaceMenus(prisma);
+}
+
+/**
+ * Put My Day at the top of the Workplace module.
+ *
+ * It has to run here rather than with the other migrations, because those go
+ * BEFORE the menu sync and this one reorders menus the sync has just created.
+ *
+ * Why it matters beyond tidiness: Workplace is the module every login lands on,
+ * and the landing route is the first screen of the first menu (see
+ * moduleLandingRoute on the front end). So this ordering is what decides that
+ * signing in opens the dashboard rather than the approvals inbox.
+ *
+ * Once, like every other ordering step — an admin who rearranges the menu
+ * afterwards keeps their arrangement.
+ */
+async function orderWorkplaceMenus(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  const workplace = await prisma.module.findUnique({
+    where: { code: 'WORKFLOW' },
+    select: { id: true },
+  });
+  if (!workplace) return;
+
+  await runOnce(prisma, 'workplace-dashboard-first', async () => {
+    // Read in the order a working day is: what is going on, then what has to be
+    // decided, then what has been said, then what has to be done.
+    const ORDER = [
+      'My Day',
+      'Documents',
+      'Communication',
+      'Tasks',
+      'Circulars',
+      'Broadcast',
+    ];
+    for (const [i, menuName] of ORDER.entries()) {
+      await prisma.mainMenu.updateMany({
+        where: { moduleId: workplace.id, menuName },
+        data: { sortOrder: i + 1 },
+      });
+    }
+  });
 }
 
 /**
@@ -1258,6 +1302,70 @@ async function grantWorkplaceToEveryone(
       });
     }
   });
+
+  // ---- approvals already waiting keep their place on the bell ----
+  // The approval engine's own notification table is gone: an approval alert is
+  // now an ordinary Notification raised through the NOTIFICATION port. Rather
+  // than copy the old rows across, the alerts are rebuilt from the PENDING
+  // tasks themselves — which are the truth of what is waiting for whom, and are
+  // still here. A dropped table cannot be read; an inbox can.
+  //
+  // Same shape and same sourceKey the engine publishes with, so the moment one
+  // of these tasks is acted on, its alert is taken back like any other.
+  await runOnce(
+    prisma,
+    'approval-alerts-rebuilt-from-pending-tasks',
+    async () => {
+      const tasks = await prisma.workflowTask.findMany({
+        where: { status: 'PENDING', instance: { status: 'IN_PROGRESS' } },
+        select: {
+          id: true,
+          assignedUserId: true,
+          canApprove: true,
+          instance: {
+            select: {
+              objectId: true,
+              documentId: true,
+              documentRef: true,
+              companyId: true,
+              branchId: true,
+            },
+          },
+        },
+      });
+      if (!tasks.length) return;
+
+      const objects = await prisma.objectMaster.findMany({
+        where: {
+          id: { in: [...new Set(tasks.map((t) => t.instance.objectId))] },
+        },
+        select: { id: true, objectName: true, route: true },
+      });
+      const byObject = new Map(objects.map((o) => [o.id, o]));
+
+      await prisma.notification.createMany({
+        data: tasks.map((t) => {
+          const form = byObject.get(t.instance.objectId);
+          const document = [form?.objectName, t.instance.documentRef]
+            .filter(Boolean)
+            .join(' ');
+          return {
+            userId: t.assignedUserId,
+            category: 'APPROVAL' as const,
+            title: t.canApprove ? 'Approval required' : 'For your review',
+            body: `${document || 'A document'} ${
+              t.canApprove ? 'needs your action' : 'has been sent to you'
+            }.`,
+            route: form?.route ?? null,
+            documentId: t.instance.documentId,
+            companyId: t.instance.companyId,
+            branchId: t.instance.branchId,
+            sourceKey: `workflow:task:${t.id}`,
+          };
+        }),
+      });
+    },
+  );
 }
 
 /**

@@ -62,21 +62,8 @@ export class WorkflowRuntimeController {
     return this.service.act(user.id, id, dto);
   }
 
-  @Get('notifications')
-  notifications(@CurrentUser() user: AuthUser) {
-    return this.service.notifications(user.id);
-  }
-
-  @Get('notifications/unread-count')
-  unread(@CurrentUser() user: AuthUser) {
-    return this.service.unreadCount(user.id);
-  }
-
-  @Post('notifications/:id/read')
-  markRead(
-    @CurrentUser() user: AuthUser,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    return this.service.markRead(user.id, id);
-  }
+  // The engine's own /workflow/notifications endpoints are gone. Approval
+  // alerts are ordinary notifications now — raised through the NOTIFICATION port
+  // and read from /notifications with everything else, because a person has one
+  // bell, not one per module. See contracts/notification.port.ts.
 }

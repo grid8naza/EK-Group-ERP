@@ -9,6 +9,10 @@ import { Prisma, WorkflowActionType, WorkflowInstance } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { USER_LOOKUP, UserLookupPort } from '../../contracts/user-lookup.port';
 import {
+  NOTIFICATION,
+  NotificationPort,
+} from '../../contracts/notification.port';
+import {
   DocumentRef,
   StartWorkflowInput,
   WorkflowDocState,
@@ -37,11 +41,20 @@ const REVIEW_ONLY_ACTIONS: WorkflowActionType[] = [
   'REVIEW_FORWARD',
 ];
 
+/**
+ * The alert key for one inbox task. Approval alerts used to be a table of this
+ * engine's own, joined to the task so a stale one could be hidden; they are now
+ * ordinary notifications, and this key is what lets the engine take one back
+ * when the task stops being PENDING. See contracts/notification.port.ts.
+ */
+const alertKey = (taskId: number) => `workflow:task:${taskId}`;
+
 @Injectable()
 export class WorkflowRuntimeService {
   constructor(
     private prisma: PrismaService,
     @Inject(USER_LOOKUP) private readonly users: UserLookupPort,
+    @Inject(NOTIFICATION) private readonly notifications: NotificationPort,
   ) {}
 
   /**
@@ -86,10 +99,15 @@ export class WorkflowRuntimeService {
       select: { id: true },
     });
     for (const inst of instances) {
+      const doomed = await this.prisma.workflowTask.findMany({
+        where: { instanceId: inst.id, status: 'PENDING' },
+        select: { id: true },
+      });
       await this.prisma.workflowTask.updateMany({
         where: { instanceId: inst.id, status: 'PENDING' },
         data: { status: 'SKIPPED' },
       });
+      await this.resolveTaskAlerts(doomed.map((t) => t.id));
       await this.finish(inst.id, 'CANCELLED');
     }
   }
@@ -360,51 +378,6 @@ export class WorkflowRuntimeService {
     return this.getInstance(instance.id);
   }
 
-  async notifications(userId: number) {
-    const rows = await this.prisma.workflowNotification.findMany({
-      // Only surface alerts whose task is still awaiting this user — once the task
-      // is DONE/SKIPPED (actioned, superseded, or the whole instance finished) the
-      // alert is stale. Legacy rows with no linked task are treated as stale too.
-      where: { userId, task: { is: { status: 'PENDING' } } },
-      orderBy: { id: 'desc' },
-      take: 50,
-      include: {
-        instance: { select: { objectId: true, documentId: true } },
-      },
-    });
-
-    // Where the document is. An alert that knows which document it is about
-    // should land on it, not on a list the reader then has to search — the
-    // approvals inbox is the place you go when you have not been told which
-    // one, and the bell has just told you.
-    const objects = await this.prisma.objectMaster.findMany({
-      where: { id: { in: [...new Set(rows.map((r) => r.instance.objectId))] } },
-      select: { id: true, route: true },
-    });
-    const routeById = new Map(objects.map((o) => [o.id, o.route]));
-
-    return rows.map(({ instance, ...n }) => ({
-      ...n,
-      route: routeById.get(instance.objectId) ?? null,
-      documentId: instance.documentId,
-    }));
-  }
-
-  async markRead(userId: number, id: number) {
-    await this.prisma.workflowNotification.updateMany({
-      where: { id, userId },
-      data: { isRead: true },
-    });
-    return { success: true };
-  }
-
-  async unreadCount(userId: number) {
-    const count = await this.prisma.workflowNotification.count({
-      where: { userId, isRead: false, task: { is: { status: 'PENDING' } } },
-    });
-    return { count };
-  }
-
   // --- document integration (WorkflowPort) ---
 
   /**
@@ -447,23 +420,16 @@ export class WorkflowRuntimeService {
       });
       status = after.status as WorkflowStatus;
       statusLabel = step?.statusLabel ?? null;
-      // The creator immediately forwards their own first level, so drop the
-      // self-notification raised when it activated — alerts are for receivers.
+      // The creator immediately forwards their own first level, and the
+      // self-alert raised when it activated goes with it — completeTask resolves
+      // the alert keyed to that task, so nothing further is needed here.
       //
-      // By TASK, not by instance-and-user. Forwarding has already activated the
-      // next level and raised its alert, and where the same person sits at two
+      // By TASK, which is what the key is: forwarding has already activated the
+      // next level and raised ITS alert, and where the same person sits at two
       // consecutive levels — an accountant who prepares and also checks, or a
-      // small company where one person holds two roles — deleting every alert
-      // they held on this instance took the new one with it. The bell then said
-      // nothing about a document waiting on them.
-      //
-      // Belt and braces at that: `notifications` and `unreadCount` already show
-      // only alerts whose task is still PENDING, and this one's task is DONE the
-      // moment it is forwarded. The row is removed to keep the table tidy, not
-      // to keep the bell honest.
-      await this.prisma.workflowNotification.deleteMany({
-        where: { taskId: myTask.id },
-      });
+      // small company where one person holds two roles — clearing every alert
+      // they held on this instance would take the new one with it, and the bell
+      // would say nothing about a document waiting on them.
     }
     return { instanceId: instance.id, status, statusLabel };
   }
@@ -905,8 +871,11 @@ export class WorkflowRuntimeService {
     ]);
 
     if (next.notifyInApp) {
-      // Link each alert to the task it's about, so the bell can drop it the moment
-      // that task stops being PENDING (actioned here, or skipped when a peer acts).
+      // One alert per TASK, keyed by it — that is what lets the engine take the
+      // alert back the moment the task stops being PENDING (actioned here, or
+      // skipped when a peer acts). It used to be a join to the task's status;
+      // with alerts now shared with every other module, the engine has to say so
+      // explicitly. See resolveTaskAlerts below.
       const tasks = await this.prisma.workflowTask.findMany({
         where: {
           instanceId: instance.id,
@@ -918,23 +887,51 @@ export class WorkflowRuntimeService {
       // Named by KIND as well as by number. The bell serves every module at
       // once, and "HOF/JV-00004 needs your action" asks the reader to know a
       // numbering scheme; "Journal HOF/JV-00004" tells them what is waiting.
+      // Its route comes along too, so the alert opens the document rather than
+      // dropping the reader on the inbox to find it.
       const form = await this.prisma.objectMaster.findUnique({
         where: { id: instance.objectId },
-        select: { objectName: true },
+        select: { objectName: true, route: true },
       });
       const document = [form?.objectName, instance.documentRef]
         .filter(Boolean)
         .join(' ');
-      await this.prisma.workflowNotification.createMany({
-        data: tasks.map((t) => ({
-          userId: t.assignedUserId,
-          instanceId: instance.id,
-          taskId: t.id,
-          title: 'Approval required',
-          body: `${document || 'A document'} needs your action (${next.buttonText}).`,
-        })),
-      });
+      // A step that only puts the document in front of somebody must not say
+      // "Approval required" — it is exactly the distinction For Approval and For
+      // Review are split on, and the bell is where most people meet it first.
+      const review =
+        !canApprove ||
+        REVIEW_ONLY_ACTIONS.includes(next.action as WorkflowActionType);
+
+      await Promise.all(
+        tasks.map((t) =>
+          this.notifications.publish({
+            audience: { userIds: [t.assignedUserId] },
+            category: 'APPROVAL',
+            title: review ? 'For your review' : 'Approval required',
+            body: `${document || 'A document'} ${
+              review ? 'has been sent to you' : 'needs your action'
+            } (${next.buttonText}).`,
+            route: form?.route ?? null,
+            documentId: instance.documentId,
+            companyId: instance.companyId,
+            branchId: instance.branchId,
+            sourceKey: alertKey(t.id),
+          }),
+        ),
+      );
     }
+  }
+
+  /**
+   * Take back the alerts for these tasks. Called wherever a task stops being
+   * PENDING — acted on, skipped because a peer acted, or cancelled with the
+   * document. An approval alert that outlives its task is worse than none: it
+   * sends somebody to a document that no longer wants anything from them.
+   */
+  private async resolveTaskAlerts(taskIds: number[]): Promise<void> {
+    if (!taskIds.length) return;
+    await this.notifications.resolve(taskIds.map(alertKey));
   }
 
   /** Explicit step users, else all active users in the step's user group. */
@@ -1112,18 +1109,28 @@ export class WorkflowRuntimeService {
     });
   }
 
-  private completeTask(taskId: number) {
-    return this.prisma.workflowTask.update({
+  private async completeTask(taskId: number) {
+    const done = await this.prisma.workflowTask.update({
       where: { id: taskId },
       data: { status: 'DONE', actedAt: new Date() },
     });
+    await this.resolveTaskAlerts([taskId]);
+    return done;
   }
 
-  private skipSiblings(instanceId: number, sequence: number) {
-    return this.prisma.workflowTask.updateMany({
+  private async skipSiblings(instanceId: number, sequence: number) {
+    // Read them first: once they are SKIPPED there is nothing left to say which
+    // alerts to take back.
+    const doomed = await this.prisma.workflowTask.findMany({
+      where: { instanceId, sequence, status: 'PENDING' },
+      select: { id: true },
+    });
+    const skipped = await this.prisma.workflowTask.updateMany({
       where: { instanceId, sequence, status: 'PENDING' },
       data: { status: 'SKIPPED' },
     });
+    await this.resolveTaskAlerts(doomed.map((t) => t.id));
+    return skipped;
   }
 
   private finish(
@@ -1153,18 +1160,6 @@ export class WorkflowRuntimeService {
         action,
         comment: comment?.trim() || null,
       },
-    });
-  }
-
-  private notify(
-    userId: number,
-    instanceId: number,
-    taskId: number | null,
-    title: string,
-    body: string,
-  ) {
-    return this.prisma.workflowNotification.create({
-      data: { userId, instanceId, taskId, title, body },
     });
   }
 }

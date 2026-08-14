@@ -1634,18 +1634,113 @@ export interface WorkflowInstanceDetail {
   timeline: WorkflowTimelineEntry[];
 }
 
-export interface WorkflowNotification {
+// ---- Alerts (SRS §8.11, FR-COM-05) ----
+
+/**
+ * What kind of thing happened. Not which module raised it — a reader thinks
+ * "an approval", "something is running out", not "the workflow engine".
+ */
+export type AlertCategory =
+  | 'APPROVAL'
+  | 'TASK'
+  | 'STOCK'
+  | 'EXPIRY'
+  | 'PAYMENT'
+  | 'LEAVE'
+  | 'MESSAGE'
+  | 'SYSTEM';
+
+export type AlertPriority = 'NORMAL' | 'IMPORTANT' | 'URGENT';
+
+/**
+ * One alert, for this person. Replaces the approval engine's own notification
+ * shape: approvals are now one category among several in a single bell.
+ *
+ * The three stamps say different things and none implies another. `readAt` is
+ * "I have seen it" — an approval you have looked at is still waiting for you.
+ * `resolvedAt` is "the thing it was about has ended", set by the module that
+ * raised it. `dismissedAt` is "I have put it down", the reader's own decision.
+ */
+export interface Alert {
   id: number;
-  userId: number;
-  instanceId: number;
-  taskId?: number | null;
+  category: AlertCategory;
+  priority: AlertPriority;
   title: string;
   body: string;
-  isRead: boolean;
-  createdAt: string;
-  /** The screen the document is read and acted on, and which document. */
+  /** The screen the alert opens, and which row on it (when there is one). */
   route?: string | null;
   documentId?: number | null;
+  /** Where it happened — shown when it is not where the reader is working. */
+  companyId?: number | null;
+  branchId?: number | null;
+  readAt?: string | null;
+  dismissedAt?: string | null;
+  resolvedAt?: string | null;
+  createdAt: string;
+}
+
+export interface AlertPage {
+  items: Alert[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+}
+
+/** What a person wants to be told about. Off means never raised for them. */
+export interface AlertPreference {
+  category: AlertCategory;
+  inApp: boolean;
+  push: boolean;
+}
+
+// ---- Workplace dashboard ----
+
+export type WorkplaceTone = 'normal' | 'attention' | 'urgent';
+
+/** One number on the dashboard, and the screen it leads to. */
+export interface WorkplaceTile {
+  key: string;
+  label: string;
+  count: number;
+  route: string;
+  /** Lucide icon name — resolved through lib/icons, like every menu icon. */
+  icon?: string | null;
+  tone?: WorkplaceTone;
+  order: number;
+  /** The same count split by company; absent where the data is not company-partitioned. */
+  byCompany?: { companyId: number; count: number }[];
+}
+
+export type WorkplaceItemKind =
+  'APPROVAL' | 'REVIEW' | 'TASK' | 'CIRCULAR' | 'MAIL' | 'ALERT';
+
+/** One thing waiting for this person, wherever in the group it is. */
+export interface WorkplaceItem {
+  key: string;
+  kind: WorkplaceItemKind;
+  title: string;
+  subtitle?: string | null;
+  at: string;
+  dueAt?: string | null;
+  overdue?: boolean;
+  route?: string | null;
+  documentId?: number | null;
+  companyId?: number | null;
+  branchId?: number | null;
+}
+
+/**
+ * The whole dashboard, in one response. Company and branch lists are the
+ * signed-in user's OWN scope — every company and branch they have privileges
+ * for — which is what makes this a person's dashboard rather than a company's.
+ */
+export interface WorkplaceDashboard {
+  tiles: WorkplaceTile[];
+  waiting: WorkplaceItem[];
+  companies: { id: number; name: string }[];
+  branches: { id: number; name: string; companyId: number }[];
+  asOf: string;
 }
 
 // ---- Backup & Restore ----

@@ -123,6 +123,26 @@ export interface UserLookupPort {
   usersInGroup(userGroupId: number): Promise<number[]>;
 
   /**
+   * The other direction of `canAccessModule`: everybody who may work in this
+   * module, in this company, by module CODE. Active users only.
+   *
+   * Asked by the notification service, because an operational alert has no
+   * addressee — "the flour is running out" is for whoever works in Inventory
+   * here, and that is a fact about company modules, user groups and per-user
+   * module pinning, none of which the Stock module can read. Answering it here
+   * also keeps ONE definition of access: the same rule that decides whether a
+   * screen opens decides who is told about it.
+   *
+   * An unknown or inactive module code returns nobody rather than raising —
+   * a publisher naming a module that has been switched off should go quiet, not
+   * fail the operation that raised the alert.
+   */
+  usersWithModuleAccess(
+    companyId: number,
+    moduleCode: string,
+  ): Promise<number[]>;
+
+  /**
    * Active users who share at least one company with this one — everybody they
    * work alongside, wherever in the group that is. Super admins see, and are
    * seen by, everyone: they belong to no company in particular.

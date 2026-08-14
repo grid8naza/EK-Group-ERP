@@ -2,10 +2,14 @@
 //
 // Admins define, per document type (company + branch + module + form), an ordered
 // chain of approval steps (WorkflowStep). At runtime a document travels through a
-// WorkflowInstance: each step raises WorkflowTasks (the approver inbox), every
-// action is written to WorkflowActionLog, and in-app WorkflowNotifications alert
-// assignees. Steps can route ACROSS company / branch / module boundaries via their
-// target* overrides.
+// WorkflowInstance: each step raises WorkflowTasks (the approver inbox) and every
+// action is written to WorkflowActionLog. Steps can route ACROSS company / branch
+// / module boundaries via their target* overrides.
+//
+// The engine no longer keeps a notification table of its own: an approval alert
+// is an ordinary Notification (see notification.prisma), raised through the
+// NOTIFICATION port and keyed `workflow:task:<id>` so the engine can take it back
+// when the task stops being PENDING. A person has one bell, not one per module.
 //
 // Cross-domain rule: every reference to a Cpanel row (company, branch, module,
 // object, user, user group) is a plain `Int` id with NO @relation — real relations
@@ -169,8 +173,6 @@ model WorkflowInstance {
 
   tasks         WorkflowTask[]
   actions       WorkflowActionLog[]
-  notifications WorkflowNotification[]
-
   @@index([moduleId, objectId, documentId])
   @@index([status])
   @@map("workflow_instances")
@@ -193,8 +195,7 @@ model WorkflowTask {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  instance      WorkflowInstance       @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-  notifications WorkflowNotification[]
+  instance WorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
 
   @@index([assignedUserId, status])
   @@index([instanceId])
@@ -217,24 +218,4 @@ model WorkflowActionLog {
 
   @@index([instanceId])
   @@map("workflow_action_logs")
-}
-
-/// In-app notification for an assignee (the bell + My Approvals feed).
-model WorkflowNotification {
-  id         Int     @id @default(autoincrement())
-  userId     Int
-  instanceId Int
-  taskId     Int? // the task this alert is about; null once unlinked (legacy)
-  title      String
-  body       String
-  isRead     Boolean @default(false)
-
-  createdAt DateTime @default(now())
-
-  instance WorkflowInstance @relation(fields: [instanceId], references: [id], onDelete: Cascade)
-  task     WorkflowTask?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
-
-  @@index([userId, isRead])
-  @@index([taskId])
-  @@map("workflow_notifications")
 }
