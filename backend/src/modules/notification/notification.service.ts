@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { NotificationCategory, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { USER_LOOKUP, UserLookupPort } from '../../contracts/user-lookup.port';
@@ -234,10 +240,11 @@ export class NotificationService {
   /**
    * One person's alerts.
    *
-   * `cleared` is the whole difference between the bell and the archive: by
-   * default a feed shows what still stands, and the Alerts screen can ask for
-   * everything — including what has since been resolved or put down — because
-   * "what was I told last Tuesday" is a fair question.
+   * `cleared` is the whole difference between the bell and the archive: without
+   * it a feed shows what still stands, and with it exactly the opposite — what
+   * has been resolved or put down. The two together are everything, and neither
+   * shows a row twice, so "what was I told last Tuesday" has one place to be
+   * asked.
    */
   async list(
     userId: number,
@@ -254,7 +261,11 @@ export class NotificationService {
 
     const where: Prisma.NotificationWhereInput = {
       userId,
-      ...(opts.cleared ? {} : { resolvedAt: null, dismissedAt: null }),
+      ...(opts.cleared
+        ? {
+            OR: [{ resolvedAt: { not: null } }, { dismissedAt: { not: null } }],
+          }
+        : { resolvedAt: null, dismissedAt: null }),
       ...(opts.unreadOnly ? { readAt: null } : {}),
       ...(opts.category ? { category: opts.category } : {}),
     };
@@ -303,6 +314,52 @@ export class NotificationService {
       data: { readAt: new Date() },
     });
     return { count };
+  }
+
+  /**
+   * Put one back to unread — for the alert somebody opened in passing and wants
+   * to come back to. It counts against the badge again, which is the point:
+   * "unread" here means "I still have to deal with this", and taking the mark
+   * off is the only way to say so once it has been given.
+   *
+   * Allowed on a cleared alert too. The stamps are independent by design, and a
+   * reader marking an old one unread has said something about it that outlives
+   * whether it is still standing.
+   */
+  async markUnread(userId: number, id: number) {
+    await this.assertOwn(userId, id);
+    await this.prisma.notification.updateMany({
+      where: { id, userId },
+      data: { readAt: null },
+    });
+    return { success: true };
+  }
+
+  /**
+   * Put a cleared alert back on the waiting list.
+   *
+   * Only one that the READER put down. An alert the module RESOLVED is over —
+   * the document was approved, the task deleted, the stock replenished — and
+   * putting it back would be restoring something that is not true any more, on
+   * the one screen whose whole job is to say what still is. Those are refused,
+   * with the reason, rather than silently doing nothing.
+   */
+  async restore(userId: number, id: number) {
+    const found = await this.prisma.notification.findFirst({
+      where: { id, userId },
+      select: { id: true, resolvedAt: true },
+    });
+    if (!found) throw new NotFoundException('Notification not found');
+    if (found.resolvedAt) {
+      throw new BadRequestException(
+        'This one is over — what it was about has already been dealt with.',
+      );
+    }
+    await this.prisma.notification.updateMany({
+      where: { id, userId },
+      data: { dismissedAt: null },
+    });
+    return { success: true };
   }
 
   /**

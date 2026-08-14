@@ -34,8 +34,11 @@ interface AlertContextValue {
   version: number;
   refresh: () => Promise<void>;
   markRead: (id: number) => Promise<void>;
+  markUnread: (id: number) => Promise<void>;
   markAllRead: () => Promise<void>;
   dismiss: (id: number) => Promise<void>;
+  /** Put a cleared alert back on the waiting list. Throws if it is over. */
+  restore: (id: number) => Promise<void>;
 }
 
 const AlertContext = createContext<AlertContextValue | null>(null);
@@ -132,6 +135,22 @@ export function AlertProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const markUnread = useCallback(async (id: number) => {
+    // Only counts against the badge again if the alert is still standing —
+    // marking a cleared one unread says something about it, but the badge is
+    // for what is waiting.
+    setAlerts((list) => {
+      if (!list.some((a) => a.id === id && a.readAt)) return list;
+      setUnread((n) => n + 1);
+      return list.map((a) => (a.id === id ? { ...a, readAt: null } : a));
+    });
+    try {
+      await api.post(`/notifications/${id}/unread`);
+    } catch {
+      void refreshRef.current();
+    }
+  }, []);
+
   const markAllRead = useCallback(async () => {
     const now = new Date().toISOString();
     setAlerts((list) =>
@@ -161,6 +180,16 @@ export function AlertProvider({ children }: { children: React.ReactNode }) {
     void refreshRef.current();
   }, []);
 
+  /**
+   * Not optimistic, unlike the rest: the server decides whether an alert may
+   * come back at all — one the module resolved is over — so the error has to be
+   * allowed to surface, and the feed is refetched from what it actually did.
+   */
+  const restore = useCallback(async (id: number) => {
+    await api.post(`/notifications/${id}/restore`);
+    await refreshRef.current();
+  }, []);
+
   const value = useMemo(
     () => ({
       alerts,
@@ -169,10 +198,23 @@ export function AlertProvider({ children }: { children: React.ReactNode }) {
       version,
       refresh,
       markRead,
+      markUnread,
       markAllRead,
       dismiss,
+      restore,
     }),
-    [alerts, unread, loading, version, refresh, markRead, markAllRead, dismiss],
+    [
+      alerts,
+      unread,
+      loading,
+      version,
+      refresh,
+      markRead,
+      markUnread,
+      markAllRead,
+      dismiss,
+      restore,
+    ],
   );
 
   return (

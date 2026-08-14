@@ -118,12 +118,29 @@ export class NotificationController {
     return this.service.markRead(user.id, id);
   }
 
+  @Post(':id/unread')
+  markUnread(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.service.markUnread(user.id, id);
+  }
+
   @Post(':id/dismiss')
   dismiss(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.service.dismiss(user.id, id);
+  }
+
+  /** Put a cleared alert back on the waiting list. Only one the reader cleared. */
+  @Post(':id/restore')
+  restore(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.service.restore(user.id, id);
   }
 
   // ----------------------------------------------------------- preferences --

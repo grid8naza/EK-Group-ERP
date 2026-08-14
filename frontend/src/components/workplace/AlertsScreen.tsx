@@ -9,9 +9,11 @@ import {
   Check,
   CheckCheck,
   ExternalLink,
+  MailOpen,
+  Undo2,
   X,
 } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { DOC_PARAM } from '@/lib/hooks';
 import { useAuth } from '@/providers/AuthProvider';
 import { useAlerts } from '@/providers/AlertProvider';
@@ -135,10 +137,39 @@ export function AlertsScreen() {
     await alerts?.markRead(alert.id);
   };
 
+  /**
+   * Take the read mark off. Not a no-op on an old alert: "unread" is how a
+   * reader says they still have to deal with something, and there is no other
+   * way to say it once the mark has been given.
+   */
+  const markUnread = async (alert: Alert) => {
+    setItems((list) =>
+      list.map((a) => (a.id === alert.id ? { ...a, readAt: null } : a)),
+    );
+    await alerts?.markUnread(alert.id);
+  };
+
   const dismiss = async (alert: Alert) => {
     setItems((list) => list.filter((a) => a.id !== alert.id));
     setTotal((n) => Math.max(0, n - 1));
     await alerts?.dismiss(alert.id);
+  };
+
+  /** Put a cleared alert back on the waiting list. */
+  const restore = async (alert: Alert) => {
+    try {
+      await alerts?.restore(alert.id);
+      // It has left this list (Cleared) for the other one, so drop the row
+      // rather than leave it looking cleared.
+      setItems((list) => list.filter((a) => a.id !== alert.id));
+      setTotal((n) => Math.max(0, n - 1));
+      toastRef.current.success('Back on your waiting list.');
+    } catch (e) {
+      // The server refuses an alert the module has resolved, and says why.
+      toastRef.current.error(
+        e instanceof ApiError ? e.message : 'That one could not be restored.',
+      );
+    }
   };
 
   const markAllRead = async () => {
@@ -332,28 +363,58 @@ export function AlertsScreen() {
                       </span>
                     </button>
 
-                    {view !== 'cleared' && (
-                      <div className="flex flex-none items-center gap-1 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
-                        {!a.readAt && (
-                          <button
-                            onClick={() => void markRead(a)}
-                            title="Mark read"
-                            aria-label="Mark read"
-                            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700"
-                          >
-                            <Check className="h-4 w-4" />
-                          </button>
-                        )}
+                    <div className="flex flex-none items-center gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
+                      {/* Read is a TOGGLE, on every tab. Marking one unread is
+                          how a reader says they still have to deal with it,
+                          and there is no other way to say so once the mark has
+                          been given. */}
+                      {a.readAt ? (
                         <button
-                          onClick={() => void dismiss(a)}
-                          title="Clear"
-                          aria-label="Clear"
+                          onClick={() => void markUnread(a)}
+                          title="Mark unread"
+                          aria-label="Mark unread"
                           className="rounded-md p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700"
                         >
-                          <X className="h-4 w-4" />
+                          <MailOpen className="h-4 w-4" />
                         </button>
-                      </div>
-                    )}
+                      ) : (
+                        <button
+                          onClick={() => void markRead(a)}
+                          title="Mark read"
+                          aria-label="Mark read"
+                          className="rounded-md p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                      )}
+
+                      {/* Clearing and un-clearing, but only what the READER put
+                          down. One the module resolved is over — the document
+                          was approved, the task deleted — so there is nothing
+                          to put back, and the row says so instead. */}
+                      {a.dismissedAt && !a.resolvedAt ? (
+                        <button
+                          onClick={() => void restore(a)}
+                          title="Move back to waiting"
+                          aria-label="Move back to waiting"
+                          className="rounded-md p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700"
+                        >
+                          <Undo2 className="h-4 w-4" />
+                        </button>
+                      ) : (
+                        !a.dismissedAt &&
+                        !a.resolvedAt && (
+                          <button
+                            onClick={() => void dismiss(a)}
+                            title="Clear"
+                            aria-label="Clear"
+                            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        )
+                      )}
+                    </div>
                   </div>
                 </div>
               );
