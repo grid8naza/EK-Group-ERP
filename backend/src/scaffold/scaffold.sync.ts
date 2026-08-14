@@ -890,6 +890,61 @@ async function migrateHrMenus(prisma: Prisma.TransactionClient): Promise<void> {
   await runOnce(prisma, 'hr-department-lookup-dropped', async () => {
     await prisma.lookup.deleteMany({ where: { code: 'DEPARTMENT' } });
   });
+
+  await seedEmployeeNumbering(prisma);
+}
+
+/**
+ * Give every company a numbering rule for employee codes.
+ *
+ * The Employee Master used to mint EMP-0001 itself. It now draws from the
+ * central numbering (Cpanel → Document Numbering, document EMPLOYEE) like every
+ * other number in the system, and this puts a real rule row in front of each
+ * company so the screen shows something to edit rather than a set of defaults
+ * nobody has agreed to. The shape seeded is exactly what the hard-coded one
+ * produced — EMP-0001 — so nothing about existing codes changes; what changes is
+ * that HR can now make it EKF/EMP/0001 per company without a developer.
+ *
+ * Skipped WITHOUT marking itself done while the EMPLOYEE document row is
+ * missing: the document master is seeded by DocumentService on the same
+ * bootstrap and the two are not ordered against each other, so a first boot that
+ * loses the race simply seeds on the next one.
+ *
+ * runOnce, not an upsert every boot: a company that deletes its rule means "use
+ * the defaults", and re-creating it each morning would be arguing with them.
+ */
+async function seedEmployeeNumbering(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  const doc = await prisma.document.findUnique({
+    where: { code: 'EMPLOYEE' },
+    select: { id: true },
+  });
+  if (!doc) return;
+
+  await runOnce(prisma, 'employee-numbering-rules', async () => {
+    const companies = await prisma.company.findMany({ select: { id: true } });
+    for (const c of companies) {
+      await prisma.documentNumberingRule.upsert({
+        where: {
+          companyId_documentId: { companyId: c.id, documentId: doc.id },
+        },
+        create: {
+          companyId: c.id,
+          documentId: doc.id,
+          prefixEnabled: true,
+          prefixValue: 'EMP-',
+          startingNo: 1,
+          paddingLength: 4,
+          // NEVER: an employee code is issued once and quoted for years. A
+          // series that restarted every year would hand one person's number to
+          // somebody else.
+          renumber: 'NEVER',
+        },
+        update: {},
+      });
+    }
+  });
 }
 
 async function migrateWorkflowMenuName(

@@ -125,6 +125,20 @@ const SOURCES: Record<string, NumberSource[]> = {
         })
         .then((r) => r.map((x) => x.orderNo)),
   ],
+  // An employee code, read back off the people themselves. Company-wide by
+  // design: somebody who moves branch keeps the code they were given, so the
+  // code must not claim a branch it may outlive.
+  EMPLOYEE: [
+    (p, companyId, code) =>
+      p.employee
+        .findMany({
+          where: { companyId, code },
+          select: { code: true },
+          orderBy: { code: 'desc' },
+          take: SCAN_LIMIT,
+        })
+        .then((r) => r.map((x) => x.code)),
+  ],
   WORK_ORDER: [
     (p, companyId, orderNo) =>
       p.workOrder

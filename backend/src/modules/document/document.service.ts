@@ -47,6 +47,11 @@ const SYSTEM_DOCUMENTS: { code: string; name: string }[] = [
   { code: 'CONTRA_VOUCHER', name: 'Contra Voucher' },
   { code: 'DEBIT_NOTE_VOUCHER', name: 'Debit Note Voucher' },
   { code: 'CREDIT_NOTE_VOUCHER', name: 'Credit Note Voucher' },
+  // Not a transaction, but numbered by the same machinery on purpose: an
+  // employee code is a number a company issues once and quotes for ever after,
+  // and HR should be able to shape it (EK/EMP/0001) from the same screen as
+  // everything else rather than live with whatever a developer hard-coded.
+  { code: 'EMPLOYEE', name: 'Employee' },
 ];
 
 /**

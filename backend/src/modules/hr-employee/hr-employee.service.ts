@@ -3,13 +3,16 @@ import { rename as renameFile } from 'fs/promises';
 import { extname, join } from 'path';
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
+import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
 import {
+  EMPLOYEE_DOCUMENT_CODE,
   EMPLOYEE_UPLOAD_DIR,
   EMPLOYEE_URL_PREFIX,
 } from './hr-employee.constants';
@@ -65,7 +68,10 @@ interface PostingNames {
  */
 @Injectable()
 export class HrEmployeeService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(NUMBERING) private readonly numbering: NumberingPort,
+  ) {}
 
   // ------------------------------------------------------------------ read --
 
@@ -132,11 +138,22 @@ export class HrEmployeeService {
       throw new BadRequestException('Enter the date of joining.');
     }
 
-    // EMP-#### per company, MAX+1 over what exists rather than a count: a
-    // deleted row must not hand its number to the next person. Retried on the
-    // unique clash two people saving at once would cause.
+    // The code comes from the company's own numbering rule (Cpanel → Document
+    // Numbering, document EMPLOYEE), so HR can shape it — EK/EMP/0001 — without
+    // a developer. EMP-0001 is only the fallback for a company that has
+    // configured nothing.
+    //
+    // `attempt` offsets the sequence: the number is DERIVED (MAX + 1), so two
+    // people saving at once are handed the same one, and the loser has to ask
+    // for the next rather than retry the same number for ever.
     for (let attempt = 0; ; attempt++) {
-      const code = await this.nextCode(data.companyId!);
+      const code = await this.numbering.nextOrDefault(
+        { companyId: data.companyId!, branchId: null },
+        EMPLOYEE_DOCUMENT_CODE,
+        { prefix: 'EMP-', padding: 4 },
+        undefined,
+        attempt,
+      );
       try {
         const created = await this.prisma.employee.create({
           data: {
@@ -436,19 +453,6 @@ export class HrEmployeeService {
         'That manager does not work for this company.',
       );
     }
-  }
-
-  /** EMP-0001, EMP-0002 … the highest existing number for the company, plus one. */
-  private async nextCode(companyId: number): Promise<string> {
-    const rows = await this.prisma.employee.findMany({
-      where: { companyId },
-      select: { code: true },
-    });
-    const highest = rows.reduce((max, r) => {
-      const n = Number(r.code.replace(/^EMP-/, ''));
-      return Number.isFinite(n) && n > max ? n : max;
-    }, 0);
-    return `EMP-${String(highest + 1).padStart(4, '0')}`;
   }
 
   // ----------------------------------------------------------- view shapes --
