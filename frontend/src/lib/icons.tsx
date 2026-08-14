@@ -57,6 +57,7 @@ import {
   PlayCircle,
   PauseCircle,
   RotateCcw,
+  Repeat,
   Loader2,
   Handshake,
   Stamp,
@@ -219,6 +220,9 @@ const MAP: Record<string, LucideIcon> = {
   'pause-circle': PauseCircle,
   hold: PauseCircle,
   'rotate-ccw': RotateCcw,
+  // A schedule that comes round: recurring checklists (FR-TSK-02).
+  repeat: Repeat,
+  recurring: Repeat,
   revert: RotateCcw,
   loader: Loader2,
   processing: Loader2,
@@ -358,6 +362,7 @@ export const ICON_OPTIONS: IconOption[] = [
   { name: 'play-circle', label: 'Start', Icon: PlayCircle },
   { name: 'pause-circle', label: 'Hold', Icon: PauseCircle },
   { name: 'rotate-ccw', label: 'Revert', Icon: RotateCcw },
+  { name: 'repeat', label: 'Recurring', Icon: Repeat },
   // Commerce / general
   { name: 'shopping-cart', label: 'Cart / Order', Icon: ShoppingCart },
   { name: 'shopping-bag', label: 'Bag', Icon: ShoppingBag },

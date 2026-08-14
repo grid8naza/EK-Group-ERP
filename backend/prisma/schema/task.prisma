@@ -60,16 +60,138 @@ model Task {
   /// Ties break on id, which keeps the order stable rather than arbitrary.
   sortOrder Int @default(0)
 
+  /// The recurring checklist this task was generated from, if it was not raised
+  /// by a person (FR-TSK-02). Null on every hand-raised task.
+  templateId Int?
+  /// WHICH occurrence it is — the local calendar date the run belongs to, held
+  /// at midnight UTC as a date-only marker.
+  ///
+  /// This is what makes generation idempotent. The scheduler runs every few
+  /// minutes and has no memory; the unique constraint below is what stops a
+  /// second pass, a restart, or two replicas from raising Monday's opening
+  /// checks twice. Deliberately NOT `createdAt`-based: a run that generated late
+  /// still belongs to the day it was for.
+  occurrenceOn DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   assignees TaskAssignee[]
   checklist TaskChecklistItem[]
   comments  TaskComment[]
+  template  ChecklistTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
 
+  /// One task per template per occurrence. See occurrenceOn.
+  @@unique([templateId, occurrenceOn])
   @@index([companyId, status])
   @@index([createdById])
   @@map("tasks")
+}
+
+/// How often a recurring checklist comes round.
+///
+/// Three, and no cron expression. What a bakery actually runs is "every day
+/// before opening", "every Monday", "the first of the month" — and a field that
+/// accepts `0 6 * * 1-5` is one a supervisor cannot fill in or check.
+enum ChecklistFrequency {
+  DAILY
+  /// On the chosen weekdays. One or more; Sunday is 0.
+  WEEKLY
+  /// On the chosen day of the month, clamped to the last day of short ones.
+  MONTHLY
+}
+
+/// A checklist that raises itself, on a schedule (SRS §8.12, FR-TSK-02:
+/// "recurring checklists (opening/closing, hygiene, production)").
+///
+/// It is a TEMPLATE, not a running list. Each occurrence becomes an ordinary
+/// Task with ordinary checklist items, and that is the whole design: a generated
+/// checklist lands on the same board, is ticked by the same people, records who
+/// ticked what and when (§8.13 hygiene), takes comments, and raises the same
+/// assignment and overdue alerts. A parallel "checklist run" model would have
+/// needed every one of those built a second time, and would have left a branch
+/// with two places to look for what it has to do this morning.
+///
+/// Scoped to company and branch like the board it feeds (FR-TSK-01): the
+/// opening checks at Kadathy are Kadathy's, and `branchId` null means the
+/// company as a whole.
+model ChecklistTemplate {
+  id          Int     @id @default(autoincrement())
+  name        String
+  description String?
+
+  companyId Int
+  branchId  Int? // null = company-wide
+
+  /// Who set it up. They own what it says, exactly as a task's raiser does.
+  createdById Int
+
+  frequency ChecklistFrequency @default(DAILY)
+  /// WEEKLY: which days, 0 = Sunday. Ignored by the other frequencies.
+  weekdays  Int[]              @default([])
+  /// MONTHLY: which day, 1-31. Clamped to the last day of a shorter month, so a
+  /// 31st checklist still happens in February rather than skipping it.
+  dayOfMonth Int?
+
+  /// When it appears, as minutes after local midnight (06:00 → 360).
+  ///
+  /// Minutes rather than a DateTime because this is a time of DAY, not an
+  /// instant — and local, because a 6 a.m. opening check is 6 a.m. where the
+  /// bakery is. The zone is the application's (APP_TIMEZONE, see
+  /// common/zoned-time.ts); the server runs in UTC and must not be allowed to
+  /// turn 06:00 into 11:30.
+  startMinutes Int @default(360)
+  /// When it must be finished by, same units. Null = the end of that local day.
+  dueMinutes   Int?
+
+  priority TaskPriority @default(NORMAL)
+
+  /// Off means it stops generating. Kept rather than deleted, so the tasks it
+  /// has already raised keep the record of where they came from.
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items     ChecklistTemplateItem[]
+  assignees ChecklistTemplateAssignee[]
+  /// Everything it has raised. SetNull on delete: the tasks survive their
+  /// template, because a completed hygiene check is a record and deleting the
+  /// schedule must not delete the evidence.
+  tasks     Task[]
+
+  @@index([companyId, isActive])
+  @@index([createdById])
+  @@map("checklist_templates")
+}
+
+/// One line of the checklist, as it will be copied onto every occurrence.
+///
+/// Copied, not referenced: the tasks a branch completed last month must keep the
+/// wording they were completed against. Editing a template changes what happens
+/// tomorrow, never what was signed for yesterday.
+model ChecklistTemplateItem {
+  id         Int               @id @default(autoincrement())
+  templateId Int
+  template   ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  text      String
+  sortOrder Int    @default(0)
+
+  @@index([templateId])
+  @@map("checklist_template_items")
+}
+
+/// Who each occurrence is raised for.
+model ChecklistTemplateAssignee {
+  id         Int               @id @default(autoincrement())
+  templateId Int
+  template   ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  userId     Int
+
+  @@unique([templateId, userId])
+  @@index([templateId])
+  @@map("checklist_template_assignees")
 }
 
 /// Who a task is for. Several people can share one (SRS: "multi-user

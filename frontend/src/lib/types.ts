@@ -2826,6 +2826,43 @@ export interface TasksElsewhere {
   count: number;
 }
 
+// ---- Recurring checklists (SRS §8.12, FR-TSK-02) ----
+
+export type ChecklistFrequency = 'DAILY' | 'WEEKLY' | 'MONTHLY';
+
+/**
+ * A checklist that raises itself on a schedule. Each occurrence becomes an
+ * ordinary Task, so there is no separate type for one that is under way.
+ */
+export interface ChecklistTemplate {
+  id: number;
+  name: string;
+  description: string | null;
+  companyId: number;
+  /** Null = company-wide: it raises on every branch's board. */
+  branchId: number | null;
+  frequency: ChecklistFrequency;
+  /** WEEKLY: which days, 0 = Sunday. */
+  weekdays: number[];
+  /** MONTHLY: which day, clamped to the last of shorter months. */
+  dayOfMonth: number | null;
+  /** Minutes after local midnight, and the same as "HH:mm" for display. */
+  startMinutes: number;
+  startTime: string;
+  dueMinutes: number | null;
+  dueTime: string | null;
+  priority: TaskPriority;
+  isActive: boolean;
+  /** I set it up, so I own what it says. */
+  isMine: boolean;
+  createdById: number;
+  createdByName: string | null;
+  items: { id: number; text: string }[];
+  assignees: { id: number; name: string }[];
+  /** The zone the times are read in, so the screen can say which one. */
+  timeZone: string;
+}
+
 // ---- Audiences (Workplace / Communication — circulars and broadcasts) ----
 //
 // Shared by both, because both address a body of people rather than a list of

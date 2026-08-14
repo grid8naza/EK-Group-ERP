@@ -5,7 +5,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, TaskStatus } from '@prisma/client';
+import { Prisma, TaskPriority, TaskStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   USER_LOOKUP,
@@ -34,6 +34,17 @@ const taskInclude = {
 } satisfies Prisma.TaskInclude;
 
 type TaskRow = Prisma.TaskGetPayload<{ include: typeof taskInclude }>;
+
+/** The little of a task that "this is yours" needs. A TaskRow satisfies it. */
+export interface AssignedTaskAlert {
+  id: number;
+  title: string;
+  dueAt: Date | null;
+  priority: TaskPriority;
+  companyId: number;
+  branchId: number | null;
+  assignees: { userId: number }[];
+}
 
 /**
  * Where the two sides of a task read it. An alert opens the board the reader
@@ -476,8 +487,16 @@ export class TaskService {
    * Tell the assignees a task is theirs. One standing alert per task per
    * person — the key is the task, so re-saving it, adding a seventh assignee or
    * a scan running twice never rings the same bell again.
+   *
+   * Public, and takes the least it needs rather than a whole TaskRow, so the
+   * recurring-checklist scheduler announces a generated task in exactly these
+   * words. Two places composing the same sentence is how they drift apart.
+   *
+   * `raisedBy` is null for work nobody raised: a checklist that came round on
+   * its own has no actor to leave out, so everybody it is for is told —
+   * including whoever set the schedule up, if they are on it.
    */
-  private async alertAssigned(task: TaskRow, raisedBy: number) {
+  async alertAssigned(task: AssignedTaskAlert, raisedBy: number | null) {
     const assignees = task.assignees.map((a) => a.userId);
     if (!assignees.length) return;
     const due = task.dueAt
@@ -641,6 +660,11 @@ export class TaskService {
       sortOrder: task.sortOrder,
       createdAt: task.createdAt.toISOString(),
     };
+  }
+
+  /** Public so the recurring-checklist screens name people the same way. */
+  async namesOf(ids: number[]): Promise<Map<number, UserSummary>> {
+    return this.namesFor(ids);
   }
 
   private async namesFor(ids: number[]): Promise<Map<number, UserSummary>> {

@@ -136,6 +136,15 @@ export const WORKFLOW_EXTRA_MENUS = [
         icon: 'clipboard-check',
         order: 2,
       },
+      {
+        // FR-TSK-02. The SCHEDULES, not the checklists under way — an occurrence
+        // is an ordinary task and appears on the two boards above, which is why
+        // this sits beside them rather than in a module of its own.
+        name: 'Recurring Checklists',
+        route: '/workplace/tasks/checklists',
+        icon: 'repeat',
+        order: 3,
+      },
     ],
   },
   {
