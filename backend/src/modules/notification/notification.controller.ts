@@ -17,7 +17,7 @@ import { AuthUser, CurrentUser } from '../../auth/current-user.decorator';
 import { SuperAdminGuard } from '../../auth/super-admin.guard';
 import { NotificationService } from './notification.service';
 import { NotificationEventsService } from './notification-events.service';
-import { SetPreferencesDto } from './notification.dto';
+import { BulkAlertDto, SetPreferencesDto } from './notification.dto';
 
 /** How often the open stream sends a keep-alive. */
 const HEARTBEAT_MS = 25_000;
@@ -105,9 +105,13 @@ export class NotificationController {
     return this.service.markAllRead(user.id);
   }
 
-  @Post('dismiss-all')
-  dismissAll(@CurrentUser() user: AuthUser) {
-    return this.service.dismissAll(user.id);
+  /**
+   * One action over several alerts. Declared before the `:id` routes below so a
+   * literal path is never read as an id.
+   */
+  @Post('bulk')
+  bulk(@CurrentUser() user: AuthUser, @Body() dto: BulkAlertDto) {
+    return this.service.bulk(user.id, dto.ids, dto.action);
   }
 
   @Post(':id/read')
@@ -118,29 +122,12 @@ export class NotificationController {
     return this.service.markRead(user.id, id);
   }
 
-  @Post(':id/unread')
-  markUnread(
-    @CurrentUser() user: AuthUser,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    return this.service.markUnread(user.id, id);
-  }
-
   @Post(':id/dismiss')
   dismiss(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.service.dismiss(user.id, id);
-  }
-
-  /** Put a cleared alert back on the waiting list. Only one the reader cleared. */
-  @Post(':id/restore')
-  restore(
-    @CurrentUser() user: AuthUser,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    return this.service.restore(user.id, id);
   }
 
   // ----------------------------------------------------------- preferences --

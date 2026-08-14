@@ -3,17 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Archive,
   BellOff,
   Building2,
   Check,
-  CheckCheck,
   ExternalLink,
   MailOpen,
   Undo2,
   X,
 } from 'lucide-react';
-import { api, ApiError } from '@/lib/api';
+import { api } from '@/lib/api';
 import { DOC_PARAM } from '@/lib/hooks';
 import { useAuth } from '@/providers/AuthProvider';
 import { useAlerts } from '@/providers/AlertProvider';
@@ -68,6 +66,8 @@ export function AlertsScreen() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
+  /** Ticked rows, by id. Cleared whenever the list underneath them changes. */
+  const [selected, setSelected] = useState<Set<number>>(new Set());
 
   /**
    * The toast helpers, reachable from `load` without being a dependency of it —
@@ -105,6 +105,8 @@ export function AlertsScreen() {
 
   useEffect(() => {
     void load({ page: 1, append: false });
+    // A tick means "this row", so it cannot survive the rows changing under it.
+    setSelected(new Set());
   }, [load]);
 
   // Anything arriving or being taken back while the screen is open. The version
@@ -137,58 +139,55 @@ export function AlertsScreen() {
     await alerts?.markRead(alert.id);
   };
 
+  // ------------------------------------------------------------ selection --
+
+  const toggleOne = (id: number) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  /** Every row currently loaded — not every row that matches, which the reader
+   *  cannot see and so cannot mean. */
+  const allOnPage = items.length > 0 && items.every((a) => selected.has(a.id));
+  const toggleAll = () =>
+    setSelected(allOnPage ? new Set() : new Set(items.map((a) => a.id)));
+
+  const clearSelection = () => setSelected(new Set());
+
   /**
-   * Take the read mark off. Not a no-op on an old alert: "unread" is how a
-   * reader says they still have to deal with something, and there is no other
-   * way to say it once the mark has been given.
+   * One action over everything ticked, in one request.
+   *
+   * Not optimistic: a bulk restore can partly fail — some of what was ticked may
+   * be over — and the honest thing is to say what actually happened rather than
+   * to paint the whole list as done and quietly put half of it back.
    */
-  const markUnread = async (alert: Alert) => {
-    setItems((list) =>
-      list.map((a) => (a.id === alert.id ? { ...a, readAt: null } : a)),
-    );
-    await alerts?.markUnread(alert.id);
-  };
-
-  const dismiss = async (alert: Alert) => {
-    setItems((list) => list.filter((a) => a.id !== alert.id));
-    setTotal((n) => Math.max(0, n - 1));
-    await alerts?.dismiss(alert.id);
-  };
-
-  /** Put a cleared alert back on the waiting list. */
-  const restore = async (alert: Alert) => {
+  const runBulk = async (
+    action: 'read' | 'unread' | 'dismiss' | 'restore',
+    label: string,
+  ) => {
+    const ids = [...selected];
+    if (!ids.length) return;
     try {
-      await alerts?.restore(alert.id);
-      // It has left this list (Cleared) for the other one, so drop the row
-      // rather than leave it looking cleared.
-      setItems((list) => list.filter((a) => a.id !== alert.id));
-      setTotal((n) => Math.max(0, n - 1));
-      toastRef.current.success('Back on your waiting list.');
-    } catch (e) {
-      // The server refuses an alert the module has resolved, and says why.
-      toastRef.current.error(
-        e instanceof ApiError ? e.message : 'That one could not be restored.',
+      const res = await api.post<{ count: number; skipped: number }>(
+        '/notifications/bulk',
+        { ids, action },
       );
-    }
-  };
-
-  const markAllRead = async () => {
-    setItems((list) =>
-      list.map((a) =>
-        a.readAt ? a : { ...a, readAt: new Date().toISOString() },
-      ),
-    );
-    await alerts?.markAllRead();
-    if (view === 'unread') void load({ page: 1, append: false });
-  };
-
-  const dismissAll = async () => {
-    try {
-      await api.post('/notifications/dismiss-all');
+      clearSelection();
       await alerts?.refresh();
       void load({ page: 1, append: false });
+
+      if (res.skipped) {
+        toastRef.current.success(
+          `${res.count} ${label}. ${res.skipped} could not be — already dealt with.`,
+        );
+      } else {
+        toastRef.current.success(`${res.count} ${label}.`);
+      }
     } catch {
-      toastRef.current.error('Could not clear your alerts.');
+      toastRef.current.error('That could not be applied to all of them.');
     }
   };
 
@@ -230,34 +229,79 @@ export function AlertsScreen() {
           {total} {total === 1 ? 'alert' : 'alerts'}
         </span>
 
-        <div className="ml-auto flex items-center gap-1">
-          {view !== 'cleared' && (
-            <>
-              <button
-                onClick={() => void markAllRead()}
-                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                <CheckCheck className="h-4 w-4" />
-                Mark all read
-              </button>
-              <button
-                onClick={() => void dismissAll()}
-                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                <Archive className="h-4 w-4" />
-                Clear all
-              </button>
-            </>
-          )}
-          {/*
-            No settings button. Which alerts a person receives is set by an
-            admin on Users & Data Security, not chosen here — whether the
-            counter staff hear about stock-outs is the organisation's decision,
-            and a switch on this screen would let anybody opt out of being told
-            without anybody knowing until something was missed.
-          */}
-        </div>
+        {/*
+          Nothing else in this toolbar, deliberately.
+
+          There is ONE way to act on an alert: tick it, then use the bar that
+          appears. "Mark all read" and "Clear all" sat here acting on everything
+          that matched the filter — including rows below the fold that nobody
+          had looked at — which is a different and much larger promise than the
+          same words next to a tick box, and the two side by side invited the
+          wrong one to be pressed.
+
+          Nor is there a settings button. Which alerts a person receives is set
+          by an admin on Users & Data Security: whether the counter staff hear
+          about stock-outs is the organisation's decision, and a switch here
+          would let anybody opt out of being told without anybody knowing until
+          something was missed.
+        */}
       </div>
+
+      {/*
+        ---- what is ticked ----
+        Appears only when something is. The actions here read "these ones",
+        against the toolbar's "all of them" above — two different scopes, so
+        they are never offered in the same place at the same time.
+      */}
+      {selected.size > 0 && (
+        <div className="flex flex-wrap items-center gap-1 rounded-xl border border-brand-200 bg-brand-50 px-3 py-2 dark:border-brand-800 dark:bg-brand-950/40">
+          <span className="mr-1 text-sm font-medium text-brand-800 dark:text-brand-200">
+            {selected.size} selected
+          </span>
+
+          <button
+            onClick={() => void runBulk('read', 'marked read')}
+            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-white dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <Check className="h-4 w-4" />
+            Mark read
+          </button>
+          <button
+            onClick={() => void runBulk('unread', 'marked unread')}
+            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-white dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <MailOpen className="h-4 w-4" />
+            Mark unread
+          </button>
+
+          {/* Clearing and restoring are opposites, so only the one that applies
+              to what is being looked at is offered. */}
+          {view === 'cleared' ? (
+            <button
+              onClick={() => void runBulk('restore', 'moved back to waiting')}
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-white dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <Undo2 className="h-4 w-4" />
+              Move back to waiting
+            </button>
+          ) : (
+            <button
+              onClick={() => void runBulk('dismiss', 'cleared')}
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-white dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <X className="h-4 w-4" />
+              Clear
+            </button>
+          )}
+
+          <button
+            onClick={clearSelection}
+            className="ml-auto rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-500 transition hover:bg-white dark:text-slate-400 dark:hover:bg-slate-800"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
 
       {/* ---- the list ---- */}
       <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -276,6 +320,21 @@ export function AlertsScreen() {
           </div>
         ) : (
           <>
+            {/* Selects what is LOADED, which is what the reader can see and so
+                the only thing they can be taken to mean. "Show older" first if
+                they want more than a page of it. */}
+            <label className="flex cursor-pointer items-center gap-3 border-b border-slate-100 px-4 py-2 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+              <input
+                type="checkbox"
+                checked={allOnPage}
+                onChange={toggleAll}
+                className="h-4 w-4 accent-brand-600"
+              />
+              {allOnPage
+                ? 'All shown selected'
+                : `Select all ${items.length} shown`}
+            </label>
+
             {items.map((a) => {
               const meta = categoryMeta(a.category);
               const day = dayLabel(a.createdAt);
@@ -298,8 +357,17 @@ export function AlertsScreen() {
                       'group flex items-start gap-3 border-b border-slate-100 px-4 py-3 transition last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50',
                       PRIORITY_ROW[a.priority],
                       !a.readAt && 'bg-brand-50/40 dark:bg-brand-950/30',
+                      selected.has(a.id) && 'bg-brand-50 dark:bg-brand-950/50',
                     )}
                   >
+                    <input
+                      type="checkbox"
+                      checked={selected.has(a.id)}
+                      onChange={() => toggleOne(a.id)}
+                      aria-label={`Select "${a.title}"`}
+                      className="mt-3 h-4 w-4 flex-none accent-brand-600"
+                    />
+
                     <span
                       className={cn(
                         'mt-0.5 flex h-9 w-9 flex-none items-center justify-center rounded-lg',
@@ -362,59 +430,6 @@ export function AlertsScreen() {
                         )}
                       </span>
                     </button>
-
-                    <div className="flex flex-none items-center gap-1 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
-                      {/* Read is a TOGGLE, on every tab. Marking one unread is
-                          how a reader says they still have to deal with it,
-                          and there is no other way to say so once the mark has
-                          been given. */}
-                      {a.readAt ? (
-                        <button
-                          onClick={() => void markUnread(a)}
-                          title="Mark unread"
-                          aria-label="Mark unread"
-                          className="rounded-md p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700"
-                        >
-                          <MailOpen className="h-4 w-4" />
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => void markRead(a)}
-                          title="Mark read"
-                          aria-label="Mark read"
-                          className="rounded-md p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700"
-                        >
-                          <Check className="h-4 w-4" />
-                        </button>
-                      )}
-
-                      {/* Clearing and un-clearing, but only what the READER put
-                          down. One the module resolved is over — the document
-                          was approved, the task deleted — so there is nothing
-                          to put back, and the row says so instead. */}
-                      {a.dismissedAt && !a.resolvedAt ? (
-                        <button
-                          onClick={() => void restore(a)}
-                          title="Move back to waiting"
-                          aria-label="Move back to waiting"
-                          className="rounded-md p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700"
-                        >
-                          <Undo2 className="h-4 w-4" />
-                        </button>
-                      ) : (
-                        !a.dismissedAt &&
-                        !a.resolvedAt && (
-                          <button
-                            onClick={() => void dismiss(a)}
-                            title="Clear"
-                            aria-label="Clear"
-                            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 dark:hover:bg-slate-700"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        )
-                      )}
-                    </div>
                   </div>
                 </div>
               );

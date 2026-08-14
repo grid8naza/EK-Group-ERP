@@ -2,9 +2,11 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
+  ArrayNotEmpty,
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsOptional,
   ValidateNested,
 } from 'class-validator';
@@ -29,6 +31,26 @@ export class SetPreferenceDto {
   @IsOptional()
   @IsBoolean()
   push?: boolean;
+}
+
+/** What a bulk action does to the alerts it is given. */
+export const BULK_ACTIONS = ['read', 'unread', 'dismiss', 'restore'] as const;
+export type BulkAlertAction = (typeof BULK_ACTIONS)[number];
+
+/** Several alerts, one action, one request. */
+export class BulkAlertDto {
+  @ApiProperty({ type: [Number] })
+  @IsArray()
+  @ArrayNotEmpty()
+  // A page of the Alerts screen is thirty; the ceiling is well clear of that
+  // and well short of a request that would hold the table open.
+  @ArrayMaxSize(200)
+  @IsInt({ each: true })
+  ids!: number[];
+
+  @ApiProperty({ enum: BULK_ACTIONS })
+  @IsIn(BULK_ACTIONS)
+  action!: BulkAlertAction;
 }
 
 /** One user's whole set, as the Users & Data Security drawer saves it. */

@@ -1,10 +1,4 @@
-import {
-  BadRequestException,
-  Inject,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { NotificationCategory, Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { USER_LOOKUP, UserLookupPort } from '../../contracts/user-lookup.port';
@@ -13,7 +7,7 @@ import {
   PublishNotification,
 } from '../../contracts/notification.port';
 import { NotificationEventsService } from './notification-events.service';
-import { SetPreferenceDto } from './notification.dto';
+import { BulkAlertAction, SetPreferenceDto } from './notification.dto';
 
 /** How many alerts the bell asks for. The Alerts screen pages properly. */
 const BELL_LIMIT = 20;
@@ -317,52 +311,6 @@ export class NotificationService {
   }
 
   /**
-   * Put one back to unread — for the alert somebody opened in passing and wants
-   * to come back to. It counts against the badge again, which is the point:
-   * "unread" here means "I still have to deal with this", and taking the mark
-   * off is the only way to say so once it has been given.
-   *
-   * Allowed on a cleared alert too. The stamps are independent by design, and a
-   * reader marking an old one unread has said something about it that outlives
-   * whether it is still standing.
-   */
-  async markUnread(userId: number, id: number) {
-    await this.assertOwn(userId, id);
-    await this.prisma.notification.updateMany({
-      where: { id, userId },
-      data: { readAt: null },
-    });
-    return { success: true };
-  }
-
-  /**
-   * Put a cleared alert back on the waiting list.
-   *
-   * Only one that the READER put down. An alert the module RESOLVED is over —
-   * the document was approved, the task deleted, the stock replenished — and
-   * putting it back would be restoring something that is not true any more, on
-   * the one screen whose whole job is to say what still is. Those are refused,
-   * with the reason, rather than silently doing nothing.
-   */
-  async restore(userId: number, id: number) {
-    const found = await this.prisma.notification.findFirst({
-      where: { id, userId },
-      select: { id: true, resolvedAt: true },
-    });
-    if (!found) throw new NotFoundException('Notification not found');
-    if (found.resolvedAt) {
-      throw new BadRequestException(
-        'This one is over — what it was about has already been dealt with.',
-      );
-    }
-    await this.prisma.notification.updateMany({
-      where: { id, userId },
-      data: { dismissedAt: null },
-    });
-    return { success: true };
-  }
-
-  /**
    * Put one down. Reading it too — an alert somebody has actively cleared has
    * certainly been seen, and leaving it counted as unread would be nonsense.
    */
@@ -376,14 +324,59 @@ export class NotificationService {
     return { success: true };
   }
 
-  /** Clear the whole live feed at once. */
-  async dismissAll(userId: number) {
+  /**
+   * One action, several alerts, one request.
+   *
+   * Every clause below carries `userId`, so a caller naming somebody else's ids
+   * changes nothing rather than being told whose they are. Returns what it
+   * actually did: `count` is how many rows moved, and for a restore `skipped`
+   * is how many of them were over and could not — which the screen says out
+   * loud, since half an action reported as a whole one is worse than a refusal.
+   */
+  async bulk(userId: number, ids: number[], action: BulkAlertAction) {
+    const unique = [...new Set(ids)];
+    if (!unique.length) return { count: 0, skipped: 0 };
     const now = new Date();
+
+    if (action === 'read') {
+      const { count } = await this.prisma.notification.updateMany({
+        where: { id: { in: unique }, userId, readAt: null },
+        data: { readAt: now },
+      });
+      return { count, skipped: 0 };
+    }
+
+    if (action === 'unread') {
+      const { count } = await this.prisma.notification.updateMany({
+        where: { id: { in: unique }, userId, readAt: { not: null } },
+        data: { readAt: null },
+      });
+      return { count, skipped: 0 };
+    }
+
+    if (action === 'dismiss') {
+      const { count } = await this.prisma.notification.updateMany({
+        where: { id: { in: unique }, userId, dismissedAt: null },
+        data: { dismissedAt: now, readAt: now },
+      });
+      return { count, skipped: 0 };
+    }
+
+    // restore — the reader's own clearings only, never a resolved alert (see
+    // `restore` above for why putting one of those back would be a lie).
     const { count } = await this.prisma.notification.updateMany({
-      where: { userId, dismissedAt: null, resolvedAt: null },
-      data: { dismissedAt: now, readAt: now },
+      where: {
+        id: { in: unique },
+        userId,
+        resolvedAt: null,
+        dismissedAt: { not: null },
+      },
+      data: { dismissedAt: null },
     });
-    return { count };
+    const resolved = await this.prisma.notification.count({
+      where: { id: { in: unique }, userId, resolvedAt: { not: null } },
+    });
+    return { count, skipped: resolved };
   }
 
   private async assertOwn(userId: number, id: number) {
