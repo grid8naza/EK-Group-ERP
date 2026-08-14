@@ -1,7 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, UserCog, Upload, Trash2, User as UserIcon } from 'lucide-react';
+import {
+  Plus,
+  UserCog,
+  Upload,
+  Trash2,
+  Phone,
+  Mail,
+  User as UserIcon,
+} from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
 import { mediaUrl } from '@/lib/login-screen';
@@ -659,16 +667,34 @@ export default function EmployeesPage() {
                     saved row, so it names whoever is being typed in rather than
                     lagging a field behind.
                   */}
-                  <p className="truncate text-lg font-bold leading-tight text-brand-700 dark:text-brand-300">
+                  <p className="truncate text-xl font-bold leading-tight text-brand-700 dark:text-brand-300">
                     {form.name.trim() || 'New employee'}
                   </p>
-                  <p className="truncate text-sm font-semibold text-amber-600 dark:text-amber-400">
+                  <p className="truncate text-base font-semibold text-amber-600 dark:text-amber-400">
                     {designationName(form.designationId) ||
                       'No designation yet'}
                   </p>
                   {editing && (
-                    <p className="mt-0.5 font-mono text-xs text-slate-400">
+                    <p className="mt-0.5 font-mono text-sm text-slate-400">
                       {editing.code}
+                    </p>
+                  )}
+                  {/* How to reach them — the other thing anybody opens this
+                      record for. Hidden until there is something to show. */}
+                  {(form.phone.trim() || form.email.trim()) && (
+                    <p className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500 dark:text-slate-400">
+                      {form.phone.trim() && (
+                        <span className="inline-flex items-center gap-1.5">
+                          <Phone className="h-3.5 w-3.5 flex-none" />
+                          {form.phone.trim()}
+                        </span>
+                      )}
+                      {form.email.trim() && (
+                        <span className="inline-flex min-w-0 items-center gap-1.5">
+                          <Mail className="h-3.5 w-3.5 flex-none" />
+                          <span className="truncate">{form.email.trim()}</span>
+                        </span>
+                      )}
                     </p>
                   )}
                 </div>
