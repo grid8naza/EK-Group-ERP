@@ -7,6 +7,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthUser, CurrentUser } from '../../auth/current-user.decorator';
@@ -31,18 +32,34 @@ import { SaveChecklistDto } from './checklist.dto';
 export class ChecklistController {
   constructor(private readonly service: ChecklistService) {}
 
+  /**
+   * Every schedule this person set up or is on, across every company — a
+   * schedule is a standing arrangement its owner must be able to find, not a
+   * board. See ChecklistService.list. No company header is read here.
+   */
   @Get()
-  list(
-    @CurrentUser() user: AuthUser,
-    @CompanyId() companyId?: number,
-    @BranchId() branchId?: number,
-  ) {
-    return this.service.list(user.id, companyId, branchId);
+  list(@CurrentUser() user: AuthUser) {
+    return this.service.list(user.id);
   }
 
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     return this.service.get(user.id, id);
+  }
+
+  /**
+   * The register — one row per day it was expected, and what became of it.
+   *
+   * Declared before `:id/...` writes for clarity only; `days` is parsed with
+   * Number(), not an optional ParseIntPipe, which 400s on an absent param.
+   */
+  @Get(':id/history')
+  history(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseIntPipe) id: number,
+    @Query('days') days?: string,
+  ) {
+    return this.service.history(user.id, id, Number(days) || 30);
   }
 
   @Post()

@@ -122,6 +122,26 @@ export function dateMarker(date: string): Date {
   return new Date(`${date}T00:00:00.000Z`);
 }
 
+/**
+ * The weekday and day-of-month of a local calendar date, without needing a zone.
+ *
+ * `YYYY-MM-DD` already IS local — which day of the week it falls on is a fact
+ * about the calendar, not about anybody's clock. Used to walk forward looking for
+ * the next date a schedule runs on.
+ */
+export function calendarParts(date: string): ZonedParts {
+  const [year, month, day] = date.split('-').map(Number);
+  const at = new Date(Date.UTC(year, month - 1, day));
+  return { date, minutes: 0, weekday: at.getUTCDay(), dayOfMonth: day };
+}
+
+/** `YYYY-MM-DD` plus n days, as another `YYYY-MM-DD`. */
+export function addDays(date: string, days: number): string {
+  const [year, month, day] = date.split('-').map(Number);
+  const at = new Date(Date.UTC(year, month - 1, day + days));
+  return at.toISOString().slice(0, 10);
+}
+
 /** `360` → `06:00`, for anything that shows a stored time of day. */
 export function formatMinutes(minutes: number): string {
   const m = ((minutes % 1440) + 1440) % 1440;

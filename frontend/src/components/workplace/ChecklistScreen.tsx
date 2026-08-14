@@ -6,7 +6,9 @@ import {
   Building2,
   CalendarDays,
   Clock,
+  ExternalLink,
   GripVertical,
+  History,
   Pencil,
   Play,
   Plus,
@@ -16,11 +18,13 @@ import {
   X,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
+import { DOC_PARAM } from '@/lib/hooks';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
 import { Input, Textarea, Checkbox } from '@/components/ui/Field';
 import { PeopleField, type PickedPerson } from '@/components/workplace/people';
+import { ChecklistHistoryDrawer } from '@/components/workplace/ChecklistHistoryDrawer';
 import { PRIORITY_TONE } from '@/components/workplace/task-ui';
 import { cn } from '@/lib/utils';
 import type {
@@ -69,6 +73,9 @@ interface Form {
   startTime: string;
   /** Empty means "by the end of the day". */
   dueTime: string;
+  /** Its working life. Empty end = no end date. */
+  startsOn: string;
+  endsOn: string;
   priority: TaskPriority;
   companyWide: boolean;
   isActive: boolean;
@@ -84,12 +91,37 @@ const blank = (): Form => ({
   dayOfMonth: 1,
   startTime: '06:00',
   dueTime: '',
+  // Today, in the browser's own reckoning — a new checklist means to start now.
+  startsOn: new Date().toLocaleDateString('en-CA'),
+  endsOn: '',
   priority: 'NORMAL',
   companyWide: false,
   isActive: true,
   assignees: [],
   items: [''],
 });
+
+/** "at 08:00 tomorrow", "on Mon 18 Aug at 06:00" — when it next comes out. */
+function nextRunLabel(nextRunAt: string | null): string {
+  if (!nextRunAt) return 'never';
+  const at = new Date(nextRunAt);
+  const time = at.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  const days = Math.round(
+    (new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime() -
+      new Date().setHours(0, 0, 0, 0)) /
+      86_400_000,
+  );
+  if (days === 0) return `at ${time} today`;
+  if (days === 1) return `at ${time} tomorrow`;
+  return `on ${at.toLocaleDateString(undefined, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  })} at ${time}`;
+}
 
 /** "Every day at 06:00", "Mon, Thu at 07:30", "Day 1 at 09:00". */
 function scheduleLabel(t: ChecklistTemplate): string {
@@ -125,6 +157,8 @@ export function ChecklistScreen() {
   const [editing, setEditing] = useState<ChecklistTemplate | null>(null);
   const [form, setForm] = useState<Form>(blank());
   const [saving, setSaving] = useState(false);
+  /** The checklist whose register is being read, if any. */
+  const [historyOf, setHistoryOf] = useState<ChecklistTemplate | null>(null);
 
   // See MailboxScreen: the toast context value is unmemoized, so depending on
   // it would turn one failed load into a request loop.
@@ -162,6 +196,8 @@ export function ChecklistScreen() {
       dayOfMonth: t.dayOfMonth ?? 1,
       startTime: t.startTime,
       dueTime: t.dueTime ?? '',
+      startsOn: t.startsOn,
+      endsOn: t.endsOn ?? '',
       priority: t.priority,
       companyWide: t.branchId === null,
       isActive: t.isActive,
@@ -197,6 +233,9 @@ export function ChecklistScreen() {
         startMinutes: toMinutes(form.startTime),
         // Empty means the end of that day, which the server stores as null.
         dueMinutes: form.dueTime ? toMinutes(form.dueTime) : null,
+        startsOn: form.startsOn || undefined,
+        // Empty means no end date, which the server stores as null.
+        endsOn: form.endsOn || null,
         priority: form.priority,
         companyWide: form.companyWide,
         isActive: form.isActive,
@@ -249,6 +288,23 @@ export function ChecklistScreen() {
         e instanceof ApiError ? e.message : 'Could not delete that.',
       );
     }
+  };
+
+  const openHistory = (t: ChecklistTemplate) => setHistoryOf(t);
+
+  /**
+   * Go to today's occurrence — the task itself, on the board where it is ticked.
+   *
+   * Whoever it is FOR goes to their own board; anybody else (the person who set
+   * it up, watching it) to the one that lists what they have given out. Sending
+   * either to the other's screen would show them a board their task is not on.
+   */
+  const openOccurrence = (t: ChecklistTemplate) => {
+    if (!t.todayTaskId) return;
+    const board = t.isForMe
+      ? '/workplace/tasks/assigned-to-me'
+      : '/workplace/tasks/assigned-by-me';
+    router.push(`${board}?${DOC_PARAM}=${t.todayTaskId}`);
   };
 
   /** Raise today's occurrence now rather than waiting for its start time. */
@@ -375,12 +431,15 @@ export function ChecklistScreen() {
                         Paused
                       </span>
                     )}
-                    {t.branchId === null && (
-                      <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                        <Building2 className="h-3 w-3" />
-                        Company-wide
-                      </span>
-                    )}
+                    {/* WHOSE checklist it is. The list crosses companies — a
+                        schedule has to be findable whatever company you are
+                        working in — so the card has to say, or two branches'
+                        opening checks would be indistinguishable. */}
+                    <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                      <Building2 className="h-3 w-3" />
+                      {t.companyName ?? `Company #${t.companyId}`}
+                      {t.branchName ? ` · ${t.branchName}` : ' · company-wide'}
+                    </span>
                   </p>
                   <p className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                     <span className="flex items-center gap-1">
@@ -398,47 +457,134 @@ export function ChecklistScreen() {
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 {t.items.length} {t.items.length === 1 ? 'check' : 'checks'} ·{' '}
                 {t.assignees.map((a) => a.name).join(', ') || 'nobody'}
+                {/* Whose schedule it is. Shown to everybody else, so that a card
+                    with no Edit button reads as somebody else's rather than as a
+                    screen that is not working. */}
+                {!t.isMine && t.createdByName && (
+                  <> · set up by {t.createdByName}</>
+                )}
               </p>
 
-              {/* Only whoever set it up may change it — the same split as a
-                  task, where the raiser owns what it says. */}
-              {t.isMine && (
-                <div className="mt-1 flex flex-wrap items-center gap-1 border-t border-slate-100 pt-2 dark:border-slate-800">
-                  <button
-                    onClick={() => openEdit(t)}
-                    className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => void raiseNow(t)}
-                    title="Raise today's occurrence now"
-                    className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-                  >
-                    <Play className="h-3.5 w-3.5" />
-                    Raise now
-                  </button>
-                  <button
-                    onClick={() => void toggleActive(t)}
-                    className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-                  >
-                    <Power className="h-3.5 w-3.5" />
-                    {t.isActive ? 'Pause' : 'Resume'}
-                  </button>
-                  <button
-                    onClick={() => void remove(t)}
-                    className="ml-auto flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50 dark:hover:bg-rose-950"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    Delete
-                  </button>
-                </div>
-              )}
+              {/*
+                Where it has got to today — the question a schedule always
+                prompts, and the one the card could not answer. Without it a
+                reader sees a time of day and cannot tell whether the system has
+                done its part yet.
+              */}
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                {t.todayTaskId ? (
+                  <>
+                    {/* Whether it was DONE, not merely whether it came out. This
+                        is what the person who set it up came here to find out,
+                        and the alternative was going to a board in another
+                        company to look. */}
+                    {t.todayStatus === 'DONE' ? (
+                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+                        Done today
+                      </span>
+                    ) : t.todayStatus === 'BLOCKED' ? (
+                      <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">
+                        Blocked
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-700 dark:bg-sky-950/60 dark:text-sky-300">
+                        Out today · {t.todayDone}/{t.todayTotal}
+                      </span>
+                    )}
+                    {t.todayCompletedByName && (
+                      <span className="text-slate-500 dark:text-slate-400">
+                        by {t.todayCompletedByName}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => openOccurrence(t)}
+                      className="flex items-center gap-1 font-medium text-brand-600 hover:underline dark:text-brand-400"
+                    >
+                      <ExternalLink className="h-3 w-3" />
+                      {t.isForMe ? 'Open it on my board' : 'See the task'}
+                    </button>
+                  </>
+                ) : t.hasEnded ? (
+                  <span className="text-slate-400">
+                    Ended {t.endsOn} — it will not come round again.
+                  </span>
+                ) : !t.isActive ? (
+                  <span className="text-slate-400">
+                    Paused — it will not come out again until resumed.
+                  </span>
+                ) : t.notStarted ? (
+                  <span className="text-slate-400">
+                    Starts {t.startsOn} · first {nextRunLabel(t.nextRunAt)}
+                  </span>
+                ) : (
+                  <span className="text-slate-400">
+                    Not out yet · next {nextRunLabel(t.nextRunAt)}
+                  </span>
+                )}
+              </p>
+
+              {/* Whoever set it up may CHANGE it — the same split as a task,
+                  where the raiser owns what it says and the assignee owns how it
+                  is going. The register is open to both of them: it is the record
+                  of work one of them asked for and the other did. */}
+              <div className="mt-1 flex flex-wrap items-center gap-1 border-t border-slate-100 pt-2 dark:border-slate-800">
+                <button
+                  onClick={() => openHistory(t)}
+                  title="Every day it was expected, and what became of it"
+                  className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  <History className="h-3.5 w-3.5" />
+                  History
+                </button>
+                {t.isMine && (
+                  <>
+                    <button
+                      onClick={() => openEdit(t)}
+                      className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => void raiseNow(t)}
+                      title="Raise today's occurrence now"
+                      className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      <Play className="h-3.5 w-3.5" />
+                      Raise now
+                    </button>
+                    <button
+                      onClick={() => void toggleActive(t)}
+                      className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      <Power className="h-3.5 w-3.5" />
+                      {t.isActive ? 'Pause' : 'Resume'}
+                    </button>
+                    <button
+                      onClick={() => void remove(t)}
+                      className="ml-auto flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-rose-600 transition hover:bg-rose-50 dark:hover:bg-rose-950"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      Delete
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* ----------------------------------------------------- the register -- */}
+      <ChecklistHistoryDrawer
+        template={historyOf}
+        onClose={() => setHistoryOf(null)}
+        onOpenTask={(taskId, isForMe) =>
+          router.push(
+            `${isForMe ? '/workplace/tasks/assigned-to-me' : '/workplace/tasks/assigned-by-me'}?${DOC_PARAM}=${taskId}`,
+          )
+        }
+      />
 
       {/* ------------------------------------------------------ the editor -- */}
       <Drawer
@@ -577,6 +723,37 @@ export function ChecklistScreen() {
                 />
                 <p className="mt-1 text-[11px] text-slate-400">
                   Left empty: the end of that day.
+                </p>
+              </div>
+            </div>
+
+            {/* ---- for how long ---- */}
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div>
+                <Input
+                  label="Starts on"
+                  type="date"
+                  value={form.startsOn}
+                  onChange={(e) =>
+                    setForm({ ...form, startsOn: e.target.value })
+                  }
+                />
+                <p className="mt-1 text-[11px] text-slate-400">
+                  Nothing before this counts as missed.
+                </p>
+              </div>
+              <div>
+                <Input
+                  label="Ends on (optional)"
+                  type="date"
+                  value={form.endsOn}
+                  min={form.startsOn || undefined}
+                  onChange={(e) => setForm({ ...form, endsOn: e.target.value })}
+                />
+                <p className="mt-1 text-[11px] text-slate-400">
+                  {form.endsOn
+                    ? 'It stops coming round after this day.'
+                    : 'Left empty: no end date — it runs until paused.'}
                 </p>
               </div>
             </div>

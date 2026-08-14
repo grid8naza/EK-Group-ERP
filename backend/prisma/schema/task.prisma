@@ -133,6 +133,19 @@ model ChecklistTemplate {
   /// 31st checklist still happens in February rather than skipping it.
   dayOfMonth Int?
 
+  /// The first day it may run, and the last — the checklist's own working life.
+  ///
+  /// A seasonal round, a checklist that covers a refit, one that runs until an
+  /// audit: all of them have dates, and without them the only way to stop one is
+  /// to remember to go and pause it. `endsOn` null means it runs until somebody
+  /// says otherwise, which is the common case and so the default.
+  ///
+  /// Date-only markers (midnight UTC), like Task.occurrenceOn — these are
+  /// calendar dates, not instants. `startsOn` also bounds the register: nothing
+  /// before it was ever expected, so nothing before it can have been missed.
+  startsOn DateTime
+  endsOn   DateTime?
+
   /// When it appears, as minutes after local midnight (06:00 → 360).
   ///
   /// Minutes rather than a DateTime because this is a time of DAY, not an

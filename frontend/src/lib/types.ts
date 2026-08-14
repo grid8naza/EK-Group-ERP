@@ -2841,6 +2841,13 @@ export interface ChecklistTemplate {
   companyId: number;
   /** Null = company-wide: it raises on every branch's board. */
   branchId: number | null;
+  /**
+   * Named, because this list crosses companies — a schedule is a standing
+   * arrangement its owner must be able to find whatever company they are
+   * working in, so the card says whose it is instead.
+   */
+  companyName: string | null;
+  branchName: string | null;
   frequency: ChecklistFrequency;
   /** WEEKLY: which days, 0 = Sunday. */
   weekdays: number[];
@@ -2855,12 +2862,80 @@ export interface ChecklistTemplate {
   isActive: boolean;
   /** I set it up, so I own what it says. */
   isMine: boolean;
+  /** It is for me, so I am one of the people who has to do it. */
+  isForMe: boolean;
   createdById: number;
   createdByName: string | null;
   items: { id: number; text: string }[];
   assignees: { id: number; name: string }[];
+  /** Its working life. `endsOn` null = no end date. */
+  startsOn: string;
+  endsOn: string | null;
+  /** Its last day has passed — it will not come round again. */
+  hasEnded: boolean;
+  /** Its first day has not arrived yet. */
+  notStarted: boolean;
+
+  /**
+   * What became of TODAY's occurrence. Null before its start time, or on a day
+   * it does not run. The status and the name are what let the person who set a
+   * checklist up see that it was done, without going to a board in another
+   * company to find out.
+   */
+  todayTaskId: number | null;
+  todayStatus: TaskStatus | null;
+  todayDone: number;
+  todayTotal: number;
+  todayCompletedByName: string | null;
+
+  /** When it next comes out. Null when paused, ended, or never again. */
+  nextRunAt: string | null;
   /** The zone the times are read in, so the screen can say which one. */
   timeZone: string;
+}
+
+/**
+ * What became of one expected day.
+ *
+ * MISSED is the important one and the reason this cannot be read off the task
+ * board: a day nobody did leaves no task behind, so it exists only as a gap in
+ * the calendar. SCHEDULED is today with nothing raised yet — never a miss, since
+ * the day is not over, and counted in neither half of the record.
+ */
+export type ChecklistDayStatus =
+  'COMPLETED' | 'OPEN' | 'OVERDUE' | 'CANCELLED' | 'MISSED' | 'SCHEDULED';
+
+export interface ChecklistHistoryRow {
+  /** Local calendar date, YYYY-MM-DD. */
+  date: string;
+  status: ChecklistDayStatus;
+  /** The occurrence, where there is one to open. */
+  taskId: number | null;
+  done: number;
+  total: number;
+  completedAt: string | null;
+  completedByName: string | null;
+  /** Finished, but after it was due. */
+  late: boolean;
+}
+
+/** The register for one checklist over a window of days. */
+export interface ChecklistHistory {
+  days: number;
+  from: string;
+  to: string;
+  rows: ChecklistHistoryRow[];
+  summary: {
+    /** Days expected, excluding one that has not come round yet today. */
+    expected: number;
+    completed: number;
+    onTime: number;
+    late: number;
+    missed: number;
+    outstanding: number;
+    /** Whole percent completed of expected. */
+    rate: number;
+  };
 }
 
 // ---- Audiences (Workplace / Communication — circulars and broadcasts) ----

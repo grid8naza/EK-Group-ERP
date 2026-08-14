@@ -4,6 +4,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsDateString,
   IsIn,
   IsInt,
   IsOptional,
@@ -53,6 +54,18 @@ export class SaveChecklistDto {
   @Min(1)
   @Max(31)
   dayOfMonth?: number;
+
+  /** First day it may run, `YYYY-MM-DD`. Defaults to today. */
+  @ApiPropertyOptional({ example: '2026-08-15' })
+  @IsOptional()
+  @IsDateString()
+  startsOn?: string;
+
+  /** Last day it may run. Null or absent = no end date. */
+  @ApiPropertyOptional({ example: '2026-12-31', nullable: true })
+  @IsOptional()
+  @IsDateString()
+  endsOn?: string | null;
 
   @ApiPropertyOptional({
     description: 'Minutes after local midnight (06:00 = 360)',
