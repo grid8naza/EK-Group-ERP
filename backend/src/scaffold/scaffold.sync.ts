@@ -934,6 +934,10 @@ async function seedEmployeeNumbering(
           documentId: doc.id,
           prefixEnabled: true,
           prefixValue: 'EMP-',
+          // No branch code. An employee code follows the person, not the
+          // branch they were hired at — KDY/EMP-0001 becomes a lie the day
+          // they transfer to Kothamangalam.
+          branchPrefix: false,
           startingNo: 1,
           paddingLength: 4,
           // NEVER: an employee code is issued once and quoted for years. A
@@ -944,6 +948,16 @@ async function seedEmployeeNumbering(
         update: {},
       });
     }
+  });
+
+  // The rules above shipped before the branch-code switch existed, so the ones
+  // already in a database carry its default (on) and read KDY/EMP-0001. Turned
+  // off once, for the same reason it is seeded off.
+  await runOnce(prisma, 'employee-numbering-no-branch-code', async () => {
+    await prisma.documentNumberingRule.updateMany({
+      where: { documentId: doc.id },
+      data: { branchPrefix: false },
+    });
   });
 }
 

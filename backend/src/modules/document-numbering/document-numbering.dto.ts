@@ -22,6 +22,11 @@ export class SaveNumberingRuleDto {
   @MaxLength(30)
   prefixValue?: string | null;
 
+  /** Whether the branch code leads the number. Ignored where the company has no branches. */
+  @IsOptional()
+  @IsBoolean()
+  branchPrefix?: boolean;
+
   @IsOptional()
   @IsInt()
   @Min(0)

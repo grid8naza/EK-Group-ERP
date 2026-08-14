@@ -810,6 +810,15 @@ model DocumentNumberingRule {
   documentId     Int
   prefixEnabled  Boolean                 @default(true)
   prefixValue    String?
+  /// Whether the branch code leads the number (KDY/GRN-0001) where the company
+  /// works in branches.
+  ///
+  /// On by default, because that is what every document did before this switch
+  /// existed and a number already issued must not change shape underneath the
+  /// people quoting it. Off for the things that are NOT a branch's own: an
+  /// employee code follows the person, not the branch they were hired at, and
+  /// stamping a branch on it would make the code a lie the day they transfer.
+  branchPrefix   Boolean                 @default(true)
   startingNo     Int                     @default(1)
   suffixEnabled  Boolean                 @default(false)
   suffixValue    String?

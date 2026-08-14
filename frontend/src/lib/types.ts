@@ -2109,6 +2109,8 @@ export interface DocumentNumberingRow {
   configured: boolean;
   prefixEnabled: boolean;
   prefixValue: string | null;
+  /** Whether the branch code leads the number. Off = one series for the company. */
+  branchPrefix: boolean;
   startingNo: number;
   suffixEnabled: boolean;
   suffixValue: string | null;

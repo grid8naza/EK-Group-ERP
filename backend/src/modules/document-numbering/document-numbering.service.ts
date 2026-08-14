@@ -16,6 +16,7 @@ import { SaveNumberingRuleDto } from './document-numbering.dto';
 interface RuleState {
   prefixEnabled: boolean;
   prefixValue: string | null;
+  branchPrefix: boolean;
   startingNo: number;
   suffixEnabled: boolean;
   suffixValue: string | null;
@@ -286,6 +287,24 @@ export class DocumentNumberingService implements NumberingPort {
    * numbers already issued, and a branch id arriving in a header from some
    * other company is ignored rather than trusted.
    */
+  /**
+   * The branch mark THIS rule wants — '' when the rule has the branch code
+   * switched off.
+   *
+   * The switch is per document, because not everything a company numbers is a
+   * branch's own: a goods receipt happens at a branch, an employee code follows
+   * the person wherever they work. Absent a rule the answer is the old one, so
+   * a document nobody has configured is numbered exactly as before.
+   */
+  private async branchFor(
+    companyId: number,
+    branchId: number | null | undefined,
+    rule: { branchPrefix: boolean } | null,
+  ): Promise<string> {
+    if (rule && !rule.branchPrefix) return '';
+    return this.branchToken(companyId, branchId);
+  }
+
   private async branchToken(
     companyId: number,
     branchId: number | null | undefined,
@@ -322,13 +341,18 @@ export class DocumentNumberingService implements NumberingPort {
       : [];
     const byDoc = new Map(rules.map((r) => [r.documentId, r]));
     const now = new Date();
-    const branch = companyId ? await this.branchToken(companyId, branchId) : '';
+    // The branch mark is per RULE, so it is resolved once and then applied
+    // only to the documents whose rule asks for it.
+    const branchCode = companyId
+      ? await this.branchToken(companyId, branchId)
+      : '';
     return Promise.all(
       docs.map(async (d) => {
         const r = byDoc.get(d.id);
         const shape: RuleState = {
           prefixEnabled: r?.prefixEnabled ?? true,
           prefixValue: r?.prefixValue ?? null,
+          branchPrefix: r?.branchPrefix ?? true,
           startingNo: r?.startingNo ?? 1,
           suffixEnabled: r?.suffixEnabled ?? false,
           suffixValue: r?.suffixValue ?? null,
@@ -339,6 +363,7 @@ export class DocumentNumberingService implements NumberingPort {
         };
         // Read back what has actually been issued rather than a stored counter,
         // and show the number this rule would hand out next.
+        const branch = shape.branchPrefix ? branchCode : '';
         const issued =
           companyId != null
             ? await this.maxIssued(companyId, d.code, shape, now, branch)
@@ -355,6 +380,7 @@ export class DocumentNumberingService implements NumberingPort {
           configured: !!r,
           prefixEnabled: r?.prefixEnabled ?? true,
           prefixValue: r?.prefixValue ?? null,
+          branchPrefix: r?.branchPrefix ?? true,
           startingNo: r?.startingNo ?? 1,
           suffixEnabled: r?.suffixEnabled ?? false,
           suffixValue: r?.suffixValue ?? null,
@@ -366,8 +392,14 @@ export class DocumentNumberingService implements NumberingPort {
           lastNumber: issued ?? 0,
           // The number this document would actually take next.
           preview: this.format(shape, nextNo, now, branch),
-          /** Which branch the two numbers above belong to ('' = company-wide). */
-          branchCode: branch,
+          /**
+           * The active branch's code, or '' where the company has no branches.
+           *
+           * The COMPANY's answer, not this rule's — whether it actually appears
+           * in the number is `branchPrefix`. The screen needs to know a branch
+           * code exists in order to offer the switch that turns it off.
+           */
+          branchCode,
         };
       }),
     );
@@ -400,6 +432,8 @@ export class DocumentNumberingService implements NumberingPort {
     const data = {
       prefixEnabled,
       prefixValue: prefixEnabled ? dto.prefixValue?.trim() || null : null,
+      // Default on: how every document was numbered before the switch existed.
+      branchPrefix: dto.branchPrefix ?? true,
       startingNo: dto.startingNo ?? 1,
       suffixEnabled,
       suffixValue: suffixEnabled ? dto.suffixValue?.trim() || null : null,
@@ -465,7 +499,7 @@ export class DocumentNumberingService implements NumberingPort {
     const { companyId } = scope;
     const rule = await this.ruleFor(companyId, documentCode);
     if (!rule) return null;
-    const branch = await this.branchToken(companyId, scope.branchId);
+    const branch = await this.branchFor(companyId, scope.branchId, rule);
     const n = await this.nextSeq(
       companyId,
       documentCode,
@@ -490,6 +524,7 @@ export class DocumentNumberingService implements NumberingPort {
     const effective: RuleState = rule ?? {
       prefixEnabled: true,
       prefixValue: fallback.prefix,
+      branchPrefix: true,
       startingNo: 1,
       suffixEnabled: false,
       suffixValue: null,
@@ -497,7 +532,7 @@ export class DocumentNumberingService implements NumberingPort {
       renumber: 'NEVER',
       periodPosition: 'BEFORE_SUFFIX',
     };
-    const branch = await this.branchToken(companyId, scope.branchId);
+    const branch = await this.branchFor(companyId, scope.branchId, rule);
     const n = await this.nextSeq(
       companyId,
       documentCode,

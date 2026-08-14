@@ -39,6 +39,7 @@ type Mode = 'add' | 'edit' | 'view';
 const emptyForm = {
   prefixEnabled: 'yes',
   prefixValue: '',
+  branchPrefix: 'yes',
   startingNo: '1',
   suffixEnabled: 'no',
   suffixValue: '',
@@ -146,6 +147,7 @@ export default function DocumentNumberingPage() {
   const formFrom = (r: DocumentNumberingRow) => ({
     prefixEnabled: r.prefixEnabled ? 'yes' : 'no',
     prefixValue: r.prefixValue ?? '',
+    branchPrefix: r.branchPrefix ? 'yes' : 'no',
     startingNo: String(r.startingNo),
     suffixEnabled: r.suffixEnabled ? 'yes' : 'no',
     suffixValue: r.suffixValue ?? '',
@@ -204,6 +206,7 @@ export default function DocumentNumberingPage() {
         documentId: Number(docId),
         prefixEnabled: form.prefixEnabled === 'yes',
         prefixValue: form.prefixValue.trim() || null,
+        branchPrefix: form.branchPrefix === 'yes',
         startingNo: Number(form.startingNo) || 1,
         suffixEnabled: form.suffixEnabled === 'yes',
         suffixValue: form.suffixValue.trim() || null,
@@ -274,6 +277,17 @@ export default function DocumentNumberingPage() {
       header: 'Prefix Val',
       accessor: (r) => r.prefixValue ?? '—',
     },
+    // Only worth a column where the company has branches at all.
+    ...(branchCode
+      ? [
+          {
+            key: 'branchPrefix',
+            header: 'Branch Code',
+            accessor: (r: DocumentNumberingRow) =>
+              r.branchPrefix ? 'Yes' : 'No',
+          },
+        ]
+      : []),
     {
       key: 'suffix',
       header: 'Suffix',
@@ -314,7 +328,7 @@ export default function DocumentNumberingPage() {
         title="Document Numbering"
         description={
           branchCode
-            ? `Sequencer for each document — prefix, suffix, padding & renumber period. The rule is the company's; the running number is ${activeBranch?.name ?? 'this branch'}'s own, and its code (${branchCode}) leads every number it issues.`
+            ? `Sequencer for each document — prefix, suffix, padding & renumber period. The rule is the company's; where a document carries the branch code, the running number is ${activeBranch?.name ?? 'this branch'}'s own and its code (${branchCode}) leads it.`
             : 'Per-company sequencer for each document — prefix, suffix, padding & renumber period'
         }
         icon={<Hash className="h-5 w-5" />}
@@ -418,6 +432,23 @@ export default function DocumentNumberingPage() {
               onChange={(e) => patch({ prefixValue: e.target.value })}
               placeholder="e.g. PPV-"
             />
+            {/*
+              Not everything a company numbers belongs to a branch. A goods
+              receipt happens somewhere; an employee code follows the person,
+              so KDY/EMP-0001 would be wrong the day they move to another
+              branch. Off also means ONE series for the whole company rather
+              than one per branch.
+            */}
+            {branchCode && (
+              <Select
+                label="Branch code"
+                wrapClassName="sm:col-span-2"
+                value={form.branchPrefix}
+                onChange={(e) => patch({ branchPrefix: e.target.value })}
+                options={YESNO}
+                title="Whether the branch code leads the number, and each branch keeps its own series"
+              />
+            )}
             <Select
               label="Suffix"
               value={form.suffixEnabled}
