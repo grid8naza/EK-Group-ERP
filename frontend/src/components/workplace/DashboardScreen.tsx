@@ -8,10 +8,12 @@ import {
   ClipboardCheck,
   Eye,
   GitBranch,
+  LayoutDashboard,
   Mail,
   RefreshCw,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { PageHeader } from '@/components/ui/PageHeader';
 import { DOC_PARAM } from '@/lib/hooks';
 import { resolveIcon } from '@/lib/icons';
 import { useAuth } from '@/providers/AuthProvider';
@@ -200,205 +202,227 @@ export function DashboardScreen() {
     .filter((c) => c.counts.length > 0);
 
   return (
-    <div className="flex flex-col gap-5">
-      {/* ---- who, and when ---- */}
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-            {greeting()}
-            {user?.name ? `, ${user.name.split(' ')[0]}` : ''}
-          </h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            {new Date().toLocaleDateString(undefined, {
-              weekday: 'long',
-              day: 'numeric',
-              month: 'long',
-            })}
-            {data
-              ? ` · across ${data.companies.length} ${data.companies.length === 1 ? 'company' : 'companies'}`
-              : ''}
-          </p>
-        </div>
-        <button
-          onClick={() => void load()}
-          disabled={loading}
-          className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800"
-        >
-          <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
-          Refresh
-        </button>
-      </div>
-
-      {/* ---- the counts ---- */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        {loading && !data
-          ? Array.from({ length: 5 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-24 animate-pulse rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
-              />
-            ))
-          : tiles.map((t) => <Tile key={t.key} tile={t} />)}
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-3">
-        {/* ---- what is waiting ---- */}
-        <div className="lg:col-span-2">
-          <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+    <>
+      {/*
+        The page's own header, rendered HERE rather than by the route shell,
+        because the greeting belongs in its right-hand slot and is built from
+        state this component holds — who is signed in, and how many companies
+        the answer covers. It sits OUTSIDE the flex column below, so its own
+        `mb-6` is the only gap under it — the same distance every other page
+        puts between its header and its content.
+      */}
+      <PageHeader
+        title="My Day"
+        description="Everything waiting for you, across the group"
+        icon={<LayoutDashboard className="h-5 w-5" />}
+        size="sm"
+        actions={
+          <>
+            <div className="text-right">
               <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-                Waiting on you
+                {greeting()}
+                {user?.name ? `, ${user.name.split(' ')[0]}` : ''}
               </p>
-              <p className="text-[11px] uppercase tracking-wider text-slate-400">
-                Late first
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {new Date().toLocaleDateString(undefined, {
+                  weekday: 'long',
+                  day: 'numeric',
+                  month: 'long',
+                })}
+                {data
+                  ? ` · across ${data.companies.length} ${data.companies.length === 1 ? 'company' : 'companies'}`
+                  : ''}
+              </p>
+            </div>
+            <button
+              onClick={() => void load()}
+              disabled={loading}
+              title="Refresh"
+              aria-label="Refresh"
+              className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800"
+            >
+              <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
+            </button>
+          </>
+        }
+      />
+
+      <div className="flex flex-col gap-5">
+        {/* ---- the counts ---- */}
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {loading && !data
+            ? Array.from({ length: 5 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-24 animate-pulse rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
+                />
+              ))
+            : tiles.map((t) => <Tile key={t.key} tile={t} />)}
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-3">
+          {/* ---- what is waiting ---- */}
+          <div className="lg:col-span-2">
+            <div className="flex h-full flex-col overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  Waiting on you
+                </p>
+                <p className="text-[11px] uppercase tracking-wider text-slate-400">
+                  Late first
+                </p>
+              </div>
+
+              {loading && !data ? (
+                <p className="p-8 text-center text-sm text-slate-400">
+                  Loading…
+                </p>
+              ) : waiting.length === 0 ? (
+                <div className="flex flex-1 flex-col items-center justify-center gap-2 p-12 text-center">
+                  <CheckCircle2 className="h-8 w-8 text-emerald-400" />
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Nothing is waiting on you anywhere.
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {waiting.map((item) => {
+                    const kind = KIND[item.kind];
+                    const due = dueLabel(item);
+                    const company = companyName(item.companyId);
+                    const branch = branchName(item.branchId);
+                    return (
+                      <button
+                        key={item.key}
+                        onClick={() => void open(item)}
+                        className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                      >
+                        <span
+                          className={cn(
+                            'mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-lg',
+                            kind.tint,
+                          )}
+                        >
+                          <kind.icon className="h-4 w-4" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+                              {item.title}
+                            </span>
+                            {due && (
+                              <span
+                                className={cn(
+                                  'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                                  item.overdue
+                                    ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
+                                    : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300',
+                                )}
+                              >
+                                {due}
+                              </span>
+                            )}
+                          </span>
+                          <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                            <span>{kind.label}</span>
+                            {item.subtitle && (
+                              <>
+                                <span className="text-slate-300">·</span>
+                                <span className="truncate">
+                                  {item.subtitle}
+                                </span>
+                              </>
+                            )}
+                            {/* Whose it is. Always shown, not only when it is
+                              elsewhere: on a page that deliberately mixes
+                              companies, "which one" is part of reading the row. */}
+                            {company && (
+                              <>
+                                <span className="text-slate-300">·</span>
+                                <span className="flex items-center gap-1">
+                                  <Building2 className="h-3 w-3" />
+                                  {company}
+                                </span>
+                              </>
+                            )}
+                            {branch && (
+                              <span className="flex items-center gap-1">
+                                <GitBranch className="h-3 w-3" />
+                                {branch}
+                              </span>
+                            )}
+                          </span>
+                        </span>
+                        <span className="flex-none text-[11px] text-slate-400">
+                          {listTime(item.at)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ---- the same numbers, per company ---- */}
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+            <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                Across the group
+              </p>
+              <p className="text-xs text-slate-400">
+                Where your outstanding work is
               </p>
             </div>
 
             {loading && !data ? (
               <p className="p-8 text-center text-sm text-slate-400">Loading…</p>
-            ) : waiting.length === 0 ? (
-              <div className="flex flex-1 flex-col items-center justify-center gap-2 p-12 text-center">
-                <CheckCircle2 className="h-8 w-8 text-emerald-400" />
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Nothing is waiting on you anywhere.
-                </p>
-              </div>
+            ) : companyRows.length === 0 ? (
+              <p className="p-8 text-center text-sm text-slate-400">
+                Nothing outstanding in any company.
+              </p>
             ) : (
               <div className="divide-y divide-slate-100 dark:divide-slate-800">
-                {waiting.map((item) => {
-                  const kind = KIND[item.kind];
-                  const due = dueLabel(item);
-                  const company = companyName(item.companyId);
-                  const branch = branchName(item.branchId);
-                  return (
-                    <button
-                      key={item.key}
-                      onClick={() => void open(item)}
-                      className="flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                    >
-                      <span
-                        className={cn(
-                          'mt-0.5 flex h-8 w-8 flex-none items-center justify-center rounded-lg',
-                          kind.tint,
-                        )}
-                      >
-                        <kind.icon className="h-4 w-4" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex flex-wrap items-center gap-2">
-                          <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
-                            {item.title}
-                          </span>
-                          {due && (
-                            <span
-                              className={cn(
-                                'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-                                item.overdue
-                                  ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
-                                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300',
-                              )}
-                            >
-                              {due}
-                            </span>
-                          )}
+                {companyRows.map((c) => (
+                  <div key={c.id} className="px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 flex-none text-slate-400" />
+                      <p className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800 dark:text-slate-100">
+                        {c.name}
+                      </p>
+                      {c.id !== activeCompanyId && (
+                        <button
+                          onClick={() => void switchCompany(c.id)}
+                          className="flex-none text-[11px] font-medium text-brand-600 hover:underline dark:text-brand-400"
+                        >
+                          Switch
+                        </button>
+                      )}
+                    </div>
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {c.counts.map(({ tile, count }) => (
+                        <span
+                          key={tile.key}
+                          className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                        >
+                          {count} {tile.label.toLowerCase()}
                         </span>
-                        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-                          <span>{kind.label}</span>
-                          {item.subtitle && (
-                            <>
-                              <span className="text-slate-300">·</span>
-                              <span className="truncate">{item.subtitle}</span>
-                            </>
-                          )}
-                          {/* Whose it is. Always shown, not only when it is
-                              elsewhere: on a page that deliberately mixes
-                              companies, "which one" is part of reading the row. */}
-                          {company && (
-                            <>
-                              <span className="text-slate-300">·</span>
-                              <span className="flex items-center gap-1">
-                                <Building2 className="h-3 w-3" />
-                                {company}
-                              </span>
-                            </>
-                          )}
-                          {branch && (
-                            <span className="flex items-center gap-1">
-                              <GitBranch className="h-3 w-3" />
-                              {branch}
-                            </span>
-                          )}
-                        </span>
-                      </span>
-                      <span className="flex-none text-[11px] text-slate-400">
-                        {listTime(item.at)}
-                      </span>
-                    </button>
-                  );
-                })}
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
+            )}
+
+            {data && (
+              <p className="border-t border-slate-100 px-4 py-2.5 text-[11px] text-slate-400 dark:border-slate-800">
+                As of {dayLabel(data.asOf).toLowerCase()} {listTime(data.asOf)}
+              </p>
             )}
           </div>
         </div>
-
-        {/* ---- the same numbers, per company ---- */}
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-          <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-              Across the group
-            </p>
-            <p className="text-xs text-slate-400">
-              Where your outstanding work is
-            </p>
-          </div>
-
-          {loading && !data ? (
-            <p className="p-8 text-center text-sm text-slate-400">Loading…</p>
-          ) : companyRows.length === 0 ? (
-            <p className="p-8 text-center text-sm text-slate-400">
-              Nothing outstanding in any company.
-            </p>
-          ) : (
-            <div className="divide-y divide-slate-100 dark:divide-slate-800">
-              {companyRows.map((c) => (
-                <div key={c.id} className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4 flex-none text-slate-400" />
-                    <p className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800 dark:text-slate-100">
-                      {c.name}
-                    </p>
-                    {c.id !== activeCompanyId && (
-                      <button
-                        onClick={() => void switchCompany(c.id)}
-                        className="flex-none text-[11px] font-medium text-brand-600 hover:underline dark:text-brand-400"
-                      >
-                        Switch
-                      </button>
-                    )}
-                  </div>
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {c.counts.map(({ tile, count }) => (
-                      <span
-                        key={tile.key}
-                        className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300"
-                      >
-                        {count} {tile.label.toLowerCase()}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {data && (
-            <p className="border-t border-slate-100 px-4 py-2.5 text-[11px] text-slate-400 dark:border-slate-800">
-              As of {dayLabel(data.asOf).toLowerCase()} {listTime(data.asOf)}
-            </p>
-          )}
-        </div>
       </div>
-    </div>
+    </>
   );
 }
 

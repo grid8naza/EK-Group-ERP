@@ -41,7 +41,12 @@ export interface WorkplaceTile {
   /** Lucide icon name (kebab-case) — the dashboard renders what it is given. */
   icon?: string;
   tone?: WorkplaceTone;
-  /** Position in the row; ties break on key. */
+  /**
+   * Where this tile would like to sit. A FALLBACK only: the dashboard's own
+   * TILE_ORDER decides the row, because what a tile should sit beside is a
+   * question about the page, not about the module that produced it. A tile the
+   * page does not name lands after the ones it does, in this order.
+   */
   order: number;
   /**
    * The same count, split by company — what makes this dashboard say something

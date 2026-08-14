@@ -13,6 +13,34 @@ const WAITING_LIMIT = 15;
 const PER_SOURCE_LIMIT = 10;
 
 /**
+ * The order the tiles are read in, left to right.
+ *
+ * It lives HERE, in one list, rather than as a number inside each provider —
+ * because the order of the row is an editorial decision about this PAGE, and a
+ * provider has no way to know what it should sit beside. Kept as one array so a
+ * reshuffle is one edit rather than seven.
+ *
+ * A tile whose key is not named below keeps its provider's own `order` and
+ * lands after everything here, so a module adding a tile appears without
+ * having to be listed first.
+ */
+const TILE_ORDER = [
+  // What this person owes, first — it is their own work before anyone else's.
+  'tasks.mine',
+  'tasks.overdue',
+  'tasks.raised',
+  // Then what is in front of them to decide or read.
+  'approvals.pending',
+  'approvals.review',
+  // Then what has been said to them.
+  'chat.unread',
+  'mail.drafts',
+  'mail.unread',
+  'broadcasts.unread',
+  'circulars.unacknowledged',
+];
+
+/**
  * The Workplace dashboard — what is waiting for ONE PERSON, across the whole
  * group (SRS §8.11 / §8.12).
  *
@@ -72,9 +100,20 @@ export class WorkplaceService {
       this.users.audienceOptions(userId),
     ]);
 
+    // Named tiles in the page's own order; anything else after them, in the
+    // order its provider asked for.
+    const rank = (key: string) => {
+      const at = TILE_ORDER.indexOf(key);
+      return at === -1 ? Number.MAX_SAFE_INTEGER : at;
+    };
     const tiles = tileGroups
       .flat()
-      .sort((a, b) => a.order - b.order || a.key.localeCompare(b.key));
+      .sort(
+        (a, b) =>
+          rank(a.key) - rank(b.key) ||
+          a.order - b.order ||
+          a.key.localeCompare(b.key),
+      );
 
     const waiting = itemGroups.flat().sort(sortWaiting).slice(0, WAITING_LIMIT);
 

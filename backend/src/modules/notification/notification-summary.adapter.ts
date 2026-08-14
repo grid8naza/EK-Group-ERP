@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { countByCompany } from '../../common/by-company';
 import {
   WorkplaceItem,
   WorkplaceSummaryPort,
@@ -10,12 +9,16 @@ import {
 const ALERTS_ROUTE = '/workplace/alerts';
 
 /**
- * Alerts' contribution to the Workplace dashboard.
+ * Alerts' contribution to the Workplace dashboard: the URGENT ones, as rows.
  *
- * The tile counts what is unread; the rows are the URGENT ones only. That is the
- * whole editorial judgement here: the dashboard is a page somebody looks at once
- * a morning, and repeating a bell they already have would fill it with stock
- * levels. What earns a place on it is the handful that say something is on fire.
+ * NO TILE. The bell in the topbar is on every screen of the application and
+ * already carries the unread count, so a card repeating it would be the one
+ * number on this page the reader can see without coming here — and it would
+ * cost a whole row of the grid to say it twice.
+ *
+ * What alerts do contribute is the handful that say something is on fire.
+ * Those belong on a page about what is waiting, and nothing else shows them
+ * ranked against the approvals and overdue work they compete with.
  */
 @Injectable()
 export class NotificationSummaryAdapter implements WorkplaceSummaryPort {
@@ -23,28 +26,8 @@ export class NotificationSummaryAdapter implements WorkplaceSummaryPort {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async tiles(userId: number): Promise<WorkplaceTile[]> {
-    const unread = await this.prisma.notification.findMany({
-      where: { userId, readAt: null, resolvedAt: null, dismissedAt: null },
-      select: { companyId: true, priority: true },
-    });
-
-    return [
-      {
-        key: 'alerts.unread',
-        label: 'Alerts',
-        count: unread.length,
-        route: ALERTS_ROUTE,
-        icon: 'bell',
-        tone: unread.some((a) => a.priority === 'URGENT')
-          ? 'urgent'
-          : unread.length
-            ? 'attention'
-            : 'normal',
-        order: 100,
-        byCompany: countByCompany(unread),
-      },
-    ];
+  async tiles(): Promise<WorkplaceTile[]> {
+    return [];
   }
 
   async waiting(userId: number, limit: number): Promise<WorkplaceItem[]> {
@@ -54,6 +37,13 @@ export class NotificationSummaryAdapter implements WorkplaceSummaryPort {
         priority: 'URGENT',
         resolvedAt: null,
         dismissedAt: null,
+        // Not the categories another provider already answers for. An overdue
+        // task raises both a TASK row (from the task module, with its due date
+        // and its title) and an "Task overdue" alert about the same task, and
+        // listing the two together tells the reader nothing twice. The same
+        // goes for approvals. What is left is what only the alert knows —
+        // stock-outs, expiry, and whatever publishes here next.
+        category: { notIn: ['TASK', 'APPROVAL'] },
       },
       orderBy: { id: 'desc' },
       take: limit,
