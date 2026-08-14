@@ -671,8 +671,11 @@ export default function EmployeesPage() {
                       {editing.code}
                     </p>
                   )}
+                </div>
 
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                {/* The controls sit at the far edge, away from the identity. */}
+                <div className="flex flex-none flex-col items-end gap-1">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
                     <button
                       type="button"
                       className="btn-secondary inline-flex items-center gap-2"
@@ -706,10 +709,10 @@ export default function EmployeesPage() {
                         e.target.value = '';
                       }}
                     />
-                    <span className="text-xs text-slate-400">
-                      PNG, JPG or WEBP — up to 5 MB.
-                    </span>
                   </div>
+                  <span className="text-xs text-slate-400">
+                    PNG, JPG or WEBP — up to 5 MB.
+                  </span>
                 </div>
               </div>
             </div>
