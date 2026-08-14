@@ -50,6 +50,17 @@ interface NamedRow {
 }
 
 /**
+ * The module a checklist's work lands in. Code stays `WORKFLOW` while the label
+ * is Workplace — see module-scaffold.ts for why renaming it would strand every
+ * configured workflow.
+ *
+ * Used to answer "who could actually do this": an occurrence is a task on the
+ * Workplace boards, so somebody who cannot reach Workplace in that company
+ * cannot be given one.
+ */
+const WORKPLACE = 'WORKFLOW';
+
+/**
  * Recurring checklists (SRS §8.12, FR-TSK-02: "opening/closing, hygiene,
  * production").
  *
@@ -125,19 +136,19 @@ export class ChecklistService {
 
   async create(
     userId: number,
-    companyId: number | undefined,
-    branchId: number | undefined,
+    activeCompanyId: number | undefined,
+    activeBranchId: number | undefined,
     dto: SaveChecklistDto,
   ) {
-    if (!companyId) {
-      throw new BadRequestException(
-        'No active company — a checklist belongs to one.',
-      );
-    }
+    const where = await this.placeOf(userId, dto, {
+      companyId: activeCompanyId,
+      branchId: activeBranchId,
+    });
     const { columns, itemTexts, assigneeIds } = await this.fields(
       userId,
       dto,
-      true,
+      where.companyId,
+      where.branchId,
     );
 
     const created = await this.prisma.checklistTemplate.create({
@@ -147,10 +158,8 @@ export class ChecklistService {
         // today — but the spread's type cannot know that.
         name: columns.name ?? '',
         startsOn: columns.startsOn ?? dateMarker(zonedParts(new Date()).date),
-        companyId,
-        // Company-wide is a choice; a branch is not — it is where the person
-        // setting it up is working. Same rule as a task.
-        branchId: dto.companyWide ? null : (branchId ?? null),
+        companyId: where.companyId,
+        branchId: where.branchId,
         createdById: userId,
         items: {
           create: (itemTexts ?? []).map((text, i) => ({
@@ -169,18 +178,48 @@ export class ChecklistService {
 
   async update(userId: number, id: number, dto: SaveChecklistDto) {
     const existing = await this.assertOwner(userId, id);
+
+    // WHERE it lands is settled first, because who may be given it depends on
+    // the company — moving a checklist to another company and naming somebody
+    // who does not work there has to fail on the people, not silently succeed.
+    // Moving it at all is allowed: one set up against the wrong branch should be
+    // correctable without being rebuilt from scratch.
+    const moved =
+      dto.companyId !== undefined || dto.branchId !== undefined
+        ? await this.placeOf(userId, dto, {
+            companyId: existing.companyId,
+            branchId: existing.branchId ?? undefined,
+          })
+        : null;
+
+    // The existing row goes in, so anything the request leaves out keeps the
+    // value it already has rather than falling back to a default.
     const { columns, itemTexts, assigneeIds } = await this.fields(
       userId,
       dto,
-      false,
+      moved?.companyId ?? existing.companyId,
+      moved ? moved.branchId : existing.branchId,
+      existing,
     );
+
+    // Moving it re-checks the people ALREADY on it against where it is going.
+    // Without this, a company-wide checklist could be pointed at one branch
+    // while carrying somebody who works at another — the place changed, so the
+    // question "may these people be given this" has to be asked again. Only
+    // needed when the request did not supply its own list, which `fields` has
+    // already validated against the new place.
+    if (moved && !assigneeIds) {
+      await this.resolveAssignees(
+        userId,
+        existing.assignees.map((a) => a.userId),
+        moved.companyId,
+        moved.branchId,
+      );
+    }
 
     await this.prisma.checklistTemplate.update({
       where: { id: existing.id },
-      data: {
-        ...columns,
-        ...(dto.companyWide === true ? { branchId: null } : {}),
-      },
+      data: { ...columns, ...(moved ?? {}) },
     });
 
     // Items and assignees are replaced wholesale: the editor sends the list it
@@ -223,27 +262,6 @@ export class ChecklistService {
     const existing = await this.assertOwner(userId, id);
     await this.prisma.checklistTemplate.delete({ where: { id: existing.id } });
     return { ok: true };
-  }
-
-  /**
-   * Raise this occurrence now, without waiting for the clock.
-   *
-   * For the checklist somebody sets up at nine for a run that starts at six
-   * tomorrow, and for the day a supervisor wants it out early. Does nothing if
-   * today's occurrence already exists — that is the same unique constraint the
-   * scheduler leans on, and saying so is better than raising a second copy.
-   */
-  async raiseNow(userId: number, id: number) {
-    const template = await this.assertVisible(userId, id);
-    const local = zonedParts(new Date());
-    const task = await this.raise(template as TemplateRow, local);
-    if (!task) {
-      return {
-        raised: false,
-        message: 'Today’s checklist has already been raised.',
-      };
-    }
-    return { raised: true, taskId: task.id };
   }
 
   // ---------------------------------------------------------- the register --
@@ -526,27 +544,117 @@ export class ChecklistService {
 
   // ---------------------------------------------------------------- guards --
 
-  /** Normalize the writable fields, and validate the recurrence makes sense. */
-  private async fields(userId: number, dto: SaveChecklistDto, isNew: boolean) {
-    const name = dto.name?.trim();
-    if (isNew && !name)
-      throw new BadRequestException('Give the checklist a name.');
+  /**
+   * The companies and branches this person may set a checklist up for.
+   *
+   * The same answer the audience pickers and the dashboard use — "which
+   * companies are mine" is the user module's fact, and asking it through the
+   * port keeps this module from reading Cpanel tables.
+   */
+  scope(userId: number) {
+    return this.users.audienceOptions(userId);
+  }
 
-    const frequency = dto.frequency ?? 'DAILY';
-    const weekdays = [...new Set(dto.weekdays ?? [])].sort();
+  /**
+   * WHERE a checklist applies, from the form if it says and from the active
+   * context if it does not.
+   *
+   * Checked against what this person may actually reach, because the company no
+   * longer comes from a header the application controls: a body naming somebody
+   * else's company would otherwise plant a schedule in it. A branch must belong
+   * to the company it is named with — the two arrive separately, and a stale
+   * picker is the ordinary way they stop matching.
+   */
+  private async placeOf(
+    userId: number,
+    dto: SaveChecklistDto,
+    fallback: { companyId?: number; branchId?: number },
+  ): Promise<{ companyId: number; branchId: number | null }> {
+    const companyId = dto.companyId ?? fallback.companyId;
+    if (!companyId) {
+      throw new BadRequestException(
+        'Choose the company this checklist is for.',
+      );
+    }
+
+    const scope = await this.users.audienceOptions(userId);
+    if (!scope.companies.some((c) => c.id === companyId)) {
+      throw new BadRequestException('You cannot set one up for that company.');
+    }
+
+    // Naming a company but no branch means the whole of it. Only when neither is
+    // named does the active branch stand in — carrying it across to a DIFFERENT
+    // company would attach a branch that does not belong to it.
+    const branchId =
+      dto.branchId !== undefined
+        ? dto.branchId
+        : dto.companyId !== undefined
+          ? null
+          : (fallback.branchId ?? null);
+
+    if (branchId !== null) {
+      const branch = scope.branches.find((b) => b.id === branchId);
+      if (!branch || branch.companyId !== companyId) {
+        throw new BadRequestException(
+          'That branch does not belong to that company.',
+        );
+      }
+    }
+
+    return { companyId, branchId };
+  }
+
+  /**
+   * Work out what the template should look like AFTER this request, and check
+   * that it makes sense.
+   *
+   * Every value falls back to what is already STORED, not to a default. That
+   * distinction is the whole method: a partial update is the normal case — Pause
+   * sends `{ isActive: false }` and nothing else — and defaulting the rest would
+   * quietly rewrite the schedule. It did exactly that until somebody asked what
+   * the Pause button was for: pausing an 08:00 checklist moved it to 06:00, and
+   * pausing a Monday one would have made it daily.
+   *
+   * The merged values are then validated together, because the rules span
+   * fields: changing only the frequency to WEEKLY has to be checked against the
+   * weekdays already stored.
+   */
+  private async fields(
+    userId: number,
+    dto: SaveChecklistDto,
+    /** Where it will belong — who may be given it depends on BOTH. */
+    companyId: number,
+    branchId: number | null,
+    /** The row being changed, or undefined when creating one. */
+    existing?: TemplateRow,
+  ) {
+    const isNew = !existing;
+    const name = dto.name?.trim() || existing?.name;
+    if (!name) throw new BadRequestException('Give the checklist a name.');
+
+    const frequency = dto.frequency ?? existing?.frequency ?? 'DAILY';
+    const weekdays = [
+      ...new Set(dto.weekdays ?? existing?.weekdays ?? []),
+    ].sort();
+    const dayOfMonth = dto.dayOfMonth ?? existing?.dayOfMonth ?? null;
     if (frequency === 'WEEKLY' && weekdays.length === 0) {
       throw new BadRequestException(
         'Choose at least one day of the week, or it would never run.',
       );
     }
-    if (frequency === 'MONTHLY' && !dto.dayOfMonth) {
+    if (frequency === 'MONTHLY' && !dayOfMonth) {
       throw new BadRequestException(
         'Choose which day of the month it runs on.',
       );
     }
 
-    const startMinutes = dto.startMinutes ?? 360;
-    const dueMinutes = dto.dueMinutes ?? null;
+    const startMinutes = dto.startMinutes ?? existing?.startMinutes ?? 360;
+    // `undefined` is "not sent" and `null` is "clear it" — two different things,
+    // so this cannot use `??`.
+    const dueMinutes =
+      dto.dueMinutes !== undefined
+        ? dto.dueMinutes
+        : (existing?.dueMinutes ?? null);
     if (dueMinutes !== null && dueMinutes < startMinutes) {
       throw new BadRequestException(
         `It cannot be due at ${formatMinutes(dueMinutes)} when it only appears at ${formatMinutes(startMinutes)}.`,
@@ -556,8 +664,17 @@ export class ChecklistService {
     // Its working life. Dates arrive as `YYYY-MM-DD` and are kept that way for
     // the comparison — a calendar date has no hour, and giving it one is how a
     // range starts behaving differently either side of midnight.
-    const startsOn = (dto.startsOn ?? zonedParts(new Date()).date).slice(0, 10);
-    const endsOn = dto.endsOn ? dto.endsOn.slice(0, 10) : null;
+    const startsOn = (
+      dto.startsOn ??
+      (existing ? dateOnly(existing.startsOn) : zonedParts(new Date()).date)
+    ).slice(0, 10);
+    const endsOnRaw =
+      dto.endsOn !== undefined
+        ? dto.endsOn
+        : existing?.endsOn
+          ? dateOnly(existing.endsOn)
+          : null;
+    const endsOn = endsOnRaw ? endsOnRaw.slice(0, 10) : null;
     if (endsOn && endsOn < startsOn) {
       throw new BadRequestException(
         'It cannot end before it starts. Leave the end date empty for no end.',
@@ -574,35 +691,39 @@ export class ChecklistService {
     // Only people this user could hand work to by name — the same rule the task
     // composer applies, asked through the same port.
     const assigneeIds = dto.assigneeIds
-      ? await this.resolveAssignees(userId, dto.assigneeIds)
+      ? await this.resolveAssignees(
+          userId,
+          dto.assigneeIds,
+          companyId,
+          branchId,
+        )
       : undefined;
     if (isNew && (!assigneeIds || assigneeIds.size === 0)) {
       throw new BadRequestException('Say who has to do it.');
     }
 
     return {
-      // The template's own columns…
+      // The template's own columns, as they should stand afterwards. Written
+      // whole rather than as a diff: every one of them has been merged with what
+      // is stored above, so writing them all is the same as writing the changes.
       columns: {
-        ...(name ? { name } : {}),
-        ...(dto.description !== undefined
-          ? { description: dto.description.trim() || null }
-          : {}),
+        name,
+        description:
+          dto.description !== undefined
+            ? dto.description.trim() || null
+            : (existing?.description ?? null),
         frequency,
         weekdays: frequency === 'WEEKLY' ? weekdays : [],
-        dayOfMonth: frequency === 'MONTHLY' ? (dto.dayOfMonth ?? 1) : null,
+        dayOfMonth: frequency === 'MONTHLY' ? (dayOfMonth ?? 1) : null,
         startMinutes,
         dueMinutes,
-        ...(dto.priority ? { priority: dto.priority } : {}),
-        ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
-        // Its working life. A new one starts today unless told otherwise —
-        // somebody setting up opening checks means them to start now, and asking
-        // for a date they have to compute is a field they will get wrong.
-        ...(isNew || dto.startsOn !== undefined
-          ? { startsOn: dateMarker(startsOn) }
-          : {}),
-        ...(dto.endsOn !== undefined
-          ? { endsOn: endsOn ? dateMarker(endsOn) : null }
-          : {}),
+        priority: dto.priority ?? existing?.priority ?? 'NORMAL',
+        isActive: dto.isActive ?? existing?.isActive ?? true,
+        // A new one starts today unless told otherwise — somebody setting up
+        // opening checks means them to start now, and asking for a date they
+        // have to compute is a field they will get wrong.
+        startsOn: dateMarker(startsOn),
+        endsOn: endsOn ? dateMarker(endsOn) : null,
       },
       // …and the two lists, which are rows of their own and are kept apart from
       // the columns so neither can be spread into a Prisma `data` by accident.
@@ -612,18 +733,68 @@ export class ChecklistService {
     };
   }
 
-  /** Everybody this user may give work to (delegates to the task module's rule). */
-  private async resolveAssignees(userId: number, ids: number[]) {
+  /**
+   * Everybody who could actually be given this checklist, at the company it is
+   * for.
+   *
+   * TWO conditions, and both matter. They must be somebody this person could
+   * hand work to by name (`findPeers`, the task module's rule — you cannot
+   * assign to a stranger), AND they must be able to reach Workplace in THAT
+   * company: an occurrence is a task on that company's board, so a schedule
+   * pointed at Regency cannot be given to somebody who has no Regency.
+   *
+   * Asked of USER_LOOKUP because both are the user module's facts — the same
+   * `usersWithModuleAccess` the stock alerts use to decide who hears about a
+   * shortage.
+   */
+  async directory(
+    userId: number,
+    companyId: number,
+    branchId?: number | null,
+    q?: string,
+  ) {
+    const [peers, reachable, atBranch] = await Promise.all([
+      this.tasks.directory(userId, q),
+      this.users.usersWithModuleAccess(companyId, WORKPLACE),
+      // A checklist for the whole company is offered to the whole company; one
+      // for Kadathy is offered to the people who are at Kadathy.
+      branchId
+        ? this.users.usersAtBranch(companyId, branchId)
+        : Promise.resolve(null),
+    ]);
+
+    const allowed = new Set(reachable);
+    const here = atBranch ? new Set(atBranch) : null;
+    return peers.filter((p) => allowed.has(p.id) && (!here || here.has(p.id)));
+  }
+
+  /** The same rule, enforced on save — a picker is not a permission. */
+  private async resolveAssignees(
+    userId: number,
+    ids: number[],
+    companyId: number,
+    branchId: number | null,
+  ) {
     const wanted = [...new Set(ids)];
     if (!wanted.length) return new Set<number>();
+
     const allowed = new Set(
-      (await this.tasks.directory(userId)).map((u) => u.id),
+      (await this.directory(userId, companyId, branchId)).map((u) => u.id),
     );
-    allowed.add(userId);
+    // Yourself, if you work there — setting up a checklist you also do is
+    // ordinary. Checked against the same place, so somebody cannot put their own
+    // name on a branch they do not work at.
+    const mineToo = branchId
+      ? await this.users.usersAtBranch(companyId, branchId)
+      : await this.users.usersWithModuleAccess(companyId, WORKPLACE);
+    if (mineToo.includes(userId)) allowed.add(userId);
+
     for (const id of wanted) {
       if (!allowed.has(id)) {
         throw new BadRequestException(
-          'One of those people cannot be given this checklist.',
+          branchId
+            ? 'Somebody on this checklist does not work at that branch.'
+            : 'Somebody on this checklist does not work at that company.',
         );
       }
     }

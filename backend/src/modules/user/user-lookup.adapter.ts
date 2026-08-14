@@ -389,4 +389,51 @@ export class UserLookupAdapter implements UserLookupPort {
 
     return [...new Set([...allowed, ...superAdmins])];
   }
+
+  /**
+   * Who works at one branch — assigned to it, or tied to no branch of its
+   * company at all (see the port for why the second half is included).
+   */
+  async usersAtBranch(companyId: number, branchId: number): Promise<number[]> {
+    const branch = await this.prisma.branch.findFirst({
+      where: { id: branchId, companyId },
+      select: { id: true },
+    });
+    // A branch of another company answers for nobody rather than for everybody.
+    if (!branch) return [];
+
+    const assigned = (
+      await this.prisma.userBranch.findMany({
+        where: { branchId, user: { isActive: true } },
+        select: { userId: true },
+      })
+    ).map((r) => r.userId);
+
+    // Everyone in the company, minus everyone pinned to any branch of it: what
+    // is left is the people no branch owns, who therefore belong to all of them.
+    const branchIds = (
+      await this.prisma.branch.findMany({
+        where: { companyId },
+        select: { id: true },
+      })
+    ).map((b) => b.id);
+    const pinned = new Set(
+      (
+        await this.prisma.userBranch.findMany({
+          where: { branchId: { in: branchIds } },
+          select: { userId: true },
+        })
+      ).map((r) => r.userId),
+    );
+    const unpinned = (
+      await this.prisma.userCompany.findMany({
+        where: { companyId, user: { isActive: true } },
+        select: { userId: true },
+      })
+    )
+      .map((c) => c.userId)
+      .filter((id) => !pinned.has(id));
+
+    return [...new Set([...assigned, ...unpinned])];
+  }
 }

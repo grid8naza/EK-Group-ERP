@@ -143,6 +143,23 @@ export interface UserLookupPort {
   ): Promise<number[]>;
 
   /**
+   * Active users who work at one branch: those assigned to it, PLUS anyone in
+   * its company who is tied to no branch there at all.
+   *
+   * The second half is the part worth stating. Somebody with no branch
+   * assignment is not "at no branch" — they are not pinned to one, which in
+   * practice means a company-level role that covers all of them. Excluding them
+   * would make a branch checklist impossible to give to the manager responsible
+   * for it.
+   *
+   * Asked by recurring checklists, which are set up for a place: work raised
+   * for Kadathy should only be offered to people who are at Kadathy. Kept here
+   * because branch membership is the user module's table, and "who is at this
+   * branch" is one question with one answer.
+   */
+  usersAtBranch(companyId: number, branchId: number): Promise<number[]>;
+
+  /**
    * Active users who share at least one company with this one — everybody they
    * work alongside, wherever in the group that is. Super admins see, and are
    * seen by, everyone: they belong to no company in particular.

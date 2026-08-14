@@ -42,6 +42,39 @@ export class ChecklistController {
     return this.service.list(user.id);
   }
 
+  /**
+   * The companies and branches this person may set a checklist up for.
+   *
+   * Before `:id`, so a literal path is never read as one.
+   */
+  @Get('scope')
+  scope(@CurrentUser() user: AuthUser) {
+    return this.service.scope(user.id);
+  }
+
+  /**
+   * Who can be given a checklist at a given company — people this person may
+   * hand work to who can also reach Workplace THERE. Company-dependent, so the
+   * form re-asks when the company picker changes.
+   */
+  @Get('directory')
+  directory(
+    @CurrentUser() user: AuthUser,
+    @Query('companyId') companyId?: string,
+    @Query('branchId') branchId?: string,
+    @Query('q') q?: string,
+  ) {
+    // Number(), not an optional ParseIntPipe, which 400s on an absent param.
+    // No branch means the whole company, which is what a company-wide checklist
+    // is offered to.
+    return this.service.directory(
+      user.id,
+      Number(companyId) || 0,
+      Number(branchId) || null,
+      q,
+    );
+  }
+
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     return this.service.get(user.id, id);
@@ -84,14 +117,5 @@ export class ChecklistController {
   @Delete(':id')
   remove(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number) {
     return this.service.remove(user.id, id);
-  }
-
-  /** Raise today's occurrence now, without waiting for its start time. */
-  @Post(':id/raise-now')
-  raiseNow(
-    @CurrentUser() user: AuthUser,
-    @Param('id', ParseIntPipe) id: number,
-  ) {
-    return this.service.raiseNow(user.id, id);
   }
 }

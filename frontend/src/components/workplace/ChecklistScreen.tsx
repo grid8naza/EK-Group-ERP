@@ -10,7 +10,6 @@ import {
   GripVertical,
   History,
   Pencil,
-  Play,
   Plus,
   Power,
   Repeat,
@@ -19,6 +18,7 @@ import {
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { DOC_PARAM } from '@/lib/hooks';
+import { useAuth } from '@/providers/AuthProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
@@ -28,6 +28,7 @@ import { ChecklistHistoryDrawer } from '@/components/workplace/ChecklistHistoryD
 import { PRIORITY_TONE } from '@/components/workplace/task-ui';
 import { cn } from '@/lib/utils';
 import type {
+  AudienceOptions,
   ChecklistFrequency,
   ChecklistTemplate,
   TaskPriority,
@@ -77,7 +78,9 @@ interface Form {
   startsOn: string;
   endsOn: string;
   priority: TaskPriority;
-  companyWide: boolean;
+  /** Where it applies. Null branch = the whole company. */
+  companyId: number | null;
+  branchId: number | null;
   isActive: boolean;
   assignees: PickedPerson[];
   items: string[];
@@ -95,7 +98,8 @@ const blank = (): Form => ({
   startsOn: new Date().toLocaleDateString('en-CA'),
   endsOn: '',
   priority: 'NORMAL',
-  companyWide: false,
+  companyId: null,
+  branchId: null,
   isActive: true,
   assignees: [],
   items: [''],
@@ -150,6 +154,7 @@ export function ChecklistScreen() {
   const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
+  const { activeCompanyId, activeBranchId } = useAuth();
 
   const [rows, setRows] = useState<ChecklistTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -159,6 +164,19 @@ export function ChecklistScreen() {
   const [saving, setSaving] = useState(false);
   /** The checklist whose register is being read, if any. */
   const [historyOf, setHistoryOf] = useState<ChecklistTemplate | null>(null);
+  /**
+   * Where this person may set one up. Asked of the server rather than read from
+   * AuthProvider, which knows the branches of the ACTIVE company only — and the
+   * whole point of the pickers is choosing another one.
+   */
+  const [scope, setScope] = useState<AudienceOptions>({
+    companies: [],
+    branches: [],
+    groups: [],
+    everyoneCount: 0,
+  });
+  const branchesOf = (companyId: number | null) =>
+    scope.branches.filter((b) => b.companyId === companyId);
 
   // See MailboxScreen: the toast context value is unmemoized, so depending on
   // it would turn one failed load into a request loop.
@@ -180,9 +198,26 @@ export function ChecklistScreen() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    let alive = true;
+    api
+      .get<AudienceOptions>('/checklists/scope')
+      .then((s) => alive && setScope(s))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const openAdd = () => {
     setEditing(null);
-    setForm(blank());
+    // A new one defaults to where you are working, which is the common case —
+    // the pickers are there for when it is not.
+    setForm({
+      ...blank(),
+      companyId: activeCompanyId ?? scope.companies[0]?.id ?? null,
+      branchId: activeBranchId ?? null,
+    });
     setOpen(true);
   };
 
@@ -199,7 +234,8 @@ export function ChecklistScreen() {
       startsOn: t.startsOn,
       endsOn: t.endsOn ?? '',
       priority: t.priority,
-      companyWide: t.branchId === null,
+      companyId: t.companyId,
+      branchId: t.branchId,
       isActive: t.isActive,
       assignees: t.assignees,
       items: t.items.length ? t.items.map((i) => i.text) : [''],
@@ -237,7 +273,8 @@ export function ChecklistScreen() {
         // Empty means no end date, which the server stores as null.
         endsOn: form.endsOn || null,
         priority: form.priority,
-        companyWide: form.companyWide,
+        companyId: form.companyId ?? undefined,
+        branchId: form.branchId,
         isActive: form.isActive,
         assigneeIds: form.assignees.map((a) => a.id),
         items,
@@ -307,24 +344,11 @@ export function ChecklistScreen() {
     router.push(`${board}?${DOC_PARAM}=${t.todayTaskId}`);
   };
 
-  /** Raise today's occurrence now rather than waiting for its start time. */
-  const raiseNow = async (t: ChecklistTemplate) => {
-    try {
-      const res = await api.post<{ raised: boolean; message?: string }>(
-        `/checklists/${t.id}/raise-now`,
-      );
-      if (res.raised) {
-        toastRef.current.success('Raised. It is on the board now.');
-        router.push('/workplace/tasks/assigned-to-me');
-      } else {
-        toastRef.current.success(res.message ?? 'Already raised today.');
-      }
-    } catch (e) {
-      toastRef.current.error(
-        e instanceof ApiError ? e.message : 'Could not raise it.',
-      );
-    }
-  };
+  // There is no "raise now". The sweep puts a checklist out within minutes of
+  // its start time, so the button only ever meant "a bit earlier today" — and
+  // it raised an occurrence whatever the schedule said, which put rows in the
+  // register for days nobody expected. A checklist that has to happen on a day
+  // it is not scheduled for is a task, and the board raises those.
 
   // ------------------------------------------------------------- the items --
 
@@ -545,16 +569,17 @@ export function ChecklistScreen() {
                       <Pencil className="h-3.5 w-3.5" />
                       Edit
                     </button>
-                    <button
-                      onClick={() => void raiseNow(t)}
-                      title="Raise today's occurrence now"
-                      className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-                    >
-                      <Play className="h-3.5 w-3.5" />
-                      Raise now
-                    </button>
+                    {/* Stop it raising work without destroying it — a refit, a
+                        seasonal close, the person it is for on leave. Distinct
+                        from Delete, which loses the schedule, and from an end
+                        date, which is a finish you knew about in advance. */}
                     <button
                       onClick={() => void toggleActive(t)}
+                      title={
+                        t.isActive
+                          ? 'Stop it coming round, without deleting it. The record is kept.'
+                          : 'Start it coming round again.'
+                      }
                       className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
                     >
                       <Power className="h-3.5 w-3.5" />
@@ -759,14 +784,6 @@ export function ChecklistScreen() {
             </div>
           </div>
 
-          {/* ---- who ---- */}
-          <PeopleField
-            label="Who has to do it"
-            endpoint="/tasks/directory"
-            chosen={form.assignees}
-            onChange={(people) => setForm({ ...form, assignees: people })}
-          />
-
           {/* ---- what ---- */}
           <div className="card p-4">
             <h3 className="mb-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
@@ -854,18 +871,109 @@ export function ChecklistScreen() {
               </div>
             </div>
 
-            <Checkbox
-              label="For the whole company, not just this branch"
-              checked={form.companyWide}
-              onChange={(e) =>
-                setForm({ ...form, companyWide: e.target.checked })
-              }
-            />
+            {/*
+              WHERE it applies, chosen here rather than taken from the company
+              picker in the topbar. A schedule is set up for a place — often not
+              the one you are working in — and making somebody switch company to
+              write a checklist for another branch is a step that existed only
+              because the data model asked for it.
+            */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+                  Company
+                </label>
+                <select
+                  value={form.companyId ?? ''}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      companyId: Number(e.target.value) || null,
+                      // A branch belongs to one company, so it cannot survive
+                      // the company changing under it. Nor can the people: they
+                      // were chosen from those who work at the OLD company, and
+                      // leaving them there would only produce a refusal on save.
+                      branchId: null,
+                      assignees: [],
+                    })
+                  }
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                >
+                  {scope.companies.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-300">
+                  Branch
+                </label>
+                <select
+                  value={form.branchId ?? ''}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      branchId: Number(e.target.value) || null,
+                      // Chosen from the people at the OLD branch, so they cannot
+                      // carry over — the save would only refuse them.
+                      assignees: [],
+                    })
+                  }
+                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                >
+                  <option value="">The whole company</option>
+                  {branchesOf(form.companyId).map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1 text-[11px] text-slate-400">
+                  {form.branchId
+                    ? 'It raises on that branch’s board only.'
+                    : 'It raises on every branch’s board.'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/*
+            ---- who ----
+            AFTER the company and branch, because who may be given it DEPENDS on
+            both: the list holds only people who work there, so asking first
+            would offer names the save then refused. The endpoint carries both,
+            so changing either picker re-asks.
+          */}
+          <PeopleField
+            label="Who has to do it"
+            endpoint={`/checklists/directory?companyId=${form.companyId ?? 0}&branchId=${form.branchId ?? ''}`}
+            chosen={form.assignees}
+            onChange={(people) => setForm({ ...form, assignees: people })}
+            placeholder={
+              form.companyId
+                ? 'Search people who work there…'
+                : 'Choose a company first…'
+            }
+          />
+
+          {/*
+            Last, because it is the switch you throw once everything above is
+            settled — and the one thing on this form that is not about WHAT the
+            checklist is, but about whether it is running at all.
+          */}
+          <div className="card p-4">
             <Checkbox
               label="Active — raise it on schedule"
               checked={form.isActive}
               onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
             />
+            <p className="mt-1 pl-6 text-[11px] text-slate-400">
+              {form.isActive
+                ? 'It comes round on its own from the start date.'
+                : 'Saved, but nothing will be raised until this is switched on.'}
+            </p>
           </div>
         </div>
       </Drawer>
