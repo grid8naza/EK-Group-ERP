@@ -192,6 +192,10 @@ export default function EmployeesPage() {
     [data, form.companyId, editing],
   );
 
+  /** The chosen designation's name, for the header beside the photograph. */
+  const designationName = (id: string) =>
+    (designations ?? []).find((d) => String(d.id) === id)?.name ?? '';
+
   const closeDrawer = () => {
     setOpen(false);
     setView(false);
@@ -648,43 +652,64 @@ export default function EmployeesPage() {
                     <UserIcon className="h-8 w-8 text-slate-300" />
                   )}
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className="btn-secondary inline-flex items-center gap-2"
-                    onClick={() => photoInput.current?.click()}
-                    disabled={photoUploading}
-                  >
-                    <Upload className="h-4 w-4" />
-                    {photoUploading
-                      ? 'Uploading…'
-                      : form.photoUrl
-                        ? 'Replace'
-                        : 'Upload'}
-                  </button>
-                  {form.photoUrl && (
+                <div className="min-w-0 flex-1">
+                  {/*
+                    Who this record is, beside their face — the two facts that
+                    identify a person at a glance. Read from the FORM, not the
+                    saved row, so it names whoever is being typed in rather than
+                    lagging a field behind.
+                  */}
+                  <p className="truncate text-lg font-bold leading-tight text-brand-700 dark:text-brand-300">
+                    {form.name.trim() || 'New employee'}
+                  </p>
+                  <p className="truncate text-sm font-semibold text-amber-600 dark:text-amber-400">
+                    {designationName(form.designationId) ||
+                      'No designation yet'}
+                  </p>
+                  {editing && (
+                    <p className="mt-0.5 font-mono text-xs text-slate-400">
+                      {editing.code}
+                    </p>
+                  )}
+
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      className="btn-secondary inline-flex items-center gap-2 text-rose-600"
-                      onClick={() => setForm({ ...form, photoUrl: '' })}
+                      className="btn-secondary inline-flex items-center gap-2"
+                      onClick={() => photoInput.current?.click()}
+                      disabled={photoUploading}
                     >
-                      <Trash2 className="h-4 w-4" /> Remove
+                      <Upload className="h-4 w-4" />
+                      {photoUploading
+                        ? 'Uploading…'
+                        : form.photoUrl
+                          ? 'Replace'
+                          : 'Upload'}
                     </button>
-                  )}
-                  <input
-                    ref={photoInput}
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) void uploadPhoto(f);
-                      e.target.value = '';
-                    }}
-                  />
-                  <p className="w-full text-xs text-slate-400">
-                    PNG, JPG or WEBP — up to 5 MB.
-                  </p>
+                    {form.photoUrl && (
+                      <button
+                        type="button"
+                        className="btn-secondary inline-flex items-center gap-2 text-rose-600"
+                        onClick={() => setForm({ ...form, photoUrl: '' })}
+                      >
+                        <Trash2 className="h-4 w-4" /> Remove
+                      </button>
+                    )}
+                    <input
+                      ref={photoInput}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) void uploadPhoto(f);
+                        e.target.value = '';
+                      }}
+                    />
+                    <span className="text-xs text-slate-400">
+                      PNG, JPG or WEBP — up to 5 MB.
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
