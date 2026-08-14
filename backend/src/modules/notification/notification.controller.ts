@@ -8,14 +8,16 @@ import {
   Put,
   Query,
   Sse,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Observable, interval, map, merge } from 'rxjs';
 import { NotificationCategory } from '@prisma/client';
 import { AuthUser, CurrentUser } from '../../auth/current-user.decorator';
+import { SuperAdminGuard } from '../../auth/super-admin.guard';
 import { NotificationService } from './notification.service';
 import { NotificationEventsService } from './notification-events.service';
-import { SetPreferenceDto } from './notification.dto';
+import { SetPreferencesDto } from './notification.dto';
 
 /** How often the open stream sends a keep-alive. */
 const HEARTBEAT_MS = 25_000;
@@ -125,14 +127,29 @@ export class NotificationController {
   }
 
   // ----------------------------------------------------------- preferences --
+  //
+  // Which alerts a person receives is set BY AN ADMIN, on Users & Data
+  // Security, and not by the reader on their own bell. Whether the counter
+  // staff hear about stock-outs is an operational decision the organisation
+  // makes; a switch on the reader's own screen would let anyone opt out of
+  // being told, quietly, and nobody would know until something was missed.
+  //
+  // So both routes name the user being edited and carry the same super-admin
+  // guard as the screen they are reached from — enforced here as well, since a
+  // hidden button is not a permission.
 
-  @Get('preferences')
-  preferences(@CurrentUser() user: AuthUser) {
-    return this.service.preferences(user.id);
+  @UseGuards(SuperAdminGuard)
+  @Get('preferences/:userId')
+  preferences(@Param('userId', ParseIntPipe) userId: number) {
+    return this.service.preferences(userId);
   }
 
-  @Put('preferences')
-  setPreference(@CurrentUser() user: AuthUser, @Body() dto: SetPreferenceDto) {
-    return this.service.setPreference(user.id, dto);
+  @UseGuards(SuperAdminGuard)
+  @Put('preferences/:userId')
+  setPreferences(
+    @Param('userId', ParseIntPipe) userId: number,
+    @Body() dto: SetPreferencesDto,
+  ) {
+    return this.service.setPreferences(userId, dto.items);
   }
 }

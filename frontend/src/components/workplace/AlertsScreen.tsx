@@ -9,7 +9,6 @@ import {
   Check,
   CheckCheck,
   ExternalLink,
-  Settings2,
   X,
 } from 'lucide-react';
 import { api } from '@/lib/api';
@@ -26,12 +25,7 @@ import {
   categoryMeta,
 } from '@/components/workplace/alert-ui';
 import { cn } from '@/lib/utils';
-import type {
-  Alert,
-  AlertCategory,
-  AlertPage,
-  AlertPreference,
-} from '@/lib/types';
+import type { Alert, AlertCategory, AlertPage } from '@/lib/types';
 
 /** Which of them is being looked at. */
 type View = 'live' | 'unread' | 'cleared';
@@ -72,7 +66,6 @@ export function AlertsScreen() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [settingsOpen, setSettingsOpen] = useState(false);
 
   /**
    * The toast helpers, reachable from `load` without being a dependency of it —
@@ -225,14 +218,13 @@ export function AlertsScreen() {
               </button>
             </>
           )}
-          <button
-            onClick={() => setSettingsOpen(true)}
-            title="Choose what you are told about"
-            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-          >
-            <Settings2 className="h-4 w-4" />
-            Settings
-          </button>
+          {/*
+            No settings button. Which alerts a person receives is set by an
+            admin on Users & Data Security, not chosen here — whether the
+            counter staff hear about stock-outs is the organisation's decision,
+            and a switch on this screen would let anybody opt out of being told
+            without anybody knowing until something was missed.
+          */}
         </div>
       </div>
 
@@ -378,130 +370,6 @@ export function AlertsScreen() {
             )}
           </>
         )}
-      </div>
-
-      {settingsOpen && <AlertSettings onClose={() => setSettingsOpen(false)} />}
-    </div>
-  );
-}
-
-/**
- * What this person wants to be told about.
- *
- * Switching a kind off means it is never raised for them — not written and
- * hidden. Said plainly in the panel, because "mute" is otherwise read as "keep
- * it, quietly", and somebody would go looking for what they had switched off.
- *
- * The push column is stored and shown as coming, not offered: browser push
- * (FR-COM-06) has no transport behind it yet, and a switch that does nothing is
- * worse than one that is not there.
- */
-function AlertSettings({ onClose }: { onClose: () => void }) {
-  const toast = useToast();
-  const [prefs, setPrefs] = useState<AlertPreference[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const toastRef = useRef(toast);
-  toastRef.current = toast;
-
-  useEffect(() => {
-    let alive = true;
-    api
-      .get<AlertPreference[]>('/notifications/preferences')
-      .then((rows) => alive && setPrefs(rows))
-      .catch(() => toastRef.current.error('Could not load your settings.'))
-      .finally(() => alive && setLoading(false));
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const toggle = async (pref: AlertPreference) => {
-    const next = !pref.inApp;
-    setPrefs((list) =>
-      list.map((p) =>
-        p.category === pref.category ? { ...p, inApp: next } : p,
-      ),
-    );
-    try {
-      await api.put('/notifications/preferences', {
-        category: pref.category,
-        inApp: next,
-      });
-    } catch {
-      setPrefs((list) =>
-        list.map((p) =>
-          p.category === pref.category ? { ...p, inApp: !next } : p,
-        ),
-      );
-      toastRef.current.error('Could not save that.');
-    }
-  };
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800">
-          <div>
-            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-              What you are told about
-            </p>
-            <p className="text-xs text-slate-400">
-              Switched off means it is never raised for you.
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            aria-label="Close"
-            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="max-h-[60vh] overflow-y-auto p-2">
-          {loading ? (
-            <p className="p-6 text-center text-sm text-slate-400">Loading…</p>
-          ) : (
-            prefs.map((p) => {
-              const meta = categoryMeta(p.category);
-              return (
-                <label
-                  key={p.category}
-                  className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5 transition hover:bg-slate-50 dark:hover:bg-slate-800"
-                >
-                  <span
-                    className={cn(
-                      'flex h-8 w-8 flex-none items-center justify-center rounded-lg',
-                      meta.tint,
-                    )}
-                  >
-                    <meta.Icon className="h-4 w-4" />
-                  </span>
-                  <span className="flex-1 text-sm text-slate-700 dark:text-slate-200">
-                    {meta.label}
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={p.inApp}
-                    onChange={() => void toggle(p)}
-                    className="h-4 w-4 accent-brand-600"
-                  />
-                </label>
-              );
-            })
-          )}
-        </div>
-
-        <p className="border-t border-slate-100 px-4 py-2.5 text-[11px] text-slate-400 dark:border-slate-800">
-          Browser push is coming — these choices will apply to it too.
-        </p>
       </div>
     </div>
   );

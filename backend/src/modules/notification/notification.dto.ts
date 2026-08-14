@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsIn, IsOptional } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsOptional,
+  ValidateNested,
+} from 'class-validator';
 import { NotificationCategory } from '@prisma/client';
 
 /** The categories a reader may address a preference to. */
@@ -21,4 +29,16 @@ export class SetPreferenceDto {
   @IsOptional()
   @IsBoolean()
   push?: boolean;
+}
+
+/** One user's whole set, as the Users & Data Security drawer saves it. */
+export class SetPreferencesDto {
+  @ApiProperty({ type: [SetPreferenceDto] })
+  @IsArray()
+  // There are eight categories; anything beyond that is a client with a bug or
+  // a caller trying it on.
+  @ArrayMaxSize(CATEGORIES.length)
+  @ValidateNested({ each: true })
+  @Type(() => SetPreferenceDto)
+  items!: SetPreferenceDto[];
 }

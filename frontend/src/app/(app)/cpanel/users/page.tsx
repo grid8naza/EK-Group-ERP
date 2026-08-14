@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Plus,
   Users,
@@ -11,6 +11,7 @@ import {
   Smartphone,
   Globe,
   GitBranch,
+  Bell,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useToast } from '@/providers/ToastProvider';
@@ -38,9 +39,38 @@ import type {
   UserGroup,
   SecurityType,
   Branch,
+  AlertCategory,
+  AlertPreference,
 } from '@/lib/types';
 
 const ROUTE = '/cpanel/users';
+
+/**
+ * The alert kinds an admin can switch on or off per user, in the order the
+ * Alerts screen lists them. Labelled for somebody administering a user rather
+ * than reading their own bell — "Approvals" is the category, not the screen.
+ *
+ * PAYMENT and LEAVE are here with no publisher behind them yet (Accounts and HR
+ * will raise them); a category that exists in the model and not in the editor
+ * would be one nobody could ever switch off.
+ */
+const ALERT_CATEGORIES: { key: AlertCategory; label: string }[] = [
+  { key: 'APPROVAL', label: 'Approvals' },
+  { key: 'TASK', label: 'Tasks' },
+  { key: 'STOCK', label: 'Stock' },
+  { key: 'EXPIRY', label: 'Expiry' },
+  { key: 'PAYMENT', label: 'Payments' },
+  { key: 'LEAVE', label: 'Leave' },
+  { key: 'MESSAGE', label: 'Messages' },
+  { key: 'SYSTEM', label: 'System' },
+];
+
+/** Everything on — what no stored row means, and so what a new user gets. */
+const allAlertsOn = (): Record<AlertCategory, boolean> =>
+  Object.fromEntries(ALERT_CATEGORIES.map((c) => [c.key, true])) as Record<
+    AlertCategory,
+    boolean
+  >;
 
 const empty = {
   userCode: '',
@@ -65,6 +95,11 @@ const empty = {
   moduleAssignments: {} as Record<number, number[]>,
   // companyId -> the module that loads automatically in that company
   defaultModuleByCompany: {} as Record<number, number | null>,
+  // Which alert categories reach this user. Saved through the notification
+  // module's own endpoint after the user is saved, not in the user payload —
+  // alerts are a different domain, and the User service has no business
+  // writing its rows.
+  alertPrefs: allAlertsOn(),
 };
 
 export default function UsersPage() {
@@ -98,6 +133,8 @@ export default function UsersPage() {
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AppUser | null>(null);
+  /** `editing`, readable from an async callback that must not act on a stale record. */
+  const editingRef = useRef<AppUser | null>(null);
   const [view, setView] = useState(false); // read-only view (e.g. for locked records)
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
@@ -297,13 +334,23 @@ export default function UsersPage() {
 
   const openAdd = () => {
     setEditing(null);
+    editingRef.current = null;
     setView(false);
-    setForm({ ...empty, moduleAssignments: {}, defaultModuleByCompany: {} });
+    setForm({
+      ...empty,
+      moduleAssignments: {},
+      defaultModuleByCompany: {},
+      alertPrefs: allAlertsOn(),
+    });
     setExpanded({});
     setOpen(true);
   };
   const loadInto = (u: AppUser) => {
     setEditing(u);
+    // Which record the async fetch below belongs to. Opening a second user
+    // before the first one's preferences arrive would otherwise paint one
+    // user's settings onto another.
+    editingRef.current = u;
     const companyIds = u.companyIds ?? u.companies?.map((c) => c.id) ?? [];
     const defaultCompanyId =
       u.defaultCompanyId ?? u.companies?.find((c) => c.isDefault)?.id ?? null;
@@ -336,8 +383,30 @@ export default function UsersPage() {
       defaultBranchIds: u.defaultBranchIds ?? [],
       moduleAssignments,
       defaultModuleByCompany,
+      // Replaced when the fetch below lands. Starting from all-on rather than
+      // blank means the boxes never render in a state this user is not in:
+      // no stored row IS on.
+      alertPrefs: allAlertsOn(),
     });
     setOpen(true);
+
+    // Alert preferences live in the notification module, so they are fetched
+    // beside the user rather than arriving with it.
+    api
+      .get<AlertPreference[]>(`/notifications/preferences/${u.id}`)
+      .then((rows) => {
+        if (editingRef.current?.id !== u.id) return;
+        setForm((f) => ({
+          ...f,
+          alertPrefs: {
+            ...allAlertsOn(),
+            ...Object.fromEntries(rows.map((r) => [r.category, r.inApp])),
+          },
+        }));
+      })
+      .catch(() => {
+        // Leave the defaults showing; saving still writes what is on screen.
+      });
   };
 
   const openEdit = (u: AppUser) => {
@@ -551,10 +620,28 @@ export default function UsersPage() {
         saved = await api.post<AppUser>('/users', payload);
         toast.success('User created.');
       }
+
+      // Alerts, second and separately: they belong to the notification module,
+      // which the User service has no business writing for. Only after the user
+      // exists — a new one has no id until then. A failure here does not undo
+      // the save, so it says exactly what did not apply rather than implying
+      // the whole thing failed.
+      try {
+        await api.put(`/notifications/preferences/${saved.id}`, {
+          items: ALERT_CATEGORIES.map(({ key }) => ({
+            category: key,
+            inApp: form.alertPrefs[key] ?? true,
+          })),
+        });
+      } catch {
+        toast.error('The user was saved, but their alert settings were not.');
+      }
+
       await load();
       if (mode === 'saveNew') {
         setEditing(null);
-        setForm({ ...empty });
+        editingRef.current = null;
+        setForm({ ...empty, alertPrefs: allAlertsOn() });
       } else if (mode === 'save') {
         loadInto(saved);
       } else setOpen(false);
@@ -1188,6 +1275,52 @@ export default function UsersPage() {
                     );
                   })}
                 </div>
+              )}
+            </div>
+
+            {/* Which alerts reach this user (SRS §8.11, FR-COM-05) */}
+            <div className="card p-4">
+              <h3 className="mb-1 flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                <Bell className="h-4 w-4 text-brand-600" /> Alerts
+              </h3>
+              <p className="mb-3 text-xs text-slate-400">
+                Which kinds of alert reach this user, on the bell and the Alerts
+                screen. Switched off means the alert is never raised for them —
+                there is nothing kept back for them to find later. Set here
+                rather than by the user, because whether somebody is told about
+                a stock-out is an operational decision.
+              </p>
+              <div className="grid gap-1.5 sm:grid-cols-2">
+                {ALERT_CATEGORIES.map(({ key, label }) => {
+                  const on = form.alertPrefs[key] ?? true;
+                  return (
+                    <div
+                      key={key}
+                      className={cn(
+                        'flex items-center justify-between gap-3 rounded-lg border px-3 py-2 transition',
+                        on
+                          ? 'border-brand-300 bg-brand-50 dark:border-brand-700 dark:bg-brand-950/30'
+                          : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900',
+                      )}
+                    >
+                      <Checkbox
+                        label={label}
+                        checked={on}
+                        onChange={() =>
+                          setForm((f) => ({
+                            ...f,
+                            alertPrefs: { ...f.alertPrefs, [key]: !on },
+                          }))
+                        }
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              {!editing && (
+                <p className="mt-2 text-xs text-slate-400">
+                  Applied when the user is created.
+                </p>
               )}
             </div>
 

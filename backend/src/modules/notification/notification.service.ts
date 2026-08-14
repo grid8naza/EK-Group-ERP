@@ -341,10 +341,17 @@ export class NotificationService {
   }
 
   // ----------------------------------------------------------- preferences --
+  //
+  // Who receives which kind of alert is set by an ADMIN, on Users & Data
+  // Security, not by the reader on their own bell. It is an operational
+  // decision — whether the counter staff are told about stock-outs is the
+  // organisation's to make, not each person's to switch off — so these methods
+  // take the userId being edited, and the endpoints in front of them are
+  // super-admin only.
 
   /**
-   * Every category with this person's effective setting — categories they have
-   * never touched come back as on, which is what no row means.
+   * Every category with this person's effective setting — categories nobody has
+   * touched come back as on, which is what no row means.
    */
   async preferences(userId: number) {
     const rows = await this.prisma.notificationPreference.findMany({
@@ -359,21 +366,31 @@ export class NotificationService {
     }));
   }
 
-  async setPreference(userId: number, dto: SetPreferenceDto) {
-    const category = dto.category as NotificationCategory;
-    await this.prisma.notificationPreference.upsert({
-      where: { userId_category: { userId, category } },
-      create: {
-        userId,
-        category,
-        inApp: dto.inApp ?? true,
-        push: dto.push ?? true,
-      },
-      update: {
-        ...(dto.inApp === undefined ? {} : { inApp: dto.inApp }),
-        ...(dto.push === undefined ? {} : { push: dto.push }),
-      },
-    });
+  /**
+   * Set one or more categories for one person, in a single call.
+   *
+   * A whole set rather than one at a time, because the editor that drives this
+   * is a drawer with a Save button: the admin ticks four boxes and presses save
+   * once, and four requests for one intention is four chances to leave the row
+   * half applied.
+   */
+  async setPreferences(userId: number, items: SetPreferenceDto[]) {
+    for (const dto of items) {
+      const category = dto.category as NotificationCategory;
+      await this.prisma.notificationPreference.upsert({
+        where: { userId_category: { userId, category } },
+        create: {
+          userId,
+          category,
+          inApp: dto.inApp ?? true,
+          push: dto.push ?? true,
+        },
+        update: {
+          ...(dto.inApp === undefined ? {} : { inApp: dto.inApp }),
+          ...(dto.push === undefined ? {} : { push: dto.push }),
+        },
+      });
+    }
     return this.preferences(userId);
   }
 }
