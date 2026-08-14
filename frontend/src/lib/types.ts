@@ -1522,8 +1522,8 @@ export interface Employee {
   email?: string | null;
   emergencyContactName?: string | null;
   emergencyContactPhone?: string | null;
-  /** Required — every employee carries a photograph. */
-  photoUrl: string;
+  /** Optional — it can follow after the person is enrolled. */
+  photoUrl?: string | null;
 
   companyId: number;
   branchId?: number | null;

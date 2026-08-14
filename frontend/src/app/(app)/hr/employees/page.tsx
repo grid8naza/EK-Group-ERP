@@ -220,7 +220,7 @@ export default function EmployeesPage() {
     email: e.email ?? '',
     emergencyContactName: e.emergencyContactName ?? '',
     emergencyContactPhone: e.emergencyContactPhone ?? '',
-    photoUrl: e.photoUrl,
+    photoUrl: e.photoUrl ?? '',
 
     companyId: String(e.companyId),
     branchId: e.branchId != null ? String(e.branchId) : '',
@@ -303,10 +303,6 @@ export default function EmployeesPage() {
       toast.error('Enter the date of joining.');
       return;
     }
-    if (!form.photoUrl) {
-      toast.error('A photograph is required — upload one before saving.');
-      return;
-    }
     if (form.aadhaarNumber && !/^\d{12}$/.test(form.aadhaarNumber)) {
       toast.error('An Aadhaar number is 12 digits.');
       return;
@@ -325,7 +321,7 @@ export default function EmployeesPage() {
       email: form.email.trim() || null,
       emergencyContactName: form.emergencyContactName.trim() || null,
       emergencyContactPhone: form.emergencyContactPhone.trim() || null,
-      photoUrl: form.photoUrl,
+      photoUrl: form.photoUrl || null,
 
       companyId: Number(form.companyId),
       branchId: idOrNull(form.branchId),
@@ -642,11 +638,9 @@ export default function EmployeesPage() {
       >
         <ReadOnlyFieldset readOnly={view}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {/* ---- the photograph, first: it is what identifies the record ---- */}
+            {/* ---- the photograph and who this record is ---- */}
             <div className="sm:col-span-2">
-              <label className="label">
-                Photograph <span className="text-rose-500">*</span>
-              </label>
+              <label className="label">Photograph</label>
               <div className="flex items-center gap-4">
                 <div className="flex h-24 w-24 flex-none items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
                   {form.photoUrl ? (
@@ -675,7 +669,7 @@ export default function EmployeesPage() {
                       'No designation yet'}
                   </p>
                   {editing && (
-                    <p className="mt-0.5 font-mono text-sm text-slate-400">
+                    <p className="mt-0.5 font-mono text-sm font-bold text-slate-900 dark:text-white">
                       {editing.code}
                     </p>
                   )}
@@ -737,7 +731,7 @@ export default function EmployeesPage() {
                     />
                   </div>
                   <span className="text-xs text-slate-400">
-                    PNG, JPG or WEBP — up to 5 MB.
+                    PNG, JPG or WEBP — up to 5 MB. Can follow later.
                   </span>
                 </div>
               </div>

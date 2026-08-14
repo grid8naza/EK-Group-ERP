@@ -125,12 +125,10 @@ export class HrEmployeeService {
       branchId: activeBranchId,
     });
 
+    // No photograph is asked for here. It is wanted on every record and is
+    // often not to hand the day somebody joins; refusing to enrol them until it
+    // is would only mean the record lives somewhere else in the meantime.
     if (!data.name) throw new BadRequestException('Give the employee a name.');
-    if (!data.photoUrl) {
-      throw new BadRequestException(
-        'A photograph is required — upload one before saving.',
-      );
-    }
     if (!data.designationId) {
       throw new BadRequestException('Choose a designation.');
     }
@@ -184,9 +182,6 @@ export class HrEmployeeService {
       branchId: existing.branchId ?? undefined,
       existingId: id,
     });
-
-    // A photograph cannot be REMOVED once required — only replaced.
-    if (dto.photoUrl !== undefined && !dto.photoUrl) delete data.photoUrl;
 
     try {
       await this.prisma.employee.update({
@@ -301,7 +296,8 @@ export class HrEmployeeService {
       ...(dto.emergencyContactPhone !== undefined
         ? { emergencyContactPhone: dto.emergencyContactPhone?.trim() || null }
         : {}),
-      ...(dto.photoUrl !== undefined ? { photoUrl: dto.photoUrl } : {}),
+      // Empty means REMOVED, now that a record may carry no photograph.
+      ...(dto.photoUrl !== undefined ? { photoUrl: dto.photoUrl || null } : {}),
       companyId,
       branchId,
       ...posting,

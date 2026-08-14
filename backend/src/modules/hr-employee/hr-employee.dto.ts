@@ -91,12 +91,12 @@ export class SaveEmployeeDto {
   @MaxLength(30)
   emergencyContactPhone?: string | null;
 
-  /** Returned by POST /hr-employees/photo. Required on create. */
-  @ApiPropertyOptional()
+  /** Returned by POST /hr-employees/photo. Optional — it can follow later. */
+  @ApiPropertyOptional({ nullable: true })
   @IsOptional()
   @IsString()
   @MaxLength(300)
-  photoUrl?: string;
+  photoUrl?: string | null;
 
   // ---- the job ----
 
