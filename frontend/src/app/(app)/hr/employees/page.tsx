@@ -639,44 +639,48 @@ export default function EmployeesPage() {
         <ReadOnlyFieldset readOnly={view}>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {/* ---- the photograph and who this record is ---- */}
+            {/* No label: the photograph and the name under it say what this is
+                more plainly than the word "Photograph" ever did. */}
             <div className="sm:col-span-2">
-              <label className="label">Photograph</label>
               <div className="flex items-center gap-4">
-                <div className="flex h-24 w-24 flex-none items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
+                <div className="flex h-20 w-20 flex-none items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-800">
                   {form.photoUrl ? (
+                    // contain, not cover: the whole photograph fits in the box
+                    // rather than being cropped to fill it.
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={mediaUrl(form.photoUrl)}
                       alt="Photograph"
-                      className="h-full w-full object-cover"
+                      className="h-full w-full rounded-lg object-contain"
                     />
                   ) : (
                     <UserIcon className="h-8 w-8 text-slate-300" />
                   )}
                 </div>
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 space-y-0.5">
                   {/*
-                    Who this record is, beside their face — the two facts that
-                    identify a person at a glance. Read from the FORM, not the
-                    saved row, so it names whoever is being typed in rather than
-                    lagging a field behind.
+                    Who this record is, beside their face. Read from the FORM,
+                    not the saved row, so it names whoever is being typed in
+                    rather than lagging a field behind. Set tight: four lines
+                    that belong together should read as one block, not fill the
+                    top of the drawer.
                   */}
                   <p className="truncate text-xl font-bold leading-tight text-brand-700 dark:text-brand-300">
                     {form.name.trim() || 'New employee'}
                   </p>
-                  <p className="truncate text-base font-semibold text-amber-600 dark:text-amber-400">
+                  <p className="truncate text-base font-semibold leading-tight text-amber-600 dark:text-amber-400">
                     {designationName(form.designationId) ||
                       'No designation yet'}
                   </p>
                   {editing && (
-                    <p className="mt-0.5 font-mono text-sm font-bold text-slate-900 dark:text-white">
+                    <p className="font-mono text-sm font-bold leading-tight text-slate-900 dark:text-white">
                       {editing.code}
                     </p>
                   )}
                   {/* How to reach them — the other thing anybody opens this
                       record for. Hidden until there is something to show. */}
                   {(form.phone.trim() || form.email.trim()) && (
-                    <p className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500 dark:text-slate-400">
+                    <p className="flex flex-wrap items-center gap-x-4 text-sm leading-tight text-slate-500 dark:text-slate-400">
                       {form.phone.trim() && (
                         <span className="inline-flex items-center gap-1.5">
                           <Phone className="h-3.5 w-3.5 flex-none" />
