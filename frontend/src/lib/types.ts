@@ -1527,7 +1527,11 @@ export interface Employee {
 
   companyId: number;
   branchId?: number | null;
-  departmentValueId?: number | null;
+  /** Division — a cost centre of the employee's company. */
+  costCenterId?: number | null;
+  divisionName?: string | null;
+  /** Department — the cost object under that division. */
+  costObjectId?: number | null;
   departmentName?: string | null;
 
   designationId: number;

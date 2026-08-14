@@ -871,6 +871,25 @@ async function migrateHrMenus(prisma: Prisma.TransactionClient): Promise<void> {
       });
     }
   });
+
+  /**
+   * Drop the HR `DEPARTMENT` lookup.
+   *
+   * The Employee Master briefly took its department from a lookup of its own.
+   * It now takes DIVISION and DEPARTMENT from the company master — a division is
+   * a cost centre, a department the cost object under it — because the company
+   * already carries that structure and the ledger already posts against it.
+   * Naming departments twice would have meant an employee filed under one
+   * "Packing" and their cost posted to another.
+   *
+   * Safe to delete rather than leave lying about: the lookup shipped and was
+   * withdrawn the same day, nothing ever referenced its values, and a stray list
+   * in HR → Lookups that no screen reads is a question somebody has to answer
+   * later. Values go with it (Cascade on LookupValue.lookupId).
+   */
+  await runOnce(prisma, 'hr-department-lookup-dropped', async () => {
+    await prisma.lookup.deleteMany({ where: { code: 'DEPARTMENT' } });
+  });
 }
 
 async function migrateWorkflowMenuName(

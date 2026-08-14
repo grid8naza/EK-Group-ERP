@@ -111,11 +111,17 @@ export class SaveEmployeeDto {
   @IsInt()
   branchId?: number | null;
 
-  /** A LookupValue of the HR `DEPARTMENT` lookup. */
+  /** Division — a cost centre of the employee's company. */
   @ApiPropertyOptional({ nullable: true })
   @IsOptional()
   @IsInt()
-  departmentValueId?: number | null;
+  costCenterId?: number | null;
+
+  /** Department — a cost object under that division. */
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsInt()
+  costObjectId?: number | null;
 
   /**
    * What they are. The category and group are NOT sent: a designation already

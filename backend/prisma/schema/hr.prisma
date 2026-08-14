@@ -155,7 +155,7 @@ enum MaritalStatus {
 /// this row stands on its own and carries no userId. The day somebody is given a
 /// login, that is a User row beside this one, not a replacement for it.
 ///
-/// Cross-domain rule: company, branch and the department lookup are plain `Int`
+/// Cross-domain rule: company, branch, division and department are plain `Int`
 /// ids with NO @relation. The designation IS a real relation — it lives in this
 /// same domain file.
 model Employee {
@@ -188,23 +188,31 @@ model Employee {
   photoUrl              String
 
   // ---- the job ----
-  companyId         Int
-  branchId          Int? // null = the company as a whole (head office, roving staff)
-  /// The department, as a Cpanel LookupValue (HR lookup `DEPARTMENT`) rather
-  /// than an enum or a master of its own: what departments a bakery has is the
-  /// user's to name and rename, and doing so must not need a developer. Same
-  /// reasoning as DELIVERY_TRIP and DISCOUNT_LEVEL in Inventory.
-  departmentValueId Int?
+  companyId     Int
+  branchId      Int? // null = the company as a whole (head office, roving staff)
+  /// Division and department, taken from the COMPANY'S OWN structure: a
+  /// division is a Cpanel CostCenter, a department the CostObject under it.
+  ///
+  /// They were briefly a lookup of their own, which was the wrong answer — the
+  /// company master already carries this structure, and the ledger already
+  /// posts against it. Naming the same department twice would have meant an
+  /// employee filed under one "Packing" and their cost posted to another.
+  ///
+  /// Plain ids with no @relation (the cross-domain rule); the service checks
+  /// the centre belongs to the company and the object to the centre. Both
+  /// optional: a company that does not work in cost centres still has staff.
+  costCenterId  Int?
+  costObjectId  Int?
   /// What they are. The CATEGORY and GROUP are not stored here — a designation
   /// already knows both, and a second copy is a second thing to keep in step.
   /// The form still asks for all three, because that is how a person finds the
   /// designation; only the answer is stored.
-  designationId     Int
-  dateOfJoin        DateTime
+  designationId Int
+  dateOfJoin    DateTime
   /// Their manager — another employee, so the line of report is answerable to
   /// somebody who exists. SetNull rather than cascade: when a manager leaves,
   /// their reports stay employed.
-  reportsToId       Int?
+  reportsToId   Int?
 
   isActive  Boolean  @default(true)
   isLocked  Boolean  @default(false)

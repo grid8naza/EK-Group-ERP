@@ -10,7 +10,6 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
 import {
-  DEPARTMENT_LOOKUP_CODE,
   EMPLOYEE_UPLOAD_DIR,
   EMPLOYEE_URL_PREFIX,
 } from './hr-employee.constants';
@@ -43,6 +42,12 @@ const withRelations = {
 } satisfies Prisma.EmployeeInclude;
 
 type EmployeeRow = Prisma.EmployeeGetPayload<{ include: typeof withRelations }>;
+
+/** Division and department names, looked up once per request. */
+interface PostingNames {
+  divisions: Map<number, string>;
+  departments: Map<number, string>;
+}
 
 /**
  * Employee Master (SRS §8.9, FR-HRP-01).
@@ -89,8 +94,8 @@ export class HrEmployeeService {
       include: withRelations,
       orderBy: { code: 'asc' },
     });
-    const departments = await this.departmentsById();
-    return rows.map((r) => this.view(r, departments));
+    const names = await this.postingNames();
+    return rows.map((r) => this.view(r, names));
   }
 
   async findOne(companyId: number | undefined, id: number) {
@@ -99,7 +104,7 @@ export class HrEmployeeService {
       include: withRelations,
     });
     if (!row) throw new NotFoundException('Employee not found');
-    return this.view(row, await this.departmentsById());
+    return this.view(row, await this.postingNames());
   }
 
   // ----------------------------------------------------------------- write --
@@ -140,7 +145,7 @@ export class HrEmployeeService {
           },
           include: withRelations,
         });
-        return this.view(created, await this.departmentsById());
+        return this.view(created, await this.postingNames());
       } catch (e) {
         if (attempt < 5 && this.isDuplicate(e, 'code')) continue;
         throw this.asFriendly(e);
@@ -251,9 +256,7 @@ export class HrEmployeeService {
     if (dto.designationId !== undefined) {
       await this.assertDesignation(dto.designationId);
     }
-    if (dto.departmentValueId != null) {
-      await this.assertDepartment(dto.departmentValueId);
-    }
+    const posting = await this.posting(dto, companyId, ctx.existingId);
     if (dto.reportsToId != null) {
       await this.assertManager(dto.reportsToId, companyId, ctx.existingId);
     }
@@ -284,9 +287,7 @@ export class HrEmployeeService {
       ...(dto.photoUrl !== undefined ? { photoUrl: dto.photoUrl } : {}),
       companyId,
       branchId,
-      ...(dto.departmentValueId !== undefined
-        ? { departmentValueId: dto.departmentValueId }
-        : {}),
+      ...posting,
       ...(dto.designationId !== undefined
         ? { designationId: dto.designationId }
         : {}),
@@ -331,13 +332,87 @@ export class HrEmployeeService {
     }
   }
 
-  /** The department must be a value of the HR DEPARTMENT lookup, not any value. */
-  private async assertDepartment(valueId: number) {
-    const value = await this.prisma.lookupValue.findFirst({
-      where: { id: valueId, lookup: { code: DEPARTMENT_LOOKUP_CODE } },
-      select: { id: true },
-    });
-    if (!value) throw new BadRequestException('No such department.');
+  /**
+   * Division and department, resolved as a PAIR and checked against the
+   * company.
+   *
+   * They come from the company's own structure — a division is a cost centre, a
+   * department the cost object under it — so the two answers have to agree, and
+   * the one mistake two independent dropdowns can make is a department that
+   * belongs to another division. Checking them together is what catches it.
+   *
+   * Moving somebody to a different division CLEARS a department that no longer
+   * sits under it: the alternative is refusing an edit whose meaning is plain,
+   * or keeping a pair that contradicts itself.
+   *
+   * Returns only the keys that should actually be written, so a request that
+   * mentions neither leaves both alone.
+   */
+  private async posting(
+    dto: SaveEmployeeDto,
+    companyId: number,
+    existingId?: number,
+  ): Promise<{ costCenterId?: number | null; costObjectId?: number | null }> {
+    if (dto.costCenterId === undefined && dto.costObjectId === undefined) {
+      return {};
+    }
+
+    const existing = existingId
+      ? await this.prisma.employee.findUnique({
+          where: { id: existingId },
+          select: { costCenterId: true, costObjectId: true },
+        })
+      : null;
+
+    const costCenterId =
+      dto.costCenterId !== undefined
+        ? dto.costCenterId
+        : (existing?.costCenterId ?? null);
+    let costObjectId =
+      dto.costObjectId !== undefined
+        ? dto.costObjectId
+        : (existing?.costObjectId ?? null);
+
+    if (costCenterId != null) {
+      const centre = await this.prisma.costCenter.findFirst({
+        where: { id: costCenterId, companyId },
+        select: { id: true },
+      });
+      if (!centre) {
+        throw new BadRequestException(
+          'That division does not belong to this company.',
+        );
+      }
+    }
+
+    if (costObjectId != null) {
+      const object = await this.prisma.costObject.findFirst({
+        where: { id: costObjectId, companyId },
+        select: { costCenterId: true },
+      });
+      if (!object) {
+        throw new BadRequestException(
+          'That department does not belong to this company.',
+        );
+      }
+      if (costCenterId == null) {
+        // A department names its own division, so there is no reason to make
+        // somebody pick it twice — it is filled in from the department.
+        return { costCenterId: object.costCenterId, costObjectId };
+      }
+      if (object.costCenterId !== costCenterId) {
+        // Only a division change the caller did not re-answer for gets the
+        // department cleared; contradicting BOTH in one request is an error.
+        if (dto.costObjectId !== undefined) {
+          throw new BadRequestException(
+            'That department is not under the chosen division.',
+          );
+        }
+        costObjectId = null;
+      }
+    }
+
+    return { costCenterId, costObjectId };
   }
 
   /**
@@ -378,16 +453,22 @@ export class HrEmployeeService {
 
   // ----------------------------------------------------------- view shapes --
 
-  /** Department labels, resolved in one query rather than per row. */
-  private async departmentsById(): Promise<Map<number, string>> {
-    const values = await this.prisma.lookupValue.findMany({
-      where: { lookup: { code: DEPARTMENT_LOOKUP_CODE } },
-      select: { id: true, label: true },
-    });
-    return new Map(values.map((v) => [v.id, v.label]));
+  /**
+   * Division and department names, in two queries for the whole page rather
+   * than two per row.
+   */
+  private async postingNames(): Promise<PostingNames> {
+    const [centres, objects] = await Promise.all([
+      this.prisma.costCenter.findMany({ select: { id: true, name: true } }),
+      this.prisma.costObject.findMany({ select: { id: true, name: true } }),
+    ]);
+    return {
+      divisions: new Map(centres.map((c) => [c.id, c.name])),
+      departments: new Map(objects.map((o) => [o.id, o.name])),
+    };
   }
 
-  private view(row: EmployeeRow, departments: Map<number, string>) {
+  private view(row: EmployeeRow, names: PostingNames) {
     return {
       id: row.id,
       code: row.code,
@@ -406,9 +487,14 @@ export class HrEmployeeService {
 
       companyId: row.companyId,
       branchId: row.branchId,
-      departmentValueId: row.departmentValueId,
-      departmentName: row.departmentValueId
-        ? (departments.get(row.departmentValueId) ?? null)
+      /** Division = cost centre, department = the cost object under it. */
+      costCenterId: row.costCenterId,
+      divisionName: row.costCenterId
+        ? (names.divisions.get(row.costCenterId) ?? null)
+        : null,
+      costObjectId: row.costObjectId,
+      departmentName: row.costObjectId
+        ? (names.departments.get(row.costObjectId) ?? null)
         : null,
 
       designationId: row.designationId,

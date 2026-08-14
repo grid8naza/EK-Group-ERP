@@ -1,5 +1,3 @@
-import { type Prisma } from '@prisma/client';
-
 /**
  * Screens shipped by the HR module. Consumed by the module scaffold registry
  * (module-scaffold.ts); the scaffold sync seeds these as menus + privileges into
@@ -91,62 +89,3 @@ export const HR_EXTRA_MENUS = [
     }[],
   },
 ];
-
-/**
- * The lookup the Employee Master's Department dropdown reads (kept in sync with
- * DEPARTMENT_LOOKUP_CODE in modules/hr-employee). A lookup rather than a master
- * of its own: a department is a label an employee is filed under, with nothing
- * hanging off it — a whole master, with codes and a screen, would be four tables
- * of ceremony around a list of eight words. Module-scoped, so HR manages it from
- * HR → Lookups and it cannot leak into another module's dropdowns.
- */
-export const DEPARTMENT_LOOKUP_CODE = 'DEPARTMENT';
-
-// Starter departments so the dropdown is usable out of the box; HR adds their
-// own from the Lookups screen. Deliberately the bakery's own shape rather than a
-// generic corporate list.
-const DEPARTMENT_VALUES = [
-  'Production',
-  'Packing',
-  'Quality',
-  'Stores',
-  'Sales',
-  'Delivery',
-  'Maintenance',
-  'Accounts',
-  'Administration',
-  'Housekeeping',
-];
-
-/** One-time seed for HR defaults (safe to run every boot). */
-export async function seedHrDefaults(
-  prisma: Prisma.TransactionClient,
-): Promise<void> {
-  // Guarded by code so re-runs — and every edit HR has since made to the list —
-  // are left alone.
-  const existing = await prisma.lookup.findFirst({
-    where: { code: DEPARTMENT_LOOKUP_CODE },
-    select: { id: true },
-  });
-  if (existing) return;
-
-  const hrModule = await prisma.module.findUnique({
-    where: { code: 'HR' },
-    select: { id: true },
-  });
-  await prisma.lookup.create({
-    data: {
-      code: DEPARTMENT_LOOKUP_CODE,
-      name: 'Departments',
-      description: 'Departments an employee belongs to',
-      moduleId: hrModule?.id ?? null,
-      values: {
-        create: DEPARTMENT_VALUES.map((value, i) => ({
-          value,
-          label: value,
-          sortOrder: i + 1,
-        })),
-      },
-    },
-  });
-}

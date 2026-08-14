@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, UserCog, Upload, Trash2, User as UserIcon } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
-import { useLookupValues } from '@/lib/hooks';
 import { mediaUrl } from '@/lib/login-screen';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -36,12 +35,11 @@ import type {
   HrDesignation,
   Company,
   Branch,
+  CostCenter,
+  CostObject,
 } from '@/lib/types';
 
 const ROUTE = '/hr/employees';
-
-/** The department list is user-maintained (HR → Lookups), not an enum. */
-const DEPARTMENT_LOOKUP = 'DEPARTMENT';
 
 const SEXES = [
   { value: 'MALE', label: 'Male' },
@@ -71,7 +69,10 @@ const empty = {
 
   companyId: '',
   branchId: '',
-  departmentValueId: '',
+  // Division and department come from the COMPANY master: a division is a cost
+  // centre, a department the cost object under it.
+  costCenterId: '',
+  costObjectId: '',
   // Category and group are FORM-ONLY: they narrow the designation list and are
   // never sent, because the designation already knows both.
   categoryId: '',
@@ -95,7 +96,10 @@ export default function EmployeesPage() {
   const { data: designations } = useFetch<HrDesignation[]>('/hr-designations');
   const { data: companies } = useFetch<Company[]>('/companies');
   const { data: branches } = useFetch<Branch[]>('/branches');
-  const departments = useLookupValues(DEPARTMENT_LOOKUP);
+  // Every company's divisions and departments in one call each — the form can
+  // move an employee to another company, so it needs more than the active one.
+  const { data: costCenters } = useFetch<CostCenter[]>('/cost-centers');
+  const { data: costObjects } = useFetch<CostObject[]>('/cost-objects');
 
   const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
     useLock<Employee>({
@@ -116,6 +120,7 @@ export default function EmployeesPage() {
   const nameRef = useRef<HTMLInputElement>(null);
 
   // List filters.
+  const [divisionFilter, setDivisionFilter] = useState('');
   const [deptFilter, setDeptFilter] = useState('');
   const [designationFilter, setDesignationFilter] = useState('');
   const [status, setStatus] = useState(''); // '' | 'active' | 'inactive'
@@ -129,6 +134,21 @@ export default function EmployeesPage() {
   const branchesOf = (companyId: string) =>
     (branches ?? []).filter(
       (b) => b.isActive && String(b.companyId) === companyId,
+    );
+
+  // Division → Department, both belonging to the chosen company. A department
+  // under another company's division is the one mistake two loose dropdowns
+  // make, so the second list is always cut to the first.
+  const divisionsOf = (companyId: string) =>
+    (costCenters ?? []).filter(
+      (c) => c.isActive && String(c.companyId) === companyId,
+    );
+  const departmentsOf = (companyId: string, costCenterId: string) =>
+    (costObjects ?? []).filter(
+      (o) =>
+        o.isActive &&
+        String(o.companyId) === companyId &&
+        (!costCenterId || String(o.costCenterId) === costCenterId),
     );
 
   // ---- the classification cascade -------------------------------------
@@ -192,8 +212,8 @@ export default function EmployeesPage() {
 
     companyId: String(e.companyId),
     branchId: e.branchId != null ? String(e.branchId) : '',
-    departmentValueId:
-      e.departmentValueId != null ? String(e.departmentValueId) : '',
+    costCenterId: e.costCenterId != null ? String(e.costCenterId) : '',
+    costObjectId: e.costObjectId != null ? String(e.costObjectId) : '',
     categoryId: String(e.categoryId),
     groupId: String(e.groupId),
     designationId: String(e.designationId),
@@ -297,7 +317,8 @@ export default function EmployeesPage() {
 
       companyId: Number(form.companyId),
       branchId: idOrNull(form.branchId),
-      departmentValueId: idOrNull(form.departmentValueId),
+      costCenterId: idOrNull(form.costCenterId),
+      costObjectId: idOrNull(form.costObjectId),
       designationId: Number(form.designationId),
       dateOfJoin: form.dateOfJoin,
       reportsToId: idOrNull(form.reportsToId),
@@ -392,16 +413,18 @@ export default function EmployeesPage() {
 
   const visibleRows = useMemo(() => {
     let rows = [...(data ?? [])];
-    if (deptFilter)
+    if (divisionFilter)
       rows = rows.filter(
-        (r) => String(r.departmentValueId ?? '') === deptFilter,
+        (r) => String(r.costCenterId ?? '') === divisionFilter,
       );
+    if (deptFilter)
+      rows = rows.filter((r) => String(r.costObjectId ?? '') === deptFilter);
     if (designationFilter)
       rows = rows.filter((r) => String(r.designationId) === designationFilter);
     if (status === 'active') rows = rows.filter((r) => r.isActive);
     else if (status === 'inactive') rows = rows.filter((r) => !r.isActive);
     return rows;
-  }, [data, deptFilter, designationFilter, status]);
+  }, [data, divisionFilter, deptFilter, designationFilter, status]);
 
   const columns: Column<Employee>[] = [
     {
@@ -434,6 +457,11 @@ export default function EmployeesPage() {
           {r.name}
         </span>
       ),
+    },
+    {
+      key: 'division',
+      header: 'Division',
+      accessor: (r) => r.divisionName ?? '-',
     },
     {
       key: 'department',
@@ -500,7 +528,7 @@ export default function EmployeesPage() {
         columns={columns}
         rows={visibleRows}
         defaultSort={{ key: 'code', dir: 'asc' }}
-        key={`${deptFilter}|${designationFilter}|${status}`}
+        key={`${divisionFilter}|${deptFilter}|${designationFilter}|${status}`}
         rowKey={(r) => r.id}
         loading={loading}
         fillHeight
@@ -508,15 +536,30 @@ export default function EmployeesPage() {
         searchPlaceholder="Search employees..."
         toolbar={
           <div className="flex flex-wrap items-center gap-2">
+            {/* The filters follow the company being worked in, since the list
+                does — see findAll. */}
+            <Select
+              value={divisionFilter}
+              onChange={(e) => {
+                setDivisionFilter(e.target.value);
+                setDeptFilter(''); // its departments no longer apply
+              }}
+              wrapClassName="w-40"
+              placeholder="All divisions"
+              options={divisionsOf(String(activeCompanyId ?? '')).map((c) => ({
+                value: String(c.id),
+                label: c.name,
+              }))}
+            />
             <Select
               value={deptFilter}
               onChange={(e) => setDeptFilter(e.target.value)}
               wrapClassName="w-44"
               placeholder="All departments"
-              options={departments.map((d) => ({
-                value: String(d.id),
-                label: d.label,
-              }))}
+              options={departmentsOf(
+                String(activeCompanyId ?? ''),
+                divisionFilter,
+              ).map((o) => ({ value: String(o.id), label: o.name }))}
             />
             <Select
               value={designationFilter}
@@ -749,12 +792,14 @@ export default function EmployeesPage() {
               required
               value={form.companyId}
               onChange={(e) =>
-                // A branch belongs to one company, and so does a manager —
-                // both are cleared when the company moves.
+                // Branch, division, department and manager all belong to one
+                // company — every one of them is cleared when it moves.
                 setForm({
                   ...form,
                   companyId: e.target.value,
                   branchId: '',
+                  costCenterId: '',
+                  costObjectId: '',
                   reportsToId: '',
                 })
               }
@@ -775,18 +820,49 @@ export default function EmployeesPage() {
                 label: b.name,
               }))}
             />
+            {/*
+              Division and department come from the company master — a division
+              is a cost centre, a department the cost object under it. Not a
+              list of their own: the company already carries this structure and
+              the ledger already posts against it, so naming departments twice
+              would let an employee sit under one "Packing" while their cost
+              goes to another.
+            */}
+            <Select
+              label="Division"
+              value={form.costCenterId}
+              onChange={(e) =>
+                // The departments under the old division no longer apply.
+                setForm({
+                  ...form,
+                  costCenterId: e.target.value,
+                  costObjectId: '',
+                })
+              }
+              placeholder={
+                form.companyId
+                  ? divisionsOf(form.companyId).length
+                    ? '— None —'
+                    : 'No divisions set up for this company'
+                  : 'Pick a company first'
+              }
+              options={divisionsOf(form.companyId).map((c) => ({
+                value: String(c.id),
+                label: c.name,
+              }))}
+            />
             <Select
               label="Department"
-              value={form.departmentValueId}
+              value={form.costObjectId}
               onChange={(e) =>
-                setForm({ ...form, departmentValueId: e.target.value })
+                setForm({ ...form, costObjectId: e.target.value })
               }
-              placeholder="— None —"
-              sortOptions={false}
-              options={departments.map((d) => ({
-                value: String(d.id),
-                label: d.label,
-              }))}
+              placeholder={
+                form.costCenterId ? '— None —' : 'Pick a division first'
+              }
+              options={departmentsOf(form.companyId, form.costCenterId).map(
+                (o) => ({ value: String(o.id), label: o.name }),
+              )}
             />
             <DateInput
               label="Date of Join"
