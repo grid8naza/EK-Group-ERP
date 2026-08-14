@@ -47,11 +47,11 @@ model Module {
 // ---------------------------------------------------------------------------
 
 model Lookup {
-  id          Int      @id @default(autoincrement())
-  code        String   @unique // e.g. DEVELOPERS, ICONS
-  name        String
-  description String?
-  moduleId    Int? // the module this lookup belongs to (null = global / all modules)
+  id             Int      @id @default(autoincrement())
+  code           String   @unique // e.g. DEVELOPERS, ICONS
+  name           String
+  description    String?
+  moduleId       Int? // the module this lookup belongs to (null = global / all modules)
   /// The lookup whose values THIS lookup's values sit under — Transaction
   /// Subtype under Transaction Type. Null in a flat lookup, which is most.
   ///
@@ -60,10 +60,10 @@ model Lookup {
   /// that parent's values, so a subtype list can never hold an entry belonging
   /// to no type. See LookupValue.parentValueId for the link itself.
   parentLookupId Int?
-  isSystem    Boolean  @default(false)
-  isLocked    Boolean  @default(false) // when locked, must be unlocked before edit/delete
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isSystem       Boolean  @default(false)
+  isLocked       Boolean  @default(false) // when locked, must be unlocked before edit/delete
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   module Module?       @relation(fields: [moduleId], references: [id], onDelete: SetNull)
   values LookupValue[]
@@ -78,12 +78,12 @@ model Lookup {
 }
 
 model LookupValue {
-  id        Int      @id @default(autoincrement())
-  lookupId  Int
-  value     String
-  label     String
-  alias     String? // optional custom name for this value (used where a bespoke label is needed)
-  remarks   String? // free-text remarks (was "extra")
+  id            Int      @id @default(autoincrement())
+  lookupId      Int
+  value         String
+  label         String
+  alias         String? // optional custom name for this value (used where a bespoke label is needed)
+  remarks       String? // free-text remarks (was "extra")
   /// The value this one sits UNDER, where a pair of lookups is read as one
   /// two-level list — a transaction subtype under its type ("B2C Sale" under
   /// "Sale"). Null in a flat lookup, which is most of them.
@@ -93,11 +93,11 @@ model LookupValue {
   /// That is what lets the type list stay short and the subtype list stay
   /// filtered to the type in hand.
   parentValueId Int?
-  sortOrder Int      @default(0)
-  isActive  Boolean  @default(true)
-  isLocked  Boolean  @default(false) // when locked, must be unlocked before edit/delete
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  sortOrder     Int      @default(0)
+  isActive      Boolean  @default(true)
+  isLocked      Boolean  @default(false) // when locked, must be unlocked before edit/delete
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   lookup Lookup @relation(fields: [lookupId], references: [id], onDelete: Cascade)
 

@@ -65,23 +65,23 @@ model AssetCategoryCompany {
 /// whose `subGroupApplicable` is true. Deleting a category is blocked while it
 /// still has groups (Restrict).
 model AssetGroup {
-  id                 Int     @id @default(autoincrement())
+  id                 Int      @id @default(autoincrement())
   categoryId         Int
   parentGroupId      Int?
-  level              Int     @default(1) // 1 = primary group … up to 5
-  subGroupApplicable Boolean @default(false) // true = container: holds sub-groups
-  code               String  @unique // system-generated positional hierarchy code
+  level              Int      @default(1) // 1 = primary group … up to 5
+  subGroupApplicable Boolean  @default(false) // true = container: holds sub-groups
+  code               String   @unique // system-generated positional hierarchy code
   name               String
   description        String?
-  allCompanies       Boolean @default(false) // true = available to every company
-  isActive           Boolean @default(true)
-  isLocked           Boolean @default(false) // when locked, must be unlocked before edit/delete
+  allCompanies       Boolean  @default(false) // true = available to every company
+  isActive           Boolean  @default(true)
+  isLocked           Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  category  AssetCategory      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  parent    AssetGroup?        @relation("AssetGroupHierarchy", fields: [parentGroupId], references: [id], onDelete: Restrict)
-  children  AssetGroup[]       @relation("AssetGroupHierarchy")
+  category  AssetCategory       @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  parent    AssetGroup?         @relation("AssetGroupHierarchy", fields: [parentGroupId], references: [id], onDelete: Restrict)
+  children  AssetGroup[]        @relation("AssetGroupHierarchy")
   companies AssetGroupCompany[]
   assets    Asset[]
 
@@ -109,33 +109,33 @@ model AssetGroupCompany {
 /// (`capacityUnitId`, `perUnitId`) point to the global Unit master by plain id
 /// (cross-domain rule: no @relation). Availability mirrors the other masters.
 model Asset {
-  id             Int       @id @default(autoincrement())
-  code           String    @unique // system-generated (leaf-group positional code)
-  categoryId     Int
-  groupId        Int // leaf asset group this asset belongs to
-  name           String // Machine Name
-  minCapacity    Float     @default(0)
-  maxCapacity    Float     @default(0)
-  capacityUnitId Int? // -> Unit (plain id, no cross-domain FK): Cuts, Pieces, Litre…
-  perUnitId      Int? // -> Unit (plain id): the "per" basis (Minutes, Hour…)
-  brand          String?
-  model          String?
-  serialNumber   String?
-  lifeSpanYears  Int       @default(0)
-  purchasedFrom  String?
-  purchaseDate   DateTime?
-  purchasePrice  Float     @default(0)
-  warrantyPeriod String? // free text (e.g. "12 months", "2 years")
-  allCompanies   Boolean     @default(false)
-  status         AssetStatus @default(ACTIVE)
+  id               Int         @id @default(autoincrement())
+  code             String      @unique // system-generated (leaf-group positional code)
+  categoryId       Int
+  groupId          Int // leaf asset group this asset belongs to
+  name             String // Machine Name
+  minCapacity      Float       @default(0)
+  maxCapacity      Float       @default(0)
+  capacityUnitId   Int? // -> Unit (plain id, no cross-domain FK): Cuts, Pieces, Litre…
+  perUnitId        Int? // -> Unit (plain id): the "per" basis (Minutes, Hour…)
+  brand            String?
+  model            String?
+  serialNumber     String?
+  lifeSpanYears    Int         @default(0)
+  purchasedFrom    String?
+  purchaseDate     DateTime?
+  purchasePrice    Float       @default(0)
+  warrantyPeriod   String? // free text (e.g. "12 months", "2 years")
+  allCompanies     Boolean     @default(false)
+  status           AssetStatus @default(ACTIVE)
   // Machines flagged here can be reserved (prebooked) when planning production.
-  isProductionLine Boolean   @default(false)
+  isProductionLine Boolean     @default(false)
   // Running cost per hour of this machine; feeds the equipment cost in a recipe's
   // process flow. Only meaningful for production-line machines.
-  costPerHour    Float       @default(0)
-  isLocked       Boolean     @default(false)
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  costPerHour      Float       @default(0)
+  isLocked         Boolean     @default(false)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
 
   category  AssetCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   group     AssetGroup     @relation(fields: [groupId], references: [id], onDelete: Restrict)

@@ -55,14 +55,14 @@ model PurchaseOrder {
 /// One line of a Purchase Order - IC: `quantity` of a `product` (in `unit`), at
 /// the group's transfer price.
 model PurchaseOrderLine {
-  id        Int   @id @default(autoincrement())
-  orderId   Int
-  sequence  Int   @default(0)
-  productId Int // -> inventory Product (plain cross-domain id)
+  id          Int     @id @default(autoincrement())
+  orderId     Int
+  sequence    Int     @default(0)
+  productId   Int // -> inventory Product (plain cross-domain id)
   // What the BUYER asked for. Never touched by the supplier — the demand must
   // stay legible next to what was actually committed.
-  quantity  Float
-  unitId    Int // -> Unit (plain cross-domain id)
+  quantity    Float
+  unitId      Int // -> Unit (plain cross-domain id)
   // The supplier's answer, set by Customer Relations while the order is in their
   // hands. null = not reviewed yet (distinct from a deliberate 0). May EXCEED
   // what's in stock: reserve takes what exists and the rest is produced, which is
@@ -71,7 +71,7 @@ model PurchaseOrderLine {
   // A line the supplier refuses. Kept on the order rather than deleted so the
   // buyer can see their line was declined instead of watching it vanish;
   // acceptedQty is forced to 0 and any reservation released.
-  cancelled Boolean @default(false)
+  cancelled   Boolean @default(false)
 
   // NO RATE, deliberately. An intercompany order carries quantities only; the
   // price is decided later, by the BATCH that ends up shipping (see
@@ -114,7 +114,7 @@ enum SalesOrderStatus {
 ///    numbering key and the company scoping all keep working. Adding it is one
 ///    nullable column plus an XOR guard.
 model SalesOrder {
-  id        Int @id @default(autoincrement())
+  id        Int  @id @default(autoincrement())
   companyId Int // the SELLER — owns the order, its numbering and its visibility
   branchId  Int? // -> Branch OF THE SELLER (the one that took the order). Distinct
   //                 from buyerBranchId below, which belongs to the other company.
@@ -158,9 +158,9 @@ model SalesOrder {
 
 /// One line of a Sales Order: what we will actually supply, against what was asked.
 model SalesOrderLine {
-  id         Int   @id @default(autoincrement())
+  id         Int     @id @default(autoincrement())
   orderId    Int
-  sequence   Int   @default(0)
+  sequence   Int     @default(0)
   productId  Int // -> inventory Product (plain cross-domain id)
   // The batch this line ships from, its number snapshotted for the document.
   // NULL = nothing reserved: this quantity must be PRODUCED, so no batch exists
@@ -170,7 +170,7 @@ model SalesOrderLine {
   // What the ICPO asked for, of this PRODUCT. Repeated across the product's split
   // lines — it describes the demand, not the line, so sum `quantity` (never this)
   // for the order's totals. 0 on a directly-raised order.
-  orderedQty Float @default(0)
+  orderedQty Float   @default(0)
   // What THIS line supplies. A line set to 0 is dropped from the order entirely
   // rather than stored as a zero.
   quantity   Float
@@ -182,7 +182,7 @@ model SalesOrderLine {
   //  - Balance line (batchId null): defaulted from Product.intercompanyPrice —
   //    the latest price, which is information only — and EDITABLE, because the
   //    batch that will carry the real price does not exist until it is produced.
-  rate       Float @default(0)
+  rate       Float   @default(0)
 
   order SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
 

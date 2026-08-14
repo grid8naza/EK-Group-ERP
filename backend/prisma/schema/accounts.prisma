@@ -7,20 +7,20 @@
 /// by Goods Receipt Notes (Inventory) via a plain cross-domain id. `code` is
 /// system-generated (SUP-#### per company).
 model Supplier {
-  id            Int      @id @default(autoincrement())
-  companyId     Int // -> Cpanel Company (plain id)
-  code          String // SUP-#### per company (system-generated)
-  name          String
-  contactPerson String?
-  phone         String?
-  email         String?
-  gstNumber     String? // GSTIN
-  address       String?
+  id               Int      @id @default(autoincrement())
+  companyId        Int // -> Cpanel Company (plain id)
+  code             String // SUP-#### per company (system-generated)
+  name             String
+  contactPerson    String?
+  phone            String?
+  email            String?
+  gstNumber        String? // GSTIN
+  address          String?
   /// Days from a bill's date until it falls due — what an ageing report counts
   /// against. Null = no agreed term, so a bill is due the day it is raised.
-  creditDays    Int?
+  creditDays       Int?
   /// The most that may stand unpaid at once. Null = no ceiling agreed.
-  creditLimit   Decimal? @db.Decimal(18, 2)
+  creditLimit      Decimal? @db.Decimal(18, 2)
   /// WHICH control account this supplier's balance is part of — its main
   /// ledger. A control account is only a total, and this says which total: a
   /// raw-material vendor sits under Trade Creditors, the electricity board under
@@ -31,10 +31,10 @@ model Supplier {
   /// under no control account is a balance that is part of no total, which no
   /// trial balance can be made to agree.
   controlAccountId Int
-  isActive      Boolean  @default(true)
-  isLocked      Boolean  @default(false) // when locked, must be unlocked before edit/delete
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  isActive         Boolean  @default(true)
+  isLocked         Boolean  @default(false) // when locked, must be unlocked before edit/delete
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   /// Same domain file, so this is a real FK — Restrict, because a control
   /// account with a sub-ledger behind it cannot simply vanish.
@@ -53,27 +53,27 @@ model Supplier {
 /// from opposite sides, and a party master that differed by side would make the
 /// statement and ageing reports two pieces of work instead of one.
 model Customer {
-  id            Int      @id @default(autoincrement())
-  companyId     Int // -> Cpanel Company (plain id)
-  code          String // CUS-#### per company (system-generated)
-  name          String
-  contactPerson String?
-  phone         String?
-  email         String?
-  gstNumber     String? // GSTIN
-  address       String?
+  id               Int      @id @default(autoincrement())
+  companyId        Int // -> Cpanel Company (plain id)
+  code             String // CUS-#### per company (system-generated)
+  name             String
+  contactPerson    String?
+  phone            String?
+  email            String?
+  gstNumber        String? // GSTIN
+  address          String?
   /// Days from a bill's date until it falls due — what an ageing report counts
   /// against. Null = no agreed term, so a bill is due the day it is raised.
-  creditDays    Int?
+  creditDays       Int?
   /// The most that may stand unpaid at once. Null = no ceiling agreed.
-  creditLimit   Decimal? @db.Decimal(18, 2)
+  creditLimit      Decimal? @db.Decimal(18, 2)
   /// The receivable control account this customer's balance is part of — the
   /// mirror of Supplier.controlAccountId, required for the same reason.
   controlAccountId Int
-  isActive      Boolean  @default(true)
-  isLocked      Boolean  @default(false) // when locked, must be unlocked before edit/delete
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  isActive         Boolean  @default(true)
+  isLocked         Boolean  @default(false) // when locked, must be unlocked before edit/delete
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   controlAccount Account @relation("CustomerControlAccount", fields: [controlAccountId], references: [id], onDelete: Restrict)
 
@@ -348,13 +348,13 @@ model Account {
   /// consolidation never collides.
   ownerCompanyId Int? // -> Cpanel Company (plain id)
 
-  group        AccountGroup     @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  group        AccountGroup        @relation(fields: [groupId], references: [id], onDelete: Restrict)
   companies    AccountCompany[]
   voucherLines VoucherLine[]
   /// The sub-ledger behind this account, where it is a control account: the
   /// parties whose balances add up to its total.
-  suppliers    Supplier[]       @relation("SupplierControlAccount")
-  customers    Customer[]       @relation("CustomerControlAccount")
+  suppliers    Supplier[]          @relation("SupplierControlAccount")
+  customers    Customer[]          @relation("CustomerControlAccount")
   /// Cheques and transfers drawn on this account, where it is a bank.
   instruments  VoucherInstrument[] @relation("InstrumentBank")
   /// Whose bank it is, per company — see BankAccountDetail.
@@ -504,19 +504,19 @@ model CostCentreCategory {
 /// one it does not use but the set itself is not user data — the posting map
 /// (D.9) names these.
 model VoucherType {
-  id     Int           @id @default(autoincrement())
-  code   String        @unique // JOURNAL, PAYMENT, …
-  name   String
-  nature VoucherNature
+  id           Int           @id @default(autoincrement())
+  code         String        @unique // JOURNAL, PAYMENT, …
+  name         String
+  nature       VoucherNature
   /// Written by a module (a sale, a payroll run), never by hand — kept out of
   /// the manual entry screen so nobody writes a sales voucher beside the
   /// invoice that should have raised it.
-  isSystemOnly Boolean @default(false)
+  isSystemOnly Boolean       @default(false)
   /// The Document Master code its numbering rule is keyed on, so each kind has
   /// its own series and its own configurable prefix.
   documentCode String
-  sortOrder    Int     @default(0)
-  isActive     Boolean @default(true)
+  sortOrder    Int           @default(0)
+  isActive     Boolean       @default(true)
 
   vouchers Voucher[]
 
@@ -536,7 +536,7 @@ model Voucher {
   /// The paper behind the entry — a bank advice number, the supplier's own bill
   /// number, a board resolution. Free text on purpose: what it points at lives
   /// outside the books, and a lookup would be a promise this cannot keep.
-  reference     String?
+  reference String?
 
   /// WHAT the transaction was, over and above which kind of voucher recorded it.
   /// The voucher type says a sale was made; these say it was a B2C sale rather
@@ -546,11 +546,11 @@ model Voucher {
   transactionTypeId    Int?
   transactionSubtypeId Int?
 
-  status VoucherStatus @default(DRAFT)
+  status      VoucherStatus @default(DRAFT)
   /// Running totals, kept on the header so a listing needs no aggregate. They
   /// are equal on every POSTED voucher — that is what posting checks.
-  totalDebit  Decimal @default(0) @db.Decimal(18, 2)
-  totalCredit Decimal @default(0) @db.Decimal(18, 2)
+  totalDebit  Decimal       @default(0) @db.Decimal(18, 2)
+  totalCredit Decimal       @default(0) @db.Decimal(18, 2)
 
   /// Where a machine-written voucher came from, so a posting can be traced back
   /// to the invoice or payroll run that raised it (and posted only once).
@@ -579,8 +579,8 @@ model Voucher {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  type  VoucherType   @relation(fields: [voucherTypeId], references: [id], onDelete: Restrict)
-  lines VoucherLine[]
+  type       VoucherType        @relation(fields: [voucherTypeId], references: [id], onDelete: Restrict)
+  lines      VoucherLine[]
   instrument VoucherInstrument?
 
   /// One number per kind per company. Numbers are derived (MAX + 1), so the
@@ -637,15 +637,15 @@ model VoucherInstrument {
   holdingAccountId Int?
 
   /// Set only where the mode is a cheque.
-  chequeKind ChequeKind?
+  chequeKind           ChequeKind?
   /// Set only on a post-dated cheque; null on everything that settled at once.
-  status PdcStatus?
+  status               PdcStatus?
   /// When it left ISSUED, and by which voucher — the entry that took it to the
   /// bank, or reversed it back out.
-  settledOn           DateTime?
-  settlementVoucherId Int?
+  settledOn            DateTime?
+  settlementVoucherId  Int?
   /// The cheque this one was written to replace, on a replacement.
-  replacesInstrumentId Int? @unique
+  replacesInstrumentId Int?        @unique
 
   notes     String?
   createdAt DateTime @default(now())
@@ -654,9 +654,9 @@ model VoucherInstrument {
   /// Everything that has happened to it, oldest first.
   events PdcEvent[]
 
-  voucher Voucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  voucher     Voucher            @relation(fields: [voucherId], references: [id], onDelete: Cascade)
   /// Restrict: a bank account a cheque was drawn on cannot simply vanish.
-  bankAccount Account @relation("InstrumentBank", fields: [bankAccountId], references: [id], onDelete: Restrict)
+  bankAccount Account            @relation("InstrumentBank", fields: [bankAccountId], references: [id], onDelete: Restrict)
   replaces    VoucherInstrument? @relation("PdcReplacement", fields: [replacesInstrumentId], references: [id], onDelete: SetNull)
   replacedBy  VoucherInstrument? @relation("PdcReplacement")
 
@@ -678,17 +678,17 @@ model VoucherInstrument {
 /// request. Nothing derives from it, and everything is easier to explain with
 /// it there.
 model PdcEvent {
-  id           Int      @id @default(autoincrement())
-  instrumentId Int
+  id              Int       @id @default(autoincrement())
+  instrumentId    Int
   /// What it became. The instrument's own status is the latest of these.
-  status PdcStatus
+  status          PdcStatus
   /// The day it happened — which is rarely the day it was entered.
-  date   DateTime
-  remark String?
+  date            DateTime
+  remark          String?
   /// The entry this move posted, where it posted one. Only clearing does.
   voucherId       Int?
   createdByUserId Int?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime  @default(now())
 
   instrument VoucherInstrument @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
 
@@ -702,9 +702,9 @@ model VoucherLine {
   voucherId Int
   sequence  Int @default(0)
 
-  companyId Int
-  branchId  Int?
-  accountId Int
+  companyId    Int
+  branchId     Int?
+  accountId    Int
   /// Named only where the account asks for one — see Account.hasCostCenter and
   /// src/common/entry-rules.ts, which decides that from the company's setup and
   /// the account's own rule together.
@@ -712,9 +712,9 @@ model VoucherLine {
   costObjectId Int? // -> Cpanel CostObject (plain id)
 
   /// A line carries either a debit or a credit, never both and never neither.
-  debit     Decimal @default(0) @db.Decimal(18, 2)
-  credit    Decimal @default(0) @db.Decimal(18, 2)
-  narration String?
+  debit                Decimal @default(0) @db.Decimal(18, 2)
+  credit               Decimal @default(0) @db.Decimal(18, 2)
+  narration            String?
   /// Inherited from the header unless this line says otherwise — one voucher may
   /// carry both a B2B and a B2C line. Denormalised like companyId/date/status
   /// above it, for the same reason: a statement cut by transaction type reads
@@ -748,11 +748,11 @@ model VoucherLine {
   /// the lines that have one — no second ledger, nothing to keep in step.
   bankDate DateTime?
 
-  voucher     Voucher          @relation(fields: [voucherId], references: [id], onDelete: Cascade)
-  account     Account          @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  voucher  Voucher          @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  account  Account          @relation(fields: [accountId], references: [id], onDelete: Restrict)
   /// How this line's amount attaches to the party's bills. Present only on a
   /// control-account line, and summing to that line's amount.
-  billRefs    BillAllocation[]
+  billRefs BillAllocation[]
 
   @@index([voucherId])
   @@index([companyId, accountId, date])
@@ -780,7 +780,7 @@ model VoucherLine {
 /// account, company, branch, date and status are copied down for the same reason
 /// they are copied onto the line: an ageing report reads this table alone.
 model BillAllocation {
-  id            Int @id @default(autoincrement())
+  id            Int       @id @default(autoincrement())
   voucherLineId Int
   companyId     Int
   branchId      Int?
@@ -804,26 +804,26 @@ model BillAllocation {
   ///
   /// Null on rows written before adjustments existed. Those were all settlements
   /// in the ordinary direction, which is how they are read.
-  side BalanceSide?
+  side      BalanceSide?
   /// The bill's own number. Required on NEW — it is the bill's NAME, what a
   /// statement lists and what a payment is matched against. Null on ADVANCE and
   /// ON_ACCOUNT, which are by definition attached to no bill.
-  billRef String?
+  billRef   String?
   /// What an ADVANCE or ON_ACCOUNT amount was called — "against Feb supply",
   /// the counterfoil number, whatever the entry needs to be recognisable by
   /// later. NOT `billRef`: that column is the bill's IDENTITY and is unique per
   /// party, whereas this is a note. Two advances may carry the same one, and a
   /// note that could collide with a real bill number would be refusing entries
   /// for no reason.
-  refNote String?
+  refNote   String?
   /// The NEW allocation this one settles. Set only on AGAINST.
   againstId Int?
-  amount    Decimal @db.Decimal(18, 2)
+  amount    Decimal      @db.Decimal(18, 2)
   /// When the bill falls due — its date plus the party's agreed credit period,
   /// snapshotted at the moment it was raised. Stored rather than recomputed
   /// because the terms may be renegotiated later, and a bill is aged by the
   /// terms it was raised under.
-  dueDate DateTime?
+  dueDate   DateTime?
 
   /// Denormalised from the voucher, exactly as on VoucherLine.
   date   DateTime
@@ -833,11 +833,11 @@ model BillAllocation {
   against  BillAllocation?  @relation("BillSettlement", fields: [againstId], references: [id], onDelete: Restrict)
   payments BillAllocation[] @relation("BillSettlement")
 
+  // A bill number is a party's own — two suppliers may both send "INV-001".
+  @@unique([companyId, partyKind, partyId, billRef])
   @@index([voucherLineId])
   // The outstanding list, and the ageing built on it: one party's bills by date.
   @@index([companyId, partyKind, partyId, status])
   @@index([againstId])
-  // A bill number is a party's own — two suppliers may both send "INV-001".
-  @@unique([companyId, partyKind, partyId, billRef])
   @@map("bill_allocations")
 }

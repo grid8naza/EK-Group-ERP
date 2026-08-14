@@ -79,8 +79,8 @@ model ConversationParticipant {
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   userId         Int
 
-  role   ChatParticipantRole @default(MEMBER)
-  isMuted Boolean            @default(false)
+  role    ChatParticipantRole @default(MEMBER)
+  isMuted Boolean             @default(false)
 
   /// The read receipt, kept as a high-water mark rather than a row per message
   /// per reader: unread count is `messages after this id, not mine`, and the
@@ -101,9 +101,9 @@ model ConversationParticipant {
 
 /// One message in a conversation.
 model ChatMessage {
-  id             Int          @id @default(autoincrement())
+  id             Int             @id @default(autoincrement())
   conversationId Int
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversation   Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   senderId       Int
   kind           ChatMessageKind @default(TEXT)
 

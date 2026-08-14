@@ -830,6 +830,49 @@ async function migrateAccountsReportMenu(
  * a no-op once renamed, and on a fresh DB where the sync creates it as
  * Workplace to begin with.
  */
+/**
+ * One-time migration: the HR module's single "Human Resources" menu becomes
+ * "HR Master", beside two new ones (HR Data, HR Reports) that the ordinary sync
+ * creates for itself.
+ *
+ * Needed because the sync matches a PRIMARY menu by moduleId and never renames
+ * it — so without this, an existing database would keep the old label while a
+ * fresh one got the new. The screens under it move nowhere: they stay on the
+ * same MainMenu row, which is the point of relabelling rather than replacing —
+ * GroupSubMenuPrivilege hangs off SubMenu.id.
+ *
+ * The re-ordering is a `runOnce` rather than part of the additive sync, which
+ * only sets sortOrder on CREATE: Lookups goes to the top of the master menu, and
+ * an admin who rearranges it afterwards keeps their arrangement.
+ */
+async function migrateHrMenus(prisma: Prisma.TransactionClient): Promise<void> {
+  const hr = await prisma.module.findUnique({
+    where: { code: 'HR' },
+    select: { id: true },
+  });
+  if (!hr) return; // fresh DB: the sync creates it with the new name
+
+  await prisma.mainMenu.updateMany({
+    where: { moduleId: hr.id, menuName: 'Human Resources' },
+    data: { menuName: 'HR Master' },
+  });
+
+  await runOnce(prisma, 'hr-master-menu-order', async () => {
+    const order: Record<string, number> = {
+      '/hr/lookups': 1,
+      '/hr/categories': 2,
+      '/hr/groups': 3,
+      '/hr/designations': 4,
+    };
+    for (const [route, sortOrder] of Object.entries(order)) {
+      await prisma.subMenu.updateMany({
+        where: { route },
+        data: { sortOrder },
+      });
+    }
+  });
+}
+
 async function migrateWorkflowMenuName(
   prisma: Prisma.TransactionClient,
 ): Promise<void> {
@@ -1036,6 +1079,7 @@ export async function syncScaffold(
   //       one menu into the five the module now has. Both before the additive
   //       sync, so the renamed/moved rows are the ones it reuses. Ordered:
   //       the split expects to find the menu under its post-rename name.
+  await migrateHrMenus(prisma);
   await migrateWorkflowMenuName(prisma);
   await migrateWorkplaceMenus(prisma);
 

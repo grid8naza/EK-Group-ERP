@@ -57,7 +57,6 @@ model Circular {
 
   issuerId Int
 
-
   /// Where it was issued FROM. A stamp for the archive, not a filter on who may
   /// read it: the audience decides that, and a circular routinely crosses
   /// companies. Same rule as mail and chat.
@@ -106,7 +105,7 @@ model CircularTarget {
   circularId Int
   circular   Circular @relation(fields: [circularId], references: [id], onDelete: Cascade)
 
-  kind CircularAudienceKind
+  kind  CircularAudienceKind
   /// The company / branch / group / person aimed at. Null for EVERYONE.
   refId Int?
 

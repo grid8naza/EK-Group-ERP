@@ -78,7 +78,7 @@ model Unit {
   derived  Unit[] @relation("UnitBase")
 
   chainLinks  UnitChainLink[] @relation("UnitChainOwner") // ladder owned by this CHAINING unit
-  chainUsages UnitChainLink[] @relation("UnitChainStep")  // rungs elsewhere that reference this unit
+  chainUsages UnitChainLink[] @relation("UnitChainStep") // rungs elsewhere that reference this unit
 
   itemsAsUnit    Item[] @relation("ItemUnit")
   itemsAsBoxUnit Item[] @relation("ItemBoxUnit")
@@ -136,7 +136,7 @@ model Category {
   companies CategoryCompany[]
   groups    GroupCategory[]
   items     Item[]
-  products  Product[] @relation("CategoryProducts")
+  products  Product[]         @relation("CategoryProducts")
 
   @@index([kind])
   @@map("categories")
@@ -173,22 +173,22 @@ model CategoryCompany {
 /// SEMI_FINISHED/FINISHED ⇒ products), which is also what binds a subtree to a
 /// screen now that ProductStage is gone.
 model Group {
-  id Int @id @default(autoincrement())
+  id                 Int      @id @default(autoincrement())
   // Self-referencing hierarchy: a "primary" group has no parent (level 1); a
   // sub-group's parent is another group whose `subGroupApplicable` is true, and
   // its categories must be a SUBSET of that parent's (enforced in the service).
   // `level` is parent.level + 1, capped at 5.
   parentGroupId      Int?
-  level              Int     @default(1) // 1 = primary group … up to 5
-  subGroupApplicable Boolean @default(false) // true = container: holds sub-groups, NOT items
-  code         String   @unique // system-generated 17-digit hierarchy code (CC = 00)
-  name         String
-  description  String?
-  allCompanies Boolean  @default(false) // true = available to every company
-  isActive     Boolean  @default(true)
-  isLocked     Boolean  @default(false) // when locked, must be unlocked before edit/delete
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  level              Int      @default(1) // 1 = primary group … up to 5
+  subGroupApplicable Boolean  @default(false) // true = container: holds sub-groups, NOT items
+  code               String   @unique // system-generated 17-digit hierarchy code (CC = 00)
+  name               String
+  description        String?
+  allCompanies       Boolean  @default(false) // true = available to every company
+  isActive           Boolean  @default(true)
+  isLocked           Boolean  @default(false) // when locked, must be unlocked before edit/delete
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   parent     Group?          @relation("GroupHierarchy", fields: [parentGroupId], references: [id], onDelete: Restrict)
   children   Group[]         @relation("GroupHierarchy")
@@ -263,28 +263,28 @@ model HsnCode {
 /// category must be one the group serves, and its kind must be INGREDIENT or
 /// PACKING_MATERIAL — a product kind belongs on Product.
 model Item {
-  id           Int      @id @default(autoincrement())
-  code         String   @unique
-  name         String
-  description  String?
-  categoryId   Int
-  groupId      Int
-  unitId       Int // stock unit
+  id                Int       @id @default(autoincrement())
+  code              String    @unique
+  name              String
+  description       String?
+  categoryId        Int
+  groupId           Int
+  unitId            Int // stock unit
   lastPurchasePrice Float     @default(0) // updated on every purchase
   lastPurchaseDate  DateTime? // updated on every purchase (null = never purchased)
-  boxQty       Float    @default(0) // how many stock units per box
-  boxUnitId    Int? // unit that represents a box (e.g. BOX, CARTON)
-  hsnCodeId    Int?
-  minimumStock Float    @default(0)
-  maximumStock Float    @default(0)
-  reorderLevel Float    @default(0)
-  leadTime     Int      @default(0) // days
-  shelfLife    Int      @default(0) // days (0 = not tracked / non-perishable)
-  allCompanies Boolean  @default(false) // true = available to every company
-  isActive     Boolean  @default(true)
-  isLocked     Boolean  @default(false) // when locked, must be unlocked before edit/delete
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  boxQty            Float     @default(0) // how many stock units per box
+  boxUnitId         Int? // unit that represents a box (e.g. BOX, CARTON)
+  hsnCodeId         Int?
+  minimumStock      Float     @default(0)
+  maximumStock      Float     @default(0)
+  reorderLevel      Float     @default(0)
+  leadTime          Int       @default(0) // days
+  shelfLife         Int       @default(0) // days (0 = not tracked / non-perishable)
+  allCompanies      Boolean   @default(false) // true = available to every company
+  isActive          Boolean   @default(true)
+  isLocked          Boolean   @default(false) // when locked, must be unlocked before edit/delete
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   category  Category      @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   group     Group         @relation(fields: [groupId], references: [id], onDelete: Restrict)
@@ -328,27 +328,27 @@ model ItemCompany {
 /// and it is what each product screen filters on. It must be one of the
 /// group's categories and its kind must be SEMI_FINISHED or FINISHED.
 model Product {
-  id           Int      @id @default(autoincrement())
-  code         String   @unique
-  name         String
-  description  String?
-  imageUrl     String? // product picture (sellable products), served at /uploads/products
-  categoryId   Int
-  groupId      Int
-  unitId       Int // selling / output unit
+  id                    Int           @id @default(autoincrement())
+  code                  String        @unique
+  name                  String
+  description           String?
+  imageUrl              String? // product picture (sellable products), served at /uploads/products
+  categoryId            Int
+  groupId               Int
+  unitId                Int // selling / output unit
   // Form factor: a product may be sold unpacked, packed, or both.
-  unpacked     Boolean @default(false)
-  packed       Boolean @default(false)
-  canSell      Boolean @default(true) // false = not sold (e.g. intermediate/ingredient)
-  costPrice    Float   @default(0) // cost incurred to make/buy one unit
+  unpacked              Boolean       @default(false)
+  packed                Boolean       @default(false)
+  canSell               Boolean       @default(true) // false = not sold (e.g. intermediate/ingredient)
+  costPrice             Float         @default(0) // cost incurred to make/buy one unit
   // Three selling prices, each with its profit % over cost (both stored; the
   // form keeps them in sync — edit a price to set its %, or a % to set the price).
-  wholesalePrice        Float @default(0)
-  wholesaleProfitPct    Float @default(0)
-  intercompanyPrice     Float @default(0)
-  intercompanyProfitPct Float @default(0)
-  retailPrice           Float @default(0)
-  retailProfitPct       Float @default(0)
+  wholesalePrice        Float         @default(0)
+  wholesaleProfitPct    Float         @default(0)
+  intercompanyPrice     Float         @default(0)
+  intercompanyProfitPct Float         @default(0)
+  retailPrice           Float         @default(0)
+  retailProfitPct       Float         @default(0)
   /// The profit % each channel is MEANT to earn — a deliberate commercial
   /// decision, set here and nowhere else. Distinct from the `*ProfitPct` fields
   /// above, which merely record what the current price happens to earn: those
@@ -374,80 +374,80 @@ model Product {
   /// Packing Master. It is entered against RETAIL only: the label carries one
   /// statutory figure, not one per customer type. Distinct from the retail
   /// "Total Price" (retail price + GST/cess), which is computed, not stored.
-  mrp                   Float @default(0)
-  boxQty       Float    @default(0) // pack content quantity (in boxUnit)
-  boxUnitId    Int? // unit the box/pack quantity is measured in (e.g. g, Kg)
-  hsnCodeId    Int?
-  shelfLife    Int      @default(0) // days
-  yieldQty     Float    @default(1) // product units one recipe batch yields
-  yieldUnitId  Int? // unit the yield quantity is measured in
+  mrp                   Float         @default(0)
+  boxQty                Float         @default(0) // pack content quantity (in boxUnit)
+  boxUnitId             Int? // unit the box/pack quantity is measured in (e.g. g, Kg)
+  hsnCodeId             Int?
+  shelfLife             Int           @default(0) // days
+  yieldQty              Float         @default(1) // product units one recipe batch yields
+  yieldUnitId           Int? // unit the yield quantity is measured in
   // BOM costing inputs. Material cost is computed from the recipe lines; these
   // are the other cost buckets and the margin used to derive the sales price.
-  labourCost   Float    @default(0)
-  fuelCost     Float    @default(0)
-  overheadCost Float    @default(0)
-  bomMarginPct Float    @default(0) // profit margin % applied to the total cost
+  labourCost            Float         @default(0)
+  fuelCost              Float         @default(0)
+  overheadCost          Float         @default(0)
+  bomMarginPct          Float         @default(0) // profit margin % applied to the total cost
   // Per-yield-unit "actual" prices set from the recipe editor. Actual cost price
   // is populated from the estimated cost/unit (used later in Packing); actual
   // sales price is entered by the user (used later for the sales invoice).
-  actualCostPrice  Float @default(0)
-  actualSalesPrice Float @default(0)
+  actualCostPrice       Float         @default(0)
+  actualSalesPrice      Float         @default(0)
   /// When `costPrice` last actually CHANGED — not when the product was last
   /// saved. So it answers "as of when is this cost figure true", which is the
   /// only question worth asking of a cached figure; re-saving a form without
   /// touching the cost leaves it alone. Written by every path that moves the
   /// cost: the Recipe/Packing editors, the Product Master, the review screens
   /// and the automatic recost. NULL means the cost has never been established.
-  lastCostedAt DateTime?
+  lastCostedAt          DateTime?
   /// Made in-house or bought in for resale. A PURCHASED product may not carry
   /// either BOM (the service rejects hasRecipe/hasPacking on it, and refuses to
   /// flip a product to PURCHASED while a BOM, process or pack source exists);
   /// it may still be `isIngredient`, since a bought-in filling can go into
   /// someone else's recipe.
-  source       ProductSource @default(MANUFACTURED)
+  source                ProductSource @default(MANUFACTURED)
   // Capability flags: which BOMs may be created for this product, and whether
   // it can itself be an ingredient in another product's recipe.
-  hasRecipe    Boolean  @default(false) // a production (recipe) BOM can be created
-  hasPacking   Boolean  @default(false) // a packing BOM can be created
-  isIngredient Boolean  @default(false) // usable as an ingredient in another product
+  hasRecipe             Boolean       @default(false) // a production (recipe) BOM can be created
+  hasPacking            Boolean       @default(false) // a packing BOM can be created
+  isIngredient          Boolean       @default(false) // usable as an ingredient in another product
   // Production schedule — the days this product is made on. Flat flags, not a
   // list: the days of the week are fixed by nature and never need configuring,
   // and it matches how every other checkbox set on this model is stored. Delivery
   // trips are the opposite case — the user names those — so they live in a lookup
   // (see ProductDeliveryTrip).
-  prodSun        Boolean @default(false)
-  prodMon        Boolean @default(false)
-  prodTue        Boolean @default(false)
-  prodWed        Boolean @default(false)
-  prodThu        Boolean @default(false)
-  prodFri        Boolean @default(false)
-  prodSat        Boolean @default(false)
+  prodSun               Boolean       @default(false)
+  prodMon               Boolean       @default(false)
+  prodTue               Boolean       @default(false)
+  prodWed               Boolean       @default(false)
+  prodThu               Boolean       @default(false)
+  prodFri               Boolean       @default(false)
+  prodSat               Boolean       @default(false)
   /// Made to order — no fixed day, so it stands apart from the weekdays.
-  prodOccasional Boolean @default(false)
+  prodOccasional        Boolean       @default(false)
   // No `allCompanies` here, unlike the other masters: every company this
   // product touches needs its own roles and costing (see ProductCompany), so
   // there is nothing a blanket flag could hang those on. A product is available
   // exactly where it has a company row.
-  isActive     Boolean  @default(true)
-  isLocked     Boolean  @default(false) // when locked, must be unlocked before edit/delete
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  isActive              Boolean       @default(true)
+  isLocked              Boolean       @default(false) // when locked, must be unlocked before edit/delete
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
 
-  category Category  @relation("CategoryProducts", fields: [categoryId], references: [id], onDelete: Restrict)
-  group    Group     @relation("GroupProducts", fields: [groupId], references: [id], onDelete: Restrict)
-  unit      Unit      @relation("ProductUnit", fields: [unitId], references: [id], onDelete: Restrict)
-  boxUnit   Unit?     @relation("ProductBoxUnit", fields: [boxUnitId], references: [id], onDelete: Restrict)
-  yieldUnit Unit?     @relation("ProductYieldUnit", fields: [yieldUnitId], references: [id], onDelete: Restrict)
-  hsnCode  HsnCode?  @relation("HsnProducts", fields: [hsnCodeId], references: [id], onDelete: Restrict)
+  category  Category @relation("CategoryProducts", fields: [categoryId], references: [id], onDelete: Restrict)
+  group     Group    @relation("GroupProducts", fields: [groupId], references: [id], onDelete: Restrict)
+  unit      Unit     @relation("ProductUnit", fields: [unitId], references: [id], onDelete: Restrict)
+  boxUnit   Unit?    @relation("ProductBoxUnit", fields: [boxUnitId], references: [id], onDelete: Restrict)
+  yieldUnit Unit?    @relation("ProductYieldUnit", fields: [yieldUnitId], references: [id], onDelete: Restrict)
+  hsnCode   HsnCode? @relation("HsnProducts", fields: [hsnCodeId], references: [id], onDelete: Restrict)
 
-  companies ProductCompany[]
+  companies     ProductCompany[]
   deliveryTrips ProductDeliveryTrip[]
-  discounts ProductDiscount[]
-  bomLines  ProductBomLine[]
-  processes ProductProcess[]
-  packSources  ProductPackSource[] @relation("PackSources")  // unpacked products this pack is made from
-  packSourceOf ProductPackSource[] @relation("PackSourceOf") // packs that use this product as a source
-  branchStocks ProductBranchStock[] // per-branch stocking parameters
+  discounts     ProductDiscount[]
+  bomLines      ProductBomLine[]
+  processes     ProductProcess[]
+  packSources   ProductPackSource[]   @relation("PackSources") // unpacked products this pack is made from
+  packSourceOf  ProductPackSource[]   @relation("PackSourceOf") // packs that use this product as a source
+  branchStocks  ProductBranchStock[] // per-branch stocking parameters
 
   @@index([categoryId])
   @@index([groupId])
@@ -594,13 +594,13 @@ model ProductDiscount {
 }
 
 model ProductBranchStock {
-  id           Int   @id @default(autoincrement())
-  productId    Int
-  branchId     Int // -> Cpanel Branch, by id (no cross-domain FK)
-  minStock     Float @default(0)
-  maxStock     Float @default(0)
-  reorderLevel Float @default(0)
-  leadTimeDays Int   @default(0)
+  id             Int   @id @default(autoincrement())
+  productId      Int
+  branchId       Int // -> Cpanel Branch, by id (no cross-domain FK)
+  minStock       Float @default(0)
+  maxStock       Float @default(0)
+  reorderLevel   Float @default(0)
+  leadTimeDays   Int   @default(0)
   // Where this product is put away in this branch: its default store and the
   // rack within it. Plain ids (-> Store / Rack) — the product's home location
   // for production put-away, transfers and delivery.
@@ -855,13 +855,13 @@ model OpeningStock {
 /// types (SALE, CONSUMPTION) decrement store stock (qtyOut). docNo is unique per
 /// company AND type, so each note type keeps its own sequence.
 model StockTransaction {
-  id        Int          @id @default(autoincrement())
-  companyId Int
-  branchId  Int? // -> Cpanel Branch (plain id); null for companies without branches
-  type      StockTxnType
-  docNo     String
-  docDate   DateTime
-  storeId   Int
+  id               Int          @id @default(autoincrement())
+  companyId        Int
+  branchId         Int? // -> Cpanel Branch (plain id); null for companies without branches
+  type             StockTxnType
+  docNo            String
+  docDate          DateTime
+  storeId          Int
   // Goods Receipt Note only: the supplier the goods came from and the purchase
   // order they fulfil. supplierId -> Accounts Supplier (plain cross-domain id);
   // purchaseOrderRef is free text for now (later a real PO link).
@@ -886,14 +886,14 @@ model StockTransaction {
   // the document is a deliberate attribution (issuing finished goods to the
   // staff mess belongs to the mess, not to the line that baked them).
   // Plain cross-domain ids -> Cpanel CostCenter / CostObject.
-  costCenterId Int?
-  costObjectId Int?
-  reference String?
-  notes     String?
-  status    String       @default("POSTED") // DRAFT | POSTED
-  isLocked  Boolean      @default(false)
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  costCenterId     Int?
+  costObjectId     Int?
+  reference        String?
+  notes            String?
+  status           String       @default("POSTED") // DRAFT | POSTED
+  isLocked         Boolean      @default(false)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   @@unique([companyId, type, docNo])
   @@index([companyId, branchId, type])
@@ -929,7 +929,7 @@ enum StockReservationStatus {
 /// order line today), so it is a plain Int with no relation. batchId/storeId are
 /// plain ids too, matching StockLedger's own style.
 model StockReservation {
-  id        Int @id @default(autoincrement())
+  id        Int   @id @default(autoincrement())
   companyId Int // the owner of the stock — the supplier company
   storeId   Int // where this held stock physically sits
   productId Int

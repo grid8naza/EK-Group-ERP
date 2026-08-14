@@ -49,22 +49,22 @@ enum WorkOrderStatus {
 /// createdByUserId -> User) are PLAIN ids with no @relation, so Production stays
 /// self-contained.
 model WorkOrder {
-  id              Int             @id @default(autoincrement())
-  companyId       Int // -> Cpanel Company (the producing / selling company)
-  branchId        Int? // -> Cpanel Branch (optional)
-  orderNo         String // WO-#### per company (system-generated)
+  id               Int             @id @default(autoincrement())
+  companyId        Int // -> Cpanel Company (the producing / selling company)
+  branchId         Int? // -> Cpanel Branch (optional)
+  orderNo          String // WO-#### per company (system-generated)
   // The sales order this fulfils. Unique: an ICSO raises one work order.
-  salesOrderId    Int?            @unique // -> CRM SalesOrder (plain id)
-  soNumber        String? // snapshot of the source order number
-  soDeliveryAt    DateTime? // delivery date the sales order committed to
-  status          WorkOrderStatus @default(PENDING)
-  notes           String?
-  isLocked        Boolean         @default(false)
-  createdByUserId Int // -> Cpanel User
+  salesOrderId     Int?            @unique // -> CRM SalesOrder (plain id)
+  soNumber         String? // snapshot of the source order number
+  soDeliveryAt     DateTime? // delivery date the sales order committed to
+  status           WorkOrderStatus @default(PENDING)
+  notes            String?
+  isLocked         Boolean         @default(false)
+  createdByUserId  Int // -> Cpanel User
   // The production plan that clubbed this order (null = not yet planned).
   productionPlanId Int?
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   lines          WorkOrderLine[]
   productionPlan ProductionPlan?    @relation(fields: [productionPlanId], references: [id], onDelete: SetNull)
@@ -105,7 +105,7 @@ model ProductionReceipt {
 
 /// One produced line: the product, quantity, and the stock batch it became.
 model ProductionReceiptLine {
-  id          Int    @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   receiptId   Int
   productId   Int // -> inventory Product (plain id)
   productName String // snapshot
@@ -291,7 +291,7 @@ model MaterialRequestLine {
 /// tagged with the division that will make it (resolved from its primary group
 /// at build time and snapshotted).
 model ProductionPlanLine {
-  id             Int    @id @default(autoincrement())
+  id             Int     @id @default(autoincrement())
   planId         Int
   productId      Int // -> inventory Product (plain id)
   productName    String // snapshot

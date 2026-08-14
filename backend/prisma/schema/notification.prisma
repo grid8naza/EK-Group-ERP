@@ -102,14 +102,14 @@ model Notification {
 
   /// Opened (or marked read). Read is not resolved: an approval you have looked
   /// at is still waiting for you.
-  readAt DateTime?
+  readAt      DateTime?
   /// Put down by the reader — gone from their feed whether or not it is still
   /// true. The reader's own decision, and it never returns: republishing checks
   /// dismissed rows too, or a dismissed stock alert would come back in 15
   /// minutes.
   dismissedAt DateTime?
   /// The condition ended. Set by resolve(), never by the reader.
-  resolvedAt DateTime?
+  resolvedAt  DateTime?
 
   /// Whether a push transport has taken this one (FR-COM-06). Stamped rather
   /// than inferred so a device that comes online later does not re-deliver

@@ -62,7 +62,7 @@ model Task {
 
   /// The recurring checklist this task was generated from, if it was not raised
   /// by a person (FR-TSK-02). Null on every hand-raised task.
-  templateId Int?
+  templateId   Int?
   /// WHICH occurrence it is — the local calendar date the run belongs to, held
   /// at midnight UTC as a date-only marker.
   ///
@@ -79,7 +79,7 @@ model Task {
   assignees TaskAssignee[]
   checklist TaskChecklistItem[]
   comments  TaskComment[]
-  template  ChecklistTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  template  ChecklistTemplate?  @relation(fields: [templateId], references: [id], onDelete: SetNull)
 
   /// One task per template per occurrence. See occurrenceOn.
   @@unique([templateId, occurrenceOn])
@@ -126,9 +126,9 @@ model ChecklistTemplate {
   /// Who set it up. They own what it says, exactly as a task's raiser does.
   createdById Int
 
-  frequency ChecklistFrequency @default(DAILY)
+  frequency  ChecklistFrequency @default(DAILY)
   /// WEEKLY: which days, 0 = Sunday. Ignored by the other frequencies.
-  weekdays  Int[]              @default([])
+  weekdays   Int[]              @default([])
   /// MONTHLY: which day, 1-31. Clamped to the last day of a shorter month, so a
   /// 31st checklist still happens in February rather than skipping it.
   dayOfMonth Int?
@@ -153,7 +153,7 @@ model ChecklistTemplate {
   /// bakery is. The zone is the application's (APP_TIMEZONE, see
   /// common/zoned-time.ts); the server runs in UTC and must not be allowed to
   /// turn 06:00 into 11:30.
-  startMinutes Int @default(360)
+  startMinutes Int  @default(360)
   /// When it must be finished by, same units. Null = the end of that local day.
   dueMinutes   Int?
 
@@ -234,8 +234,8 @@ model TaskChecklistItem {
   task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
 
   text      String
-  sortOrder Int     @default(0)
-  isDone    Boolean @default(false)
+  sortOrder Int       @default(0)
+  isDone    Boolean   @default(false)
   /// Who ticked it, and when. Kept because a hygiene check nobody can be named
   /// for is not a record of anything.
   doneById  Int?

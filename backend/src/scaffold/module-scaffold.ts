@@ -20,7 +20,11 @@ import {
   ASSET_REPORT_MENUS,
   seedAssetDefaults,
 } from '../modules/asset-category/asset-provisioning';
-import { HR_SUBS } from '../modules/hr-category/hr-provisioning';
+import {
+  HR_SUBS,
+  HR_EXTRA_MENUS,
+  seedHrDefaults,
+} from '../modules/hr-category/hr-provisioning';
 import {
   WORKFLOW_SUBS,
   WORKFLOW_EXTRA_MENUS,
@@ -169,10 +173,15 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     icon: 'id-card',
     sortOrder: 5,
     description:
-      'HR & employees — manpower category, group & designation masters.',
+      'HR & employees — the manpower masters, the employees themselves, and the reports read back off them.',
     autoEnable: true, // on for every company so the manpower masters appear
-    menu: { name: 'Human Resources', icon: 'id-card' },
+    // HR Master is the PRIMARY menu (matched by module), so the module's
+    // existing main menu row is reused and relabelled rather than left behind
+    // beside a new one. The other two are extras, matched by name.
+    menu: { name: 'HR Master', icon: 'id-card' },
     subs: HR_SUBS,
+    extraMenus: HR_EXTRA_MENUS,
+    seedData: seedHrDefaults,
   },
   {
     code: 'PRODUCTION',

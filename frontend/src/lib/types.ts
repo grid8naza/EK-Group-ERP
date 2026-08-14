@@ -1503,6 +1503,50 @@ export interface HrDesignation {
   isLocked?: boolean;
 }
 
+/** Employee Master (HR → HR Data). Category and group are derived from the
+ *  designation server-side — neither is stored on the employee. */
+export type EmployeeSex = 'MALE' | 'FEMALE' | 'OTHER';
+export type MaritalStatus = 'SINGLE' | 'MARRIED' | 'DIVORCED' | 'WIDOWED';
+
+export interface Employee {
+  id: number;
+  code: string;
+  name: string;
+
+  dateOfBirth?: string | null;
+  sex?: EmployeeSex | null;
+  maritalStatus?: MaritalStatus | null;
+  aadhaarNumber?: string | null;
+  address?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  /** Required — every employee carries a photograph. */
+  photoUrl: string;
+
+  companyId: number;
+  branchId?: number | null;
+  departmentValueId?: number | null;
+  departmentName?: string | null;
+
+  designationId: number;
+  designationName: string;
+  groupId: number;
+  groupName: string;
+  categoryId: number;
+  categoryName: string;
+  ratePerHour?: number | null;
+
+  dateOfJoin: string;
+  reportsToId?: number | null;
+  reportsToName?: string | null;
+
+  isActive: boolean;
+  isLocked?: boolean;
+  createdAt?: string;
+}
+
 // ---- Workflow Engine ----
 export type WorkflowActionType =
   | 'CREATE_APPROVE'

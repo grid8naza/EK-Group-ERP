@@ -39,8 +39,8 @@ model Mail {
   parent   Mail?  @relation("MailReply", fields: [parentId], references: [id], onDelete: SetNull)
   replies  Mail[] @relation("MailReply")
 
-  sentAt    DateTime  @default(now())
-  createdAt DateTime  @default(now())
+  sentAt    DateTime @default(now())
+  createdAt DateTime @default(now())
 
   recipients  MailRecipient[]
   attachments MailAttachment[]

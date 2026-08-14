@@ -51,7 +51,6 @@ model Broadcast {
 
   senderId Int
 
-
   /// Where it was sent FROM. A stamp, not a filter on who may read it: the
   /// audience decides that, and an announcement crosses companies by design.
   /// Same rule as mail, chat and circulars.

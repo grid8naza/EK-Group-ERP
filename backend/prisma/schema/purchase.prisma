@@ -27,7 +27,7 @@ enum LocalPurchaseOrderStatus {
 
 /// A purchase order raised on an external supplier.
 model LocalPurchaseOrder {
-  id Int @id @default(autoincrement())
+  id             Int       @id @default(autoincrement())
   // The BUYER — the company raising the order. NOTE the inversion vs CRM's
   // PurchaseOrder.companyId, which is the supplier company. An LPO has no
   // supplier company, so this is the company that owns the order, holds the
@@ -36,7 +36,7 @@ model LocalPurchaseOrder {
   branchId       Int? // -> Cpanel Branch (the raising branch)
   supplierId     Int // -> Accounts Supplier (the external vendor)
   orderNo        String // per-buyer sequential number (LPO-#####)
-  orderDate      DateTime @default(now())
+  orderDate      DateTime  @default(now())
   deliveryAt     DateTime? // requested delivery date & time
   storeId        Int? // -> Inventory Store: where the goods should be delivered
   placedByUserId Int // -> User who raised it

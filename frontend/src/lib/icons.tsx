@@ -58,6 +58,7 @@ import {
   PauseCircle,
   RotateCcw,
   Repeat,
+  IdCard,
   Loader2,
   Handshake,
   Stamp,
@@ -115,6 +116,8 @@ const MAP: Record<string, LucideIcon> = {
   user: Users,
   usercog: UserCog,
   'user-cog': UserCog,
+  // The HR module and its Designation Master both ask for this one.
+  'id-card': IdCard,
   group: Users,
   groups: Users,
   building: Building2,

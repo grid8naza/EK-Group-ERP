@@ -11,7 +11,9 @@ import { PageHeader } from '@/components/ui/PageHeader';
  * workflow can be bound to it, before anybody writes the page. This stands in
  * so that following the menu explains itself rather than landing on a 404.
  *
- * Delete this usage when the real screen lands; nothing else references it.
+ * Lives in components/ui rather than under one module: it was written for the
+ * Workplace screens, and the HR module now stages Employee Master the same way.
+ * Delete a usage when its real screen lands.
  */
 export function ComingSoon({
   title,

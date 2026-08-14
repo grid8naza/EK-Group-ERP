@@ -49,17 +49,17 @@ model HrCategoryCompany {
 /// parent is another group in the SAME category whose `subGroupApplicable` is
 /// true. Deleting a category is blocked while it still has groups (Restrict).
 model HrGroup {
-  id                 Int     @id @default(autoincrement())
+  id                 Int      @id @default(autoincrement())
   categoryId         Int
   parentGroupId      Int?
-  level              Int     @default(1) // 1 = primary group … up to 5
-  subGroupApplicable Boolean @default(false) // true = container: holds sub-groups
-  code               String  @unique // system-generated positional hierarchy code
+  level              Int      @default(1) // 1 = primary group … up to 5
+  subGroupApplicable Boolean  @default(false) // true = container: holds sub-groups
+  code               String   @unique // system-generated positional hierarchy code
   name               String
   description        String?
-  allCompanies       Boolean @default(false) // true = available to every company
-  isActive           Boolean @default(true)
-  isLocked           Boolean @default(false) // when locked, must be unlocked before edit/delete
+  allCompanies       Boolean  @default(false) // true = available to every company
+  isActive           Boolean  @default(true)
+  isLocked           Boolean  @default(false) // when locked, must be unlocked before edit/delete
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -107,9 +107,10 @@ model HrDesignation {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  category  HrCategory            @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  group     HrGroup               @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  category  HrCategory             @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  group     HrGroup                @relation(fields: [groupId], references: [id], onDelete: Restrict)
   companies HrDesignationCompany[]
+  employees Employee[]
 
   @@index([categoryId])
   @@index([groupId])
@@ -127,4 +128,96 @@ model HrDesignationCompany {
   @@unique([designationId, companyId])
   @@index([companyId])
   @@map("hr_designation_companies")
+}
+
+// ---------------------------------------------------------------- employees --
+
+/// As recorded on the employee's own documents. OTHER is present because the
+/// alternative is refusing to record somebody who exists.
+enum EmployeeSex {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  WIDOWED
+  DIVORCED
+}
+
+/// One person on the payroll (SRS §8.9, FR-HRP-01).
+///
+/// "including staff who do not have user logins" is the load-bearing half of
+/// that requirement: an Employee is NOT a User. Most of the bakery's staff never
+/// sign in — their managers mark their attendance and raise their leave — so
+/// this row stands on its own and carries no userId. The day somebody is given a
+/// login, that is a User row beside this one, not a replacement for it.
+///
+/// Cross-domain rule: company, branch and the department lookup are plain `Int`
+/// ids with NO @relation. The designation IS a real relation — it lives in this
+/// same domain file.
+model Employee {
+  id   Int    @id @default(autoincrement())
+  /// EMP-0001, per company. MAX+1 over what exists rather than a stored counter
+  /// (the house rule for every number in the system). Unique WITHIN the company
+  /// (see @@unique below) and not across the group: each company numbers its own
+  /// people from one, which is what a payroll clerk expects and what stops two
+  /// companies fighting over EMP-0001.
+  code String
+  name String
+
+  // ---- the person ----
+  dateOfBirth           DateTime?
+  sex                   EmployeeSex?
+  maritalStatus         MaritalStatus?
+  /// Unique across the group when given: one Aadhaar is one person, so this is
+  /// what stops the same employee being entered twice at two branches. Nullable,
+  /// because a record should never be blocked for want of a document — Postgres
+  /// allows many NULLs under a unique index.
+  aadhaarNumber         String?        @unique
+  address               String?
+  phone                 String?
+  email                 String?
+  /// Who to ring, and on what number, when something happens at work.
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  /// Required. A payroll record for a face nobody can put a name to is exactly
+  /// what an ID card exists to prevent.
+  photoUrl              String
+
+  // ---- the job ----
+  companyId         Int
+  branchId          Int? // null = the company as a whole (head office, roving staff)
+  /// The department, as a Cpanel LookupValue (HR lookup `DEPARTMENT`) rather
+  /// than an enum or a master of its own: what departments a bakery has is the
+  /// user's to name and rename, and doing so must not need a developer. Same
+  /// reasoning as DELIVERY_TRIP and DISCOUNT_LEVEL in Inventory.
+  departmentValueId Int?
+  /// What they are. The CATEGORY and GROUP are not stored here — a designation
+  /// already knows both, and a second copy is a second thing to keep in step.
+  /// The form still asks for all three, because that is how a person finds the
+  /// designation; only the answer is stored.
+  designationId     Int
+  dateOfJoin        DateTime
+  /// Their manager — another employee, so the line of report is answerable to
+  /// somebody who exists. SetNull rather than cascade: when a manager leaves,
+  /// their reports stay employed.
+  reportsToId       Int?
+
+  isActive  Boolean  @default(true)
+  isLocked  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  designation HrDesignation @relation(fields: [designationId], references: [id], onDelete: Restrict)
+  reportsTo   Employee?     @relation("EmployeeReportsTo", fields: [reportsToId], references: [id], onDelete: SetNull)
+  reports     Employee[]    @relation("EmployeeReportsTo")
+
+  @@unique([companyId, code])
+  @@index([companyId, branchId])
+  @@index([designationId])
+  @@index([reportsToId])
+  @@map("employees")
 }
