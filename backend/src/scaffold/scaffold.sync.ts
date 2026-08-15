@@ -1,4 +1,4 @@
-import { ObjectType, Prisma } from '@prisma/client';
+import { ObjectType, Prisma, WidgetType } from '@prisma/client';
 import { MODULE_SCAFFOLDS, type ModuleScaffold } from './module-scaffold';
 import { CPANEL_COMPANY_SUBS } from '../modules/company/company-provisioning';
 import {
@@ -1252,6 +1252,10 @@ export async function syncScaffold(
 
   // 4) After the menus, because it hides one of the tabs they just created.
   await hideUserAccessTabByDefault(prisma);
+
+  // 5) And the HR Dashboard's starting widgets, which need the module row
+  //    above and a dashboard to hang on.
+  await seedHrDashboardWidgets(prisma);
 }
 
 /**
@@ -2000,4 +2004,144 @@ async function syncOneMenu(
       skipDuplicates: true,
     });
   }
+}
+
+/**
+ * The widgets an HR Dashboard opens with, and the metric each shows.
+ *
+ * A starting board, not a fixed one: it is written ONCE per company (see the
+ * runOnce below), and from then on the dashboard belongs to whoever arranges
+ * it in Cpanel → Dashboards. Adding a widget here later will not disturb a
+ * board somebody has already made their own.
+ *
+ * Chosen to answer the four questions an HR screen is opened with: how many
+ * people, who is new, who is still on probation, and what it costs.
+ */
+const HR_DASHBOARD_WIDGETS: {
+  code: string;
+  name: string;
+  metric: string;
+  hint: string;
+  accent: string;
+}[] = [
+  {
+    code: 'HR_HEADCOUNT',
+    name: 'Headcount',
+    metric: 'hr.employees.active',
+    hint: 'Active employees',
+    accent: 'emerald',
+  },
+  {
+    code: 'HR_JOINED_MONTH',
+    name: 'Joined This Month',
+    metric: 'hr.employees.joinedThisMonth',
+    hint: 'New this month',
+    accent: 'blue',
+  },
+  {
+    code: 'HR_ON_PROBATION',
+    name: 'On Probation',
+    metric: 'hr.employees.onProbation',
+    hint: 'Awaiting confirmation',
+    accent: 'amber',
+  },
+  {
+    code: 'HR_MONTHLY_NET',
+    name: 'Monthly Net Payable',
+    metric: 'hr.salary.monthlyNet',
+    hint: 'Packages in force today',
+    accent: 'violet',
+  },
+  {
+    code: 'HR_SALARY_COVERED',
+    name: 'With a Package',
+    metric: 'hr.salary.covered',
+    hint: 'Payroll can pay these',
+    accent: 'slate',
+  },
+];
+
+/**
+ * Give every company's HR Dashboard a starting set of widgets.
+ *
+ * Dashboards and widgets are normally the admin's to build — this is the one
+ * exception, so the HR Dashboard opens with something on it rather than an
+ * empty board nobody knows what to do with. `runOnce`, emphatically: rebuilding
+ * it every boot would undo the first rearrangement anybody made.
+ *
+ * Skipped WITHOUT marking itself done while the HR module or its dashboards are
+ * missing — they are created by the sync above and by an admin respectively, so
+ * a database that has neither yet simply seeds on a later boot.
+ */
+async function seedHrDashboardWidgets(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  await runOnce(prisma, 'hr-dashboard-starter-widgets', async () => {
+    const hr = await prisma.module.findUnique({
+      where: { code: 'HR' },
+      select: { id: true },
+    });
+    if (!hr) return;
+
+    const dashboards = await prisma.dashboard.findMany({
+      where: { moduleId: hr.id },
+      select: { id: true, companyId: true },
+    });
+    if (!dashboards.length) return;
+
+    for (const dashboard of dashboards) {
+      // A widget belongs to a company; a dashboard without one is global and
+      // has no company's widgets to hang on it.
+      if (dashboard.companyId == null) continue;
+
+      for (const [i, w] of HR_DASHBOARD_WIDGETS.entries()) {
+        const widget = await prisma.widget.upsert({
+          where: {
+            companyId_moduleId_code: {
+              companyId: dashboard.companyId,
+              moduleId: hr.id,
+              code: w.code,
+            },
+          },
+          update: {},
+          create: {
+            companyId: dashboard.companyId,
+            moduleId: hr.id,
+            code: w.code,
+            name: w.name,
+            type: WidgetType.METRIC,
+            sortOrder: i + 1,
+            config: {
+              metric: w.metric,
+              hint: w.hint,
+              style: {
+                shape: 'rounded',
+                accent: w.accent,
+                border: true,
+                fontSize: 'xl',
+                fontWeight: 'bold',
+              },
+            },
+          },
+          select: { id: true },
+        });
+
+        await prisma.dashboardWidget.upsert({
+          where: {
+            dashboardId_widgetId: {
+              dashboardId: dashboard.id,
+              widgetId: widget.id,
+            },
+          },
+          update: {},
+          create: {
+            dashboardId: dashboard.id,
+            widgetId: widget.id,
+            sortOrder: i + 1,
+            width: 1,
+          },
+        });
+      }
+    }
+  });
 }

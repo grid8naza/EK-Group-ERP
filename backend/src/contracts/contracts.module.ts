@@ -10,6 +10,7 @@ import { METRIC_PROVIDER } from './metric-provider.port';
 import { CpanelMetricsAdapter } from '../modules/company/cpanel-metrics.adapter';
 import { ProductionMetricsAdapter } from '../modules/production/production-metrics.adapter';
 import { InventoryMetricsAdapter } from '../modules/item/inventory-metrics.adapter';
+import { HrMetricsAdapter } from '../modules/hr-employee/hr-metrics.adapter';
 import { NUMBERING } from './numbering.port';
 import { DocumentNumberingService } from '../modules/document-numbering/document-numbering.service';
 import { BATCH_NUMBERING } from './batch-numbering.port';
@@ -190,17 +191,20 @@ import { NotificationSummaryAdapter } from '../modules/notification/notification
     CpanelMetricsAdapter,
     ProductionMetricsAdapter,
     InventoryMetricsAdapter,
+    HrMetricsAdapter,
     {
       provide: METRIC_PROVIDER,
       useFactory: (
         cpanel: CpanelMetricsAdapter,
         production: ProductionMetricsAdapter,
         inventory: InventoryMetricsAdapter,
-      ) => [cpanel, production, inventory],
+        hr: HrMetricsAdapter,
+      ) => [cpanel, production, inventory, hr],
       inject: [
         CpanelMetricsAdapter,
         ProductionMetricsAdapter,
         InventoryMetricsAdapter,
+        HrMetricsAdapter,
       ],
     },
   ],
