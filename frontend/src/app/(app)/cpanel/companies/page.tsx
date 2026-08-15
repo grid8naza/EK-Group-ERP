@@ -28,6 +28,7 @@ import {
   type SaveMode,
 } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
+import { FormSection } from '@/components/ui/FormSection';
 import { Input, Textarea, Checkbox, Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import { mediaUrl } from '@/lib/login-screen';
@@ -957,9 +958,7 @@ export default function CompaniesPage() {
                 for this company.
               </p>
             </div>
-            <div className="mt-1 border-t border-slate-200 pt-3 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300 sm:col-span-2">
-              Financial &amp; statutory
-            </div>
+            <FormSection>Financial &amp; Statutory</FormSection>
             <Select
               label="Currency"
               placeholder="Select currency"

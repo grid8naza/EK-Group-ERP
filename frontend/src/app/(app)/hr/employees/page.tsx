@@ -34,6 +34,7 @@ import {
   type SaveMode,
 } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
+import { FormSection } from '@/components/ui/FormSection';
 import {
   Input,
   Select,
@@ -1048,15 +1049,8 @@ export default function EmployeesPage() {
                 </div>
               </div>
 
-              {/* ---- the person ----
-                  A centred band in a light blue, dark blue text: the tint is
-                  what separates one block from the next, so it replaces the
-                  rule that used to sit above the heading rather than joining
-                  it. Deliberately NOT brand-*: that palette is evergreen, and a
-                  heading in it would look like a button that failed to render. */}
-              <div className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-center text-base font-bold text-blue-900 dark:bg-blue-950/40 dark:text-blue-300 sm:col-span-2">
-                Personal Details
-              </div>
+              {/* ---- the person ---- */}
+              <FormSection>Personal Details</FormSection>
 
               <Input
                 label="Employee ID (auto)"
@@ -1204,9 +1198,7 @@ export default function EmployeesPage() {
               />
 
               {/* ---- the job ---- */}
-              <div className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-center text-base font-bold text-blue-900 dark:bg-blue-950/40 dark:text-blue-300 sm:col-span-2">
-                Posting Details
-              </div>
+              <FormSection>Posting Details</FormSection>
 
               {/*
               Company and branch are chosen HERE rather than taken from the
