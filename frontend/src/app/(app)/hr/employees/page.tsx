@@ -66,15 +66,6 @@ const GENDERS = [
   { value: 'OTHER', label: 'Other' },
 ];
 
-/**
- * The eight blood groups. A fixed list rather than a lookup — unlike education,
- * skills, languages and grade, there is no ninth group for an admin to add.
- * Mirrors BLOOD_GROUPS in the backend's hr-employee.constants.ts.
- */
-const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(
-  (g) => ({ value: g, label: g }),
-);
-
 const MARITAL_STATUSES = [
   { value: 'SINGLE', label: 'Single' },
   { value: 'MARRIED', label: 'Married' },
@@ -87,7 +78,7 @@ const empty = {
   dateOfBirth: '',
   sex: '', // labelled "Gender" on the form; the stored field keeps its name
   maritalStatus: '',
-  bloodGroup: '',
+  bloodGroupId: '',
   aadhaarNumber: '',
   address: '', // Permanent Address
   presentAddress: '',
@@ -149,6 +140,7 @@ export default function EmployeesPage() {
   const skillValues = useLookupValues('SKILL');
   const languageValues = useLookupValues('LANGUAGE');
   const gradeValues = useLookupValues('EMPLOYEE_GRADE');
+  const bloodGroupValues = useLookupValues('BLOOD_GROUP');
   const asOptions = (vals: LookupValue[]) =>
     vals.map((v) => ({ value: v.id, label: v.label }));
 
@@ -422,7 +414,7 @@ export default function EmployeesPage() {
     dateOfBirth: e.dateOfBirth ?? '',
     sex: e.sex ?? '',
     maritalStatus: e.maritalStatus ?? '',
-    bloodGroup: e.bloodGroup ?? '',
+    bloodGroupId: e.bloodGroupId != null ? String(e.bloodGroupId) : '',
     aadhaarNumber: e.aadhaarNumber ?? '',
     address: e.address ?? '',
     presentAddress: e.presentAddress ?? '',
@@ -551,7 +543,7 @@ export default function EmployeesPage() {
       dateOfBirth: form.dateOfBirth || null,
       sex: form.sex || null,
       maritalStatus: form.maritalStatus || null,
-      bloodGroup: form.bloodGroup || null,
+      bloodGroupId: idOrNull(form.bloodGroupId),
       aadhaarNumber: form.aadhaarNumber.trim() || null,
       address: form.address.trim() || null,
       presentAddress: form.presentAddress.trim() || null,
@@ -610,7 +602,7 @@ export default function EmployeesPage() {
           dateOfBirth: '',
           sex: '',
           maritalStatus: '',
-          bloodGroup: '',
+          bloodGroupId: '',
           aadhaarNumber: '',
           address: '',
           presentAddress: '',
@@ -1099,15 +1091,18 @@ export default function EmployeesPage() {
               />
               <Select
                 label="Blood Group"
-                value={form.bloodGroup}
+                value={form.bloodGroupId}
                 onChange={(e) =>
-                  setForm({ ...form, bloodGroup: e.target.value })
+                  setForm({ ...form, bloodGroupId: e.target.value })
                 }
                 placeholder="— Not stated —"
-                // In medical order (by type, positive before negative) rather
-                // than A→Z, which would read A+, A-, AB+, AB-, B+…
+                // Left in the order the lookup holds them (by type, positive
+                // before negative). A→Z would read A+, A-, AB+, AB-, B+ …
                 sortOptions={false}
-                options={BLOOD_GROUPS}
+                options={asOptions(bloodGroupValues).map((o) => ({
+                  ...o,
+                  value: String(o.value),
+                }))}
               />
               <Input
                 label="Aadhaar Number"

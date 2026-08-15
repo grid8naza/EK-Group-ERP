@@ -15,7 +15,6 @@ import {
   Min,
   MinLength,
 } from 'class-validator';
-import { BLOOD_GROUPS } from './hr-employee.constants';
 
 const SEXES = Object.values(EmployeeSex);
 const MARITAL_STATUSES = Object.values(MaritalStatus);
@@ -79,11 +78,11 @@ export class SaveEmployeeDto {
   @MaxLength(500)
   presentAddress?: string | null;
 
-  /** One of BLOOD_GROUPS — a fixed medical set, not a lookup. */
-  @ApiPropertyOptional({ enum: BLOOD_GROUPS })
+  /** A BLOOD_GROUP LookupValue id. */
+  @ApiPropertyOptional({ nullable: true })
   @IsOptional()
-  @IsIn(BLOOD_GROUPS, { message: 'That is not a blood group.' })
-  bloodGroup?: string | null;
+  @IsInt()
+  bloodGroupId?: number | null;
 
   /**
    * LookupValue ids of the EDUCATION / SKILL / LANGUAGE lists. Sent whole:

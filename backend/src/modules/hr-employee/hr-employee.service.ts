@@ -69,6 +69,7 @@ const LIST_LABELS: Record<string, string> = {
   SKILL: 'Skills',
   LANGUAGE: 'Languages known',
   EMPLOYEE_GRADE: 'Employee grade',
+  BLOOD_GROUP: 'Blood group',
 };
 
 /**
@@ -322,8 +323,8 @@ export class HrEmployeeService {
       ...(dto.presentAddress !== undefined
         ? { presentAddress: dto.presentAddress?.trim() || null }
         : {}),
-      ...(dto.bloodGroup !== undefined
-        ? { bloodGroup: dto.bloodGroup || null }
+      ...(dto.bloodGroupId !== undefined
+        ? { bloodGroupId: dto.bloodGroupId }
         : {}),
       ...lists,
       ...(dto.phone !== undefined ? { phone: dto.phone?.trim() || null } : {}),
@@ -403,6 +404,13 @@ export class HrEmployeeService {
         ids: [dto.gradeId],
       });
     }
+    if (dto.bloodGroupId !== undefined && dto.bloodGroupId !== null) {
+      asked.push({
+        key: 'bloodGroupId',
+        code: 'BLOOD_GROUP',
+        ids: [dto.bloodGroupId],
+      });
+    }
     if (!asked.length) return {};
 
     const allIds = [...new Set(asked.flatMap((a) => a.ids))];
@@ -425,10 +433,12 @@ export class HrEmployeeService {
           `${LIST_LABELS[a.code]}: ${wrong.length === 1 ? 'that choice is' : 'those choices are'} not on the list. Re-pick and save again.`,
         );
       }
-      // Deduplicated and ordered as the list itself is, so two saves of the
-      // same answer produce the same row.
-      if (a.key !== 'gradeId')
+      // Deduplicated and ordered, so two saves of the same answer produce the
+      // same row. Only the LISTS are rebuilt here — the single-value fields
+      // (grade, blood group) are written from the dto like any other scalar.
+      if (a.key !== 'gradeId' && a.key !== 'bloodGroupId') {
         out[a.key] = [...new Set(a.ids)].sort((x, y) => x - y);
+      }
     }
     return out;
   }
@@ -609,7 +619,11 @@ export class HrEmployeeService {
       presentAddress: row.presentAddress,
       phone: row.phone,
       email: row.email,
-      bloodGroup: row.bloodGroup,
+      bloodGroupId: row.bloodGroupId,
+      bloodGroupName:
+        row.bloodGroupId != null
+          ? (names.lookupLabels.get(row.bloodGroupId) ?? null)
+          : null,
       emergencyContactName: row.emergencyContactName,
       emergencyContactPhone: row.emergencyContactPhone,
       photoUrl: row.photoUrl,

@@ -1549,8 +1549,9 @@ export interface Employee {
   presentAddress?: string | null;
   phone?: string | null;
   email?: string | null;
-  /** One of BLOOD_GROUPS. A fixed medical set, not a lookup. */
-  bloodGroup?: string | null;
+  /** A BLOOD_GROUP LookupValue (HR → Lookups). */
+  bloodGroupId?: number | null;
+  bloodGroupName?: string | null;
   emergencyContactName?: string | null;
   emergencyContactPhone?: string | null;
   /** Optional — it can follow after the person is enrolled. */

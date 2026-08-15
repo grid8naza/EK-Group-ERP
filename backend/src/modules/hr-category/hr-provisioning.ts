@@ -109,23 +109,29 @@ export const HR_EXTRA_MENUS = [
 // ---------------------------------------------------------------------------
 
 /**
- * The four lists the Employee Master picks from, and the values each starts
+ * The five lists the Employee Master picks from, and the values each starts
  * with.
  *
  * Lookups rather than fixed options because every one of them is the business's
  * to keep: another language when they hire from a new state, a grade above A, a
- * skill the bakery did not need last year. Blood group is deliberately NOT here
- * — the eight groups are a fact of medicine, so the form holds them.
+ * skill the bakery did not need last year. Blood group is here too, for
+ * consistency — one place to look for every list the form offers — even though
+ * the eight groups are a fact of medicine rather than a choice.
  *
  * The starting values are a first draft, not a policy. They are written only
  * when the lookup is first created; after that the list belongs to whoever
  * maintains it, and re-running must not resurrect a value they deleted or undo
  * a rename.
+ *
+ * A value is either a label (its stable code is derived from it) or an explicit
+ * `{ code, label }` pair, for the lists where deriving would not work — "A+"
+ * and "A-" both reduce to "A" once punctuation is stripped, and one would
+ * silently swallow the other.
  */
 export const HR_LOOKUPS: {
   code: string;
   name: string;
-  values: string[];
+  values: (string | { code: string; label: string })[];
 }[] = [
   {
     code: 'EDUCATION',
@@ -180,6 +186,26 @@ export const HR_LOOKUPS: {
     name: 'Employee Grade',
     values: ['A', 'B', 'C', 'D', 'E'],
   },
+  {
+    code: 'BLOOD_GROUP',
+    name: 'Blood Group',
+    // Seeded in the order a form asks for it — by type, positive before
+    // negative — which the sortOrder below preserves. Alphabetical would give
+    // A+, A-, AB+, AB-, B+, and read as a mistake.
+    //
+    // Explicit codes: the sign is the whole distinction here, and stripping
+    // punctuation would leave A+ and A- as the same "A".
+    values: [
+      { code: 'A_POS', label: 'A+' },
+      { code: 'A_NEG', label: 'A-' },
+      { code: 'B_POS', label: 'B+' },
+      { code: 'B_NEG', label: 'B-' },
+      { code: 'AB_POS', label: 'AB+' },
+      { code: 'AB_NEG', label: 'AB-' },
+      { code: 'O_POS', label: 'O+' },
+      { code: 'O_NEG', label: 'O-' },
+    ],
+  },
 ];
 
 /**
@@ -216,16 +242,22 @@ export async function seedHrDefaults(
       },
     });
     await prisma.lookupValue.createMany({
-      data: spec.values.map((label, i) => ({
-        lookupId: lookup.id,
-        value: label
-          .toUpperCase()
-          .replace(/[’']/g, '')
-          .replace(/[^A-Z0-9]+/g, '_')
-          .replace(/^_|_$/g, ''),
-        label,
-        sortOrder: i + 1,
-      })),
+      data: spec.values.map((v, i) => {
+        const label = typeof v === 'string' ? v : v.label;
+        return {
+          lookupId: lookup.id,
+          value:
+            typeof v === 'string'
+              ? label
+                  .toUpperCase()
+                  .replace(/[’']/g, '')
+                  .replace(/[^A-Z0-9]+/g, '_')
+                  .replace(/^_|_$/g, '')
+              : v.code,
+          label,
+          sortOrder: i + 1,
+        };
+      }),
       skipDuplicates: true,
     });
   }

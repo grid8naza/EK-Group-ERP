@@ -185,10 +185,10 @@ model Employee {
   presentAddress        String?
   phone                 String?
   email                 String?
-  /// A+, O-, and the rest. A plain string against a fixed list rather than a
-  /// lookup: the eight groups are a fact of medicine, not a list this business
-  /// maintains, so there is nothing here for an admin to add.
-  bloodGroup            String?
+  /// A BLOOD_GROUP LookupValue id (A+, O-, and the rest), maintained in
+  /// HR → Lookups beside education, skills and languages. A plain Int for the
+  /// cross-domain reason those carry — LookupValue is a Cpanel table.
+  bloodGroupId          Int?
   /// Who to ring, and on what number, when something happens at work.
   emergencyContactName  String?
   emergencyContactPhone String?
