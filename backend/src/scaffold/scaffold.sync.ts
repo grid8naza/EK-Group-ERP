@@ -9,6 +9,13 @@ import {
 import { ACCOUNTS_REPORT_MENUS } from '../modules/supplier/accounts-provisioning';
 
 /**
+ * The group every new screen is granted to, and the one this sync will not take
+ * anything away from. Matched by NAME — plural, exactly so — because that is how
+ * company provisioning creates it and how the rest of the scaffold finds it.
+ */
+const ADMIN_GROUP_NAME = 'Administrators';
+
+/**
  * Screen routes that were renamed or removed. The additive sync below never
  * deletes on its own, so a renamed screen's old SubMenu / ObjectMaster (and the
  * privileges hanging off them) would linger in every developer's DB. List the
@@ -1224,6 +1231,64 @@ export async function syncScaffold(
   //    the per-company menus and the screens the steps above have just created.
   await grantWorkplaceToEveryone(prisma);
   await orderWorkplaceMenus(prisma);
+
+  // 4) After the menus, because it hides one of the tabs they just created.
+  await hideUserAccessTabByDefault(prisma);
+}
+
+/**
+ * Take HR → Employee Master → User Access away from every group except
+ * Administrators.
+ *
+ * A tab nobody has hidden is VISIBLE (see GroupSubMenuTabAccess), which is right
+ * for tabs in general and too generous for this one: it is where logins are
+ * created and roles handed out, and leaving it on by default would give it to
+ * whoever already maintains staff records — including, in the end, the ability
+ * to widen their own access. So the rows are written once, explicitly, and an
+ * admin opens it up per group from the Privileges screen.
+ *
+ * `runOnce`, emphatically. Every boot would be arguing with the admin who ticked
+ * it back on that morning — this is a starting position, not a rule.
+ *
+ * Matched company by company: a group and the tab it is being refused belong to
+ * one company, and joining without that would write a setting against a screen
+ * the group never sees. Administrators is matched by NAME, the same way the rest
+ * of the scaffold identifies it.
+ */
+async function hideUserAccessTabByDefault(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  await runOnce(prisma, 'hide-user-access-tab-by-default', async () => {
+    const tabs = await prisma.subMenuTab.findMany({
+      where: {
+        key: 'access',
+        subMenu: { route: '/hr/employees' },
+      },
+      select: { id: true, subMenu: { select: { mainMenu: true } } },
+    });
+    if (!tabs.length) return;
+
+    for (const tab of tabs) {
+      const groups = await prisma.userGroup.findMany({
+        where: {
+          companyId: tab.subMenu.mainMenu.companyId,
+          name: { not: ADMIN_GROUP_NAME },
+        },
+        select: { id: true },
+      });
+      if (!groups.length) continue;
+      // createMany + skipDuplicates rather than an upsert: a group that already
+      // has a row has been decided about, and this is only a default.
+      await prisma.groupSubMenuTabAccess.createMany({
+        data: groups.map((g) => ({
+          userGroupId: g.id,
+          subMenuTabId: tab.id,
+          visible: false,
+        })),
+        skipDuplicates: true,
+      });
+    }
+  });
 }
 
 /**
@@ -1622,7 +1687,7 @@ async function syncModuleMenus(
 
   for (const { id: companyId } of companies) {
     const admin = await prisma.userGroup.findFirst({
-      where: { companyId, name: 'Administrators' },
+      where: { companyId, name: ADMIN_GROUP_NAME },
       select: { id: true },
     });
     if (admin) {
