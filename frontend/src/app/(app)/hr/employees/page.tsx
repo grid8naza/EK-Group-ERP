@@ -30,6 +30,7 @@ import {
   Drawer,
   DrawerFooter,
   CloseFooter,
+  DISCARD_PROMPT,
   type SaveMode,
 } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
@@ -145,6 +146,14 @@ export default function EmployeesPage() {
    * still being looked up, so the tab can say "loading" rather than "none".
    */
   const [login, setLogin] = useState<AppUser | null | undefined>(undefined);
+  /** Unsaved work on the User Access tab, as that panel reports it. */
+  const [accessDirty, setAccessDirty] = useState(false);
+  /**
+   * The employee form as it stood when last loaded or saved. Compared against
+   * rather than a touched-a-field flag, so the drawer stops claiming unsaved
+   * work the moment it IS saved — this one stays open after Save.
+   */
+  const [employeeBaseline, setEmployeeBaseline] = useState('');
   const [photoUploading, setPhotoUploading] = useState(false);
   /** The photograph, shown full size over the drawer. */
   const [photoOpen, setPhotoOpen] = useState(false);
@@ -273,6 +282,60 @@ export default function EmployeesPage() {
     setPhotoOpen(false);
     setTab(defaultTab);
     setLogin(undefined);
+    setAccessDirty(false);
+  };
+
+  /**
+   * Is there unsaved work anywhere in the drawer?
+   *
+   * Both tabs, whichever is on screen: the User Access tab is unmounted while
+   * the Employee tab is showing, so asking only about the visible one would let
+   * a typed-out employee be thrown away by a Close pressed from the other side.
+   *
+   * A view drawer is never dirty — nothing in it can be typed into.
+   */
+  const employeeDirty =
+    !view &&
+    employeeBaseline !== '' &&
+    JSON.stringify(form) !== employeeBaseline;
+  const drawerDirty = useCallback(
+    () => employeeDirty || accessDirty,
+    [employeeDirty, accessDirty],
+  );
+
+  /**
+   * Close, asking first if that would lose something. Given to the footer
+   * buttons; the X, Escape and the backdrop are guarded by the Drawer itself
+   * from the same `dirty` answer, so every way out asks once and only once.
+   */
+  const requestClose = async () => {
+    if (drawerDirty() && !(await confirm({ ...DISCARD_PROMPT }))) return;
+    closeDrawer();
+  };
+
+  /**
+   * Move between the two tabs, asking first where that would lose something.
+   *
+   * Only leaving User Access asks: that panel is unmounted on the way out and
+   * its half-typed login goes with it. The Employee form is held here and
+   * survives the round trip, so switching away from it costs nothing.
+   */
+  const switchTab = async (next: Tab) => {
+    if (next === tab) return;
+    if (tab === 'access' && accessDirty) {
+      const ok = await confirm({
+        title: 'Leave the login unsaved?',
+        message:
+          'What has been entered on User Access has not been saved. Switching tabs loses it.',
+        danger: true,
+        confirmText: 'Yes',
+        cancelText: 'No',
+        defaultCancel: true,
+      });
+      if (!ok) return;
+      setAccessDirty(false);
+    }
+    setTab(next);
   };
 
   /**
@@ -326,6 +389,15 @@ export default function EmployeesPage() {
     [canSetUpLogins],
   );
 
+  /**
+   * Put a form on screen and treat it as the saved state. Everything that is
+   * not somebody typing goes through here, so "dirty" means what it says.
+   */
+  const loadForm = (next: Form) => {
+    setEmployeeBaseline(JSON.stringify(next));
+    setForm(next);
+  };
+
   const formFrom = (e: Employee): Form => ({
     name: e.name,
     dateOfBirth: e.dateOfBirth ?? '',
@@ -357,7 +429,7 @@ export default function EmployeesPage() {
     setTab(defaultTab);
     setLogin(null); // a record that does not exist yet can hold no login
     // Start where the user is working — they can move it on the form.
-    setForm({
+    loadForm({
       ...empty,
       companyId: activeCompanyId ? String(activeCompanyId) : '',
       branchId: activeBranchId ? String(activeBranchId) : '',
@@ -368,7 +440,7 @@ export default function EmployeesPage() {
     setEditing(e);
     setView(false);
     setTab(defaultTab);
-    setForm(formFrom(e));
+    loadForm(formFrom(e));
     setOpen(true);
     void loadLogin(e.id);
   };
@@ -376,7 +448,7 @@ export default function EmployeesPage() {
     setEditing(e);
     setView(true);
     setTab(defaultTab);
-    setForm(formFrom(e));
+    loadForm(formFrom(e));
     setOpen(true);
     void loadLogin(e.id);
   };
@@ -489,8 +561,10 @@ export default function EmployeesPage() {
         // carrying the last one over is how the wrong face ends up on a record.
         setEditing(null);
         setLogin(null); // the next record is a different person
-        setForm((f) => ({
-          ...f,
+        // A saved record followed by a blank one is not unsaved work, so the
+        // cleared form becomes the baseline too.
+        loadForm({
+          ...form,
           name: '',
           dateOfBirth: '',
           sex: '',
@@ -502,11 +576,11 @@ export default function EmployeesPage() {
           emergencyContactName: '',
           emergencyContactPhone: '',
           photoUrl: '',
-        }));
+        });
         setTimeout(() => nameRef.current?.focus(), 0);
       } else if (mode === 'save') {
         setEditing(saved);
-        setForm(formFrom(saved));
+        loadForm(formFrom(saved));
         // The record now has an id, so the User Access tab has something to
         // hang a login on.
         void loadLogin(saved.id);
@@ -758,7 +832,10 @@ export default function EmployeesPage() {
 
       <Drawer
         open={open}
+        // The RAW close: the Drawer asks for itself, from `dirty` below, on the
+        // X, Escape and the backdrop. Guarding here as well would ask twice.
         onClose={closeDrawer}
+        dirty={drawerDirty}
         title={title}
         subtitle="Employee details"
         icon={<UserCog className="h-5 w-5" />}
@@ -768,7 +845,7 @@ export default function EmployeesPage() {
             <CloseFooter onClose={closeDrawer} />
           ) : tab === 'employee' ? (
             <DrawerFooter
-              onCancel={closeDrawer}
+              onCancel={() => void requestClose()}
               onSave={save}
               saving={saving}
               dataEntry
@@ -777,7 +854,7 @@ export default function EmployeesPage() {
             // The User Access tab saves the LOGIN, not the employee, and does
             // it with its own button — one Save that means two different
             // things depending on the tab is the confusion worth avoiding.
-            <CloseFooter onClose={closeDrawer} />
+            <CloseFooter onClose={() => void requestClose()} />
           )
         }
       >
@@ -788,7 +865,7 @@ export default function EmployeesPage() {
           <Tabs
             tabs={visibleTabs}
             active={tab}
-            onChange={(k) => setTab(k as Tab)}
+            onChange={(k) => void switchTab(k as Tab)}
             className="mb-5"
           />
         )}
@@ -817,6 +894,7 @@ export default function EmployeesPage() {
               readOnly={view}
               onSaved={(u) => setLogin(u)}
               onDeleted={() => setLogin(null)}
+              onDirtyChange={setAccessDirty}
             />
           )
         ) : (

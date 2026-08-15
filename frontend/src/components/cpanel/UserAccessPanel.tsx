@@ -132,6 +132,12 @@ export interface UserAccessPanelProps {
   onSaved?: (user: AppUser) => void;
   /** After the login has been deleted. */
   onDeleted?: () => void;
+  /**
+   * Whether there is unsaved work in here. Told to the host so the drawer
+   * around this panel can ask before closing on top of it — pass a stable
+   * function (a setState is ideal), since it is called from an effect.
+   */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export function UserAccessPanel({
@@ -140,6 +146,7 @@ export function UserAccessPanel({
   readOnly = false,
   onSaved,
   onDeleted,
+  onDirtyChange,
 }: UserAccessPanelProps) {
   const toast = useToast();
   const confirm = useConfirm();
@@ -171,8 +178,33 @@ export function UserAccessPanel({
   /** Which login the async preference fetch belongs to. */
   const loadedRef = useRef<number | null>(null);
 
+  /**
+   * The form as it stood when it was last loaded or saved.
+   *
+   * Compared against, rather than a touched-a-field flag, because this decides
+   * whether SAVE is offered: a field clicked into and back out of has changed
+   * nothing, and a button that lights up for it invites a pointless write. It
+   * also has to go quiet again after saving, which a touch flag cannot do.
+   */
+  const baselineRef = useRef('');
+  const snapshot = JSON.stringify(form);
+  // Empty until the form has been loaded, which is one render later than the
+  // first — and an unloaded form is not unsaved work, it is nothing yet.
+  const dirty = baselineRef.current !== '' && snapshot !== baselineRef.current;
+
   /** Is there a form on screen at all? */
   const showForm = user != null || creating;
+
+  // Let the host know, so the drawer around this panel can ask before closing
+  // on top of unsaved work. Only while a form is actually on screen: the
+  // invitation to create a login has nothing to lose.
+  useEffect(() => {
+    onDirtyChange?.(showForm && dirty);
+  }, [showForm, dirty, onDirtyChange]);
+
+  // Anything left unsaved goes when the panel does — switching tabs unmounts
+  // it, and a host still holding `true` would guard work that is already gone.
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   useEffect(() => {
     api
@@ -204,10 +236,34 @@ export function UserAccessPanel({
     };
   }, [employee]);
 
+  /**
+   * Put a form on screen and treat it as the saved state. Everything that is
+   * not a user edit goes through here, so "dirty" means somebody typed.
+   */
+  const load = useCallback((next: typeof empty) => {
+    baselineRef.current = JSON.stringify(next);
+    setForm(next);
+  }, []);
+
+  /**
+   * Fold in data that ARRIVED rather than was typed — late-loading alert
+   * preferences, a module list pruned to what the chosen roles allow.
+   *
+   * Rebased only while nothing has been typed yet: doing it unconditionally
+   * would absorb a fast typist's change into the baseline and lose their work
+   * to a Close that never asked.
+   */
+  const settle = useCallback((next: typeof empty, previous: typeof empty) => {
+    if (JSON.stringify(previous) === baselineRef.current) {
+      baselineRef.current = JSON.stringify(next);
+    }
+    return next;
+  }, []);
+
   useEffect(() => {
     if (!user) {
       loadedRef.current = null;
-      setForm(seeded());
+      load(seeded());
       setExpanded(
         Object.fromEntries(
           (employee?.companyId ? [employee.companyId] : []).map((id) => [
@@ -232,7 +288,7 @@ export function UserAccessPanel({
       defaultModuleByCompany[a.companyId] = a.defaultModuleId ?? null;
     }
     setExpanded(Object.fromEntries(companyIds.map((id) => [id, true])));
-    setForm({
+    load({
       userCode: user.userCode,
       username: user.username,
       name: user.name,
@@ -269,18 +325,23 @@ export function UserAccessPanel({
         // Opening a second login before the first one's preferences arrive
         // would otherwise paint one person's settings onto another.
         if (loadedRef.current !== user.id) return;
-        setForm((f) => ({
-          ...f,
-          alertPrefs: {
-            ...allAlertsOn(),
-            ...Object.fromEntries(rows.map((r) => [r.category, r.inApp])),
-          },
-        }));
+        setForm((f) =>
+          settle(
+            {
+              ...f,
+              alertPrefs: {
+                ...allAlertsOn(),
+                ...Object.fromEntries(rows.map((r) => [r.category, r.inApp])),
+              },
+            },
+            f,
+          ),
+        );
       })
       .catch(() => {
         // Leave the defaults showing; saving still writes what is on screen.
       });
-  }, [user, employee, seeded]);
+  }, [user, employee, seeded, load, settle]);
 
   // ------------------------------------------------------ lazy access data --
 
@@ -416,17 +477,23 @@ export function UserAccessPanel({
           changed = true;
         }
       }
+      // Pruning is the data arriving, not somebody editing — a login opened and
+      // left alone must not offer to save itself.
       return changed
-        ? {
-            ...f,
-            moduleAssignments: next,
-            defaultModuleByCompany: nextDefaults,
-          }
+        ? settle(
+            {
+              ...f,
+              moduleAssignments: next,
+              defaultModuleByCompany: nextDefaults,
+            },
+            f,
+          )
         : f;
     });
   }, [
     showForm,
     readOnly,
+    settle,
     form.groupIds,
     form.companyIds,
     groupsByCompany,
@@ -657,6 +724,15 @@ export function UserAccessPanel({
         toast.error('The login was saved, but its alert settings were not.');
       }
 
+      // Saved is the new baseline, so the button goes quiet until something
+      // else is typed. The password box is cleared with it — it is write-only,
+      // and leaving the typed one on screen would make a saved form look
+      // different from what was stored.
+      setForm((f) => {
+        const next = { ...f, password: '' };
+        baselineRef.current = JSON.stringify(next);
+        return next;
+      });
       setCreating(false);
       onSaved?.(saved);
     } catch (e) {
@@ -1267,11 +1343,18 @@ export function UserAccessPanel({
               Cancel
             </button>
           )}
+          {/* Nothing typed, nothing to save. Disabled rather than hidden so the
+              button stays where it was and says why. */}
           <button
             type="button"
-            className="btn-primary inline-flex items-center gap-2"
+            className="btn-primary inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={save}
-            disabled={saving}
+            disabled={saving || !dirty}
+            title={
+              !dirty && !saving
+                ? 'Nothing has changed since this was last saved'
+                : undefined
+            }
           >
             <KeyRound className="h-4 w-4" />
             {saving ? 'Saving…' : user ? 'Save login' : 'Create login'}

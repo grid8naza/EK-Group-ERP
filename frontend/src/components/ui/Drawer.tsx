@@ -34,7 +34,32 @@ interface DrawerProps {
    * nested drawer is open, so Escape only dismisses the top-most one.
    */
   closeOnEsc?: boolean;
+  /**
+   * Has this drawer got unsaved work? Supply it to REPLACE the touched-a-field
+   * heuristic below with the screen's own answer, and Escape and the X start
+   * asking before they close as well as the backdrop.
+   *
+   * Worth supplying wherever a drawer STAYS OPEN after saving: the heuristic
+   * never unsets, so such a form would go on claiming unsaved work long after
+   * it was saved. A screen that answers for itself can say no again.
+   */
+  dirty?: () => boolean;
 }
+
+/**
+ * The prompt shown before unsaved work is thrown away. Exported so a screen
+ * whose own footer button closes the drawer asks in exactly the same words —
+ * two wordings for one question read as two different questions.
+ */
+export const DISCARD_PROMPT = {
+  title: 'Discard this form?',
+  message:
+    'What has been entered here has not been saved. Close the form and lose it?',
+  danger: true,
+  confirmText: 'Yes',
+  cancelText: 'No',
+  defaultCancel: true,
+} as const;
 
 const WIDTHS: Record<NonNullable<DrawerProps['width']>, string> = {
   sm: 'max-w-md',
@@ -65,6 +90,7 @@ export function Drawer({
   footer,
   aside,
   closeOnEsc = true,
+  dirty,
 }: DrawerProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const confirm = useConfirm();
@@ -84,7 +110,10 @@ export function Drawer({
    * A view drawer disables its fields, which fire nothing, so it never asks.
    */
   const dirtyRef = useRef(false);
-  const unsaved = useCallback(() => open && dirtyRef.current, [open]);
+  const unsaved = useCallback(
+    () => open && (dirty ? dirty() : dirtyRef.current),
+    [open, dirty],
+  );
 
   // Reset on opening, not on closing: a drawer that closes and re-opens on the
   // same record starts clean, and a drawer left mounted between records does
@@ -114,25 +143,24 @@ export function Drawer({
   // The X, Esc and Cancel are deliberate and still close straight away.
   const dismiss = async () => {
     if (unsaved()) {
-      const ok = await confirm({
-        title: 'Discard this form?',
-        message:
-          'What has been entered here has not been saved. Close the form and lose it?',
-        danger: true,
-        confirmText: 'Yes',
-        cancelText: 'No',
-        defaultCancel: true,
-      });
+      const ok = await confirm({ ...DISCARD_PROMPT });
       if (!ok) return;
     }
     onClose();
   };
 
+  /**
+   * What the X and Escape do. Straight out, as before — unless the screen
+   * answers `dirty` for itself, in which case it is accurate enough to be worth
+   * stopping for, and every way out of the drawer asks the same question.
+   */
+  const requestClose = dirty ? () => void dismiss() : onClose;
+
   // Close on Escape; lock body scroll while open.
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && closeOnEsc) onClose();
+      if (e.key === 'Escape' && closeOnEsc) requestClose();
     };
     document.addEventListener('keydown', onKey);
     const prev = document.body.style.overflow;
@@ -141,7 +169,8 @@ export function Drawer({
       document.removeEventListener('keydown', onKey);
       document.body.style.overflow = prev;
     };
-  }, [open, onClose, closeOnEsc]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, onClose, closeOnEsc, dirty]);
 
   return (
     <div
@@ -218,7 +247,7 @@ export function Drawer({
             )}
           </div>
           <button
-            onClick={onClose}
+            onClick={requestClose}
             className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-200"
             aria-label="Close"
           >
