@@ -71,6 +71,28 @@ const GENDERS = [
   { value: 'OTHER', label: 'Other' },
 ];
 
+/**
+ * What colour a status chip wears.
+ *
+ * Keyed on the LABEL rather than the lookup's code, because the label is what a
+ * reader sees and what an admin edits — and matched loosely, so "On Leave
+ * (Unpaid)" still reads as leave. Anything unrecognised comes back slate, which
+ * is the point of having a default: a status somebody adds tomorrow renders as
+ * a neutral chip rather than not at all.
+ */
+const statusColor = (
+  label: string,
+): 'green' | 'amber' | 'blue' | 'red' | 'slate' => {
+  const l = label.toLowerCase();
+  if (l.includes('service') || l.includes('working') || l.includes('duty')) {
+    return 'green';
+  }
+  if (l.includes('probation')) return 'amber';
+  if (l.includes('leave')) return 'blue';
+  if (l.includes('resign') || l.includes('terminat')) return 'red';
+  return 'slate';
+};
+
 const MARITAL_STATUSES = [
   { value: 'SINGLE', label: 'Single' },
   { value: 'MARRIED', label: 'Married' },
@@ -312,6 +334,10 @@ export default function EmployeesPage() {
   /** The chosen designation's name, for the header beside the photograph. */
   const designationName = (id: string) =>
     (designations ?? []).find((d) => String(d.id) === id)?.name ?? '';
+
+  /** The chosen status's label, shown as a chip beside the employee code. */
+  const statusLabel =
+    statusValues.find((v) => String(v.id) === form.statusId)?.label ?? '';
 
   const closeDrawer = () => {
     setOpen(false);
@@ -1044,9 +1070,22 @@ export default function EmployeesPage() {
                       {designationName(form.designationId) ||
                         'No designation yet'}
                     </p>
-                    {editing && (
-                      <p className="font-mono text-sm font-bold leading-tight text-slate-900 dark:text-white">
-                        {editing.code}
+                    {/* The code and where they stand, on one line. Read from
+                        the FORM, not the saved row, so changing the status on
+                        the Posting Details block shows here at once rather
+                        than after a save. */}
+                    {(editing || statusLabel) && (
+                      <p className="flex flex-wrap items-center gap-2 leading-tight">
+                        {editing && (
+                          <span className="font-mono text-sm font-bold text-slate-900 dark:text-white">
+                            {editing.code}
+                          </span>
+                        )}
+                        {statusLabel && (
+                          <Badge color={statusColor(statusLabel)}>
+                            {statusLabel}
+                          </Badge>
+                        )}
                       </p>
                     )}
                     {/* How to reach them — the other thing anybody opens this

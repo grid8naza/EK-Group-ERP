@@ -1256,6 +1256,7 @@ export async function syncScaffold(
   // 5) And the HR Dashboard's starting widgets, which need the module row
   //    above and a dashboard to hang on.
   await seedHrDashboardWidgets(prisma);
+  await addHrStatusWidgets(prisma);
 }
 
 /**
@@ -2059,7 +2060,26 @@ const HR_DASHBOARD_WIDGETS: {
     hint: 'Payroll can pay these',
     accent: 'slate',
   },
+  // Added after the first five, once the employee STATUS field existed — see
+  // the second runOnce below, which is why they are a separate group here.
+  {
+    code: 'HR_IN_SERVICE',
+    name: 'In Service',
+    metric: 'hr.employees.inService',
+    hint: 'Working today',
+    accent: 'emerald',
+  },
+  {
+    code: 'HR_ON_LEAVE',
+    name: 'On Leave',
+    metric: 'hr.employees.onLeave',
+    hint: 'Away today',
+    accent: 'blue',
+  },
 ];
+
+/** The widgets added with the employee-status field, by code. */
+const HR_STATUS_WIDGET_CODES = ['HR_IN_SERVICE', 'HR_ON_LEAVE'];
 
 /**
  * Give every company's HR Dashboard a starting set of widgets.
@@ -2141,6 +2161,103 @@ async function seedHrDashboardWidgets(
             width: 1,
           },
         });
+      }
+    }
+  });
+}
+
+/**
+ * Put the two status widgets on boards that were seeded before the employee
+ * status field existed.
+ *
+ * A migration of its own rather than a change to the starter list, because that
+ * one has already run everywhere: adding to it would seed the new widgets on a
+ * fresh database and nowhere else. Its own key means the boards already out
+ * there get them too, once.
+ *
+ * Only ADDS. A board somebody has since rearranged keeps its arrangement, and
+ * the two land at the end of it.
+ */
+async function addHrStatusWidgets(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  await runOnce(prisma, 'hr-dashboard-status-widgets', async () => {
+    const hr = await prisma.module.findUnique({
+      where: { code: 'HR' },
+      select: { id: true },
+    });
+    if (!hr) return;
+
+    const dashboards = await prisma.dashboard.findMany({
+      where: { moduleId: hr.id },
+      select: { id: true, companyId: true },
+    });
+    if (!dashboards.length) return;
+
+    const wanted = HR_DASHBOARD_WIDGETS.filter((w) =>
+      HR_STATUS_WIDGET_CODES.includes(w.code),
+    );
+
+    for (const dashboard of dashboards) {
+      if (dashboard.companyId == null) continue;
+
+      // Land after whatever is already on the board rather than at a fixed
+      // position — the order there is somebody's, not ours.
+      const last = await prisma.dashboardWidget.findFirst({
+        where: { dashboardId: dashboard.id },
+        orderBy: { sortOrder: 'desc' },
+        select: { sortOrder: true },
+      });
+      let next = (last?.sortOrder ?? 0) + 1;
+
+      for (const w of wanted) {
+        const widget = await prisma.widget.upsert({
+          where: {
+            companyId_moduleId_code: {
+              companyId: dashboard.companyId,
+              moduleId: hr.id,
+              code: w.code,
+            },
+          },
+          update: {},
+          create: {
+            companyId: dashboard.companyId,
+            moduleId: hr.id,
+            code: w.code,
+            name: w.name,
+            type: WidgetType.METRIC,
+            sortOrder: next,
+            config: {
+              metric: w.metric,
+              hint: w.hint,
+              style: {
+                shape: 'rounded',
+                accent: w.accent,
+                border: true,
+                fontSize: 'xl',
+                fontWeight: 'bold',
+              },
+            },
+          },
+          select: { id: true },
+        });
+
+        await prisma.dashboardWidget.upsert({
+          where: {
+            dashboardId_widgetId: {
+              dashboardId: dashboard.id,
+              widgetId: widget.id,
+            },
+          },
+          update: {},
+          create: {
+            dashboardId: dashboard.id,
+            widgetId: widget.id,
+            sortOrder: next,
+            width: 1,
+          },
+        });
+        next += 1;
       }
     }
   });

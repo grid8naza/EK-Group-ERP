@@ -36,6 +36,31 @@ export class HrMetricsAdapter implements MetricProviderPort {
       });
   }
 
+  /**
+   * Count the employees carrying one EMPLOYEE_STATUS value.
+   *
+   * Matched on the lookup value's CODE, never its label: an admin may rename
+   * "In Service" to "Working" tomorrow, and a dashboard that stopped counting
+   * because of it would be worse than useless. The code is the stable half —
+   * see the seed in hr-provisioning.ts.
+   *
+   * A status nobody has defined counts nobody rather than everybody: an unknown
+   * code returns 0, which is the truthful answer to "how many are On Leave" on
+   * a database where that status does not exist.
+   */
+  private countByStatus(code: string) {
+    return async (ctx: MetricContext) => {
+      const value = await this.prisma.lookupValue.findFirst({
+        where: { value: code, lookup: { code: 'EMPLOYEE_STATUS' } },
+        select: { id: true },
+      });
+      if (!value) return 0;
+      return this.prisma.employee.count({
+        where: { ...this.scope(ctx), statusId: value.id },
+      });
+    };
+  }
+
   /** Midnight today, and the first of this month / year, in whole days. */
   private today() {
     const now = new Date();
@@ -125,16 +150,36 @@ export class HrMetricsAdapter implements MetricProviderPort {
         })),
       }),
 
-      // ---- the joining / confirmation cycle ----
+      // ---- where people stand (the EMPLOYEE_STATUS field) ----
+      // Read off the status HR set, not worked out from dates. Two answers to
+      // "is this person on probation" is one too many, and the entered one is
+      // the answer a manager and a payroll run have to agree on.
       M('hr.employees.onProbation', 'On Probation', {
-        // A term was agreed and no confirmation has been recorded against it.
-        compute: this.count(() => ({
-          isActive: true,
-          dateOfConfirmation: null,
-          probationMonths: { not: null },
-        })),
+        compute: this.countByStatus('ON_PROBATION'),
       }),
-      M('hr.employees.confirmed', 'Confirmed Employees', {
+      M('hr.employees.inService', 'In Service', {
+        compute: this.countByStatus('IN_SERVICE'),
+      }),
+      M('hr.employees.onLeave', 'On Leave', {
+        compute: this.countByStatus('ON_LEAVE'),
+      }),
+      M('hr.employees.resigned', 'Resigned', {
+        compute: this.countByStatus('RESIGNED'),
+      }),
+      M('hr.employees.terminated', 'Terminated', {
+        compute: this.countByStatus('TERMINATED'),
+      }),
+      M('hr.employees.noStatus', 'Status Not Set', {
+        // The gap in the data, shown rather than hidden: every count above is
+        // only as good as this number is small.
+        compute: this.count(() => ({ isActive: true, statusId: null })),
+      }),
+
+      // ---- the joining / confirmation cycle ----
+      M('hr.employees.confirmed', 'Confirmed (Date Recorded)', {
+        // A DIFFERENT question from "In Service": this is whether the
+        // confirmation event has been written down, which is a records check
+        // rather than a statement of where somebody stands.
         compute: this.count(() => ({
           isActive: true,
           dateOfConfirmation: { not: null },
