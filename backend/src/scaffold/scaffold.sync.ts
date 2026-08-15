@@ -1530,6 +1530,7 @@ interface MenuGroup {
     order: number;
     objectType?: ObjectType;
     superAdminOnly?: boolean;
+    tabs?: { key: string; label: string; order: number }[];
   }[];
   /** The module's primary menu is matched by module (so a rename is reused);
    *  extra menus are matched by name, so they coexist with the primary. */
@@ -1647,6 +1648,67 @@ async function syncModuleMenus(
 }
 
 /** Find/create one main menu, back-fill its sub-menus, and grant the admin group. */
+/**
+ * Make the SubMenuTab rows under one main menu match what the scaffold declares.
+ *
+ * Matched by (subMenu, key) so the row's id — which every group's hide/show
+ * hangs off — survives a relabel or a reorder. Only tabs of the screens named in
+ * this menu group are touched.
+ */
+async function syncSubMenuTabs(
+  prisma: Prisma.TransactionClient,
+  mainMenuId: number,
+  subs: MenuGroup['subs'],
+): Promise<void> {
+  const declared = new Map(subs.map((s) => [s.route, s.tabs ?? []]));
+  const rows = await prisma.subMenu.findMany({
+    where: { mainMenuId },
+    select: {
+      id: true,
+      route: true,
+      tabs: { select: { id: true, key: true, label: true, sortOrder: true } },
+    },
+  });
+
+  for (const sub of rows) {
+    const want = declared.get(sub.route ?? '');
+    // A screen this menu group does not declare at all is left alone; only a
+    // screen that IS declared has its tab list treated as the whole truth.
+    if (!want) continue;
+
+    const have = new Map(sub.tabs.map((t) => [t.key, t]));
+
+    const missing = want.filter((t) => !have.has(t.key));
+    if (missing.length) {
+      await prisma.subMenuTab.createMany({
+        data: missing.map((t) => ({
+          subMenuId: sub.id,
+          key: t.key,
+          label: t.label,
+          sortOrder: t.order,
+        })),
+      });
+    }
+
+    for (const t of want) {
+      const existing = have.get(t.key);
+      if (existing && (existing.label !== t.label || existing.sortOrder !== t.order)) {
+        await prisma.subMenuTab.update({
+          where: { id: existing.id },
+          data: { label: t.label, sortOrder: t.order },
+        });
+      }
+    }
+
+    const wanted = new Set(want.map((t) => t.key));
+    const stale = sub.tabs.filter((t) => !wanted.has(t.key)).map((t) => t.id);
+    if (stale.length) {
+      // Cascades to GroupSubMenuTabAccess.
+      await prisma.subMenuTab.deleteMany({ where: { id: { in: stale } } });
+    }
+  }
+}
+
 async function syncOneMenu(
   prisma: Prisma.TransactionClient,
   opts: {
@@ -1717,6 +1779,16 @@ async function syncOneMenu(
       });
     }
   }
+
+  // The screens' tabs. Additive like everything else here: a tab declared for
+  // the first time is created, a relabelled or reordered one is corrected in
+  // place (its id is what an admin's hide/show hangs off, so it must survive),
+  // and a tab no longer declared is dropped along with those settings — it is
+  // gone from the page, so an admin choice about it means nothing.
+  //
+  // No grant is written: a tab nobody has hidden is visible, so every group
+  // that can reach the screen sees a new tab without a row existing at all.
+  await syncSubMenuTabs(prisma, main.id, group.subs);
 
   // Grant the Administrators group full privileges on the menu + all its subs.
   if (adminGroupId) {

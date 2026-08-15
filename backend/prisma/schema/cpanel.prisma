@@ -406,8 +406,52 @@ model SubMenu {
   mainMenu   MainMenu                @relation(fields: [mainMenuId], references: [id], onDelete: Cascade)
   object     ObjectMaster?           @relation(fields: [objectId], references: [id])
   privileges GroupSubMenuPrivilege[]
+  tabs       SubMenuTab[]
 
   @@map("sub_menus")
+}
+
+/// One tab on a screen that has more than one — "User Access" on Employee
+/// Master, say.
+///
+/// Declared by the module scaffold beside the screen itself (ScaffoldSub.tabs)
+/// and seeded per company, so the Privileges matrix can offer a tab that exists
+/// rather than a string somebody typed. `key` is what the page passes to
+/// canTab(); renaming a LABEL is free, renaming a key orphans the privilege.
+model SubMenuTab {
+  id        Int      @id @default(autoincrement())
+  subMenuId Int
+  key       String
+  label     String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  subMenu     SubMenu                 @relation(fields: [subMenuId], references: [id], onDelete: Cascade)
+  groupAccess GroupSubMenuTabAccess[]
+
+  @@unique([subMenuId, key])
+  @@map("sub_menu_tabs")
+}
+
+/// Whether one group sees one tab.
+///
+/// A MISSING row means visible, which is the opposite of how
+/// GroupSubMenuPrivilege reads — and deliberately so. A tab is part of a screen
+/// the group already has access to, so the only question being asked here is
+/// "hide it?". Reading absence as hidden would have blanked every existing
+/// group's screens the moment the first tab was declared.
+model GroupSubMenuTabAccess {
+  id           Int     @id @default(autoincrement())
+  userGroupId  Int
+  subMenuTabId Int
+  visible      Boolean @default(true)
+
+  userGroup  UserGroup  @relation(fields: [userGroupId], references: [id], onDelete: Cascade)
+  subMenuTab SubMenuTab @relation(fields: [subMenuTabId], references: [id], onDelete: Cascade)
+
+  @@unique([userGroupId, subMenuTabId])
+  @@map("group_sub_menu_tab_access")
 }
 
 // ---------------------------------------------------------------------------
@@ -435,6 +479,7 @@ model UserGroup {
   modules         UserGroupModule[]
   mainMenuAccess  GroupMainMenuAccess[]
   subMenuPrivs    GroupSubMenuPrivilege[]
+  subMenuTabs     GroupSubMenuTabAccess[]
   userAssignments UserGroupAssignment[]
   dashboardAccess GroupDashboard[]
 
@@ -607,6 +652,17 @@ model User {
   userCode        String       @unique
   username        String       @unique
   name            String
+  /// The employee this login belongs to. A plain Int, not a relation: Employee
+  /// is the HR module's table and a foreign key across that line is what the
+  /// module-isolation rule forbids — the User service validates it through the
+  /// EMPLOYEE_LOOKUP port instead.
+  ///
+  /// Required in practice for every login created from now on: logins are set up
+  /// on the employee's own record (HR → Employee Master → User Access), so
+  /// "who is this account" always has an answer. Nullable only because the
+  /// accounts that predate the rule — the super admin, who is nobody's employee
+  /// — have to keep working.
+  employeeId      Int?         @unique
   email           String?      @unique
   passwordHash    String
   mobile          String?

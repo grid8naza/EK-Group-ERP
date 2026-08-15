@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Plus,
   UserCog,
@@ -9,6 +9,7 @@ import {
   Phone,
   Mail,
   X,
+  KeyRound,
   User as UserIcon,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
@@ -23,6 +24,8 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { StatusToggle } from '@/components/ui/StatusToggle';
+import { Tabs, type TabDef } from '@/components/ui/Tabs';
+import { UserAccessPanel } from '@/components/cpanel/UserAccessPanel';
 import {
   Drawer,
   DrawerFooter,
@@ -39,6 +42,7 @@ import {
 } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import type {
+  AppUser,
   Employee,
   HrCategory,
   HrGroup,
@@ -95,8 +99,17 @@ const empty = {
 
 type Form = typeof empty;
 
+/** The drawer's two halves: the person, and the way in. */
+type Tab = 'employee' | 'access';
+
 export default function EmployeesPage() {
-  const { can, activeCompanyId, activeBranchId } = useAuth();
+  const {
+    can,
+    canTab,
+    user: signedInUser,
+    activeCompanyId,
+    activeBranchId,
+  } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -125,6 +138,13 @@ export default function EmployeesPage() {
   const [view, setView] = useState(false);
   const [form, setForm] = useState<Form>({ ...empty });
   const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState<Tab>('employee');
+  /**
+   * This employee's login, or null where they have none — which is the ordinary
+   * case (SRS FR-HRP-01: most staff never sign in). `undefined` while it is
+   * still being looked up, so the tab can say "loading" rather than "none".
+   */
+  const [login, setLogin] = useState<AppUser | null | undefined>(undefined);
   const [photoUploading, setPhotoUploading] = useState(false);
   /** The photograph, shown full size over the drawer. */
   const [photoOpen, setPhotoOpen] = useState(false);
@@ -141,6 +161,45 @@ export default function EmployeesPage() {
   const canEdit = can(ROUTE, 'edit');
   const canDelete = can(ROUTE, 'delete');
   const canView = can(ROUTE, 'view');
+
+  /**
+   * Who may set up a login. Still super admins only: the SCREEN moved onto the
+   * employee record, the authority did not. Whoever maintains staff records
+   * would otherwise be able to hand themselves any role in the system, and the
+   * /users endpoints refuse them anyway — so the tab shows the state of things
+   * and says who to ask.
+   */
+  const canSetUpLogins = !!signedInUser?.isSuperAdmin;
+
+  /**
+   * The tabs this user's group is allowed to see (Cpanel → User Groups &
+   * Privileges → the screen's Tabs row).
+   *
+   * Falls back to the full list if a group has somehow hidden both: a form with
+   * no panes at all is a broken screen, not a locked-down one, and the way to
+   * take Employee Master away is to untick the screen rather than empty it.
+   */
+  const visibleTabs = useMemo(() => {
+    const all: TabDef[] = [
+      {
+        key: 'employee',
+        label: 'Employee',
+        icon: <UserCog className="h-4 w-4" />,
+      },
+      {
+        key: 'access',
+        label: 'User Access',
+        icon: <KeyRound className="h-4 w-4" />,
+        // Nothing to attach a login to until the record exists.
+        disabled: !editing,
+      },
+    ];
+    const allowed = all.filter((t) => canTab(ROUTE, t.key));
+    return allowed.length ? allowed : all;
+  }, [canTab, editing]);
+
+  /** Which tab the drawer opens on — the first one this group can see. */
+  const defaultTab: Tab = canTab(ROUTE, 'employee') ? 'employee' : 'access';
 
   const companyList = companies ?? [];
   const branchesOf = (companyId: string) =>
@@ -212,7 +271,60 @@ export default function EmployeesPage() {
     setOpen(false);
     setView(false);
     setPhotoOpen(false);
+    setTab(defaultTab);
+    setLogin(undefined);
   };
+
+  /**
+   * The employee the User Access tab is setting a login up for.
+   *
+   * Memoized deliberately: the panel reloads its form whenever this changes, so
+   * building the object inline in the JSX — a new identity every render — would
+   * wipe what was being typed on every keystroke.
+   */
+  const loginOwner = useMemo(
+    () =>
+      editing
+        ? {
+            id: editing.id,
+            code: editing.code,
+            name: editing.name,
+            email: editing.email,
+            phone: editing.phone,
+            companyId: editing.companyId,
+            branchId: editing.branchId,
+          }
+        : null,
+    [editing],
+  );
+
+  /**
+   * Look up this employee's login. One call per employee opened, not per
+   * keystroke — the tab reads it, the panel writes through it.
+   *
+   * `/users` is super-admin-only, so for anybody else this is not attempted at
+   * all: a 403 in the console would say nothing the tab does not already say.
+   */
+  const loadLogin = useCallback(
+    async (employeeId: number) => {
+      if (!canSetUpLogins) {
+        setLogin(null);
+        return;
+      }
+      setLogin(undefined);
+      try {
+        const rows = await api.get<AppUser[]>(
+          `/users?employeeId=${employeeId}`,
+        );
+        setLogin(rows?.[0] ?? null);
+      } catch {
+        // A login that cannot be read is shown as none rather than as an error
+        // banner over a form the user came here to fill in for other reasons.
+        setLogin(null);
+      }
+    },
+    [canSetUpLogins],
+  );
 
   const formFrom = (e: Employee): Form => ({
     name: e.name,
@@ -242,6 +354,8 @@ export default function EmployeesPage() {
   const openAdd = () => {
     setEditing(null);
     setView(false);
+    setTab(defaultTab);
+    setLogin(null); // a record that does not exist yet can hold no login
     // Start where the user is working — they can move it on the form.
     setForm({
       ...empty,
@@ -253,14 +367,18 @@ export default function EmployeesPage() {
   const openEdit = (e: Employee) => {
     setEditing(e);
     setView(false);
+    setTab(defaultTab);
     setForm(formFrom(e));
     setOpen(true);
+    void loadLogin(e.id);
   };
   const openView = (e: Employee) => {
     setEditing(e);
     setView(true);
+    setTab(defaultTab);
     setForm(formFrom(e));
     setOpen(true);
+    void loadLogin(e.id);
   };
 
   // Alt+A opens the New form (when allowed and no drawer is open).
@@ -370,6 +488,7 @@ export default function EmployeesPage() {
         // designation), clear the person. The photograph MUST be cleared —
         // carrying the last one over is how the wrong face ends up on a record.
         setEditing(null);
+        setLogin(null); // the next record is a different person
         setForm((f) => ({
           ...f,
           name: '',
@@ -388,6 +507,9 @@ export default function EmployeesPage() {
       } else if (mode === 'save') {
         setEditing(saved);
         setForm(formFrom(saved));
+        // The record now has an id, so the User Access tab has something to
+        // hang a login on.
+        void loadLogin(saved.id);
       } else {
         closeDrawer();
       }
@@ -644,266 +766,314 @@ export default function EmployeesPage() {
         footer={
           view ? (
             <CloseFooter onClose={closeDrawer} />
-          ) : (
+          ) : tab === 'employee' ? (
             <DrawerFooter
               onCancel={closeDrawer}
               onSave={save}
               saving={saving}
               dataEntry
             />
+          ) : (
+            // The User Access tab saves the LOGIN, not the employee, and does
+            // it with its own button — one Save that means two different
+            // things depending on the tab is the confusion worth avoiding.
+            <CloseFooter onClose={closeDrawer} />
           )
         }
       >
-        <ReadOnlyFieldset readOnly={view}>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {/* ---- the photograph and who this record is ---- */}
-            {/* No label: the photograph and the name under it say what this is
+        {/* Tab navigation stays outside the read-only wrapper so tabs remain
+            switchable in view mode. Hidden entirely when this group is left
+            with one tab — a single tab is a heading, not a choice. */}
+        {visibleTabs.length > 1 && (
+          <Tabs
+            tabs={visibleTabs}
+            active={tab}
+            onChange={(k) => setTab(k as Tab)}
+            className="mb-5"
+          />
+        )}
+
+        {tab === 'access' ? (
+          !canSetUpLogins ? (
+            <div className="rounded-xl border border-dashed border-slate-300 px-6 py-10 text-center dark:border-slate-700">
+              <KeyRound className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
+              <p className="mt-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+                Only a super admin can set up a login.
+              </p>
+              <p className="mx-auto mt-1 max-w-md text-xs text-slate-400">
+                Granting somebody a way into the system — and a role once they
+                are in — stayed a super admin&apos;s to do when the screen moved
+                here. Ask one of them to open this record.
+              </p>
+            </div>
+          ) : login === undefined ? (
+            <p className="px-1 py-6 text-sm text-slate-400">Loading login…</p>
+          ) : (
+            <UserAccessPanel
+              user={login}
+              employee={loginOwner}
+              // A record being VIEWED is being read, not administered — the
+              // same rule the rest of the drawer follows.
+              readOnly={view}
+              onSaved={(u) => setLogin(u)}
+              onDeleted={() => setLogin(null)}
+            />
+          )
+        ) : (
+          <ReadOnlyFieldset readOnly={view}>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {/* ---- the photograph and who this record is ---- */}
+              {/* No label: the photograph and the name under it say what this is
                 more plainly than the word "Photograph" ever did. */}
-            <div className="sm:col-span-2">
-              <div className="flex items-center gap-4">
-                {/*
+              <div className="sm:col-span-2">
+                <div className="flex items-center gap-4">
+                  {/*
                   A div rather than a button on purpose: in View mode this whole
                   form sits inside a disabled fieldset, which would make a button
                   inert — and looking at somebody's photograph is exactly what
                   view mode is for.
                 */}
-                <div
-                  className={cn(
-                    'flex h-28 w-28 flex-none items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-800',
-                    form.photoUrl && 'cursor-zoom-in',
-                  )}
-                  onClick={() => form.photoUrl && setPhotoOpen(true)}
-                  title={form.photoUrl ? 'Click to enlarge' : undefined}
-                >
-                  {form.photoUrl ? (
-                    // contain, not cover: the whole photograph fits in the box
-                    // rather than being cropped to fill it.
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={mediaUrl(form.photoUrl)}
-                      alt="Photograph"
-                      className="h-full w-full rounded-lg object-contain"
-                    />
-                  ) : (
-                    <UserIcon className="h-10 w-10 text-slate-300" />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1 space-y-0.5">
-                  {/*
+                  <div
+                    className={cn(
+                      'flex h-28 w-28 flex-none items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 p-0.5 dark:border-slate-700 dark:bg-slate-800',
+                      form.photoUrl && 'cursor-zoom-in',
+                    )}
+                    onClick={() => form.photoUrl && setPhotoOpen(true)}
+                    title={form.photoUrl ? 'Click to enlarge' : undefined}
+                  >
+                    {form.photoUrl ? (
+                      // contain, not cover: the whole photograph fits in the box
+                      // rather than being cropped to fill it.
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={mediaUrl(form.photoUrl)}
+                        alt="Photograph"
+                        className="h-full w-full rounded-lg object-contain"
+                      />
+                    ) : (
+                      <UserIcon className="h-10 w-10 text-slate-300" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    {/*
                     Who this record is, beside their face. Read from the FORM,
                     not the saved row, so it names whoever is being typed in
                     rather than lagging a field behind. Set tight: four lines
                     that belong together should read as one block, not fill the
                     top of the drawer.
                   */}
-                  <p className="truncate text-xl font-bold leading-tight text-brand-700 dark:text-brand-300">
-                    {form.name.trim() || 'New employee'}
-                  </p>
-                  <p className="truncate text-base font-semibold leading-tight text-amber-600 dark:text-amber-400">
-                    {designationName(form.designationId) ||
-                      'No designation yet'}
-                  </p>
-                  {editing && (
-                    <p className="font-mono text-sm font-bold leading-tight text-slate-900 dark:text-white">
-                      {editing.code}
+                    <p className="truncate text-xl font-bold leading-tight text-brand-700 dark:text-brand-300">
+                      {form.name.trim() || 'New employee'}
                     </p>
-                  )}
-                  {/* How to reach them — the other thing anybody opens this
+                    <p className="truncate text-base font-semibold leading-tight text-amber-600 dark:text-amber-400">
+                      {designationName(form.designationId) ||
+                        'No designation yet'}
+                    </p>
+                    {editing && (
+                      <p className="font-mono text-sm font-bold leading-tight text-slate-900 dark:text-white">
+                        {editing.code}
+                      </p>
+                    )}
+                    {/* How to reach them — the other thing anybody opens this
                       record for. Hidden until there is something to show. */}
-                  {(form.phone.trim() || form.email.trim()) && (
-                    <p className="flex flex-wrap items-center gap-x-4 text-sm leading-tight text-slate-500 dark:text-slate-400">
-                      {form.phone.trim() && (
-                        <span className="inline-flex items-center gap-1.5">
-                          <Phone className="h-3.5 w-3.5 flex-none" />
-                          {form.phone.trim()}
-                        </span>
-                      )}
-                      {form.email.trim() && (
-                        <span className="inline-flex min-w-0 items-center gap-1.5">
-                          <Mail className="h-3.5 w-3.5 flex-none" />
-                          <span className="truncate">{form.email.trim()}</span>
-                        </span>
-                      )}
-                    </p>
-                  )}
-                </div>
+                    {(form.phone.trim() || form.email.trim()) && (
+                      <p className="flex flex-wrap items-center gap-x-4 text-sm leading-tight text-slate-500 dark:text-slate-400">
+                        {form.phone.trim() && (
+                          <span className="inline-flex items-center gap-1.5">
+                            <Phone className="h-3.5 w-3.5 flex-none" />
+                            {form.phone.trim()}
+                          </span>
+                        )}
+                        {form.email.trim() && (
+                          <span className="inline-flex min-w-0 items-center gap-1.5">
+                            <Mail className="h-3.5 w-3.5 flex-none" />
+                            <span className="truncate">
+                              {form.email.trim()}
+                            </span>
+                          </span>
+                        )}
+                      </p>
+                    )}
+                  </div>
 
-                {/* The controls sit at the far edge, away from the identity. */}
-                <div className="flex flex-none flex-col items-end gap-1">
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      className="btn-secondary inline-flex items-center gap-2"
-                      onClick={() => photoInput.current?.click()}
-                      disabled={photoUploading}
-                    >
-                      <Upload className="h-4 w-4" />
-                      {photoUploading
-                        ? 'Uploading…'
-                        : form.photoUrl
-                          ? 'Replace'
-                          : 'Upload'}
-                    </button>
-                    {form.photoUrl && (
+                  {/* The controls sit at the far edge, away from the identity. */}
+                  <div className="flex flex-none flex-col items-end gap-1">
+                    <div className="flex flex-wrap items-center justify-end gap-2">
                       <button
                         type="button"
-                        className="btn-secondary inline-flex items-center gap-2 text-rose-600"
-                        onClick={() => setForm({ ...form, photoUrl: '' })}
+                        className="btn-secondary inline-flex items-center gap-2"
+                        onClick={() => photoInput.current?.click()}
+                        disabled={photoUploading}
                       >
-                        <Trash2 className="h-4 w-4" /> Remove
+                        <Upload className="h-4 w-4" />
+                        {photoUploading
+                          ? 'Uploading…'
+                          : form.photoUrl
+                            ? 'Replace'
+                            : 'Upload'}
                       </button>
-                    )}
-                    <input
-                      ref={photoInput}
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      className="hidden"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) void uploadPhoto(f);
-                        e.target.value = '';
-                      }}
-                    />
+                      {form.photoUrl && (
+                        <button
+                          type="button"
+                          className="btn-secondary inline-flex items-center gap-2 text-rose-600"
+                          onClick={() => setForm({ ...form, photoUrl: '' })}
+                        >
+                          <Trash2 className="h-4 w-4" /> Remove
+                        </button>
+                      )}
+                      <input
+                        ref={photoInput}
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) void uploadPhoto(f);
+                          e.target.value = '';
+                        }}
+                      />
+                    </div>
+                    <span className="text-xs text-slate-400">
+                      PNG, JPG or WEBP — up to 5 MB. Can follow later.
+                    </span>
                   </div>
-                  <span className="text-xs text-slate-400">
-                    PNG, JPG or WEBP — up to 5 MB. Can follow later.
-                  </span>
                 </div>
               </div>
-            </div>
 
-            {/* ---- the person ---- */}
-            <div className="mt-1 border-t border-slate-200 pt-3 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300 sm:col-span-2">
-              Personal
-            </div>
+              {/* ---- the person ---- */}
+              <div className="mt-1 border-t border-slate-200 pt-3 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300 sm:col-span-2">
+                Personal
+              </div>
 
-            <Input
-              label="Employee ID (auto)"
-              value={editing ? editing.code : 'Generated on save'}
-              disabled
-            />
-            <Input
-              ref={nameRef}
-              label="Employee Name"
-              required
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Full name as on record"
-            />
-            <DateInput
-              label="Date of Birth"
-              value={form.dateOfBirth}
-              onChange={(iso) => setForm({ ...form, dateOfBirth: iso })}
-            />
-            <Select
-              label="Sex"
-              value={form.sex}
-              onChange={(e) => setForm({ ...form, sex: e.target.value })}
-              placeholder="— Not stated —"
-              sortOptions={false}
-              options={SEXES}
-            />
-            <Select
-              label="Marital Status"
-              value={form.maritalStatus}
-              onChange={(e) =>
-                setForm({ ...form, maritalStatus: e.target.value })
-              }
-              placeholder="— Not stated —"
-              sortOptions={false}
-              options={MARITAL_STATUSES}
-            />
-            <Input
-              label="Aadhaar Number"
-              value={form.aadhaarNumber}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  // Digits only, 12 of them — typed spaces are the usual reason
-                  // an otherwise valid number is rejected.
-                  aadhaarNumber: e.target.value.replace(/\D/g, '').slice(0, 12),
-                })
-              }
-              placeholder="12 digits"
-            />
-            <Textarea
-              label="Address"
-              wrapClassName="sm:col-span-2"
-              rows={2}
-              value={form.address}
-              onChange={(e) => setForm({ ...form, address: e.target.value })}
-            />
-            <Input
-              label="Contact Number"
-              value={form.phone}
-              onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            />
-            <Input
-              label="Contact Email"
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-            />
-            <Input
-              label="Emergency Contact Person"
-              value={form.emergencyContactName}
-              onChange={(e) =>
-                setForm({ ...form, emergencyContactName: e.target.value })
-              }
-            />
-            <Input
-              label="Emergency Contact Number"
-              value={form.emergencyContactPhone}
-              onChange={(e) =>
-                setForm({ ...form, emergencyContactPhone: e.target.value })
-              }
-            />
+              <Input
+                label="Employee ID (auto)"
+                value={editing ? editing.code : 'Generated on save'}
+                disabled
+              />
+              <Input
+                ref={nameRef}
+                label="Employee Name"
+                required
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="Full name as on record"
+              />
+              <DateInput
+                label="Date of Birth"
+                value={form.dateOfBirth}
+                onChange={(iso) => setForm({ ...form, dateOfBirth: iso })}
+              />
+              <Select
+                label="Sex"
+                value={form.sex}
+                onChange={(e) => setForm({ ...form, sex: e.target.value })}
+                placeholder="— Not stated —"
+                sortOptions={false}
+                options={SEXES}
+              />
+              <Select
+                label="Marital Status"
+                value={form.maritalStatus}
+                onChange={(e) =>
+                  setForm({ ...form, maritalStatus: e.target.value })
+                }
+                placeholder="— Not stated —"
+                sortOptions={false}
+                options={MARITAL_STATUSES}
+              />
+              <Input
+                label="Aadhaar Number"
+                value={form.aadhaarNumber}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    // Digits only, 12 of them — typed spaces are the usual reason
+                    // an otherwise valid number is rejected.
+                    aadhaarNumber: e.target.value
+                      .replace(/\D/g, '')
+                      .slice(0, 12),
+                  })
+                }
+                placeholder="12 digits"
+              />
+              <Textarea
+                label="Address"
+                wrapClassName="sm:col-span-2"
+                rows={2}
+                value={form.address}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
+              />
+              <Input
+                label="Contact Number"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+              />
+              <Input
+                label="Contact Email"
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+              />
+              <Input
+                label="Emergency Contact Person"
+                value={form.emergencyContactName}
+                onChange={(e) =>
+                  setForm({ ...form, emergencyContactName: e.target.value })
+                }
+              />
+              <Input
+                label="Emergency Contact Number"
+                value={form.emergencyContactPhone}
+                onChange={(e) =>
+                  setForm({ ...form, emergencyContactPhone: e.target.value })
+                }
+              />
 
-            {/* ---- the job ---- */}
-            <div className="mt-1 border-t border-slate-200 pt-3 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300 sm:col-span-2">
-              Posting
-            </div>
+              {/* ---- the job ---- */}
+              <div className="mt-1 border-t border-slate-200 pt-3 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300 sm:col-span-2">
+                Posting
+              </div>
 
-            {/*
+              {/*
               Company and branch are chosen HERE rather than taken from the
               topbar: HR set up the whole group's staff, and making them switch
               company to add somebody at another branch is a step that exists
               only because of where the data lives.
             */}
-            <Select
-              label="Company"
-              required
-              value={form.companyId}
-              onChange={(e) =>
-                // Branch, division, department and manager all belong to one
-                // company — every one of them is cleared when it moves.
-                setForm({
-                  ...form,
-                  companyId: e.target.value,
-                  branchId: '',
-                  costCenterId: '',
-                  costObjectId: '',
-                  reportsToId: '',
-                })
-              }
-              placeholder="Select company"
-              options={companyList
-                .filter((c) => c.isActive)
-                .map((c) => ({ value: String(c.id), label: c.name }))}
-            />
-            <Select
-              label="Branch"
-              value={form.branchId}
-              onChange={(e) => setForm({ ...form, branchId: e.target.value })}
-              placeholder={
-                form.companyId ? 'Whole company' : 'Pick a company first'
-              }
-              options={branchesOf(form.companyId).map((b) => ({
-                value: String(b.id),
-                label: b.name,
-              }))}
-            />
-            {/*
+              <Select
+                label="Company"
+                required
+                value={form.companyId}
+                onChange={(e) =>
+                  // Branch, division, department and manager all belong to one
+                  // company — every one of them is cleared when it moves.
+                  setForm({
+                    ...form,
+                    companyId: e.target.value,
+                    branchId: '',
+                    costCenterId: '',
+                    costObjectId: '',
+                    reportsToId: '',
+                  })
+                }
+                placeholder="Select company"
+                options={companyList
+                  .filter((c) => c.isActive)
+                  .map((c) => ({ value: String(c.id), label: c.name }))}
+              />
+              <Select
+                label="Branch"
+                value={form.branchId}
+                onChange={(e) => setForm({ ...form, branchId: e.target.value })}
+                placeholder={
+                  form.companyId ? 'Whole company' : 'Pick a company first'
+                }
+                options={branchesOf(form.companyId).map((b) => ({
+                  value: String(b.id),
+                  label: b.name,
+                }))}
+              />
+              {/*
               Division and department come from the company master — a division
               is a cost centre, a department the cost object under it. Not a
               list of their own: the company already carries this structure and
@@ -911,128 +1081,133 @@ export default function EmployeesPage() {
               would let an employee sit under one "Packing" while their cost
               goes to another.
             */}
-            <Select
-              label="Division"
-              value={form.costCenterId}
-              onChange={(e) =>
-                // The departments under the old division no longer apply.
-                setForm({
-                  ...form,
-                  costCenterId: e.target.value,
-                  costObjectId: '',
-                })
-              }
-              placeholder={
-                form.companyId
-                  ? divisionsOf(form.companyId).length
-                    ? '— None —'
-                    : 'No divisions set up for this company'
-                  : 'Pick a company first'
-              }
-              options={divisionsOf(form.companyId).map((c) => ({
-                value: String(c.id),
-                label: c.name,
-              }))}
-            />
-            <Select
-              label="Department"
-              value={form.costObjectId}
-              onChange={(e) =>
-                setForm({ ...form, costObjectId: e.target.value })
-              }
-              placeholder={
-                form.costCenterId ? '— None —' : 'Pick a division first'
-              }
-              options={departmentsOf(form.companyId, form.costCenterId).map(
-                (o) => ({ value: String(o.id), label: o.name }),
-              )}
-            />
-            <DateInput
-              label="Date of Join"
-              required
-              value={form.dateOfJoin}
-              onChange={(iso) => setForm({ ...form, dateOfJoin: iso })}
-            />
+              <Select
+                label="Division"
+                value={form.costCenterId}
+                onChange={(e) =>
+                  // The departments under the old division no longer apply.
+                  setForm({
+                    ...form,
+                    costCenterId: e.target.value,
+                    costObjectId: '',
+                  })
+                }
+                placeholder={
+                  form.companyId
+                    ? divisionsOf(form.companyId).length
+                      ? '— None —'
+                      : 'No divisions set up for this company'
+                    : 'Pick a company first'
+                }
+                options={divisionsOf(form.companyId).map((c) => ({
+                  value: String(c.id),
+                  label: c.name,
+                }))}
+              />
+              <Select
+                label="Department"
+                value={form.costObjectId}
+                onChange={(e) =>
+                  setForm({ ...form, costObjectId: e.target.value })
+                }
+                placeholder={
+                  form.costCenterId ? '— None —' : 'Pick a division first'
+                }
+                options={departmentsOf(form.companyId, form.costCenterId).map(
+                  (o) => ({ value: String(o.id), label: o.name }),
+                )}
+              />
+              <DateInput
+                label="Date of Join"
+                required
+                value={form.dateOfJoin}
+                onChange={(iso) => setForm({ ...form, dateOfJoin: iso })}
+              />
 
-            {/*
+              {/*
               Category → Group → Designation. Only the designation is stored:
               it already knows the other two, and a stored copy would go stale
               the day a designation is moved to another group.
             */}
-            <Select
-              label="Category"
-              value={form.categoryId}
-              onChange={(e) =>
-                setForm({
-                  ...form,
-                  categoryId: e.target.value,
-                  groupId: '',
-                  designationId: '',
-                })
-              }
-              placeholder="All categories"
-              options={(categories ?? [])
-                .filter((c) => c.isActive)
-                .map((c) => ({ value: String(c.id), label: c.name }))}
-            />
-            <Select
-              label="Group"
-              value={form.groupId}
-              onChange={(e) =>
-                setForm({ ...form, groupId: e.target.value, designationId: '' })
-              }
-              placeholder={form.categoryId ? 'All groups' : 'Pick a category'}
-              options={groupOptions.map((g) => ({
-                value: String(g.id),
-                label: g.name,
-              }))}
-            />
-            <Select
-              label="Designation"
-              required
-              wrapClassName="sm:col-span-2"
-              value={form.designationId}
-              onChange={(e) =>
-                setForm({ ...form, designationId: e.target.value })
-              }
-              placeholder="Select designation"
-              options={designationOptions.map((d) => ({
-                value: String(d.id),
-                label: d.name,
-              }))}
-            />
-
-            <Select
-              label="Reporting To"
-              wrapClassName="sm:col-span-2"
-              value={form.reportsToId}
-              onChange={(e) =>
-                setForm({ ...form, reportsToId: e.target.value })
-              }
-              placeholder={
-                form.companyId
-                  ? managerOptions.length
-                    ? '— Nobody —'
-                    : 'Nobody else on this company yet'
-                  : 'Pick a company first'
-              }
-              options={managerOptions.map((m) => ({
-                value: String(m.id),
-                label: `${m.name} (${m.designationName})`,
-              }))}
-            />
-
-            <div className="sm:col-span-2">
-              <Checkbox
-                label="Active"
-                checked={form.isActive}
+              <Select
+                label="Category"
+                value={form.categoryId}
                 onChange={(e) =>
-                  setForm({ ...form, isActive: e.target.checked })
+                  setForm({
+                    ...form,
+                    categoryId: e.target.value,
+                    groupId: '',
+                    designationId: '',
+                  })
                 }
+                placeholder="All categories"
+                options={(categories ?? [])
+                  .filter((c) => c.isActive)
+                  .map((c) => ({ value: String(c.id), label: c.name }))}
               />
+              <Select
+                label="Group"
+                value={form.groupId}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    groupId: e.target.value,
+                    designationId: '',
+                  })
+                }
+                placeholder={form.categoryId ? 'All groups' : 'Pick a category'}
+                options={groupOptions.map((g) => ({
+                  value: String(g.id),
+                  label: g.name,
+                }))}
+              />
+              <Select
+                label="Designation"
+                required
+                wrapClassName="sm:col-span-2"
+                value={form.designationId}
+                onChange={(e) =>
+                  setForm({ ...form, designationId: e.target.value })
+                }
+                placeholder="Select designation"
+                options={designationOptions.map((d) => ({
+                  value: String(d.id),
+                  label: d.name,
+                }))}
+              />
+
+              <Select
+                label="Reporting To"
+                wrapClassName="sm:col-span-2"
+                value={form.reportsToId}
+                onChange={(e) =>
+                  setForm({ ...form, reportsToId: e.target.value })
+                }
+                placeholder={
+                  form.companyId
+                    ? managerOptions.length
+                      ? '— Nobody —'
+                      : 'Nobody else on this company yet'
+                    : 'Pick a company first'
+                }
+                options={managerOptions.map((m) => ({
+                  value: String(m.id),
+                  label: `${m.name} (${m.designationName})`,
+                }))}
+              />
+
+              <div className="sm:col-span-2">
+                <Checkbox
+                  label="Active"
+                  checked={form.isActive}
+                  onChange={(e) =>
+                    setForm({ ...form, isActive: e.target.checked })
+                  }
+                />
+              </div>
             </div>
-          </div>
-        </ReadOnlyFieldset>
+          </ReadOnlyFieldset>
+        )}
       </Drawer>
 
       {/*

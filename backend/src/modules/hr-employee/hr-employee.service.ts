@@ -11,6 +11,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
 import { NUMBERING, NumberingPort } from '../../contracts/numbering.port';
+import { USER_LOOKUP, UserLookupPort } from '../../contracts/user-lookup.port';
 import {
   EMPLOYEE_DOCUMENT_CODE,
   EMPLOYEE_UPLOAD_DIR,
@@ -71,6 +72,7 @@ export class HrEmployeeService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(NUMBERING) private readonly numbering: NumberingPort,
+    @Inject(USER_LOOKUP) private readonly users: UserLookupPort,
   ) {}
 
   // ------------------------------------------------------------------ read --
@@ -207,6 +209,16 @@ export class HrEmployeeService {
     const existing = await this.prisma.employee.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Employee not found');
     assertUnlocked(existing, 'employee', 'deleting');
+
+    // They hold a login. An account names its employee and nothing else does,
+    // so deleting the record underneath it would leave a live login belonging
+    // to nobody — and a way into the system that no staff list accounts for.
+    const login = await this.users.findByEmployeeId(id);
+    if (login) {
+      throw new BadRequestException(
+        `${existing.name} has a login (${login.username}). Delete it on the User Access tab first.`,
+      );
+    }
 
     // Somebody reports to them. Deleting would quietly cut the line of report,
     // so it is refused with the reason rather than silently nulled.

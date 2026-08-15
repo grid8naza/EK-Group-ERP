@@ -190,7 +190,12 @@ export class AuthService {
               mainMenus: {
                 where: { companyId: activeCompanyId },
                 orderBy: { sortOrder: 'asc' },
-                include: { subMenus: { orderBy: { sortOrder: 'asc' } } },
+                include: {
+                  subMenus: {
+                    orderBy: { sortOrder: 'asc' },
+                    include: { tabs: { orderBy: { sortOrder: 'asc' } } },
+                  },
+                },
               },
             },
           },
@@ -203,7 +208,12 @@ export class AuthService {
           mainMenus: {
             where: { companyId: activeCompanyId },
             orderBy: { sortOrder: 'asc' },
-            include: { subMenus: { orderBy: { sortOrder: 'asc' } } },
+            include: {
+                  subMenus: {
+                    orderBy: { sortOrder: 'asc' },
+                    include: { tabs: { orderBy: { sortOrder: 'asc' } } },
+                  },
+                },
           },
         },
         orderBy: { sortOrder: 'asc' },
@@ -263,6 +273,12 @@ export class AuthService {
     // null = super admin (every dashboard); otherwise the ids the user's groups
     // selected via GroupDashboard.
     let allowedDashboardIds: Set<number> | null = null;
+    /**
+     * SubMenuTab ids this user may NOT see. Empty for a super admin, and empty
+     * for anybody whose groups have hidden nothing — which is the normal case,
+     * since a tab is visible until somebody takes it away.
+     */
+    const hiddenTabIds = new Set<number>();
 
     if (!user.isSuperAdmin) {
       mainMenuVisible = new Set<number>();
@@ -298,6 +314,30 @@ export class AuthService {
           select: { dashboardId: true },
         });
         gd.forEach((d) => allowedDashboardIds!.add(d.dashboardId));
+
+        // Tabs the user's groups have HIDDEN. Only the `false` rows are read,
+        // because a tab nobody has hidden is visible — see
+        // GroupSubMenuTabAccess.
+        //
+        // INTERSECTED across the groups, where every other privilege here is
+        // OR-ed. It comes to the same thing: belonging to a second group only
+        // ever widens what somebody can see, so a tab is out of sight only when
+        // EVERY group they are in hides it. One group that does not hide it is
+        // one grant of it.
+        const tabRows = await this.prisma.groupSubMenuTabAccess.findMany({
+          where: { userGroupId: { in: groupIds }, visible: false },
+          select: { userGroupId: true, subMenuTabId: true },
+        });
+        const hiddenPerGroup = new Map<number, Set<number>>(
+          groupIds.map((g) => [g, new Set<number>()]),
+        );
+        for (const r of tabRows) {
+          hiddenPerGroup.get(r.userGroupId)?.add(r.subMenuTabId);
+        }
+        const [first, ...rest] = groupIds.map((g) => hiddenPerGroup.get(g)!);
+        for (const id of first ?? []) {
+          if (rest.every((s) => s.has(id))) hiddenTabIds.add(id);
+        }
       }
     }
 
@@ -347,6 +387,12 @@ export class AuthService {
         print: boolean;
         downloadPdf: boolean;
         downloadExcel: boolean;
+        /**
+         * Which of this screen's tabs the user may see, by tab key. Absent on a
+         * screen that declares no tabs; a page with no entry here shows all of
+         * its tabs, which is what every single-pane screen wants.
+         */
+        tabs?: Record<string, boolean>;
       }
     > = {};
 
@@ -387,6 +433,14 @@ export class AuthService {
                   print: !!p.canPrint,
                   downloadPdf: !!p.canDownloadPdf,
                   downloadExcel: !!p.canDownloadExcel,
+                  // Only screens that declare tabs carry the key at all.
+                  ...(sm.tabs.length
+                    ? {
+                        tabs: Object.fromEntries(
+                          sm.tabs.map((t) => [t.key, !hiddenTabIds.has(t.id)]),
+                        ),
+                      }
+                    : {}),
                 };
               }
               return {

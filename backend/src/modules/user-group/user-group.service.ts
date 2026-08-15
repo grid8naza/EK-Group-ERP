@@ -177,7 +177,12 @@ export class UserGroupService {
     const mainMenus = moduleIds.length
       ? await this.prisma.mainMenu.findMany({
           where: { companyId: group.companyId, moduleId: { in: moduleIds } },
-          include: { subMenus: { orderBy: { sortOrder: 'asc' } } },
+          include: {
+            subMenus: {
+              orderBy: { sortOrder: 'asc' },
+              include: { tabs: { orderBy: { sortOrder: 'asc' } } },
+            },
+          },
           orderBy: { sortOrder: 'asc' },
         })
       : [];
@@ -197,18 +202,23 @@ export class UserGroupService {
         })
       : [];
 
-    const [mainAccess, subPrivs, groupDashboards] = await Promise.all([
-      this.prisma.groupMainMenuAccess.findMany({
-        where: { userGroupId: id },
-      }),
-      this.prisma.groupSubMenuPrivilege.findMany({
-        where: { userGroupId: id },
-      }),
-      this.prisma.groupDashboard.findMany({ where: { userGroupId: id } }),
-    ]);
+    const [mainAccess, subPrivs, groupDashboards, tabAccess] =
+      await Promise.all([
+        this.prisma.groupMainMenuAccess.findMany({
+          where: { userGroupId: id },
+        }),
+        this.prisma.groupSubMenuPrivilege.findMany({
+          where: { userGroupId: id },
+        }),
+        this.prisma.groupDashboard.findMany({ where: { userGroupId: id } }),
+        this.prisma.groupSubMenuTabAccess.findMany({
+          where: { userGroupId: id },
+        }),
+      ]);
 
     const mainMap = new Map(mainAccess.map((a) => [a.mainMenuId, a]));
     const subMap = new Map(subPrivs.map((p) => [p.subMenuId, p]));
+    const tabMap = new Map(tabAccess.map((t) => [t.subMenuTabId, t]));
     const selectedDashboards = new Set(
       groupDashboards.map((d) => d.dashboardId),
     );
@@ -236,6 +246,15 @@ export class UserGroupService {
           canPrint: priv?.canPrint ?? false,
           canDownloadPdf: priv?.canDownloadPdf ?? false,
           canDownloadExcel: priv?.canDownloadExcel ?? false,
+          // Empty on a single-pane screen. Ticked unless somebody has hidden
+          // it — the absence of a row IS visible, so a screen that just gained
+          // a tab shows it rather than hiding it from everyone at once.
+          tabs: sub.tabs.map((t) => ({
+            id: t.id,
+            key: t.key,
+            label: t.label,
+            visible: tabMap.get(t.id)?.visible ?? true,
+          })),
         };
       }),
     });
@@ -319,6 +338,28 @@ export class UserGroupService {
         }),
       ),
     ];
+
+    // Tab visibility. Sent for every tab on screen, so what an admin sees is
+    // what is stored — including the ticked ones, which would otherwise be
+    // indistinguishable from a tab that has never been decided about.
+    for (const t of dto.subMenuTabs ?? []) {
+      ops.push(
+        this.prisma.groupSubMenuTabAccess.upsert({
+          where: {
+            userGroupId_subMenuTabId: {
+              userGroupId: id,
+              subMenuTabId: t.subMenuTabId,
+            },
+          },
+          create: {
+            userGroupId: id,
+            subMenuTabId: t.subMenuTabId,
+            visible: t.visible,
+          },
+          update: { visible: t.visible },
+        }),
+      );
+    }
 
     // Replace the group's dashboard selection when provided.
     if (dto.dashboardIds !== undefined) {

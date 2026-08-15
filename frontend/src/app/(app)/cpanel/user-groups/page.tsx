@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import {
   Plus,
   ShieldCheck,
@@ -327,6 +327,34 @@ export default function UserGroupsPage() {
     }));
   };
 
+  /**
+   * Show or hide one tab of a multi-tab screen for this group.
+   *
+   * Independent of the action columns beside it: a tab is a PART of the screen,
+   * not a thing you may do to a record, so hiding "User Access" says nothing
+   * about whether this group may edit an employee.
+   */
+  const setSubTab = (
+    mainId: number,
+    subId: number,
+    tabId: number,
+    visible: boolean,
+  ) => {
+    mapNode(mainId, (n) => ({
+      ...n,
+      subMenus: n.subMenus.map((s) =>
+        s.id === subId
+          ? {
+              ...s,
+              tabs: (s.tabs ?? []).map((t) =>
+                t.id === tabId ? { ...t, visible } : t,
+              ),
+            }
+          : s,
+      ),
+    }));
+  };
+
   const toggleAllForMain = (mainId: number, value: boolean) => {
     mapNode(mainId, (n) => ({
       ...n,
@@ -393,12 +421,26 @@ export default function UserGroupsPage() {
           })),
         ),
       );
+      // Every tab on screen, ticked ones included: a tab that has never been
+      // decided about is visible, so only writing the unticked ones would make
+      // "shown again" indistinguishable from "never asked".
+      const subMenuTabs = privModules.flatMap((mg) =>
+        mg.tree.flatMap((n) =>
+          n.subMenus.flatMap((s) =>
+            (s.tabs ?? []).map((t) => ({
+              subMenuTabId: t.id,
+              visible: t.visible,
+            })),
+          ),
+        ),
+      );
       const dashboardIds = privModules.flatMap((mg) =>
         mg.dashboards.filter((d) => d.selected).map((d) => d.id),
       );
       await api.put(`/user-groups/${privGroup.id}/privileges`, {
         mainMenuAccess,
         subMenuPrivileges,
+        subMenuTabs,
         dashboardIds,
       });
       toast.success('Privileges saved.');
@@ -765,97 +807,166 @@ export default function UserGroupsPage() {
                                   </thead>
                                   <tbody>
                                     {node.subMenus.map((s) => (
-                                      <tr
-                                        key={s.id}
-                                        className="border-b border-slate-100 last:border-0 dark:border-slate-800/60"
-                                      >
-                                        <td className="px-4 py-2">
-                                          <span
-                                            className={cn(
-                                              'font-medium text-slate-700 dark:text-slate-200',
-                                              !s.canMenu && 'opacity-50',
-                                            )}
-                                            title={
-                                              !s.canMenu
-                                                ? 'Hidden — MENU is unchecked'
-                                                : undefined
-                                            }
-                                          >
-                                            {s.subMenuName}
-                                          </span>
-                                          {s.objectType && (
-                                            <span className="ml-2 text-xs text-slate-400">
-                                              {s.objectType}
-                                            </span>
+                                      <Fragment key={s.id}>
+                                        <tr
+                                          className={cn(
+                                            'border-slate-100 dark:border-slate-800/60',
+                                            // The tabs row below carries the
+                                            // divider when there is one, so the
+                                            // pair reads as one screen.
+                                            s.tabs?.length
+                                              ? ''
+                                              : 'border-b last:border-0',
                                           )}
-                                        </td>
-                                        {/* MENU visibility */}
-                                        <td className="px-3 py-2 text-center">
-                                          <input
-                                            type="checkbox"
-                                            className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
-                                            checked={s.canMenu}
-                                            onChange={(e) =>
-                                              setSubPriv(
-                                                node.mainMenu.id,
-                                                s.id,
-                                                'canMenu',
-                                                e.target.checked,
-                                              )
-                                            }
-                                          />
-                                        </td>
-                                        {/* Action columns — only those that apply to this
+                                        >
+                                          <td className="px-4 py-2">
+                                            <span
+                                              className={cn(
+                                                'font-medium text-slate-700 dark:text-slate-200',
+                                                !s.canMenu && 'opacity-50',
+                                              )}
+                                              title={
+                                                !s.canMenu
+                                                  ? 'Hidden — MENU is unchecked'
+                                                  : undefined
+                                              }
+                                            >
+                                              {s.subMenuName}
+                                            </span>
+                                            {s.objectType && (
+                                              <span className="ml-2 text-xs text-slate-400">
+                                                {s.objectType}
+                                              </span>
+                                            )}
+                                          </td>
+                                          {/* MENU visibility */}
+                                          <td className="px-3 py-2 text-center">
+                                            <input
+                                              type="checkbox"
+                                              className="h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
+                                              checked={s.canMenu}
+                                              onChange={(e) =>
+                                                setSubPriv(
+                                                  node.mainMenu.id,
+                                                  s.id,
+                                                  'canMenu',
+                                                  e.target.checked,
+                                                )
+                                              }
+                                            />
+                                          </td>
+                                          {/* Action columns — only those that apply to this
                                 object type (forms vs reports) are checkable. */}
-                                        {ACTION_COLS.map((col) => {
-                                          const applies = isReport(s.objectType)
-                                            ? col.forReport
-                                            : col.forForm;
-                                          if (!applies) {
+                                          {ACTION_COLS.map((col) => {
+                                            const applies = isReport(
+                                              s.objectType,
+                                            )
+                                              ? col.forReport
+                                              : col.forForm;
+                                            if (!applies) {
+                                              return (
+                                                <td
+                                                  key={col.key}
+                                                  className="px-3 py-2 text-center text-slate-300 dark:text-slate-700"
+                                                >
+                                                  —
+                                                </td>
+                                              );
+                                            }
+                                            // Actions are meaningless when the menu is hidden,
+                                            // so disable them until MENU is checked.
+                                            const disabled = !s.canMenu;
                                             return (
                                               <td
                                                 key={col.key}
-                                                className="px-3 py-2 text-center text-slate-300 dark:text-slate-700"
+                                                className="px-3 py-2 text-center"
                                               >
-                                                —
+                                                <input
+                                                  type="checkbox"
+                                                  disabled={disabled}
+                                                  title={
+                                                    disabled
+                                                      ? 'Enable MENU first to grant this action'
+                                                      : undefined
+                                                  }
+                                                  className={cn(
+                                                    'h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800',
+                                                    disabled &&
+                                                      'cursor-not-allowed opacity-40',
+                                                  )}
+                                                  checked={s[col.key]}
+                                                  onChange={(e) =>
+                                                    setSubPriv(
+                                                      node.mainMenu.id,
+                                                      s.id,
+                                                      col.key,
+                                                      e.target.checked,
+                                                    )
+                                                  }
+                                                />
                                               </td>
                                             );
-                                          }
-                                          // Actions are meaningless when the menu is hidden,
-                                          // so disable them until MENU is checked.
-                                          const disabled = !s.canMenu;
-                                          return (
+                                          })}
+                                        </tr>
+
+                                        {/* Tabs — only for a screen that has more
+                                          than one pane. Their own row rather
+                                          than columns of their own: which tabs
+                                          a screen has varies per screen, and a
+                                          column that is "—" for all but two
+                                          rows is not a column. */}
+                                        {!!s.tabs?.length && (
+                                          <tr className="border-b border-slate-100 last:border-0 dark:border-slate-800/60">
                                             <td
-                                              key={col.key}
-                                              className="px-3 py-2 text-center"
+                                              colSpan={
+                                                1 + ACTION_COLS.length + 1
+                                              }
+                                              className="px-4 pb-2.5"
                                             >
-                                              <input
-                                                type="checkbox"
-                                                disabled={disabled}
-                                                title={
-                                                  disabled
-                                                    ? 'Enable MENU first to grant this action'
-                                                    : undefined
-                                                }
-                                                className={cn(
-                                                  'h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800',
-                                                  disabled &&
-                                                    'cursor-not-allowed opacity-40',
-                                                )}
-                                                checked={s[col.key]}
-                                                onChange={(e) =>
-                                                  setSubPriv(
-                                                    node.mainMenu.id,
-                                                    s.id,
-                                                    col.key,
-                                                    e.target.checked,
-                                                  )
-                                                }
-                                              />
+                                              <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800/40">
+                                                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                                                  Tabs
+                                                </span>
+                                                {s.tabs.map((t) => (
+                                                  <label
+                                                    key={t.id}
+                                                    className={cn(
+                                                      'inline-flex cursor-pointer select-none items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300',
+                                                      !s.canMenu &&
+                                                        'cursor-not-allowed opacity-40',
+                                                    )}
+                                                    title={
+                                                      !s.canMenu
+                                                        ? 'Enable MENU first'
+                                                        : `Untick to hide the "${t.label}" tab from this group`
+                                                    }
+                                                  >
+                                                    <input
+                                                      type="checkbox"
+                                                      disabled={!s.canMenu}
+                                                      className={cn(
+                                                        'h-4 w-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800',
+                                                        !s.canMenu &&
+                                                          'cursor-not-allowed',
+                                                      )}
+                                                      checked={t.visible}
+                                                      onChange={(e) =>
+                                                        setSubTab(
+                                                          node.mainMenu.id,
+                                                          s.id,
+                                                          t.id,
+                                                          e.target.checked,
+                                                        )
+                                                      }
+                                                    />
+                                                    {t.label}
+                                                  </label>
+                                                ))}
+                                              </div>
                                             </td>
-                                          );
-                                        })}
-                                      </tr>
+                                          </tr>
+                                        )}
+                                      </Fragment>
                                     ))}
                                   </tbody>
                                 </table>

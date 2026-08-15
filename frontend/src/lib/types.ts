@@ -119,6 +119,13 @@ export interface Permission {
   print: boolean;
   downloadPdf: boolean;
   downloadExcel: boolean;
+  /**
+   * Which of this screen's tabs the signed-in user may see, by tab key. Present
+   * only on screens that DECLARE tabs (module-scaffold.ts → ScaffoldSub.tabs);
+   * everywhere else it is absent and `canTab` answers yes. Read it through
+   * `useAuth().canTab(route, key)` rather than directly.
+   */
+  tabs?: Record<string, boolean>;
 }
 
 export type Permissions = Record<string, Permission>;
@@ -453,10 +460,20 @@ export interface UserGroup {
   modules?: Module[];
 }
 
+/** One tab of a multi-tab screen, as the Privileges matrix lists it. */
+export interface PrivilegeTab {
+  id: number;
+  key: string;
+  label: string;
+  visible: boolean;
+}
+
 export interface PrivilegeSubMenu {
   id: number;
   subMenuName: string;
   objectType?: string | null;
+  /** Empty on a single-pane screen. */
+  tabs?: PrivilegeTab[];
   canMenu: boolean;
   canView: boolean;
   canAdd: boolean;
@@ -514,6 +531,16 @@ export interface UserCompanyRef {
 
 export interface AppUser {
   id: number;
+  /**
+   * The employee this login belongs to. Every login created from now on has
+   * one — they are set up on the employee's own record (HR → Employee Master →
+   * User Access). Null only on the accounts that predate the rule, the super
+   * admin among them.
+   */
+  employeeId?: number | null;
+  employee?: { id: number; code: string; name: string } | null;
+  employeeCode?: string | null;
+  employeeName?: string | null;
   userCode: string;
   username: string;
   name: string;

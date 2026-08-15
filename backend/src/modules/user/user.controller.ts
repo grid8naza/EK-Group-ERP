@@ -21,6 +21,11 @@ import { CreateUserDto, UpdateUserDto } from './user.dto';
 // super-admin-only operation, matching the Cpanel navigation which only
 // surfaces this screen to super admins. Enforced server-side so the endpoints
 // can't be reached directly by a non-super-admin who has a valid token.
+//
+// It stays super-admin-only now that logins are set up from HR → Employee
+// Master → User Access: the screen moved, the authority did not. Anything less
+// would let whoever maintains staff records hand themselves a role, and the
+// User Access tab is read-only for them for the same reason.
 @ApiTags('users')
 @ApiBearerAuth()
 @UseGuards(SuperAdminGuard)
@@ -29,8 +34,12 @@ export class UserController {
   constructor(private readonly service: UserService) {}
 
   @Get()
-  findAll(@Query('search') search?: string) {
-    return this.service.findAll(search);
+  findAll(
+    @Query('search') search?: string,
+    @Query('employeeId') employeeId?: string,
+  ) {
+    // Number(), not an optional ParseIntPipe, which 400s on an absent param.
+    return this.service.findAll(search, Number(employeeId) || undefined);
   }
 
   @Get(':id')

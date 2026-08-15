@@ -28,6 +28,15 @@ export class ModuleAssignmentDto {
 }
 
 export class CreateUserDto {
+  /**
+   * The employee this login belongs to. Required on create: a login is set up
+   * on the person's own record (HR → Employee Master → User Access), so there
+   * is always somebody it belongs to. The service checks they exist, are still
+   * on the books, and hold no account already.
+   */
+  @IsInt()
+  employeeId: number;
+
   @IsString()
   @IsNotEmpty()
   userCode: string;

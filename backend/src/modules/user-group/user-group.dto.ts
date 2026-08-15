@@ -70,6 +70,15 @@ export class SubMenuPrivilegeDto {
   @IsOptional() @IsBoolean() canDownloadExcel?: boolean;
 }
 
+/** Whether this group sees one tab of a multi-tab screen. */
+export class SubMenuTabAccessDto {
+  @IsInt()
+  subMenuTabId: number;
+
+  @IsBoolean()
+  visible: boolean;
+}
+
 export class UpdatePrivilegesDto {
   @IsArray()
   @ValidateNested({ each: true })
@@ -80,6 +89,14 @@ export class UpdatePrivilegesDto {
   @ValidateNested({ each: true })
   @Type(() => SubMenuPrivilegeDto)
   subMenuPrivileges: SubMenuPrivilegeDto[];
+
+  // Tab visibility for the multi-tab screens on show. Optional so a client that
+  // predates tabs still saves everything else.
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SubMenuTabAccessDto)
+  subMenuTabs?: SubMenuTabAccessDto[];
 
   // Dashboard ids selected for this group.
   @IsOptional()

@@ -58,14 +58,19 @@ export const HR_EXTRA_MENUS = [
     icon: 'users',
     subs: [
       {
-        // Not built yet. The menu row, the Object Master row and the privilege
-        // column are seeded ahead of the screen on purpose, so an admin can
-        // grant access before the page exists — the same way the Workplace
-        // screens were staged.
         name: 'Employee Master',
         route: '/hr/employees',
         icon: 'user-cog',
         order: 1,
+        /**
+         * Two panes, and not everybody who maintains staff records should be
+         * shown both. The keys are what the page passes to canTab(); the
+         * labels are what the Privileges matrix lists.
+         */
+        tabs: [
+          { key: 'employee', label: 'Employee', order: 1 },
+          { key: 'access', label: 'User Access', order: 2 },
+        ],
       },
     ],
   },

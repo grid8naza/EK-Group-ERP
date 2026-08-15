@@ -51,11 +51,35 @@ import {
  * push` on container start.
  */
 
+/**
+ * One tab on a screen that has more than one.
+ *
+ * Declared here so the Privileges matrix can offer it: an admin can only hide a
+ * tab the system knows exists. `key` is the string the page passes to
+ * `canTab(route, key)` — it is the contract between this list and the page, so
+ * changing it orphans whatever an admin has already set. The label is free to
+ * change.
+ */
+export interface ScaffoldTab {
+  key: string;
+  label: string;
+  order: number;
+}
+
 export interface ScaffoldSub {
   name: string;
   route: string;
   icon: string;
   order: number;
+  /**
+   * The screen's tabs, where it has more than one. Omit for a single-pane
+   * screen — a screen with no declared tabs simply has none to hide.
+   *
+   * A tab nobody has hidden is VISIBLE (see GroupSubMenuTabAccess), so adding
+   * one here shows it to every group that can already reach the screen; the
+   * matrix is then how it gets taken away.
+   */
+  tabs?: ScaffoldTab[];
   /**
    * Screen kind — decides which privilege actions apply (forms use
    * Add/Edit/Delete/Lock/Unlock; reports use Print/PDF/Excel). Defaults to FORM.

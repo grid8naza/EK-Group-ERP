@@ -1,6 +1,8 @@
 import { Global, Module } from '@nestjs/common';
 import { USER_LOOKUP } from './user-lookup.port';
 import { UserLookupAdapter } from '../modules/user/user-lookup.adapter';
+import { EMPLOYEE_LOOKUP } from './employee-lookup.port';
+import { EmployeeLookupAdapter } from '../modules/hr-employee/employee-lookup.adapter';
 import { WORKFLOW } from './workflow.port';
 import { WorkflowRuntimeAdapter } from '../modules/workflow/workflow-runtime.adapter';
 import { WorkflowRuntimeService } from '../modules/workflow/workflow-runtime.service';
@@ -77,6 +79,12 @@ import { NotificationSummaryAdapter } from '../modules/notification/notification
 @Module({
   providers: [
     { provide: USER_LOOKUP, useClass: UserLookupAdapter },
+    // The two halves of "who holds this login". The User module asks HR whether
+    // an employee exists before it will create an account for them; HR asks the
+    // User module whether an account exists before it will delete the employee
+    // underneath it. Two ports rather than one import each way — that is what
+    // keeps either module extractable.
+    { provide: EMPLOYEE_LOOKUP, useClass: EmployeeLookupAdapter },
     // Workflow runtime bound here (with its service) so any business module can
     // start/cancel an approval via the WORKFLOW port without importing the
     // Workflow module. Its own instance for the port; the REST controller keeps
@@ -198,6 +206,7 @@ import { NotificationSummaryAdapter } from '../modules/notification/notification
   ],
   exports: [
     USER_LOOKUP,
+    EMPLOYEE_LOOKUP,
     METRIC_PROVIDER,
     WORKFLOW,
     NUMBERING,

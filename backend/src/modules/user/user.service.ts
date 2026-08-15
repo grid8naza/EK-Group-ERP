@@ -1,5 +1,7 @@
 import {
+  BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -7,10 +9,16 @@ import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../../prisma/prisma.service';
 import { assertUnlocked } from '../../common/assert-unlocked';
+import {
+  EMPLOYEE_LOOKUP,
+  EmployeeLookupPort,
+  EmployeeSummary,
+} from '../../contracts/employee-lookup.port';
 import { CreateUserDto, UpdateUserDto } from './user.dto';
 
 const userSelect = {
   id: true,
+  employeeId: true,
   userCode: true,
   username: true,
   name: true,
@@ -49,8 +57,15 @@ const userSelect = {
 
 type RawUser = Prisma.UserGetPayload<{ select: typeof userSelect }>;
 
+/** Who a login belongs to, as far as anything outside HR needs to know. */
+export interface EmployeeRef {
+  id: number;
+  code: string;
+  name: string;
+}
+
 // Flatten the join rows for the client.
-function shape(user: RawUser) {
+function shape(user: RawUser, employee: EmployeeRef | null = null) {
   // Group per-company module assignments: [{ companyId, moduleIds }].
   const byCompany = new Map<number, number[]>();
   for (const m of user.modules) {
@@ -64,6 +79,11 @@ function shape(user: RawUser) {
   );
   return {
     ...user,
+    // Denormalized for display only — the employee master is still the one
+    // place either field is edited.
+    employee,
+    employeeCode: employee?.code ?? null,
+    employeeName: employee?.name ?? null,
     groupIds: user.groupAssignments.map((g) => g.userGroupId),
     groups: user.groupAssignments.map((g) => g.userGroup),
     companyIds: user.companies.map((c) => c.companyId),
@@ -114,7 +134,73 @@ const WORKPLACE_CODE = 'WORKFLOW';
 
 @Injectable()
 export class UserService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    @Inject(EMPLOYEE_LOOKUP) private readonly employees: EmployeeLookupPort,
+  ) {}
+
+  /**
+   * Check the employee a login is being attached to, and hand back their record.
+   *
+   * Every account created from now on belongs to somebody on the books — that
+   * is the whole point of moving login setup onto the employee record. Three
+   * things can be wrong, and each gets its own sentence, because "invalid
+   * employee" would leave an admin guessing which:
+   *   · no such employee — a stale id, or a record deleted since the form opened
+   *   · they have left — an inactive employee should not be given a way in
+   *   · they already have one — logins are one per person, so the admin wants
+   *     the existing account, not a second one they will have to keep in step
+   *
+   * `selfUserId` is the account being edited, so re-saving a login does not
+   * report its own employee as taken.
+   *
+   * `requireActive` is false when an account is merely being re-saved against
+   * the employee it already belongs to. Somebody who has left is set inactive
+   * rather than deleted, and switching their login off is exactly what an admin
+   * does next — refusing that save would leave the account they were trying to
+   * close still open.
+   */
+  private async assertEmployee(
+    employeeId: number,
+    selfUserId?: number,
+    requireActive = true,
+  ): Promise<EmployeeSummary> {
+    const employee = await this.employees.findById(employeeId);
+    if (!employee) {
+      throw new BadRequestException(
+        'No such employee. A login is set up from the employee’s own record.',
+      );
+    }
+    if (requireActive && !employee.isActive) {
+      throw new BadRequestException(
+        `${employee.name} is not an active employee, so they cannot be given a login.`,
+      );
+    }
+    const taken = await this.prisma.user.findUnique({
+      where: { employeeId },
+      select: { id: true, username: true },
+    });
+    if (taken && taken.id !== selfUserId) {
+      throw new BadRequestException(
+        `${employee.name} already has a login (${taken.username}). Edit that one instead of creating a second.`,
+      );
+    }
+    return employee;
+  }
+
+  /** The employees behind a set of logins, keyed by employee id. */
+  private async employeeRefs(
+    users: { employeeId: number | null }[],
+  ): Promise<Map<number, EmployeeRef>> {
+    const ids = users
+      .map((u) => u.employeeId)
+      .filter((id): id is number => id != null);
+    if (ids.length === 0) return new Map();
+    const rows = await this.employees.findByIds(Array.from(new Set(ids)));
+    return new Map(
+      rows.map((e) => [e.id, { id: e.id, code: e.code, name: e.name }]),
+    );
+  }
 
   /** The Workplace module's id, or null on a database that predates it. */
   private async workplaceModuleId(): Promise<number | null> {
@@ -142,21 +228,29 @@ export class UserService {
     );
   }
 
-  async findAll(search?: string) {
+  async findAll(search?: string, employeeId?: number) {
     const users = await this.prisma.user.findMany({
-      where: search
-        ? {
-            OR: [
-              { username: { contains: search, mode: 'insensitive' } },
-              { name: { contains: search, mode: 'insensitive' } },
-              { userCode: { contains: search, mode: 'insensitive' } },
-            ],
-          }
-        : undefined,
+      where: {
+        // Employee Master asks for one person's login by this, and gets an empty
+        // list where they have none — which is the ordinary answer, not an error.
+        ...(employeeId != null ? { employeeId } : {}),
+        ...(search
+          ? {
+              OR: [
+                { username: { contains: search, mode: 'insensitive' } },
+                { name: { contains: search, mode: 'insensitive' } },
+                { userCode: { contains: search, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
+      },
       select: userSelect,
       orderBy: { name: 'asc' },
     });
-    return users.map(shape);
+    const refs = await this.employeeRefs(users);
+    return users.map((u) =>
+      shape(u, u.employeeId != null ? (refs.get(u.employeeId) ?? null) : null),
+    );
   }
 
   async findOne(id: number) {
@@ -165,7 +259,11 @@ export class UserService {
       select: userSelect,
     });
     if (!user) throw new NotFoundException('User not found');
-    return shape(user);
+    const refs = await this.employeeRefs([user]);
+    return shape(
+      user,
+      user.employeeId != null ? (refs.get(user.employeeId) ?? null) : null,
+    );
   }
 
   async create(dto: CreateUserDto) {
@@ -180,6 +278,11 @@ export class UserService {
       ...rest
     } = dto;
     const passwordHash = await bcrypt.hash(password, 10);
+
+    // Who this account is for, before anything is written. Logins are set up on
+    // the employee's own record, so an account with nobody behind it is not a
+    // case to handle — it is a request to refuse.
+    const employee = await this.assertEmployee(rest.employeeId);
 
     // Flatten per-company module assignments into UserModule rows — Workplace
     // always among them, and the module the user lands on unless the form named
@@ -230,7 +333,11 @@ export class UserService {
         },
         select: userSelect,
       });
-      return shape(user);
+      return shape(user, {
+        id: employee.id,
+        code: employee.code,
+        name: employee.name,
+      });
     });
   }
 
@@ -251,6 +358,16 @@ export class UserService {
     const data: Prisma.UserUpdateInput = { ...rest };
     if (password) {
       data.passwordHash = await bcrypt.hash(password, 10);
+    }
+    // Re-checked whenever it is sent, including when it is unchanged: the
+    // employee could have left since the account was made, and passing their id
+    // back should not be the way that goes unnoticed.
+    if (rest.employeeId !== undefined) {
+      await this.assertEmployee(
+        rest.employeeId,
+        id,
+        rest.employeeId !== existing.employeeId,
+      );
     }
 
     // Workplace survives an edit: the assignment rows are replaced wholesale
@@ -369,7 +486,11 @@ export class UserService {
         data,
         select: userSelect,
       });
-      return shape(user);
+      const refs = await this.employeeRefs([user]);
+      return shape(
+        user,
+        user.employeeId != null ? (refs.get(user.employeeId) ?? null) : null,
+      );
     });
   }
 

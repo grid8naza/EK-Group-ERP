@@ -94,6 +94,18 @@ export interface UserLookupPort {
   /** Minimal user records for the given ids (active + inactive), any order. */
   findByIds(ids: number[]): Promise<UserSummary[]>;
 
+  /**
+   * The login held by one employee, or null where they have none — most staff
+   * never sign in (SRS FR-HRP-01), so null is the ordinary answer.
+   *
+   * Asked by HR, which has to refuse to delete an employee whose login exists:
+   * the account names its employee and nothing else would, so removing the
+   * record underneath it would leave a live login belonging to nobody. Kept
+   * HERE because `users.employeeId` is the user module's column, and HR cannot
+   * read it without importing the module.
+   */
+  findByEmployeeId(employeeId: number): Promise<UserSummary | null>;
+
   /** True if the user exists and is allowed to access the given company. */
   canAccessCompany(userId: number, companyId: number): Promise<boolean>;
 

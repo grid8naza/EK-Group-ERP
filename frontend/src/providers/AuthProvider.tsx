@@ -55,8 +55,16 @@ interface AuthContextValue {
   setActiveModule: (id: number) => void;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
-  can: (route: string, action: keyof Permission) => boolean;
+  can: (route: string, action: PermissionAction) => boolean;
+  /** Whether one tab of a multi-tab screen is on for this user. */
+  canTab: (route: string, tabKey: string) => boolean;
 }
+
+/**
+ * The yes/no keys of Permission. `tabs` is a map rather than a flag, so it is
+ * excluded — `can(route, 'tabs')` would be true whenever the map existed.
+ */
+export type PermissionAction = Exclude<keyof Permission, 'tabs'>;
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
@@ -292,11 +300,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [router]);
 
   const can = useCallback(
-    (route: string, action: keyof Permission) => {
+    (route: string, action: PermissionAction) => {
       if (user?.isSuperAdmin) return true;
       const p = permissions[route];
       if (!p) return false;
       return !!p[action];
+    },
+    [user, permissions],
+  );
+
+  /**
+   * May this user see one tab of a multi-tab screen?
+   *
+   * Yes unless somebody has said otherwise. A screen whose tabs are not
+   * declared in the module scaffold carries no `tabs` map at all, and a tab
+   * nobody has hidden is not in it — both answer yes, so adding a tab to a page
+   * never needs a privilege to exist before it will show.
+   */
+  const canTab = useCallback(
+    (route: string, tabKey: string) => {
+      if (user?.isSuperAdmin) return true;
+      return permissions[route]?.tabs?.[tabKey] !== false;
     },
     [user, permissions],
   );
@@ -323,6 +347,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         can,
+        canTab,
       }}
     >
       {children}

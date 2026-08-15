@@ -46,6 +46,13 @@ export class UserLookupAdapter implements UserLookupPort {
     });
   }
 
+  findByEmployeeId(employeeId: number): Promise<UserSummary | null> {
+    return this.prisma.user.findUnique({
+      where: { employeeId },
+      select: this.summarySelect,
+    });
+  }
+
   async usersInGroup(userGroupId: number): Promise<number[]> {
     const rows = await this.prisma.userGroupAssignment.findMany({
       where: { userGroupId, user: { isActive: true } },
