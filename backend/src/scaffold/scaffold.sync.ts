@@ -2015,8 +2015,9 @@ async function syncOneMenu(
  * it in Cpanel → Dashboards. Adding a widget here later will not disturb a
  * board somebody has already made their own.
  *
- * Chosen to answer the four questions an HR screen is opened with: how many
- * people, who is new, who is still on probation, and what it costs.
+ * Six of them, which the dashboard's three-column grid lays out as two rows:
+ * how many people and how many are actually here on the first, then what is
+ * changing and what it costs on the second.
  */
 const HR_DASHBOARD_WIDGETS: {
   code: string;
@@ -2025,6 +2026,7 @@ const HR_DASHBOARD_WIDGETS: {
   hint: string;
   accent: string;
 }[] = [
+  // ---- first row: how many, and how many of them are actually here ----
   {
     code: 'HR_HEADCOUNT',
     name: 'Headcount',
@@ -2032,6 +2034,21 @@ const HR_DASHBOARD_WIDGETS: {
     hint: 'Active employees',
     accent: 'emerald',
   },
+  {
+    code: 'HR_IN_SERVICE',
+    name: 'In Service',
+    metric: 'hr.employees.inService',
+    hint: 'Working today',
+    accent: 'emerald',
+  },
+  {
+    code: 'HR_ON_LEAVE',
+    name: 'On Leave',
+    metric: 'hr.employees.onLeave',
+    hint: 'Away today',
+    accent: 'blue',
+  },
+  // ---- second row: what is changing, and what it costs ----
   {
     code: 'HR_JOINED_MONTH',
     name: 'Joined This Month',
@@ -2053,32 +2070,15 @@ const HR_DASHBOARD_WIDGETS: {
     hint: 'Packages in force today',
     accent: 'violet',
   },
-  {
-    code: 'HR_SALARY_COVERED',
-    name: 'With a Package',
-    metric: 'hr.salary.covered',
-    hint: 'Payroll can pay these',
-    accent: 'slate',
-  },
-  // Added after the first five, once the employee STATUS field existed — see
-  // the second runOnce below, which is why they are a separate group here.
-  {
-    code: 'HR_IN_SERVICE',
-    name: 'In Service',
-    metric: 'hr.employees.inService',
-    hint: 'Working today',
-    accent: 'emerald',
-  },
-  {
-    code: 'HR_ON_LEAVE',
-    name: 'On Leave',
-    metric: 'hr.employees.onLeave',
-    hint: 'Away today',
-    accent: 'blue',
-  },
 ];
 
-/** The widgets added with the employee-status field, by code. */
+/**
+ * The widgets added with the employee-status field, by code.
+ *
+ * They are part of the starter set above now, so a fresh database gets them
+ * from that. This list is only for the boards seeded BEFORE the status field
+ * existed — see addHrStatusWidgets, whose marker those databases do not carry.
+ */
 const HR_STATUS_WIDGET_CODES = ['HR_IN_SERVICE', 'HR_ON_LEAVE'];
 
 /**
