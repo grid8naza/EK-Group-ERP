@@ -1048,9 +1048,13 @@ export default function EmployeesPage() {
                 </div>
               </div>
 
-              {/* ---- the person ---- */}
-              <div className="mt-1 border-t border-slate-200 pt-3 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300 sm:col-span-2">
-                Personal
+              {/* ---- the person ----
+                  Set larger and in a dark blue of its own, so the two block
+                  headings read as headings rather than as another field label.
+                  Deliberately NOT brand-*: that palette is evergreen, and a
+                  heading in it would look like a button that failed to render. */}
+              <div className="mt-1 border-t border-slate-200 pt-3 text-base font-bold text-blue-900 dark:border-slate-700 dark:text-blue-300 sm:col-span-2">
+                Personal Details
               </div>
 
               <Input
@@ -1150,21 +1154,6 @@ export default function EmployeesPage() {
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
               />
-              <Input
-                label="Emergency Contact Person"
-                value={form.emergencyContactName}
-                onChange={(e) =>
-                  setForm({ ...form, emergencyContactName: e.target.value })
-                }
-              />
-              <Input
-                label="Emergency Contact Number"
-                value={form.emergencyContactPhone}
-                onChange={(e) =>
-                  setForm({ ...form, emergencyContactPhone: e.target.value })
-                }
-              />
-
               {/* What they bring. Three lists rather than free text so a search
                   for everybody who speaks Tamil, or can decorate a cake, has
                   something to match on. The lists themselves live in
@@ -1195,9 +1184,27 @@ export default function EmployeesPage() {
                 options={asOptions(languageValues)}
               />
 
+              {/* Last in the block, and a pair of their own: this is who to
+                  ring when something happens at work, not another way to reach
+                  the employee. */}
+              <Input
+                label="Emergency Contact Person"
+                value={form.emergencyContactName}
+                onChange={(e) =>
+                  setForm({ ...form, emergencyContactName: e.target.value })
+                }
+              />
+              <Input
+                label="Emergency Contact Number"
+                value={form.emergencyContactPhone}
+                onChange={(e) =>
+                  setForm({ ...form, emergencyContactPhone: e.target.value })
+                }
+              />
+
               {/* ---- the job ---- */}
-              <div className="mt-1 border-t border-slate-200 pt-3 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300 sm:col-span-2">
-                Posting
+              <div className="mt-1 border-t border-slate-200 pt-3 text-base font-bold text-blue-900 dark:border-slate-700 dark:text-blue-300 sm:col-span-2">
+                Posting Details
               </div>
 
               {/*
@@ -1283,35 +1290,6 @@ export default function EmployeesPage() {
                   (o) => ({ value: String(o.id), label: o.name }),
                 )}
               />
-              <DateInput
-                label="Date of Join"
-                required
-                value={form.dateOfJoin}
-                onChange={(iso) => setForm({ ...form, dateOfJoin: iso })}
-              />
-              <Input
-                label="Probation Period (months)"
-                type="number"
-                min={0}
-                max={120}
-                value={form.probationMonths}
-                onChange={(e) =>
-                  setForm({ ...form, probationMonths: e.target.value })
-                }
-                placeholder="e.g. 6"
-              />
-              {/* What was AGREED above, what actually HAPPENED here — they part
-                  company often enough (a confirmation early for good work, late
-                  for a review that slipped) that one cannot be read off the
-                  other. */}
-              <DateInput
-                label="Date of Confirmation"
-                value={form.dateOfConfirmation}
-                onChange={(iso) =>
-                  setForm({ ...form, dateOfConfirmation: iso })
-                }
-              />
-
               {/*
               Category → Group → Designation. Only the designation is stored:
               it already knows the other two, and a stored copy would go stale
@@ -1394,6 +1372,37 @@ export default function EmployeesPage() {
                   value: String(m.id),
                   label: `${m.name} (${m.designationName})`,
                 }))}
+              />
+
+              {/* The dates of the engagement itself, after the shape of the job
+                  above them. */}
+              <DateInput
+                label="Date of Join"
+                required
+                value={form.dateOfJoin}
+                onChange={(iso) => setForm({ ...form, dateOfJoin: iso })}
+              />
+              <Input
+                label="Probation Period (months)"
+                type="number"
+                min={0}
+                max={120}
+                value={form.probationMonths}
+                onChange={(e) =>
+                  setForm({ ...form, probationMonths: e.target.value })
+                }
+                placeholder="e.g. 6"
+              />
+              {/* What was AGREED above, what actually HAPPENED here — they part
+                  company often enough (a confirmation early for good work, late
+                  for a review that slipped) that one cannot be read off the
+                  other. */}
+              <DateInput
+                label="Date of Confirmation"
+                value={form.dateOfConfirmation}
+                onChange={(iso) =>
+                  setForm({ ...form, dateOfConfirmation: iso })
+                }
               />
 
               {/* Whether this person is drawn on the organisation chart. Yes
