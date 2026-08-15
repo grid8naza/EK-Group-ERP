@@ -1104,23 +1104,11 @@ export default function EmployeesPage() {
                   value: String(o.value),
                 }))}
               />
-              <Input
-                label="Aadhaar Number"
-                value={form.aadhaarNumber}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    // Digits only, 12 of them — typed spaces are the usual reason
-                    // an otherwise valid number is rejected.
-                    aadhaarNumber: e.target.value
-                      .replace(/\D/g, '')
-                      .slice(0, 12),
-                  })
-                }
-                placeholder="12 digits"
-              />
-              {/* The two addresses side by side, a column each — they are read
-                  against each other far more often than either is read alone. */}
+              {/* The two addresses on ONE row, a column each — they are read
+                  against each other far more often than either is read alone,
+                  so nothing is allowed between them. Everything after them
+                  follows in order; Aadhaar sits below rather than above so the
+                  pair starts a row of its own. */}
               <Textarea
                 label="Permanent Address"
                 rows={2}
@@ -1135,6 +1123,21 @@ export default function EmployeesPage() {
                   setForm({ ...form, presentAddress: e.target.value })
                 }
                 placeholder="If different from the permanent address"
+              />
+              <Input
+                label="Aadhaar Number"
+                value={form.aadhaarNumber}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    // Digits only, 12 of them — typed spaces are the usual reason
+                    // an otherwise valid number is rejected.
+                    aadhaarNumber: e.target.value
+                      .replace(/\D/g, '')
+                      .slice(0, 12),
+                  })
+                }
+                placeholder="12 digits"
               />
               <Input
                 label="Contact Number"
