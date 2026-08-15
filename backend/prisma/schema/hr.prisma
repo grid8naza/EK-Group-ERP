@@ -253,6 +253,13 @@ model Employee {
   /// what HR say the position is, and it is the one a manager and a payroll run
   /// have to agree on.
   statusId           Int?
+  /// The last day they actually worked — asked for ONLY where the status says
+  /// they have gone (Resigned or Terminated), and cleared by the service the
+  /// moment it says otherwise.
+  ///
+  /// Separate from `isActive`, which is whether the record is live, and from
+  /// the status itself, which is why they went. This is when.
+  lastWorkingDay     DateTime?
   dateOfJoin         DateTime
   /// How long they are on probation, in months. Null = none agreed.
   probationMonths    Int?

@@ -1672,6 +1672,8 @@ export interface Employee {
    */
   statusId?: number | null;
   statusName?: string | null;
+  /** The last day worked. Only kept where the status says they have gone. */
+  lastWorkingDay?: string | null;
 
   dateOfJoin: string;
   /** Months. Null = no probation agreed. */

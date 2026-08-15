@@ -135,6 +135,7 @@ const empty = {
   employeeTypeId: '',
   gradeId: '',
   statusId: '',
+  lastWorkingDay: '',
   dateOfJoin: '',
   probationMonths: '',
   dateOfConfirmation: '',
@@ -336,8 +337,17 @@ export default function EmployeesPage() {
     (designations ?? []).find((d) => String(d.id) === id)?.name ?? '';
 
   /** The chosen status's label, shown as a chip beside the employee code. */
-  const statusLabel =
-    statusValues.find((v) => String(v.id) === form.statusId)?.label ?? '';
+  const statusChoice = statusValues.find((v) => String(v.id) === form.statusId);
+  const statusLabel = statusChoice?.label ?? '';
+
+  /**
+   * Has this person gone? Decided on the lookup value's CODE, matching the
+   * server's rule — renaming "Resigned" must not switch the last working day
+   * back off. Only then is that field asked for.
+   */
+  const hasLeft =
+    !!statusChoice &&
+    ['RESIGNED', 'TERMINATED'].includes(String(statusChoice.value));
 
   const closeDrawer = () => {
     setOpen(false);
@@ -513,6 +523,7 @@ export default function EmployeesPage() {
     employeeTypeId: e.employeeTypeId != null ? String(e.employeeTypeId) : '',
     gradeId: e.gradeId != null ? String(e.gradeId) : '',
     statusId: e.statusId != null ? String(e.statusId) : '',
+    lastWorkingDay: e.lastWorkingDay ?? '',
     dateOfJoin: e.dateOfJoin,
     probationMonths: e.probationMonths != null ? String(e.probationMonths) : '',
     dateOfConfirmation: e.dateOfConfirmation ?? '',
@@ -644,6 +655,9 @@ export default function EmployeesPage() {
       employeeTypeId: idOrNull(form.employeeTypeId),
       gradeId: idOrNull(form.gradeId),
       statusId: idOrNull(form.statusId),
+      // Sent only where it applies; the server refuses it otherwise and clears
+      // it when the status goes back to a working one.
+      lastWorkingDay: hasLeft ? form.lastWorkingDay || null : null,
       dateOfJoin: form.dateOfJoin,
       probationMonths: form.probationMonths
         ? Number(form.probationMonths)
@@ -1468,20 +1482,6 @@ export default function EmployeesPage() {
                   value: String(o.value),
                 }))}
               />
-              {/* Where they stand today. Entered rather than worked out: it is
-                  not the Active flag below, nor a missing confirmation date —
-                  it is what HR say the position is. */}
-              <Select
-                label="Employee Status"
-                value={form.statusId}
-                onChange={(e) => setForm({ ...form, statusId: e.target.value })}
-                placeholder="— Not stated —"
-                sortOptions={false}
-                options={asOptions(statusValues).map((o) => ({
-                  ...o,
-                  value: String(o.value),
-                }))}
-              />
 
               <Select
                 label="Reporting To"
@@ -1500,6 +1500,50 @@ export default function EmployeesPage() {
                   value: String(m.id),
                   label: `${m.name} (${m.designationName})`,
                 }))}
+              />
+
+              {/* Where they stand today. Entered rather than worked out: it is
+                  not the Active flag below, nor a missing confirmation date —
+                  it is what HR say the position is. */}
+              <Select
+                label="Employee Status"
+                value={form.statusId}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  const chosen = statusValues.find(
+                    (v) => String(v.id) === next,
+                  );
+                  const leaving =
+                    !!chosen &&
+                    ['RESIGNED', 'TERMINATED'].includes(String(chosen.value));
+                  // Moving back to a working status drops the last working day
+                  // with it, rather than leaving a date behind on somebody who
+                  // has not gone. The server does the same on save.
+                  setForm({
+                    ...form,
+                    statusId: next,
+                    lastWorkingDay: leaving ? form.lastWorkingDay : '',
+                  });
+                }}
+                placeholder="— Not stated —"
+                sortOptions={false}
+                options={asOptions(statusValues).map((o) => ({
+                  ...o,
+                  value: String(o.value),
+                }))}
+              />
+              {/* Only asked for once the status says they have gone. Left on
+                  the form but disabled rather than hidden, so the field does
+                  not appear and disappear as the status changes — and so its
+                  place in the run of fields stays put. */}
+              <DateInput
+                label="Last Working Day"
+                value={form.lastWorkingDay}
+                onChange={(iso) => setForm({ ...form, lastWorkingDay: iso })}
+                disabled={!hasLeft}
+                placeholder={
+                  hasLeft ? undefined : 'Set when resigned or terminated'
+                }
               />
 
               {/* The dates of the engagement itself, after the shape of the job

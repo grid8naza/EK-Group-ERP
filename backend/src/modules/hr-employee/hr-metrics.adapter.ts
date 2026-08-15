@@ -48,7 +48,7 @@ export class HrMetricsAdapter implements MetricProviderPort {
    * code returns 0, which is the truthful answer to "how many are On Leave" on
    * a database where that status does not exist.
    */
-  private countByStatus(code: string) {
+  private countByStatus(code: string, opts: { activeOnly?: boolean } = {}) {
     return async (ctx: MetricContext) => {
       const value = await this.prisma.lookupValue.findFirst({
         where: { value: code, lookup: { code: 'EMPLOYEE_STATUS' } },
@@ -56,7 +56,11 @@ export class HrMetricsAdapter implements MetricProviderPort {
       });
       if (!value) return 0;
       return this.prisma.employee.count({
-        where: { ...this.scope(ctx), statusId: value.id },
+        where: {
+          ...this.scope(ctx),
+          statusId: value.id,
+          ...(opts.activeOnly ? { isActive: true } : {}),
+        },
       });
     };
   }
@@ -154,14 +158,20 @@ export class HrMetricsAdapter implements MetricProviderPort {
       // Read off the status HR set, not worked out from dates. Two answers to
       // "is this person on probation" is one too many, and the entered one is
       // the answer a manager and a payroll run have to agree on.
+      //
+      // The three "still here" states count ACTIVE records only, so they add up
+      // against Headcount, which is the Active flag. The two "gone" states do
+      // not: they are about people who have left, and a leaver whose record has
+      // been switched off is exactly who those numbers are for — filtering them
+      // to active would report zero the moment somebody tidied up.
       M('hr.employees.onProbation', 'On Probation', {
-        compute: this.countByStatus('ON_PROBATION'),
+        compute: this.countByStatus('ON_PROBATION', { activeOnly: true }),
       }),
       M('hr.employees.inService', 'In Service', {
-        compute: this.countByStatus('IN_SERVICE'),
+        compute: this.countByStatus('IN_SERVICE', { activeOnly: true }),
       }),
       M('hr.employees.onLeave', 'On Leave', {
-        compute: this.countByStatus('ON_LEAVE'),
+        compute: this.countByStatus('ON_LEAVE', { activeOnly: true }),
       }),
       M('hr.employees.resigned', 'Resigned', {
         compute: this.countByStatus('RESIGNED'),

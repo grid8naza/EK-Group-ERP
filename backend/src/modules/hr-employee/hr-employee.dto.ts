@@ -189,6 +189,16 @@ export class SaveEmployeeDto {
   @IsInt()
   statusId?: number | null;
 
+  /**
+   * The last day they worked. Only accepted where the status says they have
+   * gone; the service refuses it otherwise and clears it when the status
+   * changes back.
+   */
+  @ApiPropertyOptional({ nullable: true, example: '2026-09-30' })
+  @IsOptional()
+  @IsDateString()
+  lastWorkingDay?: string | null;
+
   @ApiPropertyOptional({ example: '2026-08-14' })
   @IsOptional()
   @IsDateString()

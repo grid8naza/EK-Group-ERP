@@ -76,6 +76,12 @@ const LIST_LABELS: Record<string, string> = {
 };
 
 /**
+ * The EMPLOYEE_STATUS values that mean somebody has gone, by CODE — a last
+ * working day is only asked for, and only kept, against one of these.
+ */
+const LEAVING_STATUS_CODES = ['RESIGNED', 'TERMINATED'];
+
+/**
  * Employee Master (SRS §8.9, FR-HRP-01).
  *
  * An employee is NOT a user, and that is the requirement rather than a
@@ -304,6 +310,7 @@ export class HrEmployeeService {
     }
     const posting = await this.posting(dto, companyId, ctx.existingId);
     const lists = await this.lookupLists(dto);
+    const leaving = await this.lastWorkingDay(dto, ctx.existingId);
     if (dto.reportsToId != null) {
       await this.assertManager(dto.reportsToId, companyId, ctx.existingId);
     }
@@ -351,6 +358,7 @@ export class HrEmployeeService {
         ? { employeeTypeId: dto.employeeTypeId }
         : {}),
       ...(dto.statusId !== undefined ? { statusId: dto.statusId } : {}),
+      ...leaving,
       ...(dto.dateOfJoin !== undefined
         ? { dateOfJoin: new Date(dto.dateOfJoin) }
         : {}),
@@ -467,6 +475,72 @@ export class HrEmployeeService {
       }
     }
     return out;
+  }
+
+  /**
+   * Resolve the last working day against the status, and hand back only the
+   * key that should actually be written.
+   *
+   * The rule is that a last working day belongs to somebody who has GONE. So:
+   *
+   *   · a date sent with any other status is refused, because it is a mistake
+   *     rather than something to interpret
+   *   · changing the status back to a working one CLEARS the date — a person
+   *     who is In Service has no last working day, and leaving a stale one
+   *     behind is how a leavers report grows a ghost
+   *   · a partial update that mentions neither leaves the stored value alone
+   *
+   * Leaving statuses are matched on the lookup value's CODE (RESIGNED,
+   * TERMINATED), so renaming either label does not change the rule. A status
+   * somebody ADDS that also means gone — "Retired", say — will not be
+   * recognised; that is a deliberate limit rather than an oversight, and the
+   * two codes are the place to add it.
+   */
+  private async lastWorkingDay(
+    dto: SaveEmployeeDto,
+    existingId?: number,
+  ): Promise<{ lastWorkingDay?: Date | null }> {
+    // Nothing said about either — leave what is stored untouched.
+    if (dto.statusId === undefined && dto.lastWorkingDay === undefined) {
+      return {};
+    }
+
+    const existing = existingId
+      ? await this.prisma.employee.findUnique({
+          where: { id: existingId },
+          select: { statusId: true },
+        })
+      : null;
+    const statusId =
+      dto.statusId !== undefined ? dto.statusId : (existing?.statusId ?? null);
+
+    const hasLeft =
+      statusId != null &&
+      !!(await this.prisma.lookupValue.findFirst({
+        where: {
+          id: statusId,
+          value: { in: LEAVING_STATUS_CODES },
+          lookup: { code: 'EMPLOYEE_STATUS' },
+        },
+        select: { id: true },
+      }));
+
+    if (!hasLeft) {
+      if (dto.lastWorkingDay) {
+        throw new BadRequestException(
+          'A last working day belongs to somebody who has left. Set the status to Resigned or Terminated first.',
+        );
+      }
+      return { lastWorkingDay: null };
+    }
+
+    return dto.lastWorkingDay !== undefined
+      ? {
+          lastWorkingDay: dto.lastWorkingDay
+            ? new Date(dto.lastWorkingDay)
+            : null,
+        }
+      : {};
   }
 
   /** The company must exist, and a named branch must belong to it. */
@@ -708,6 +782,8 @@ export class HrEmployeeService {
         row.statusId != null
           ? (names.lookupLabels.get(row.statusId) ?? null)
           : null,
+
+      lastWorkingDay: row.lastWorkingDay?.toISOString().slice(0, 10) ?? null,
 
       dateOfJoin: row.dateOfJoin.toISOString().slice(0, 10),
       probationMonths: row.probationMonths,
