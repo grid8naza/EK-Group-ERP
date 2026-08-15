@@ -18,7 +18,16 @@ import { ObjectType } from '@prisma/client';
 // Transactions → Vouchers rename, done because the label wrapped); the full
 // expansions live in each screen's page header.
 export const PURCHASE_SUBS = [
-  { name: 'ICPO', route: '/purchase/icpo', icon: 'shopping-cart', order: 1 },
+  {
+    name: 'ICPO',
+    route: '/purchase/icpo',
+    icon: 'shopping-cart',
+    order: 1,
+    tabs: [
+      { key: 'order', label: 'Purchase Order', order: 1 },
+      { key: 'stock', label: 'Stock & acceptance', order: 2 },
+    ],
+  },
   { name: 'LPO', route: '/purchase/lpo', icon: 'truck', order: 2 },
 ];
 

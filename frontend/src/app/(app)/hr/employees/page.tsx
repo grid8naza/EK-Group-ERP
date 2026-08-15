@@ -104,13 +104,7 @@ type Form = typeof empty;
 type Tab = 'employee' | 'access';
 
 export default function EmployeesPage() {
-  const {
-    can,
-    canTab,
-    user: signedInUser,
-    activeCompanyId,
-    activeBranchId,
-  } = useAuth();
+  const { can, canTab, activeCompanyId, activeBranchId } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -170,15 +164,6 @@ export default function EmployeesPage() {
   const canEdit = can(ROUTE, 'edit');
   const canDelete = can(ROUTE, 'delete');
   const canView = can(ROUTE, 'view');
-
-  /**
-   * Who may set up a login. Still super admins only: the SCREEN moved onto the
-   * employee record, the authority did not. Whoever maintains staff records
-   * would otherwise be able to hand themselves any role in the system, and the
-   * /users endpoints refuse them anyway — so the tab shows the state of things
-   * and says who to ask.
-   */
-  const canSetUpLogins = !!signedInUser?.isSuperAdmin;
 
   /**
    * The tabs this user's group is allowed to see (Cpanel → User Groups &
@@ -365,12 +350,13 @@ export default function EmployeesPage() {
    * Look up this employee's login. One call per employee opened, not per
    * keystroke — the tab reads it, the panel writes through it.
    *
-   * `/users` is super-admin-only, so for anybody else this is not attempted at
-   * all: a 403 in the console would say nothing the tab does not already say.
+   * Not attempted at all where the User Access tab is hidden: the endpoint
+   * refuses that caller, and a 403 in the console would say nothing the missing
+   * tab does not already say.
    */
   const loadLogin = useCallback(
     async (employeeId: number) => {
-      if (!canSetUpLogins) {
+      if (!canTab(ROUTE, 'access')) {
         setLogin(null);
         return;
       }
@@ -386,7 +372,7 @@ export default function EmployeesPage() {
         setLogin(null);
       }
     },
-    [canSetUpLogins],
+    [canTab],
   );
 
   /**
@@ -871,19 +857,7 @@ export default function EmployeesPage() {
         )}
 
         {tab === 'access' ? (
-          !canSetUpLogins ? (
-            <div className="rounded-xl border border-dashed border-slate-300 px-6 py-10 text-center dark:border-slate-700">
-              <KeyRound className="mx-auto h-8 w-8 text-slate-300 dark:text-slate-600" />
-              <p className="mt-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
-                Only a super admin can set up a login.
-              </p>
-              <p className="mx-auto mt-1 max-w-md text-xs text-slate-400">
-                Granting somebody a way into the system — and a role once they
-                are in — stayed a super admin&apos;s to do when the screen moved
-                here. Ask one of them to open this record.
-              </p>
-            </div>
-          ) : login === undefined ? (
+          login === undefined ? (
             <p className="px-1 py-6 text-sm text-slate-400">Loading login…</p>
           ) : (
             <UserAccessPanel

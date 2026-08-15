@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   ParseIntPipe,
@@ -13,33 +14,50 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { UserService } from './user.service';
 import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
-import { SuperAdminGuard } from '../../auth/super-admin.guard';
+import { TabPrivilegeGuard } from '../../auth/tab-privilege.guard';
+import { CurrentUser, AuthUser } from '../../auth/current-user.decorator';
 import { LockDto } from '../../common/lock.dto';
 import { CreateUserDto, UpdateUserDto } from './user.dto';
 
-// Managing users (and their group/company/branch/module access) is a
-// super-admin-only operation, matching the Cpanel navigation which only
-// surfaces this screen to super admins. Enforced server-side so the endpoints
-// can't be reached directly by a non-super-admin who has a valid token.
-//
-// It stays super-admin-only now that logins are set up from HR → Employee
-// Master → User Access: the screen moved, the authority did not. Anything less
-// would let whoever maintains staff records hand themselves a role, and the
-// User Access tab is read-only for them for the same reason.
+/**
+ * Logins are set up from HR → Employee Master → User Access, so who may reach
+ * these endpoints is decided by who may see THAT TAB — the tick in Cpanel →
+ * User Groups & Privileges, per group. Super admins always pass.
+ *
+ * Enforced here as well as in the page, so a valid token cannot be pointed
+ * straight at the endpoint by somebody whose group has the tab hidden.
+ */
 @ApiTags('users')
 @ApiBearerAuth()
-@UseGuards(SuperAdminGuard)
+@UseGuards(
+  TabPrivilegeGuard(
+    '/hr/employees',
+    'access',
+    'You do not have permission to set up logins. Ask an administrator for the User Access tab on Employee Master.',
+  ),
+)
 @Controller('users')
 export class UserController {
   constructor(private readonly service: UserService) {}
 
   @Get()
   findAll(
+    @CurrentUser() me: AuthUser,
     @Query('search') search?: string,
     @Query('employeeId') employeeId?: string,
   ) {
     // Number(), not an optional ParseIntPipe, which 400s on an absent param.
-    return this.service.findAll(search, Number(employeeId) || undefined);
+    const forEmployee = Number(employeeId) || undefined;
+    // The whole register is the Cpanel screen's, and that is super admins'
+    // alone. Somebody working from the employee's own record is asking about
+    // ONE person, so that is all they may ask for — otherwise the tab would
+    // double as a way to enumerate every login in the group.
+    if (!me.isSuperAdmin && !forEmployee) {
+      throw new ForbiddenException(
+        'Ask for one employee’s login (employeeId), not the whole register.',
+      );
+    }
+    return this.service.findAll(search, forEmployee);
   }
 
   @Get(':id')

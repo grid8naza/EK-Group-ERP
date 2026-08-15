@@ -28,7 +28,7 @@ import {
   type SaveMode,
 } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
-import { Tabs } from '@/components/ui/Tabs';
+import { Tabs, type TabDef } from '@/components/ui/Tabs';
 import { Input, Select, Checkbox } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import { cn } from '@/lib/utils';
@@ -193,7 +193,7 @@ const emptyDef = {
 };
 
 export default function WorkflowsPage() {
-  const { can, activeCompanyId } = useAuth();
+  const { can, canTab, activeCompanyId } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -279,6 +279,9 @@ export default function WorkflowsPage() {
   const [editing, setEditing] = useState<WorkflowDefinition | null>(null);
   const [view, setView] = useState(false);
   const [tab, setTab] = useState('def');
+
+  /** Which tab the drawer opens on — the first one this group can see. */
+  const defaultTab = canTab(ROUTE, 'def') ? 'def' : 'steps';
   const [def, setDef] = useState({ ...emptyDef });
   // The form this definition governs — decides which form-specific actions its
   // steps may use (see ACTION_ONLY_ON).
@@ -289,6 +292,20 @@ export default function WorkflowsPage() {
     [forms, def.objectId],
   );
   const [steps, setSteps] = useState<StepDraft[]>([]);
+
+  /**
+   * The tabs this user's group may see (Cpanel → User Groups & Privileges).
+   * Falls back to all of them if a group has hidden every one — a form with no
+   * panes is a broken screen, not a locked-down one.
+   */
+  const visibleTabs = useMemo<TabDef[]>(() => {
+    const all: TabDef[] = [
+      { key: 'def', label: 'Definition' },
+      { key: 'steps', label: `Approval steps (${steps.length})` },
+    ];
+    const allowed = all.filter((t) => canTab(ROUTE, t.key));
+    return allowed.length ? allowed : all;
+  }, [canTab, steps.length]);
   const [saving, setSaving] = useState(false);
 
   const closeDrawer = () => {
@@ -302,7 +319,7 @@ export default function WorkflowsPage() {
       companyId: activeCompanyId ? String(activeCompanyId) : '',
     });
     setSteps([]);
-    setTab('def');
+    setTab(defaultTab);
   };
 
   const openAdd = () => {
@@ -323,7 +340,7 @@ export default function WorkflowsPage() {
     setEditing(w);
     setView(viewMode);
     if (reopen) {
-      setTab('def');
+      setTab(defaultTab);
       setOpen(true);
     }
     try {
@@ -689,15 +706,14 @@ export default function WorkflowsPage() {
       >
         {/* Tabs stay outside the read-only fieldset so they remain clickable in
             view mode; only each tab's controls are disabled. */}
-        <Tabs
-          className="mb-5"
-          active={tab}
-          onChange={setTab}
-          tabs={[
-            { key: 'def', label: 'Definition' },
-            { key: 'steps', label: `Approval steps (${steps.length})` },
-          ]}
-        />
+        {visibleTabs.length > 1 && (
+          <Tabs
+            className="mb-5"
+            active={tab}
+            onChange={setTab}
+            tabs={visibleTabs}
+          />
+        )}
 
         {/* Tab 1 — Definition */}
         {tab === 'def' && (

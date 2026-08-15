@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import {
   Plus,
   Box,
@@ -37,7 +37,7 @@ import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import { IconPicker } from '@/components/ui/IconPicker';
 import { StatCard } from '@/components/ui/StatCard';
 import { Badge } from '@/components/ui/Badge';
-import { Tabs } from '@/components/ui/Tabs';
+import { Tabs, type TabDef } from '@/components/ui/Tabs';
 import { formatDate } from '@/lib/utils';
 import type {
   ErpObject,
@@ -71,7 +71,7 @@ const emptyForm = {
 };
 
 export default function ObjectsPage() {
-  const { can, user } = useAuth();
+  const { can, canTab, user } = useAuth();
   const isSuperAdmin = !!user?.isSuperAdmin;
   const toast = useToast();
   const confirm = useConfirm();
@@ -105,6 +105,32 @@ export default function ObjectsPage() {
   const [form, setForm] = useState({ ...emptyForm });
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState('object');
+
+  /**
+   * The tabs this user's group may see (Cpanel → User Groups & Privileges).
+   * Falls back to all of them if a group has hidden every one — a form with no
+   * panes is a broken screen, not a locked-down one.
+   */
+  const visibleTabs = useMemo(() => {
+    const all: TabDef[] = [
+      {
+        key: 'object',
+        label: 'Object',
+        icon: <Monitor className="h-4 w-4" />,
+      },
+      {
+        key: 'revisions',
+        label: 'Revision History',
+        icon: <History className="h-4 w-4" />,
+        disabled: !editing,
+      },
+    ];
+    const allowed = all.filter((t) => canTab(ROUTE, t.key));
+    return allowed.length ? allowed : all;
+  }, [canTab, editing]);
+
+  /** Which tab the drawer opens on — the first one this group can see. */
+  const defaultTab = canTab(ROUTE, 'object') ? 'object' : 'revisions';
 
   // revisions
   const [revisions, setRevisions] = useState<ObjectRevision[]>([]);
@@ -219,7 +245,7 @@ export default function ObjectsPage() {
     setView(false);
     setForm({ ...emptyForm });
     setRevisions([]);
-    setTab('object');
+    setTab(defaultTab);
     setOpen(true);
   };
 
@@ -241,7 +267,7 @@ export default function ObjectsPage() {
       notes: o.notes ?? '',
     });
     setRevisions([]);
-    setTab('object');
+    setTab(defaultTab);
     setOpen(true);
     // load full detail (incl. revisions)
     try {
@@ -271,7 +297,7 @@ export default function ObjectsPage() {
       notes: o.notes ?? '',
     });
     setRevisions([]);
-    setTab('object');
+    setTab(defaultTab);
     setOpen(true);
     // load full detail (incl. revisions)
     try {
@@ -324,7 +350,7 @@ export default function ObjectsPage() {
       if (mode === 'saveNew') {
         setEditing(null);
         setForm({ ...emptyForm });
-        setTab('object');
+        setTab(defaultTab);
       } else if (mode === 'save') {
         setEditing(saved);
         setForm({
@@ -627,24 +653,14 @@ export default function ObjectsPage() {
           ) : undefined
         }
       >
-        <Tabs
-          tabs={[
-            {
-              key: 'object',
-              label: 'Object',
-              icon: <Monitor className="h-4 w-4" />,
-            },
-            {
-              key: 'revisions',
-              label: 'Revision History',
-              icon: <History className="h-4 w-4" />,
-              disabled: !editing,
-            },
-          ]}
-          active={tab}
-          onChange={setTab}
-          className="mb-5"
-        />
+        {visibleTabs.length > 1 && (
+          <Tabs
+            tabs={visibleTabs}
+            active={tab}
+            onChange={setTab}
+            className="mb-5"
+          />
+        )}
 
         {/* Tab navigation stays outside the read-only wrapper so tabs remain
             switchable in view mode. */}

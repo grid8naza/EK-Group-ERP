@@ -24,6 +24,11 @@ export const CRM_SUBS = [
     route: '/crm/icpo-received',
     icon: 'inbox',
     order: 1,
+    // Same two panes as the buyer's ICPO screen — they are one component.
+    tabs: [
+      { key: 'order', label: 'Purchase Order', order: 1 },
+      { key: 'stock', label: 'Stock & acceptance', order: 2 },
+    ],
   },
   { name: 'ICSO', route: '/crm/icso', icon: 'clipboard-list', order: 2 },
   // Dispatch — ship an approved sales order; invoice + delivery note + e-way bill.

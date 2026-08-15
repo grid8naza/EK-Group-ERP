@@ -24,7 +24,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Input, Select, Textarea } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import { Tabs } from '@/components/ui/Tabs';
+import { Tabs, type TabDef } from '@/components/ui/Tabs';
 import { PurchaseOrderDoc } from '@/components/crm/PurchaseOrderDoc';
 import {
   PurchaseOrderReview,
@@ -103,7 +103,7 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
   const screen = SCREEN[scope];
   const ROUTE = screen.route;
 
-  const { can, activeCompanyId } = useAuth();
+  const { can, canTab, activeCompanyId } = useAuth();
   const toast = useToast();
   const confirm = useConfirm();
   const router = useRouter();
@@ -208,6 +208,31 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
   // document: on an order with many lines it would sit a long scroll away, and
   // it answers a different question from the one the document answers.
   const [tab, setTab] = useState<'order' | 'stock'>('order');
+
+  /**
+   * The tabs this user's group may see (Cpanel → User Groups & Privileges).
+   * Falls back to all of them if a group has hidden every one — a screen with
+   * no panes is broken, not locked down.
+   */
+  const visibleTabs = useMemo<TabDef[]>(() => {
+    const all: TabDef[] = [
+      { key: 'order', label: 'Purchase Order' },
+      {
+        key: 'stock',
+        label: 'Stock & acceptance',
+        icon: <Package className="h-4 w-4" />,
+      },
+    ];
+    const allowed = all.filter((t) => canTab(ROUTE, t.key));
+    return allowed.length ? allowed : all;
+  }, [canTab, ROUTE]);
+
+  // Never sit on a tab this group cannot see.
+  useEffect(() => {
+    if (!visibleTabs.some((t) => t.key === tab)) {
+      setTab(visibleTabs[0].key as 'order' | 'stock');
+    }
+  }, [visibleTabs, tab]);
   const [current, setCurrent] = useState<PurchaseOrder | null>(null);
   const [saving, setSaving] = useState(false);
   // Approver action state (when the open order has a pending task for this user).
@@ -876,14 +901,7 @@ export function PurchaseOrderScreen({ scope }: { scope: PurchaseOrderScope }) {
         {showReview && !isEditing && (
           <div className="sticky top-[3.75rem] z-10 -mt-2 bg-[#f0f2f5]/90 pb-1 pt-1 backdrop-blur dark:bg-slate-950/90">
             <Tabs
-              tabs={[
-                { key: 'order', label: 'Purchase Order' },
-                {
-                  key: 'stock',
-                  label: 'Stock & acceptance',
-                  icon: <Package className="h-4 w-4" />,
-                },
-              ]}
+              tabs={visibleTabs}
               active={tab}
               onChange={(k) => setTab(k as 'order' | 'stock')}
             />

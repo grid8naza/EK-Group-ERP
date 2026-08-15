@@ -16,6 +16,10 @@ export const CPANEL_SUBS = [
     route: '/cpanel/objects',
     icon: 'database',
     order: 1,
+    tabs: [
+      { key: 'object', label: 'Object', order: 1 },
+      { key: 'revisions', label: 'Revision History', order: 2 },
+    ],
   },
   { name: 'Module Master', route: '/cpanel/modules', icon: 'layers', order: 2 },
   { name: 'Menu Setup', route: '/cpanel/menus', icon: 'menu', order: 3 },
@@ -80,6 +84,10 @@ export const CPANEL_COMPANY_SUBS = [
     route: '/cpanel/workflows',
     icon: 'git-branch',
     order: 7,
+    tabs: [
+      { key: 'def', label: 'Definition', order: 1 },
+      { key: 'steps', label: 'Approval steps', order: 2 },
+    ],
   },
   {
     name: 'Approval Statuses',

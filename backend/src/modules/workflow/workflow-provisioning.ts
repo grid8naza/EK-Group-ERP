@@ -117,6 +117,14 @@ export const WORKFLOW_EXTRA_MENUS = [
         route: '/workplace/alerts',
         icon: 'bell',
         order: 6,
+        // These three are what the list is filtered TO, not separate sections —
+        // declared all the same, so an admin can narrow a group to the alerts
+        // still waiting on them rather than the whole history.
+        tabs: [
+          { key: 'live', label: 'Waiting', order: 1 },
+          { key: 'unread', label: 'Unread', order: 2 },
+          { key: 'cleared', label: 'Cleared', order: 3 },
+        ],
       },
     ],
   },

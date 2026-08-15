@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   BellOff,
@@ -16,7 +16,7 @@ import { DOC_PARAM } from '@/lib/hooks';
 import { useAuth } from '@/providers/AuthProvider';
 import { useAlerts } from '@/providers/AlertProvider';
 import { useToast } from '@/providers/ToastProvider';
-import { Tabs } from '@/components/ui/Tabs';
+import { Tabs, type TabDef } from '@/components/ui/Tabs';
 import { dayLabel, fullTime } from '@/components/workplace/people';
 import {
   CATEGORY_ORDER,
@@ -29,6 +29,9 @@ import type { Alert, AlertCategory, AlertPage } from '@/lib/types';
 
 /** Which of them is being looked at. */
 type View = 'live' | 'unread' | 'cleared';
+
+/** The screen this component IS, for the tab privileges it answers to. */
+const ALERTS_ROUTE = '/workplace/alerts';
 
 const PAGE_SIZE = 30;
 
@@ -56,10 +59,37 @@ const PAGE_SIZE = 30;
 export function AlertsScreen() {
   const router = useRouter();
   const toast = useToast();
-  const { companies, activeCompanyId } = useAuth();
+  const { canTab, companies, activeCompanyId } = useAuth();
   const alerts = useAlerts();
 
   const [view, setView] = useState<View>('live');
+
+  /**
+   * Which of the three the group may look at (Cpanel → User Groups &
+   * Privileges). These are what the list is filtered TO rather than separate
+   * sections, so hiding one narrows what a group can go back through — take
+   * "Cleared" away and they see only what is still live.
+   *
+   * Falls back to all three where a group has hidden every one: a list with no
+   * filter to stand on shows nothing at all, which is broken rather than
+   * restricted.
+   */
+  const visibleTabs = useMemo<TabDef[]>(() => {
+    const all: TabDef[] = [
+      { key: 'live', label: 'Waiting' },
+      { key: 'unread', label: 'Unread' },
+      { key: 'cleared', label: 'Cleared' },
+    ];
+    const allowed = all.filter((t) => canTab(ALERTS_ROUTE, t.key));
+    return allowed.length ? allowed : all;
+  }, [canTab]);
+
+  // Never sit on a view this group cannot see.
+  useEffect(() => {
+    if (!visibleTabs.some((t) => t.key === view)) {
+      setView(visibleTabs[0].key as View);
+    }
+  }, [visibleTabs, view]);
   const [category, setCategory] = useState<AlertCategory | 'ALL'>('ALL');
   const [items, setItems] = useState<Alert[]>([]);
   const [total, setTotal] = useState(0);
@@ -243,11 +273,7 @@ export function AlertsScreen() {
       {/* ---- what is being looked at ---- */}
       <div className="flex flex-wrap items-center gap-2">
         <Tabs
-          tabs={[
-            { key: 'live', label: 'Waiting' },
-            { key: 'unread', label: 'Unread' },
-            { key: 'cleared', label: 'Cleared' },
-          ]}
+          tabs={visibleTabs}
           active={view}
           onChange={(k) => setView(k as View)}
         />
