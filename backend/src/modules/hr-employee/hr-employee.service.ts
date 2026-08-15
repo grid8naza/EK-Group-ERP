@@ -49,6 +49,7 @@ type EmployeeRow = Prisma.EmployeeGetPayload<{ include: typeof withRelations }>;
 
 /** Division and department names, looked up once per request. */
 interface PostingNames {
+  branches: Map<number, string>;
   divisions: Map<number, string>;
   departments: Map<number, string>;
   /** Every EDUCATION / SKILL / LANGUAGE / EMPLOYEE_GRADE value, by id. */
@@ -587,7 +588,8 @@ export class HrEmployeeService {
    * than two per row.
    */
   private async postingNames(): Promise<PostingNames> {
-    const [centres, objects, lookupValues] = await Promise.all([
+    const [branches, centres, objects, lookupValues] = await Promise.all([
+      this.prisma.branch.findMany({ select: { id: true, name: true } }),
       this.prisma.costCenter.findMany({ select: { id: true, name: true } }),
       this.prisma.costObject.findMany({ select: { id: true, name: true } }),
       // All four HR lists in one read — the whole page's labels, rather than a
@@ -598,6 +600,7 @@ export class HrEmployeeService {
       }),
     ]);
     return {
+      branches: new Map(branches.map((b) => [b.id, b.name])),
       divisions: new Map(centres.map((c) => [c.id, c.name])),
       departments: new Map(objects.map((o) => [o.id, o.name])),
       lookupLabels: new Map(lookupValues.map((v) => [v.id, v.label])),
@@ -639,6 +642,9 @@ export class HrEmployeeService {
 
       companyId: row.companyId,
       branchId: row.branchId,
+      branchName: row.branchId
+        ? (names.branches.get(row.branchId) ?? null)
+        : null,
       /** Division = cost centre, department = the cost object under it. */
       costCenterId: row.costCenterId,
       divisionName: row.costCenterId

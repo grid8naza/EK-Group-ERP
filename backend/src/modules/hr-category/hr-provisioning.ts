@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { ObjectType, Prisma } from '@prisma/client';
 
 /**
  * Screens shipped by the HR module. Consumed by the module scaffold registry
@@ -102,22 +102,42 @@ export const HR_EXTRA_MENUS = [
   },
   {
     /**
-     * Empty on purpose — reports are added one at a time as they are written.
-     *
-     * An empty menu is shown to super admins and hidden from everybody else
-     * (see auth.service: `filter(mm => isSuperAdmin || mm.items.length > 0)`),
-     * which is exactly the behaviour wanted here: whoever is building the module
-     * can see the place reports will go, and staff are not shown a heading with
-     * nothing under it.
+     * What is read back out of HR. Every screen here is tagged REPORT, which is
+     * what makes the Privileges matrix offer Print / PDF / Excel on it instead
+     * of Add / Edit / Delete — a report has nothing to add to.
      */
     name: 'HR Analysis',
     icon: 'report',
-    subs: [] as {
-      name: string;
-      route: string;
-      icon: string;
-      order: number;
-    }[],
+    subs: [
+      {
+        name: 'Employee List',
+        route: '/hr/reports/employees',
+        icon: 'users',
+        order: 1,
+        objectType: ObjectType.REPORT,
+      },
+      {
+        name: 'Headcount Analysis',
+        route: '/hr/reports/headcount',
+        icon: 'bar-chart-3',
+        order: 2,
+        objectType: ObjectType.REPORT,
+      },
+      {
+        name: 'Postings Register',
+        route: '/hr/reports/postings',
+        icon: 'map-pin',
+        order: 3,
+        objectType: ObjectType.REPORT,
+      },
+      {
+        name: 'Salary Register',
+        route: '/hr/reports/salary',
+        icon: 'wallet',
+        order: 4,
+        objectType: ObjectType.REPORT,
+      },
+    ],
   },
 ];
 

@@ -1644,6 +1644,7 @@ export interface Employee {
 
   companyId: number;
   branchId?: number | null;
+  branchName?: string | null;
   /** Division — a cost centre of the employee's company. */
   costCenterId?: number | null;
   divisionName?: string | null;
