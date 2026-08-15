@@ -111,6 +111,7 @@ model HrDesignation {
   group     HrGroup                @relation(fields: [groupId], references: [id], onDelete: Restrict)
   companies HrDesignationCompany[]
   employees Employee[]
+  postings  EmployeePosting[]
 
   @@index([categoryId])
   @@index([groupId])
@@ -265,6 +266,7 @@ model Employee {
   reportsTo      Employee?               @relation("EmployeeReportsTo", fields: [reportsToId], references: [id], onDelete: SetNull)
   reports        Employee[]              @relation("EmployeeReportsTo")
   salaryPackages EmployeeSalaryPackage[]
+  postings       EmployeePosting[]
 
   @@unique([companyId, code])
   @@index([companyId, branchId])
@@ -347,4 +349,61 @@ model EmployeeSalaryComponent {
   @@unique([packageId, kind, componentId])
   @@index([packageId])
   @@map("employee_salary_components")
+}
+
+/// Where one employee worked, and as what, between two dates.
+///
+/// The same shape as a salary package and for the same reason: a promotion or a
+/// transfer is a NEW posting starting the day it takes effect, not an edit of
+/// the last one. What somebody was on in March stays readable next year, which
+/// is what a service record is for.
+///
+/// A promotion and a transfer are not stored as different KINDS. They are read
+/// off the change: a posting whose designation differs from the one before it is
+/// a promotion, one whose place differs is a transfer, and a row can be both.
+/// Asking somebody to classify it as well as enter it invites the two to
+/// disagree.
+///
+/// Cross-domain rule again: company, branch, division and department are plain
+/// `Int` ids with NO @relation (they are Cpanel's), while the designation IS a
+/// real relation — it lives in this file.
+model EmployeePosting {
+  id         Int @id @default(autoincrement())
+  employeeId Int
+
+  /// The day this posting starts. Required — a posting with no start cannot be
+  /// placed in the history, which is the only thing postings are for.
+  effectiveFrom DateTime
+  /// The last day of it. NULL = still there, which the newest posting usually
+  /// is; a transfer closes the one before it the day before the new one starts.
+  effectiveTo   DateTime?
+
+  companyId     Int
+  /// Only where the company is branch-applicable — the Company master decides
+  /// whether branches exist at all, and the service checks the flag rather than
+  /// trusting the form.
+  branchId      Int?
+  /// Division = CostCenter, department = the CostObject under it. Each only
+  /// where the company has that level switched on, same as branch.
+  costCenterId  Int?
+  costObjectId  Int?
+  designationId Int
+
+  /// Why — "promoted to Supervisor", "transferred to Kadathy on request". The
+  /// change itself is derived; this is the part only a person knows.
+  remarks String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee    Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  designation HrDesignation @relation(fields: [designationId], references: [id], onDelete: Restrict)
+
+  /// Two postings starting the same day would leave the history with a fork.
+  /// The service checks the whole period for overlap; this catches the exact
+  /// collision at the database.
+  @@unique([employeeId, effectiveFrom])
+  @@index([employeeId, effectiveFrom])
+  @@index([designationId])
+  @@map("employee_postings")
 }

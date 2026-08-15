@@ -72,9 +72,17 @@ export const HR_EXTRA_MENUS = [
         tabs: [
           { key: 'employee', label: 'Employee', order: 1 },
           {
+            // Where they have worked and as what. Visible by default, unlike
+            // the two below: a service record is ordinary staff information,
+            // and whoever maintains employees needs to read it.
+            key: 'postings',
+            label: 'Postings',
+            order: 2,
+          },
+          {
             key: 'salary',
             label: 'Salary',
-            order: 2,
+            order: 3,
             // What everybody earns, on one screen. Starts shut for the same
             // reason User Access does, and is opened per group from the
             // Privileges screen.
@@ -83,7 +91,7 @@ export const HR_EXTRA_MENUS = [
           {
             key: 'access',
             label: 'User Access',
-            order: 3,
+            order: 4,
             // Logins and roles are given out here, so this one starts shut and
             // is opened per group from the Privileges screen.
             hiddenByDefault: true,

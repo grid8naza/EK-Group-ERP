@@ -11,6 +11,7 @@ import {
   X,
   KeyRound,
   Wallet,
+  MapPin,
   User as UserIcon,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
@@ -28,6 +29,7 @@ import { StatusToggle } from '@/components/ui/StatusToggle';
 import { Tabs, type TabDef } from '@/components/ui/Tabs';
 import { UserAccessPanel } from '@/components/cpanel/UserAccessPanel';
 import { SalaryPanel } from '@/components/hr/SalaryPanel';
+import { PostingsPanel } from '@/components/hr/PostingsPanel';
 import {
   Drawer,
   DrawerFooter,
@@ -120,7 +122,7 @@ const empty = {
 type Form = typeof empty;
 
 /** The drawer's three parts: the person, what they are paid, and the way in. */
-type Tab = 'employee' | 'salary' | 'access';
+type Tab = 'employee' | 'postings' | 'salary' | 'access';
 
 export default function EmployeesPage() {
   const { can, canTab, activeCompanyId, activeBranchId } = useAuth();
@@ -172,6 +174,8 @@ export default function EmployeesPage() {
   const [accessDirty, setAccessDirty] = useState(false);
   /** Likewise the Salary tab — true while its package editor is open. */
   const [salaryDirty, setSalaryDirty] = useState(false);
+  /** And the Postings tab, while its posting editor is open. */
+  const [postingsDirty, setPostingsDirty] = useState(false);
   /**
    * The employee form as it stood when last loaded or saved. Compared against
    * rather than a touched-a-field flag, so the drawer stops claiming unsaved
@@ -209,6 +213,13 @@ export default function EmployeesPage() {
         key: 'employee',
         label: 'Employee',
         icon: <UserCog className="h-4 w-4" />,
+      },
+      {
+        key: 'postings',
+        label: 'Postings',
+        icon: <MapPin className="h-4 w-4" />,
+        // A posting has to belong to somebody.
+        disabled: !editing,
       },
       {
         key: 'salary',
@@ -306,6 +317,7 @@ export default function EmployeesPage() {
     setLogin(undefined);
     setAccessDirty(false);
     setSalaryDirty(false);
+    setPostingsDirty(false);
   };
 
   /**
@@ -322,8 +334,8 @@ export default function EmployeesPage() {
     employeeBaseline !== '' &&
     JSON.stringify(form) !== employeeBaseline;
   const drawerDirty = useCallback(
-    () => employeeDirty || accessDirty || salaryDirty,
-    [employeeDirty, accessDirty, salaryDirty],
+    () => employeeDirty || accessDirty || salaryDirty || postingsDirty,
+    [employeeDirty, accessDirty, salaryDirty, postingsDirty],
   );
 
   /**
@@ -359,7 +371,13 @@ export default function EmployeesPage() {
               where: 'Salary',
               clear: () => setSalaryDirty(false),
             }
-          : null;
+          : tab === 'postings' && postingsDirty
+            ? {
+                what: 'the posting',
+                where: 'Postings',
+                clear: () => setPostingsDirty(false),
+              }
+            : null;
 
     if (leaving) {
       const ok = await confirm({
@@ -940,7 +958,14 @@ export default function EmployeesPage() {
           />
         )}
 
-        {tab === 'salary' ? (
+        {tab === 'postings' ? (
+          <PostingsPanel
+            employeeId={editing?.id ?? null}
+            employee={editing}
+            readOnly={view}
+            onDirtyChange={setPostingsDirty}
+          />
+        ) : tab === 'salary' ? (
           <SalaryPanel
             employeeId={editing?.id ?? null}
             readOnly={view}

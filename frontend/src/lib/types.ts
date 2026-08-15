@@ -1530,6 +1530,44 @@ export interface HrDesignation {
   isLocked?: boolean;
 }
 
+/** What differs between a posting and the one before it. */
+export type PostingChange =
+  'DESIGNATION' | 'COMPANY' | 'BRANCH' | 'DIVISION' | 'DEPARTMENT';
+
+/**
+ * Where an employee worked, and as what, between two dates.
+ *
+ * A series like salary packages: a promotion or transfer is a NEW posting from
+ * the day it takes effect. `changes` is DERIVED against the posting before it —
+ * a designation change reads as a promotion, a change of place as a transfer —
+ * so nobody has to classify the event as well as enter it.
+ */
+export interface EmployeePosting {
+  id: number;
+  employeeId: number;
+  effectiveFrom: string;
+  /** Null = still there. */
+  effectiveTo?: string | null;
+
+  companyId: number;
+  companyName?: string | null;
+  branchId?: number | null;
+  branchName?: string | null;
+  /** Division — a cost centre of that company. */
+  costCenterId?: number | null;
+  divisionName?: string | null;
+  /** Department — the cost object under that division. */
+  costObjectId?: number | null;
+  departmentName?: string | null;
+  designationId: number;
+  designationName?: string | null;
+
+  remarks?: string | null;
+  /** Empty on the first posting — joining is not a change. */
+  changes: PostingChange[];
+  createdAt?: string;
+}
+
 /** Whether a salary component is paid on top of the basic or taken out of it. */
 export type SalaryComponentKind = 'ALLOWANCE' | 'DEDUCTION';
 
