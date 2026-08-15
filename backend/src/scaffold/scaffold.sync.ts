@@ -838,9 +838,9 @@ async function migrateAccountsReportMenu(
  * Workplace to begin with.
  */
 /**
- * One-time migration: the HR module's single "Human Resources" menu becomes
- * "HR Master", beside two new ones (HR Data, HR Reports) that the ordinary sync
- * creates for itself.
+ * The HR module's primary menu, relabelled: "Human Resources" became "HR
+ * Master" and is now "HR Setup", beside HR Data and HR Reports that the
+ * ordinary sync creates for itself.
  *
  * Needed because the sync matches a PRIMARY menu by moduleId and never renames
  * it — so without this, an existing database would keep the old label while a
@@ -848,10 +848,16 @@ async function migrateAccountsReportMenu(
  * same MainMenu row, which is the point of relabelling rather than replacing —
  * GroupSubMenuPrivilege hangs off SubMenu.id.
  *
+ * Every superseded name is listed, so a database that skipped a release lands on
+ * the current one in a single step rather than needing them applied in order.
+ * Guarded on those names alone, so an admin's own rename is left alone.
+ *
  * The re-ordering is a `runOnce` rather than part of the additive sync, which
  * only sets sortOrder on CREATE: Lookups goes to the top of the master menu, and
  * an admin who rearranges it afterwards keeps their arrangement.
  */
+const HR_PRIMARY_MENU_OLD_NAMES = ['Human Resources', 'HR Master'];
+
 async function migrateHrMenus(prisma: Prisma.TransactionClient): Promise<void> {
   const hr = await prisma.module.findUnique({
     where: { code: 'HR' },
@@ -860,8 +866,8 @@ async function migrateHrMenus(prisma: Prisma.TransactionClient): Promise<void> {
   if (!hr) return; // fresh DB: the sync creates it with the new name
 
   await prisma.mainMenu.updateMany({
-    where: { moduleId: hr.id, menuName: 'Human Resources' },
-    data: { menuName: 'HR Master' },
+    where: { moduleId: hr.id, menuName: { in: HR_PRIMARY_MENU_OLD_NAMES } },
+    data: { menuName: 'HR Setup' },
   });
 
   await runOnce(prisma, 'hr-master-menu-order', async () => {

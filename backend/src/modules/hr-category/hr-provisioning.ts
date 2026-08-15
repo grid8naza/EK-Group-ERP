@@ -8,16 +8,16 @@ import { Prisma } from '@prisma/client';
  * scaffold) so there is no module↔scaffold import cycle.
  *
  * Three menus, split by what the rows ARE rather than by which service serves
- * them: the classification a person is described BY (HR Master), the people
+ * them: the classification a person is described BY (HR Setup), the people
  * themselves (HR Data), and what is read back out (HR Reports).
  */
 
 /**
- * HR Master — the module's PRIMARY menu, so the sync reuses its existing main
+ * HR Setup — the module's PRIMARY menu, so the sync reuses its existing main
  * menu row rather than leaving one behind beside a new one (a primary is matched
- * by module, an extra by name). The one-time rename in scaffold.sync relabels
- * that row from "Human Resources"; without it an existing database would keep
- * the old name.
+ * by module, an extra by name). The rename in scaffold.sync relabels that row
+ * from its earlier names ("Human Resources", then "HR Master"); without it an
+ * existing database would keep the old one.
  */
 export const HR_SUBS = [
   // Per-module reference data. Super-admin-only; managed here so a module's

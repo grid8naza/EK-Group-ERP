@@ -213,10 +213,10 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     description:
       'HR & employees — the manpower masters, the employees themselves, and the reports read back off them.',
     autoEnable: true, // on for every company so the manpower masters appear
-    // HR Master is the PRIMARY menu (matched by module), so the module's
+    // HR Setup is the PRIMARY menu (matched by module), so the module's
     // existing main menu row is reused and relabelled rather than left behind
     // beside a new one. The other two are extras, matched by name.
-    menu: { name: 'HR Master', icon: 'id-card' },
+    menu: { name: 'HR Setup', icon: 'id-card' },
     subs: HR_SUBS,
     extraMenus: HR_EXTRA_MENUS,
     seedData: seedHrDefaults,
