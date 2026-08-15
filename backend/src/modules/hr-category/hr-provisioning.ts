@@ -1,3 +1,5 @@
+import { Prisma } from '@prisma/client';
+
 /**
  * Screens shipped by the HR module. Consumed by the module scaffold registry
  * (module-scaffold.ts); the scaffold sync seeds these as menus + privileges into
@@ -101,3 +103,130 @@ export const HR_EXTRA_MENUS = [
     }[],
   },
 ];
+
+// ---------------------------------------------------------------------------
+// The HR module's own reference lists, maintained in HR → Lookups.
+// ---------------------------------------------------------------------------
+
+/**
+ * The four lists the Employee Master picks from, and the values each starts
+ * with.
+ *
+ * Lookups rather than fixed options because every one of them is the business's
+ * to keep: another language when they hire from a new state, a grade above A, a
+ * skill the bakery did not need last year. Blood group is deliberately NOT here
+ * — the eight groups are a fact of medicine, so the form holds them.
+ *
+ * The starting values are a first draft, not a policy. They are written only
+ * when the lookup is first created; after that the list belongs to whoever
+ * maintains it, and re-running must not resurrect a value they deleted or undo
+ * a rename.
+ */
+export const HR_LOOKUPS: {
+  code: string;
+  name: string;
+  values: string[];
+}[] = [
+  {
+    code: 'EDUCATION',
+    name: 'Education',
+    values: [
+      'Below SSLC',
+      'SSLC',
+      'Plus Two',
+      'ITI',
+      'Diploma',
+      'Bachelor’s Degree',
+      'Master’s Degree',
+      'Doctorate',
+      'Bakery / Culinary Certification',
+    ],
+  },
+  {
+    code: 'SKILL',
+    name: 'Skill',
+    values: [
+      'Baking',
+      'Pastry',
+      'Cake Decoration',
+      'Chocolate Work',
+      'Dough Handling',
+      'Machine Operation',
+      'Packing',
+      'Quality Checking',
+      'Store Keeping',
+      'Billing',
+      'Driving',
+      'Housekeeping',
+    ],
+  },
+  {
+    code: 'LANGUAGE',
+    name: 'Language',
+    values: [
+      'Malayalam',
+      'English',
+      'Hindi',
+      'Tamil',
+      'Kannada',
+      'Telugu',
+      'Bengali',
+      'Odia',
+      'Arabic',
+    ],
+  },
+  {
+    code: 'EMPLOYEE_GRADE',
+    name: 'Employee Grade',
+    values: ['A', 'B', 'C', 'D', 'E'],
+  },
+];
+
+/**
+ * Create the HR lookups and their starting values.
+ *
+ * Guarded per lookup rather than all-or-nothing, so a list added here later
+ * arrives on the next boot without disturbing the ones already in use. The
+ * values go in only with the lookup itself — see the note above.
+ *
+ * `value` is the stable code, `label` what the form shows: renaming a grade
+ * from "A" to "A — Senior" must not orphan the employees on it.
+ */
+export async function seedHrDefaults(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  const hr = await prisma.module.findUnique({
+    where: { code: 'HR' },
+    select: { id: true },
+  });
+
+  for (const spec of HR_LOOKUPS) {
+    const existing = await prisma.lookup.findUnique({
+      where: { code: spec.code },
+      select: { id: true },
+    });
+    if (existing) continue;
+
+    const lookup = await prisma.lookup.create({
+      data: {
+        code: spec.code,
+        name: spec.name,
+        moduleId: hr?.id ?? null,
+        isSystem: true,
+      },
+    });
+    await prisma.lookupValue.createMany({
+      data: spec.values.map((label, i) => ({
+        lookupId: lookup.id,
+        value: label
+          .toUpperCase()
+          .replace(/[’']/g, '')
+          .replace(/[^A-Z0-9]+/g, '_')
+          .replace(/^_|_$/g, ''),
+        label,
+        sortOrder: i + 1,
+      })),
+      skipDuplicates: true,
+    });
+  }
+}

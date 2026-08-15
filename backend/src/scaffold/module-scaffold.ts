@@ -23,6 +23,7 @@ import {
 import {
   HR_SUBS,
   HR_EXTRA_MENUS,
+  seedHrDefaults,
 } from '../modules/hr-category/hr-provisioning';
 import {
   WORKFLOW_SUBS,
@@ -218,6 +219,7 @@ export const MODULE_SCAFFOLDS: ModuleScaffold[] = [
     menu: { name: 'HR Master', icon: 'id-card' },
     subs: HR_SUBS,
     extraMenus: HR_EXTRA_MENUS,
+    seedData: seedHrDefaults,
   },
   {
     code: 'PRODUCTION',

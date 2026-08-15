@@ -912,3 +912,298 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
     );
   },
 );
+
+type MultiSelectProps = {
+  label?: string;
+  required?: boolean;
+  error?: string;
+  wrapClassName?: string;
+  className?: string;
+  options?: SelectOption[];
+  /** Shown when nothing is chosen. */
+  placeholder?: string;
+  /** The chosen values. Order is the caller's; this control never reorders it. */
+  value?: (string | number)[];
+  onChange?: (values: (string | number)[]) => void;
+  disabled?: boolean;
+  name?: string;
+  id?: string;
+  title?: string;
+  /** Sort options A→Z by label. On by default (project-wide convention). */
+  sortOptions?: boolean;
+  /** Show the search box once the list is longer than this. Defaults to 0 —
+   *  every picker searches, like Select. */
+  searchThreshold?: number;
+};
+
+/**
+ * The many-answer twin of Select: the same searchable, portaled dropdown, but
+ * rows are ticked rather than chosen and the trigger shows chips.
+ *
+ * For the questions with more than one right answer — the languages somebody
+ * speaks, the things they can do. Kept beside Select rather than folded into it
+ * because the two differ in what they RETURN, and a `multiple` flag that changes
+ * the type of `value` is the kind of API that gets handed the wrong thing.
+ *
+ * Fires FIELD_CHANGE_EVENT on every change, like Select, so the Drawer's
+ * unsaved-work guard hears it.
+ */
+export function MultiSelect({
+  label,
+  required,
+  error,
+  wrapClassName,
+  className,
+  options,
+  placeholder,
+  value,
+  onChange,
+  disabled,
+  name,
+  id,
+  title,
+  sortOptions = true,
+  searchThreshold = 0,
+}: MultiSelectProps) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [menuPos, setMenuPos] = useState<{
+    left: number;
+    width: number;
+    top?: number;
+    bottom?: number;
+  } | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const chosen = useMemo(
+    () => new Set((value ?? []).map((v) => String(v))),
+    [value],
+  );
+
+  const sorted = useMemo(() => {
+    const list = options ?? [];
+    if (!sortOptions) return list;
+    return [...list].sort((a, b) =>
+      a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }),
+    );
+  }, [options, sortOptions]);
+
+  const showSearch = sorted.length > searchThreshold;
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? sorted.filter((o) => o.label.toLowerCase().includes(q))
+    : sorted;
+
+  // What the trigger shows, in the order the options are listed rather than the
+  // order they were ticked — so the same set always reads the same way.
+  const selectedOptions = sorted.filter((o) => chosen.has(String(o.value)));
+
+  // Close on outside click (the dropdown is portaled, so also check menuRef).
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (
+        ref.current &&
+        !ref.current.contains(t) &&
+        (!menuRef.current || !menuRef.current.contains(t))
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
+
+  // Position the portaled dropdown under (or above) the trigger.
+  useEffect(() => {
+    if (!open) {
+      setMenuPos(null);
+      setQuery('');
+      return;
+    }
+    const place = () => {
+      const el = ref.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const width = r.width;
+      const left = Math.max(
+        8,
+        Math.min(r.left, window.innerWidth - Math.max(width, 240) - 8),
+      );
+      const menuH = 320;
+      const spaceBelow = window.innerHeight - r.bottom;
+      if (spaceBelow < menuH && r.top > menuH) {
+        setMenuPos({ left, width, bottom: window.innerHeight - r.top + 4 });
+      } else {
+        setMenuPos({ left, width, top: r.bottom + 4 });
+      }
+    };
+    place();
+    if (showSearch) setTimeout(() => searchRef.current?.focus(), 0);
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  }, [open, showSearch]);
+
+  const emit = (next: (string | number)[]) => {
+    onChange?.(next);
+    ref.current?.dispatchEvent(
+      new CustomEvent(FIELD_CHANGE_EVENT, { bubbles: true }),
+    );
+  };
+
+  // Ticking leaves the list open: choosing several is the whole point, and a
+  // dropdown that shut after each one would be reopened for every answer.
+  const toggle = (val: string | number) => {
+    const cur = value ?? [];
+    emit(
+      chosen.has(String(val))
+        ? cur.filter((v) => String(v) !== String(val))
+        : [...cur, val],
+    );
+  };
+
+  return (
+    <FieldWrap
+      label={label}
+      required={required}
+      error={error}
+      className={wrapClassName}
+    >
+      <div className="relative" ref={ref}>
+        <button
+          type="button"
+          data-field=""
+          id={id}
+          name={name}
+          title={title}
+          disabled={disabled}
+          onClick={() => !disabled && setOpen((v) => !v)}
+          className={cn(
+            'input-base flex w-full items-start gap-2 text-left',
+            className,
+          )}
+        >
+          <span className="flex flex-1 flex-wrap gap-1">
+            {selectedOptions.length === 0 ? (
+              <span className="text-slate-400">{placeholder ?? ''}</span>
+            ) : (
+              selectedOptions.map((o) => (
+                <span
+                  key={o.value}
+                  className="inline-flex max-w-full items-center gap-1 rounded-md bg-brand-50 px-1.5 py-0.5 text-xs font-medium text-brand-700 dark:bg-brand-950/40 dark:text-brand-300"
+                >
+                  <span className="truncate">{o.label}</span>
+                  {/* A span, not a nested button: this whole trigger is one, and
+                      a button inside a button is invalid markup the browser
+                      will happily reshuffle. */}
+                  {!disabled && (
+                    <span
+                      role="button"
+                      tabIndex={-1}
+                      aria-label={'Remove ' + o.label}
+                      className="cursor-pointer opacity-60 hover:opacity-100"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggle(o.value);
+                      }}
+                    >
+                      <X className="h-3 w-3" />
+                    </span>
+                  )}
+                </span>
+              ))
+            )}
+          </span>
+          <ChevronDown
+            className={cn(
+              'mt-0.5 h-4 w-4 flex-none text-slate-400 transition-transform',
+              open && 'rotate-180',
+            )}
+          />
+        </button>
+
+        {open &&
+          menuPos &&
+          createPortal(
+            <div
+              ref={menuRef}
+              style={{
+                position: 'fixed',
+                left: menuPos.left,
+                width: menuPos.width,
+                top: menuPos.top,
+                bottom: menuPos.bottom,
+              }}
+              className="z-[60] min-w-[15rem] overflow-hidden rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900"
+            >
+              {showSearch && (
+                <div className="relative border-b border-slate-100 p-2 dark:border-slate-800">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    ref={searchRef}
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') setOpen(false);
+                    }}
+                    placeholder="Search..."
+                    className="input-base w-full pl-9"
+                  />
+                </div>
+              )}
+              <div className="max-h-60 overflow-y-auto p-1">
+                {filtered.length === 0 ? (
+                  <p className="px-3 py-4 text-center text-sm text-slate-400">
+                    No matches
+                  </p>
+                ) : (
+                  filtered.map((o) => {
+                    const active = chosen.has(String(o.value));
+                    return (
+                      <button
+                        key={o.value}
+                        type="button"
+                        onClick={() => toggle(o.value)}
+                        className={cn(
+                          'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition hover:bg-slate-100 dark:hover:bg-slate-800',
+                          active
+                            ? 'font-semibold text-emerald-600 dark:text-emerald-400'
+                            : 'text-slate-700 dark:text-slate-200',
+                        )}
+                      >
+                        <span className="flex-1 truncate text-left">
+                          {o.label}
+                        </span>
+                        {active && <Check className="h-4 w-4 flex-none" />}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+              {selectedOptions.length > 0 && (
+                <div className="flex items-center justify-between border-t border-slate-100 px-3 py-1.5 text-xs dark:border-slate-800">
+                  <span className="text-slate-400">
+                    {selectedOptions.length} selected
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => emit([])}
+                    className="font-medium text-slate-500 hover:underline"
+                  >
+                    Clear
+                  </button>
+                </div>
+              )}
+            </div>,
+            document.body,
+          )}
+      </div>
+    </FieldWrap>
+  );
+}

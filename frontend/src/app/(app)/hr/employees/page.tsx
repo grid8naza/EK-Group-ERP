@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { useFetch } from '@/lib/hooks';
+import { useFetch, useLookupValues } from '@/lib/hooks';
 import { mediaUrl } from '@/lib/login-screen';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -37,6 +37,7 @@ import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import {
   Input,
   Select,
+  MultiSelect,
   Checkbox,
   Textarea,
   DateInput,
@@ -45,6 +46,7 @@ import { Badge } from '@/components/ui/Badge';
 import type {
   AppUser,
   Employee,
+  LookupValue,
   HrCategory,
   HrGroup,
   HrDesignation,
@@ -56,11 +58,22 @@ import type {
 
 const ROUTE = '/hr/employees';
 
-const SEXES = [
+// Labelled "Gender" on the form. The stored values (and the column) stay as
+// they were — relabelling a field is not a reason to rewrite everybody's data.
+const GENDERS = [
   { value: 'MALE', label: 'Male' },
   { value: 'FEMALE', label: 'Female' },
   { value: 'OTHER', label: 'Other' },
 ];
+
+/**
+ * The eight blood groups. A fixed list rather than a lookup — unlike education,
+ * skills, languages and grade, there is no ninth group for an admin to add.
+ * Mirrors BLOOD_GROUPS in the backend's hr-employee.constants.ts.
+ */
+const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map(
+  (g) => ({ value: g, label: g }),
+);
 
 const MARITAL_STATUSES = [
   { value: 'SINGLE', label: 'Single' },
@@ -72,15 +85,23 @@ const MARITAL_STATUSES = [
 const empty = {
   name: '',
   dateOfBirth: '',
-  sex: '',
+  sex: '', // labelled "Gender" on the form; the stored field keeps its name
   maritalStatus: '',
+  bloodGroup: '',
   aadhaarNumber: '',
-  address: '',
+  address: '', // Permanent Address
+  presentAddress: '',
   phone: '',
   email: '',
   emergencyContactName: '',
   emergencyContactPhone: '',
   photoUrl: '',
+  // LookupValue ids (HR → Lookups). Numbers, not strings: they go to the
+  // server as ids and there is nothing to be gained by round-tripping them
+  // through text.
+  educationIds: [] as number[],
+  skillIds: [] as number[],
+  languageIds: [] as number[],
 
   companyId: '',
   branchId: '',
@@ -93,8 +114,12 @@ const empty = {
   categoryId: '',
   groupId: '',
   designationId: '',
+  gradeId: '',
   dateOfJoin: '',
+  probationMonths: '',
+  dateOfConfirmation: '',
   reportsToId: '',
+  showInOrgChart: true,
   isActive: true,
 };
 
@@ -118,6 +143,14 @@ export default function EmployeesPage() {
   // move an employee to another company, so it needs more than the active one.
   const { data: costCenters } = useFetch<CostCenter[]>('/cost-centers');
   const { data: costObjects } = useFetch<CostObject[]>('/cost-objects');
+
+  // The HR module's own lists, maintained in HR → Lookups (super-admin only).
+  const educationValues = useLookupValues('EDUCATION');
+  const skillValues = useLookupValues('SKILL');
+  const languageValues = useLookupValues('LANGUAGE');
+  const gradeValues = useLookupValues('EMPLOYEE_GRADE');
+  const asOptions = (vals: LookupValue[]) =>
+    vals.map((v) => ({ value: v.id, label: v.label }));
 
   const { canLock, canUnlock, toggleLock, guardEdit, guardDelete, bulkLock } =
     useLock<Employee>({
@@ -389,13 +422,18 @@ export default function EmployeesPage() {
     dateOfBirth: e.dateOfBirth ?? '',
     sex: e.sex ?? '',
     maritalStatus: e.maritalStatus ?? '',
+    bloodGroup: e.bloodGroup ?? '',
     aadhaarNumber: e.aadhaarNumber ?? '',
     address: e.address ?? '',
+    presentAddress: e.presentAddress ?? '',
     phone: e.phone ?? '',
     email: e.email ?? '',
     emergencyContactName: e.emergencyContactName ?? '',
     emergencyContactPhone: e.emergencyContactPhone ?? '',
     photoUrl: e.photoUrl ?? '',
+    educationIds: e.educationIds ?? [],
+    skillIds: e.skillIds ?? [],
+    languageIds: e.languageIds ?? [],
 
     companyId: String(e.companyId),
     branchId: e.branchId != null ? String(e.branchId) : '',
@@ -404,8 +442,12 @@ export default function EmployeesPage() {
     categoryId: String(e.categoryId),
     groupId: String(e.groupId),
     designationId: String(e.designationId),
+    gradeId: e.gradeId != null ? String(e.gradeId) : '',
     dateOfJoin: e.dateOfJoin,
+    probationMonths: e.probationMonths != null ? String(e.probationMonths) : '',
+    dateOfConfirmation: e.dateOfConfirmation ?? '',
     reportsToId: e.reportsToId != null ? String(e.reportsToId) : '',
+    showInOrgChart: e.showInOrgChart ?? true,
     isActive: e.isActive,
   });
 
@@ -509,21 +551,34 @@ export default function EmployeesPage() {
       dateOfBirth: form.dateOfBirth || null,
       sex: form.sex || null,
       maritalStatus: form.maritalStatus || null,
+      bloodGroup: form.bloodGroup || null,
       aadhaarNumber: form.aadhaarNumber.trim() || null,
       address: form.address.trim() || null,
+      presentAddress: form.presentAddress.trim() || null,
       phone: form.phone.trim() || null,
       email: form.email.trim() || null,
       emergencyContactName: form.emergencyContactName.trim() || null,
       emergencyContactPhone: form.emergencyContactPhone.trim() || null,
       photoUrl: form.photoUrl || null,
+      // Sent whole every time: what arrives replaces what is stored, so
+      // removing a skill is simply leaving it out.
+      educationIds: form.educationIds,
+      skillIds: form.skillIds,
+      languageIds: form.languageIds,
 
       companyId: Number(form.companyId),
       branchId: idOrNull(form.branchId),
       costCenterId: idOrNull(form.costCenterId),
       costObjectId: idOrNull(form.costObjectId),
       designationId: Number(form.designationId),
+      gradeId: idOrNull(form.gradeId),
       dateOfJoin: form.dateOfJoin,
+      probationMonths: form.probationMonths
+        ? Number(form.probationMonths)
+        : null,
+      dateOfConfirmation: form.dateOfConfirmation || null,
       reportsToId: idOrNull(form.reportsToId),
+      showInOrgChart: form.showInOrgChart,
       isActive: form.isActive,
     };
 
@@ -555,13 +610,22 @@ export default function EmployeesPage() {
           dateOfBirth: '',
           sex: '',
           maritalStatus: '',
+          bloodGroup: '',
           aadhaarNumber: '',
           address: '',
+          presentAddress: '',
           phone: '',
           email: '',
           emergencyContactName: '',
           emergencyContactPhone: '',
           photoUrl: '',
+          educationIds: [],
+          skillIds: [],
+          languageIds: [],
+          // The grade and the probation term belong with the designation being
+          // carried over — a batch of hires into one role usually shares both.
+          // The confirmation DATE does not: that is one person's.
+          dateOfConfirmation: '',
         });
         setTimeout(() => nameRef.current?.focus(), 0);
       } else if (mode === 'save') {
@@ -1016,12 +1080,12 @@ export default function EmployeesPage() {
                 onChange={(iso) => setForm({ ...form, dateOfBirth: iso })}
               />
               <Select
-                label="Sex"
+                label="Gender"
                 value={form.sex}
                 onChange={(e) => setForm({ ...form, sex: e.target.value })}
                 placeholder="— Not stated —"
                 sortOptions={false}
-                options={SEXES}
+                options={GENDERS}
               />
               <Select
                 label="Marital Status"
@@ -1032,6 +1096,18 @@ export default function EmployeesPage() {
                 placeholder="— Not stated —"
                 sortOptions={false}
                 options={MARITAL_STATUSES}
+              />
+              <Select
+                label="Blood Group"
+                value={form.bloodGroup}
+                onChange={(e) =>
+                  setForm({ ...form, bloodGroup: e.target.value })
+                }
+                placeholder="— Not stated —"
+                // In medical order (by type, positive before negative) rather
+                // than A→Z, which would read A+, A-, AB+, AB-, B+…
+                sortOptions={false}
+                options={BLOOD_GROUPS}
               />
               <Input
                 label="Aadhaar Number"
@@ -1048,12 +1124,22 @@ export default function EmployeesPage() {
                 }
                 placeholder="12 digits"
               />
+              {/* The two addresses side by side, a column each — they are read
+                  against each other far more often than either is read alone. */}
               <Textarea
-                label="Address"
-                wrapClassName="sm:col-span-2"
+                label="Permanent Address"
                 rows={2}
                 value={form.address}
                 onChange={(e) => setForm({ ...form, address: e.target.value })}
+              />
+              <Textarea
+                label="Present Address"
+                rows={2}
+                value={form.presentAddress}
+                onChange={(e) =>
+                  setForm({ ...form, presentAddress: e.target.value })
+                }
+                placeholder="If different from the permanent address"
               />
               <Input
                 label="Contact Number"
@@ -1079,6 +1165,37 @@ export default function EmployeesPage() {
                 onChange={(e) =>
                   setForm({ ...form, emergencyContactPhone: e.target.value })
                 }
+              />
+
+              {/* What they bring. Three lists rather than free text so a search
+                  for everybody who speaks Tamil, or can decorate a cake, has
+                  something to match on. The lists themselves live in
+                  HR → Lookups. */}
+              <MultiSelect
+                label="Education"
+                wrapClassName="sm:col-span-2"
+                value={form.educationIds}
+                onChange={(v) =>
+                  setForm({ ...form, educationIds: v.map(Number) })
+                }
+                placeholder="Select qualifications"
+                options={asOptions(educationValues)}
+              />
+              <MultiSelect
+                label="Skills"
+                value={form.skillIds}
+                onChange={(v) => setForm({ ...form, skillIds: v.map(Number) })}
+                placeholder="Select skills"
+                options={asOptions(skillValues)}
+              />
+              <MultiSelect
+                label="Languages Known"
+                value={form.languageIds}
+                onChange={(v) =>
+                  setForm({ ...form, languageIds: v.map(Number) })
+                }
+                placeholder="Select languages"
+                options={asOptions(languageValues)}
               />
 
               {/* ---- the job ---- */}
@@ -1175,6 +1292,28 @@ export default function EmployeesPage() {
                 value={form.dateOfJoin}
                 onChange={(iso) => setForm({ ...form, dateOfJoin: iso })}
               />
+              <Input
+                label="Probation Period (months)"
+                type="number"
+                min={0}
+                max={120}
+                value={form.probationMonths}
+                onChange={(e) =>
+                  setForm({ ...form, probationMonths: e.target.value })
+                }
+                placeholder="e.g. 6"
+              />
+              {/* What was AGREED above, what actually HAPPENED here — they part
+                  company often enough (a confirmation early for good work, late
+                  for a review that slipped) that one cannot be read off the
+                  other. */}
+              <DateInput
+                label="Date of Confirmation"
+                value={form.dateOfConfirmation}
+                onChange={(iso) =>
+                  setForm({ ...form, dateOfConfirmation: iso })
+                }
+              />
 
               {/*
               Category → Group → Designation. Only the designation is stored:
@@ -1227,6 +1366,21 @@ export default function EmployeesPage() {
                   label: d.name,
                 }))}
               />
+              {/* Beside the designation, not derived from it: two people can
+                  hold the same designation on different grades, which is the
+                  whole point of having one. */}
+              <Select
+                label="Employee Grade"
+                wrapClassName="sm:col-span-2"
+                value={form.gradeId}
+                onChange={(e) => setForm({ ...form, gradeId: e.target.value })}
+                placeholder="— None —"
+                sortOptions={false}
+                options={asOptions(gradeValues).map((o) => ({
+                  ...o,
+                  value: String(o.value),
+                }))}
+              />
 
               <Select
                 label="Reporting To"
@@ -1246,6 +1400,23 @@ export default function EmployeesPage() {
                   value: String(m.id),
                   label: `${m.name} (${m.designationName})`,
                 }))}
+              />
+
+              {/* Whether this person is drawn on the organisation chart. Yes
+                  for almost everybody — the chart is of the whole staff — with
+                  an off switch for the records that would clutter it rather
+                  than explain it. */}
+              <Select
+                label="Show in Organization Chart"
+                value={form.showInOrgChart ? 'yes' : 'no'}
+                onChange={(e) =>
+                  setForm({ ...form, showInOrgChart: e.target.value === 'yes' })
+                }
+                sortOptions={false}
+                options={[
+                  { value: 'yes', label: 'Yes' },
+                  { value: 'no', label: 'No' },
+                ]}
               />
 
               <div className="sm:col-span-2">

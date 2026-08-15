@@ -177,9 +177,18 @@ model Employee {
   /// because a record should never be blocked for want of a document — Postgres
   /// allows many NULLs under a unique index.
   aadhaarNumber         String?        @unique
+  /// Where they are FROM. Labelled "Permanent Address" on the form; the column
+  /// keeps its original name so nothing already written has to move.
   address               String?
+  /// Where they are living NOW — the one a letter actually reaches, and often
+  /// not the same as the permanent one for staff who have moved for the job.
+  presentAddress        String?
   phone                 String?
   email                 String?
+  /// A+, O-, and the rest. A plain string against a fixed list rather than a
+  /// lookup: the eight groups are a fact of medicine, not a list this business
+  /// maintains, so there is nothing here for an admin to add.
+  bloodGroup            String?
   /// Who to ring, and on what number, when something happens at work.
   emergencyContactName  String?
   emergencyContactPhone String?
@@ -187,6 +196,21 @@ model Employee {
   /// the day somebody joins — refusing to enrol them until it is would only
   /// mean the record is kept somewhere else in the meantime.
   photoUrl              String?
+
+  /// What they have studied, what they can do, and what they speak.
+  ///
+  /// Lists of LookupValue ids (EDUCATION / SKILL / LANGUAGE, maintained in
+  /// HR → Lookups), held as plain Int arrays: LookupValue is a Cpanel table and
+  /// a foreign key across that line is what the cross-domain rule forbids, so
+  /// the service checks each id against the right lookup instead.
+  ///
+  /// Arrays rather than three join tables because nothing is ever hung off the
+  /// pairing — no "since when", no proficiency. The day one of them grows a
+  /// column of its own it becomes a table; today it would be three tables to
+  /// say what three columns say.
+  educationIds          Int[]
+  skillIds              Int[]
+  languageIds           Int[]
 
   // ---- the job ----
   companyId     Int
@@ -209,11 +233,28 @@ model Employee {
   /// The form still asks for all three, because that is how a person finds the
   /// designation; only the answer is stored.
   designationId Int
+  /// Their grade — an EMPLOYEE_GRADE LookupValue (A…E out of the box, editable
+  /// in HR → Lookups). A plain Int for the cross-domain reason above.
+  ///
+  /// Beside the designation rather than derived from it: two people can hold
+  /// the same designation on different grades, which is the whole point of
+  /// having one.
+  gradeId       Int?
   dateOfJoin    DateTime
+  /// How long they are on probation, in months. Null = none agreed.
+  probationMonths    Int?
+  /// When they were actually confirmed. Kept beside the period rather than
+  /// worked out from it: the period is what was agreed, this is what happened,
+  /// and confirmations run early and late.
+  dateOfConfirmation DateTime?
   /// Their manager — another employee, so the line of report is answerable to
   /// somebody who exists. SetNull rather than cascade: when a manager leaves,
   /// their reports stay employed.
   reportsToId   Int?
+  /// Whether this person is drawn on the organisation chart. On by default —
+  /// the chart is of the whole staff — with an off switch for the records that
+  /// would clutter it rather than explain it.
+  showInOrgChart Boolean @default(true)
 
   isActive  Boolean  @default(true)
   isLocked  Boolean  @default(false)

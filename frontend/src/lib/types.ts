@@ -1544,13 +1544,28 @@ export interface Employee {
   sex?: EmployeeSex | null;
   maritalStatus?: MaritalStatus | null;
   aadhaarNumber?: string | null;
+  /** Shown as "Permanent Address" — the field keeps its original name. */
   address?: string | null;
+  presentAddress?: string | null;
   phone?: string | null;
   email?: string | null;
+  /** One of BLOOD_GROUPS. A fixed medical set, not a lookup. */
+  bloodGroup?: string | null;
   emergencyContactName?: string | null;
   emergencyContactPhone?: string | null;
   /** Optional — it can follow after the person is enrolled. */
   photoUrl?: string | null;
+
+  /**
+   * LookupValue ids of the EDUCATION / SKILL / LANGUAGE lists (HR → Lookups).
+   * The *Names are resolved server-side for lists, reports and prints.
+   */
+  educationIds?: number[];
+  educationNames?: string[];
+  skillIds?: number[];
+  skillNames?: string[];
+  languageIds?: number[];
+  languageNames?: string[];
 
   companyId: number;
   branchId?: number | null;
@@ -1568,10 +1583,18 @@ export interface Employee {
   categoryId: number;
   categoryName: string;
   ratePerHour?: number | null;
+  /** An EMPLOYEE_GRADE LookupValue (A…E out of the box). */
+  gradeId?: number | null;
+  gradeName?: string | null;
 
   dateOfJoin: string;
+  /** Months. Null = no probation agreed. */
+  probationMonths?: number | null;
+  dateOfConfirmation?: string | null;
   reportsToId?: number | null;
   reportsToName?: string | null;
+  /** Whether this person is drawn on the organisation chart. */
+  showInOrgChart?: boolean;
 
   isActive: boolean;
   isLocked?: boolean;

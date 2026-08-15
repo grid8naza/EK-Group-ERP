@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { EmployeeSex, MaritalStatus } from '@prisma/client';
 import {
+  IsArray,
   IsBoolean,
   IsDateString,
   IsEmail,
@@ -9,9 +10,12 @@ import {
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
+  Min,
   MinLength,
 } from 'class-validator';
+import { BLOOD_GROUPS } from './hr-employee.constants';
 
 const SEXES = Object.values(EmployeeSex);
 const MARITAL_STATUSES = Object.values(MaritalStatus);
@@ -62,11 +66,47 @@ export class SaveEmployeeDto {
   })
   aadhaarNumber?: string | null;
 
+  /** Shown as "Permanent Address"; the field keeps its original name. */
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
   @MaxLength(500)
   address?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  presentAddress?: string | null;
+
+  /** One of BLOOD_GROUPS — a fixed medical set, not a lookup. */
+  @ApiPropertyOptional({ enum: BLOOD_GROUPS })
+  @IsOptional()
+  @IsIn(BLOOD_GROUPS, { message: 'That is not a blood group.' })
+  bloodGroup?: string | null;
+
+  /**
+   * LookupValue ids of the EDUCATION / SKILL / LANGUAGE lists. Sent whole:
+   * what arrives replaces what is stored, so removing one is just leaving it
+   * out.
+   */
+  @ApiPropertyOptional({ type: [Number] })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  educationIds?: number[];
+
+  @ApiPropertyOptional({ type: [Number] })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  skillIds?: number[];
+
+  @ApiPropertyOptional({ type: [Number] })
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  languageIds?: number[];
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -132,16 +172,40 @@ export class SaveEmployeeDto {
   @IsInt()
   designationId?: number;
 
+  /** An EMPLOYEE_GRADE LookupValue id. */
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsInt()
+  gradeId?: number | null;
+
   @ApiPropertyOptional({ example: '2026-08-14' })
   @IsOptional()
   @IsDateString()
   dateOfJoin?: string;
+
+  /** Months. Null = no probation agreed. */
+  @ApiPropertyOptional({ nullable: true, example: 6 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(120)
+  probationMonths?: number | null;
+
+  @ApiPropertyOptional({ nullable: true, example: '2027-02-14' })
+  @IsOptional()
+  @IsDateString()
+  dateOfConfirmation?: string | null;
 
   /** Their manager — another employee of the same company. */
   @ApiPropertyOptional({ nullable: true })
   @IsOptional()
   @IsInt()
   reportsToId?: number | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  showInOrgChart?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()

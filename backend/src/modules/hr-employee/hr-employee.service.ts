@@ -51,7 +51,25 @@ type EmployeeRow = Prisma.EmployeeGetPayload<{ include: typeof withRelations }>;
 interface PostingNames {
   divisions: Map<number, string>;
   departments: Map<number, string>;
+  /** Every EDUCATION / SKILL / LANGUAGE / EMPLOYEE_GRADE value, by id. */
+  lookupLabels: Map<number, string>;
 }
+
+/**
+ * Turn a list of LookupValue ids into their labels, dropping any whose value
+ * has since been deleted — a stale id is nothing to show, and refusing to
+ * render the employee over it would be worse.
+ */
+const labels = (ids: number[], by: Map<number, string>): string[] =>
+  ids.map((id) => by.get(id)).filter((l): l is string => !!l);
+
+/** How each list is named when a choice on it turns out to be stale. */
+const LIST_LABELS: Record<string, string> = {
+  EDUCATION: 'Education',
+  SKILL: 'Skills',
+  LANGUAGE: 'Languages known',
+  EMPLOYEE_GRADE: 'Employee grade',
+};
 
 /**
  * Employee Master (SRS §8.9, FR-HRP-01).
@@ -281,6 +299,7 @@ export class HrEmployeeService {
       await this.assertDesignation(dto.designationId);
     }
     const posting = await this.posting(dto, companyId, ctx.existingId);
+    const lists = await this.lookupLists(dto);
     if (dto.reportsToId != null) {
       await this.assertManager(dto.reportsToId, companyId, ctx.existingId);
     }
@@ -300,6 +319,13 @@ export class HrEmployeeService {
       ...(dto.address !== undefined
         ? { address: dto.address?.trim() || null }
         : {}),
+      ...(dto.presentAddress !== undefined
+        ? { presentAddress: dto.presentAddress?.trim() || null }
+        : {}),
+      ...(dto.bloodGroup !== undefined
+        ? { bloodGroup: dto.bloodGroup || null }
+        : {}),
+      ...lists,
       ...(dto.phone !== undefined ? { phone: dto.phone?.trim() || null } : {}),
       ...(dto.email !== undefined ? { email: dto.email?.trim() || null } : {}),
       ...(dto.emergencyContactName !== undefined
@@ -316,14 +342,95 @@ export class HrEmployeeService {
       ...(dto.designationId !== undefined
         ? { designationId: dto.designationId }
         : {}),
+      ...(dto.gradeId !== undefined ? { gradeId: dto.gradeId } : {}),
       ...(dto.dateOfJoin !== undefined
         ? { dateOfJoin: new Date(dto.dateOfJoin) }
+        : {}),
+      ...(dto.probationMonths !== undefined
+        ? { probationMonths: dto.probationMonths }
+        : {}),
+      ...(dto.dateOfConfirmation !== undefined
+        ? {
+            dateOfConfirmation: dto.dateOfConfirmation
+              ? new Date(dto.dateOfConfirmation)
+              : null,
+          }
         : {}),
       ...(dto.reportsToId !== undefined
         ? { reportsToId: dto.reportsToId }
         : {}),
+      ...(dto.showInOrgChart !== undefined
+        ? { showInOrgChart: dto.showInOrgChart }
+        : {}),
       ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
     };
+  }
+
+  /**
+   * Check every id sent for education, skills, languages and grade actually
+   * belongs to the list it is meant to come from, and hand back only the keys
+   * the caller mentioned.
+   *
+   * One query for all four rather than one each: they are all LookupValue rows,
+   * and what makes an id wrong is which lookup it sits under. Checked at all
+   * because these are plain Ints — no foreign key is going to catch a skill id
+   * sent as a language.
+   */
+  private async lookupLists(dto: SaveEmployeeDto) {
+    const asked: { key: keyof SaveEmployeeDto; code: string; ids: number[] }[] =
+      [];
+    if (dto.educationIds !== undefined) {
+      asked.push({
+        key: 'educationIds',
+        code: 'EDUCATION',
+        ids: dto.educationIds,
+      });
+    }
+    if (dto.skillIds !== undefined) {
+      asked.push({ key: 'skillIds', code: 'SKILL', ids: dto.skillIds });
+    }
+    if (dto.languageIds !== undefined) {
+      asked.push({
+        key: 'languageIds',
+        code: 'LANGUAGE',
+        ids: dto.languageIds,
+      });
+    }
+    if (dto.gradeId !== undefined && dto.gradeId !== null) {
+      asked.push({
+        key: 'gradeId',
+        code: 'EMPLOYEE_GRADE',
+        ids: [dto.gradeId],
+      });
+    }
+    if (!asked.length) return {};
+
+    const allIds = [...new Set(asked.flatMap((a) => a.ids))];
+    const rows = allIds.length
+      ? await this.prisma.lookupValue.findMany({
+          where: { id: { in: allIds }, isActive: true },
+          select: { id: true, lookup: { select: { code: true } } },
+        })
+      : [];
+    const codeById = new Map(rows.map((r) => [r.id, r.lookup.code]));
+
+    const out: Record<string, number[]> = {};
+    for (const a of asked) {
+      const wrong = a.ids.filter((id) => codeById.get(id) !== a.code);
+      if (wrong.length) {
+        throw new BadRequestException(
+          // Covers both ways an id can be wrong — a value deleted since the
+          // form opened, and one picked off the wrong list altogether. The
+          // remedy is the same either way.
+          `${LIST_LABELS[a.code]}: ${wrong.length === 1 ? 'that choice is' : 'those choices are'} not on the list. Re-pick and save again.`,
+        );
+      }
+      // Deduplicated and ordered as the list itself is, so two saves of the
+      // same answer produce the same row.
+      if (a.key !== 'gradeId')
+        out[a.key] = [...new Set(a.ids)].sort((x, y) => x - y);
+    }
+    return out;
   }
 
   /** The company must exist, and a named branch must belong to it. */
@@ -470,13 +577,20 @@ export class HrEmployeeService {
    * than two per row.
    */
   private async postingNames(): Promise<PostingNames> {
-    const [centres, objects] = await Promise.all([
+    const [centres, objects, lookupValues] = await Promise.all([
       this.prisma.costCenter.findMany({ select: { id: true, name: true } }),
       this.prisma.costObject.findMany({ select: { id: true, name: true } }),
+      // All four HR lists in one read — the whole page's labels, rather than a
+      // query per employee per list.
+      this.prisma.lookupValue.findMany({
+        where: { lookup: { code: { in: Object.keys(LIST_LABELS) } } },
+        select: { id: true, label: true },
+      }),
     ]);
     return {
       divisions: new Map(centres.map((c) => [c.id, c.name])),
       departments: new Map(objects.map((o) => [o.id, o.name])),
+      lookupLabels: new Map(lookupValues.map((v) => [v.id, v.label])),
     };
   }
 
@@ -490,12 +604,24 @@ export class HrEmployeeService {
       sex: row.sex,
       maritalStatus: row.maritalStatus,
       aadhaarNumber: row.aadhaarNumber,
+      /** Shown as "Permanent Address". */
       address: row.address,
+      presentAddress: row.presentAddress,
       phone: row.phone,
       email: row.email,
+      bloodGroup: row.bloodGroup,
       emergencyContactName: row.emergencyContactName,
       emergencyContactPhone: row.emergencyContactPhone,
       photoUrl: row.photoUrl,
+
+      // The ids are what the form edits; the names are what a list, a report or
+      // a print needs, and resolving them here saves every reader doing it.
+      educationIds: row.educationIds,
+      educationNames: labels(row.educationIds, names.lookupLabels),
+      skillIds: row.skillIds,
+      skillNames: labels(row.skillIds, names.lookupLabels),
+      languageIds: row.languageIds,
+      languageNames: labels(row.languageIds, names.lookupLabels),
 
       companyId: row.companyId,
       branchId: row.branchId,
@@ -522,9 +648,19 @@ export class HrEmployeeService {
       categoryName: row.designation.category.name,
       ratePerHour: row.designation.ratePerHour,
 
+      gradeId: row.gradeId,
+      gradeName:
+        row.gradeId != null
+          ? (names.lookupLabels.get(row.gradeId) ?? null)
+          : null,
+
       dateOfJoin: row.dateOfJoin.toISOString().slice(0, 10),
+      probationMonths: row.probationMonths,
+      dateOfConfirmation:
+        row.dateOfConfirmation?.toISOString().slice(0, 10) ?? null,
       reportsToId: row.reportsToId,
       reportsToName: row.reportsTo?.name ?? null,
+      showInOrgChart: row.showInOrgChart,
 
       isActive: row.isActive,
       isLocked: row.isLocked,
