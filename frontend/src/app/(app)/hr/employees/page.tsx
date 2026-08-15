@@ -1171,7 +1171,6 @@ export default function EmployeesPage() {
                   HR → Lookups. */}
               <MultiSelect
                 label="Education"
-                wrapClassName="sm:col-span-2"
                 value={form.educationIds}
                 onChange={(v) =>
                   setForm({ ...form, educationIds: v.map(Number) })
@@ -1353,7 +1352,6 @@ export default function EmployeesPage() {
               <Select
                 label="Designation"
                 required
-                wrapClassName="sm:col-span-2"
                 value={form.designationId}
                 onChange={(e) =>
                   setForm({ ...form, designationId: e.target.value })
@@ -1369,7 +1367,6 @@ export default function EmployeesPage() {
                   whole point of having one. */}
               <Select
                 label="Employee Grade"
-                wrapClassName="sm:col-span-2"
                 value={form.gradeId}
                 onChange={(e) => setForm({ ...form, gradeId: e.target.value })}
                 placeholder="— None —"
@@ -1382,7 +1379,6 @@ export default function EmployeesPage() {
 
               <Select
                 label="Reporting To"
-                wrapClassName="sm:col-span-2"
                 value={form.reportsToId}
                 onChange={(e) =>
                   setForm({ ...form, reportsToId: e.target.value })
@@ -1417,7 +1413,10 @@ export default function EmployeesPage() {
                 ]}
               />
 
-              <div className="sm:col-span-2">
+              {/* Bottom-aligned with the picker beside it: a checkbox has no
+                  label above it, so left to itself it would float level with
+                  that field's LABEL rather than its input. */}
+              <div className="flex items-end pb-2">
                 <Checkbox
                   label="Active"
                   checked={form.isActive}
