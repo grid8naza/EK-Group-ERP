@@ -838,9 +838,14 @@ async function migrateAccountsReportMenu(
  * Workplace to begin with.
  */
 /**
- * The HR module's primary menu, relabelled: "Human Resources" became "HR
- * Master" and is now "HR Setup", beside HR Data and HR Reports that the
- * ordinary sync creates for itself.
+ * The HR module's menus, relabelled: the primary went "Human Resources" → "HR
+ * Master" → "HR Setup", and the extra went "HR Data" → "HR Records".
+ *
+ * The extra one matters MORE than the primary, not less. A primary menu is
+ * matched by moduleId, so a declaration renamed without this would merely show
+ * the old label. An extra is matched by NAME — the sync would find nothing
+ * called "HR Records", build a second menu, and leave the old one standing with
+ * Employee Master and every privilege on it underneath.
  *
  * Needed because the sync matches a PRIMARY menu by moduleId and never renames
  * it — so without this, an existing database would keep the old label while a
@@ -856,19 +861,24 @@ async function migrateAccountsReportMenu(
  * only sets sortOrder on CREATE: Lookups goes to the top of the master menu, and
  * an admin who rearranges it afterwards keeps their arrangement.
  */
-const HR_PRIMARY_MENU_OLD_NAMES = ['Human Resources', 'HR Master'];
+const HR_MENU_RENAMES: { from: string[]; to: string }[] = [
+  { from: ['Human Resources', 'HR Master'], to: 'HR Setup' },
+  { from: ['HR Data'], to: 'HR Records' },
+];
 
 async function migrateHrMenus(prisma: Prisma.TransactionClient): Promise<void> {
   const hr = await prisma.module.findUnique({
     where: { code: 'HR' },
     select: { id: true },
   });
-  if (!hr) return; // fresh DB: the sync creates it with the new name
+  if (!hr) return; // fresh DB: the sync creates them with the new names
 
-  await prisma.mainMenu.updateMany({
-    where: { moduleId: hr.id, menuName: { in: HR_PRIMARY_MENU_OLD_NAMES } },
-    data: { menuName: 'HR Setup' },
-  });
+  for (const { from, to } of HR_MENU_RENAMES) {
+    await prisma.mainMenu.updateMany({
+      where: { moduleId: hr.id, menuName: { in: from } },
+      data: { menuName: to },
+    });
+  }
 
   await runOnce(prisma, 'hr-master-menu-order', async () => {
     const order: Record<string, number> = {

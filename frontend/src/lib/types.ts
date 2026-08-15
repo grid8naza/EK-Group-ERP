@@ -1530,7 +1530,7 @@ export interface HrDesignation {
   isLocked?: boolean;
 }
 
-/** Employee Master (HR → HR Data). Category and group are derived from the
+/** Employee Master (HR → HR Records). Category and group are derived from the
  *  designation server-side — neither is stored on the employee. */
 export type EmployeeSex = 'MALE' | 'FEMALE' | 'OTHER';
 export type MaritalStatus = 'SINGLE' | 'MARRIED' | 'DIVORCED' | 'WIDOWED';
