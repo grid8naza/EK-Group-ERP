@@ -79,6 +79,42 @@ export class UserGroupService {
     return [...moduleIds, workplace.id];
   }
 
+  /**
+   * Shut the tabs that start shut.
+   *
+   * A tab nobody has hidden is visible, which is right for tabs in general and
+   * too generous for the few that hand out more than they show — User Access
+   * creates logins and gives out roles. Those are marked `hiddenByDefault` by
+   * the module scaffold, and a group made today starts on the same footing as
+   * every group made before it, rather than quietly getting more.
+   *
+   * Written at creation rather than resolved at read time on purpose: from here
+   * on it is an ordinary row an admin can tick, and nothing keeps re-deciding
+   * it behind them.
+   */
+  private async applyDefaultTabVisibility(
+    group: { id: number; name: string },
+    companyId: number,
+  ) {
+    if (group.name === ADMIN_GROUP_NAME) return;
+    const tabs = await this.prisma.subMenuTab.findMany({
+      where: {
+        hiddenByDefault: true,
+        subMenu: { mainMenu: { companyId } },
+      },
+      select: { id: true },
+    });
+    if (!tabs.length) return;
+    await this.prisma.groupSubMenuTabAccess.createMany({
+      data: tabs.map((t) => ({
+        userGroupId: group.id,
+        subMenuTabId: t.id,
+        visible: false,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
   async create(dto: CreateUserGroupDto, companyId: number) {
     const { moduleIds: rawIds, ...rest } = dto;
     const moduleIds = await this.withWorkplace(
@@ -91,6 +127,7 @@ export class UserGroupService {
         modules: { create: moduleIds.map((moduleId) => ({ moduleId })) },
       },
     });
+    await this.applyDefaultTabVisibility(group, companyId);
     return this.findOne(group.id);
   }
 

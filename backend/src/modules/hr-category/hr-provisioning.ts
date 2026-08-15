@@ -69,7 +69,14 @@ export const HR_EXTRA_MENUS = [
          */
         tabs: [
           { key: 'employee', label: 'Employee', order: 1 },
-          { key: 'access', label: 'User Access', order: 2 },
+          {
+            key: 'access',
+            label: 'User Access',
+            order: 2,
+            // Logins and roles are given out here, so this one starts shut and
+            // is opened per group from the Privileges screen.
+            hiddenByDefault: true,
+          },
         ],
       },
     ],

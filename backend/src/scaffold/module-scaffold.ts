@@ -64,6 +64,20 @@ export interface ScaffoldTab {
   key: string;
   label: string;
   order: number;
+  /**
+   * Start this tab HIDDEN for every group but Administrators.
+   *
+   * The exception, not the rule: a tab is normally visible until somebody takes
+   * it away. Set it where the tab hands out more than it shows — User Access
+   * creates logins and gives out roles — so the capability is opened up
+   * deliberately instead of arriving switched on for whoever could already
+   * reach the screen.
+   *
+   * A starting position only. It is applied when the tab is first created and
+   * when a group is first created, and never argues with a decision made after
+   * that.
+   */
+  hiddenByDefault?: boolean;
 }
 
 export interface ScaffoldSub {

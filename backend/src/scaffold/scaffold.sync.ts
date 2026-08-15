@@ -1237,54 +1237,61 @@ export async function syncScaffold(
 }
 
 /**
- * Take HR → Employee Master → User Access away from every group except
- * Administrators.
+ * Shut every hidden-by-default tab — User Access today — to the groups that
+ * existed before the idea did.
  *
  * A tab nobody has hidden is VISIBLE (see GroupSubMenuTabAccess), which is right
- * for tabs in general and too generous for this one: it is where logins are
- * created and roles handed out, and leaving it on by default would give it to
- * whoever already maintains staff records — including, in the end, the ability
- * to widen their own access. So the rows are written once, explicitly, and an
- * admin opens it up per group from the Privileges screen.
+ * for tabs in general and too generous for a few: User Access is where logins
+ * are created and roles handed out, and leaving it on by default would give it
+ * to whoever already maintains staff records — including, in the end, the means
+ * to widen their own access.
+ *
+ * This is the back-fill for databases that already had the tabs. From here on
+ * the two live paths keep it true without it:
+ *   · a NEW tab → closed to existing groups as it is created (syncSubMenuTabs)
+ *   · a NEW group → closed to every such tab as it is created (UserGroupService)
  *
  * `runOnce`, emphatically. Every boot would be arguing with the admin who ticked
  * it back on that morning — this is a starting position, not a rule.
- *
- * Matched company by company: a group and the tab it is being refused belong to
- * one company, and joining without that would write a setting against a screen
- * the group never sees. Administrators is matched by NAME, the same way the rest
- * of the scaffold identifies it.
  */
 async function hideUserAccessTabByDefault(
   prisma: Prisma.TransactionClient,
 ): Promise<void> {
   await runOnce(prisma, 'hide-user-access-tab-by-default', async () => {
     const tabs = await prisma.subMenuTab.findMany({
-      where: {
-        key: 'access',
-        subMenu: { route: '/hr/employees' },
+      where: { hiddenByDefault: true },
+      select: {
+        id: true,
+        subMenu: { select: { mainMenu: { select: { companyId: true } } } },
       },
-      select: { id: true, subMenu: { select: { mainMenu: true } } },
     });
     if (!tabs.length) return;
 
-    for (const tab of tabs) {
+    // Grouped by company: a group and the tab it is being refused belong to one
+    // company, and joining without that would write a setting against a screen
+    // the group never sees.
+    const byCompany = new Map<number, number[]>();
+    for (const t of tabs) {
+      const companyId = t.subMenu.mainMenu.companyId;
+      byCompany.set(companyId, [...(byCompany.get(companyId) ?? []), t.id]);
+    }
+
+    for (const [companyId, tabIds] of byCompany) {
       const groups = await prisma.userGroup.findMany({
-        where: {
-          companyId: tab.subMenu.mainMenu.companyId,
-          name: { not: ADMIN_GROUP_NAME },
-        },
+        where: { companyId, name: { not: ADMIN_GROUP_NAME } },
         select: { id: true },
       });
       if (!groups.length) continue;
       // createMany + skipDuplicates rather than an upsert: a group that already
       // has a row has been decided about, and this is only a default.
       await prisma.groupSubMenuTabAccess.createMany({
-        data: groups.map((g) => ({
-          userGroupId: g.id,
-          subMenuTabId: tab.id,
-          visible: false,
-        })),
+        data: groups.flatMap((g) =>
+          tabIds.map((subMenuTabId) => ({
+            userGroupId: g.id,
+            subMenuTabId,
+            visible: false,
+          })),
+        ),
         skipDuplicates: true,
       });
     }
@@ -1595,7 +1602,12 @@ interface MenuGroup {
     order: number;
     objectType?: ObjectType;
     superAdminOnly?: boolean;
-    tabs?: { key: string; label: string; order: number }[];
+    tabs?: {
+      key: string;
+      label: string;
+      order: number;
+      hiddenByDefault?: boolean;
+    }[];
   }[];
   /** The module's primary menu is matched by module (so a rename is reused);
    *  extra menus are matched by name, so they coexist with the primary. */
@@ -1712,6 +1724,46 @@ async function syncModuleMenus(
   }
 }
 
+/**
+ * Shut a just-created hidden-by-default tab to the groups that already exist in
+ * this company — everyone but Administrators.
+ *
+ * Only ever called with tabs created a moment ago, so it cannot re-close a tab
+ * an admin has since opened. skipDuplicates covers the one case where a row
+ * could already exist: a tab deleted and re-declared under the same key.
+ */
+async function closeNewTabsToExistingGroups(
+  prisma: Prisma.TransactionClient,
+  companyId: number,
+  subMenuId: number,
+  tabKeys: string[],
+): Promise<void> {
+  if (!tabKeys.length) return;
+
+  const [tabs, groups] = await Promise.all([
+    prisma.subMenuTab.findMany({
+      where: { subMenuId, key: { in: tabKeys } },
+      select: { id: true },
+    }),
+    prisma.userGroup.findMany({
+      where: { companyId, name: { not: ADMIN_GROUP_NAME } },
+      select: { id: true },
+    }),
+  ]);
+  if (!tabs.length || !groups.length) return;
+
+  await prisma.groupSubMenuTabAccess.createMany({
+    data: groups.flatMap((g) =>
+      tabs.map((t) => ({
+        userGroupId: g.id,
+        subMenuTabId: t.id,
+        visible: false,
+      })),
+    ),
+    skipDuplicates: true,
+  });
+}
+
 /** Find/create one main menu, back-fill its sub-menus, and grant the admin group. */
 /**
  * Make the SubMenuTab rows under one main menu match what the scaffold declares.
@@ -1723,6 +1775,7 @@ async function syncModuleMenus(
 async function syncSubMenuTabs(
   prisma: Prisma.TransactionClient,
   mainMenuId: number,
+  companyId: number,
   subs: MenuGroup['subs'],
 ): Promise<void> {
   const declared = new Map(subs.map((s) => [s.route, s.tabs ?? []]));
@@ -1731,7 +1784,15 @@ async function syncSubMenuTabs(
     select: {
       id: true,
       route: true,
-      tabs: { select: { id: true, key: true, label: true, sortOrder: true } },
+      tabs: {
+        select: {
+          id: true,
+          key: true,
+          label: true,
+          sortOrder: true,
+          hiddenByDefault: true,
+        },
+      },
     },
   });
 
@@ -1751,16 +1812,40 @@ async function syncSubMenuTabs(
           key: t.key,
           label: t.label,
           sortOrder: t.order,
+          hiddenByDefault: !!t.hiddenByDefault,
         })),
       });
+
+      // A tab that starts shut has to be shut for the groups that already
+      // exist, or declaring one on an established screen would hand it to
+      // everybody who could already reach that screen. Done HERE, against the
+      // tabs just created, so it happens exactly once per tab: on the next boot
+      // they are no longer missing.
+      await closeNewTabsToExistingGroups(
+        prisma,
+        companyId,
+        sub.id,
+        missing.filter((t) => t.hiddenByDefault).map((t) => t.key),
+      );
     }
 
     for (const t of want) {
       const existing = have.get(t.key);
-      if (existing && (existing.label !== t.label || existing.sortOrder !== t.order)) {
+      if (
+        existing &&
+        (existing.label !== t.label ||
+          existing.sortOrder !== t.order ||
+          existing.hiddenByDefault !== !!t.hiddenByDefault)
+      ) {
         await prisma.subMenuTab.update({
           where: { id: existing.id },
-          data: { label: t.label, sortOrder: t.order },
+          data: {
+            label: t.label,
+            sortOrder: t.order,
+            // Only the STARTING position for groups made after this point;
+            // nobody's existing row is touched.
+            hiddenByDefault: !!t.hiddenByDefault,
+          },
         });
       }
     }
@@ -1853,7 +1938,7 @@ async function syncOneMenu(
   //
   // No grant is written: a tab nobody has hidden is visible, so every group
   // that can reach the screen sees a new tab without a row existing at all.
-  await syncSubMenuTabs(prisma, main.id, group.subs);
+  await syncSubMenuTabs(prisma, main.id, companyId, group.subs);
 
   // Grant the Administrators group full privileges on the menu + all its subs.
   if (adminGroupId) {

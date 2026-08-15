@@ -419,13 +419,26 @@ model SubMenu {
 /// rather than a string somebody typed. `key` is what the page passes to
 /// canTab(); renaming a LABEL is free, renaming a key orphans the privilege.
 model SubMenuTab {
-  id        Int      @id @default(autoincrement())
+  id        Int    @id @default(autoincrement())
   subMenuId Int
   key       String
   label     String
-  sortOrder Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  sortOrder Int    @default(0)
+  /// Start this tab HIDDEN for every group but Administrators, rather than
+  /// visible like the rest.
+  ///
+  /// For the few tabs that hand out more than they show — User Access, where
+  /// logins are created and roles given — so the capability is opened up
+  /// deliberately rather than arriving switched on for whoever could already
+  /// reach the screen. Declared in the module scaffold and mirrored here,
+  /// because the group service has to read it when a group is created and
+  /// cannot import the scaffold.
+  ///
+  /// It decides the STARTING position only. Once a group has a row, this is
+  /// never consulted for it again.
+  hiddenByDefault Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   subMenu     SubMenu                 @relation(fields: [subMenuId], references: [id], onDelete: Cascade)
   groupAccess GroupSubMenuTabAccess[]
