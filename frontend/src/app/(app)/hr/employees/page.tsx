@@ -1049,11 +1049,12 @@ export default function EmployeesPage() {
               </div>
 
               {/* ---- the person ----
-                  Set larger and in a dark blue of its own, so the two block
-                  headings read as headings rather than as another field label.
-                  Deliberately NOT brand-*: that palette is evergreen, and a
+                  A centred band in a light blue, dark blue text: the tint is
+                  what separates one block from the next, so it replaces the
+                  rule that used to sit above the heading rather than joining
+                  it. Deliberately NOT brand-*: that palette is evergreen, and a
                   heading in it would look like a button that failed to render. */}
-              <div className="mt-1 border-t border-slate-200 pt-3 text-base font-bold text-blue-900 dark:border-slate-700 dark:text-blue-300 sm:col-span-2">
+              <div className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-center text-base font-bold text-blue-900 dark:bg-blue-950/40 dark:text-blue-300 sm:col-span-2">
                 Personal Details
               </div>
 
@@ -1203,7 +1204,7 @@ export default function EmployeesPage() {
               />
 
               {/* ---- the job ---- */}
-              <div className="mt-1 border-t border-slate-200 pt-3 text-base font-bold text-blue-900 dark:border-slate-700 dark:text-blue-300 sm:col-span-2">
+              <div className="mt-2 rounded-lg bg-blue-50 px-3 py-2 text-center text-base font-bold text-blue-900 dark:bg-blue-950/40 dark:text-blue-300 sm:col-span-2">
                 Posting Details
               </div>
 
