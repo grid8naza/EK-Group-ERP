@@ -5,11 +5,12 @@ export function cn(
 }
 
 /**
- * A date as a person writes it here: dd/mm/yy.
+ * A date as a person writes it here: dd/mm/yyyy.
  *
  * For reports and printed documents, where an ISO date reads as a machine
- * timestamp and the year in full costs width a wide table cannot spare. The
- * time is dropped — the things dated this way are days, not moments.
+ * timestamp. The time is dropped — the things dated this way are days, not
+ * moments. The year is written in full: a service record spans decades, and
+ * "01/01/30" leaves the reader deciding whether that is 1930 or 2030.
  *
  * A date-only string is read back as UTC, because that is how the engine parses
  * it; taking it as local would show the day before to anybody west of
@@ -25,7 +26,7 @@ export function formatDayMonthYear(value?: string | null): string {
   const day = dateOnly ? d.getUTCDate() : d.getDate();
   const month = (dateOnly ? d.getUTCMonth() : d.getMonth()) + 1;
   const year = dateOnly ? d.getUTCFullYear() : d.getFullYear();
-  return `${pad(day)}/${pad(month)}/${pad(year % 100)}`;
+  return `${pad(day)}/${pad(month)}/${year}`;
 }
 
 export function formatDate(value?: string | null): string {

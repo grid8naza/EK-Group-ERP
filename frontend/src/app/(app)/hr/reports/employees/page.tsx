@@ -83,14 +83,15 @@ export default function EmployeeListReportPage() {
       {
         key: 'doj',
         header: 'Joined',
-        weight: 9,
+        // 10 characters of dd/mm/yyyy, so it never wraps in a printed table.
+        weight: 10,
         center: true,
         cell: (e) => formatDayMonthYear(e.dateOfJoin),
       },
       {
         key: 'confirmed',
         header: 'Confirmed',
-        weight: 9,
+        weight: 10,
         center: true,
         cell: (e) => formatDayMonthYear(e.dateOfConfirmation),
       },

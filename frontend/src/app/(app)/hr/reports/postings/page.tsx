@@ -53,7 +53,9 @@ const COLUMNS = [
   'Department',
   'Event',
 ] as const;
-const WEIGHTS = [9, 15, 9, 9, 14, 12, 12, 12, 10] as const;
+// From and To hold ten characters of dd/mm/yyyy, so they get a little more
+// room than a four-character heading would suggest.
+const WEIGHTS = [9, 15, 10, 10, 14, 12, 12, 12, 10] as const;
 /** From, To and Event. */
 const CENTER_COLS = [2, 3, 8];
 
