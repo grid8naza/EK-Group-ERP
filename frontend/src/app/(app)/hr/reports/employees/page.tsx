@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Users } from 'lucide-react';
 import { useFetch } from '@/lib/hooks';
+import { formatDayMonthYear } from '@/lib/utils';
 import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -83,18 +84,21 @@ export default function EmployeeListReportPage() {
         key: 'doj',
         header: 'Joined',
         weight: 9,
-        cell: (e) => e.dateOfJoin ?? '-',
+        center: true,
+        cell: (e) => formatDayMonthYear(e.dateOfJoin),
       },
       {
         key: 'confirmed',
         header: 'Confirmed',
         weight: 9,
-        cell: (e) => e.dateOfConfirmation ?? '-',
+        center: true,
+        cell: (e) => formatDayMonthYear(e.dateOfConfirmation),
       },
       {
         key: 'phone',
         header: 'Contact',
         weight: 11,
+        center: true,
         cell: (e) => e.phone ?? '-',
       },
       {
@@ -177,6 +181,7 @@ export default function EmployeeListReportPage() {
     columns: selected.columns,
     weights: selected.weights,
     blocks,
+    centerCols: selected.centerCols,
     fileBase: 'employee-list-report',
     serial: true,
     summary,
@@ -260,6 +265,7 @@ export default function EmployeeListReportPage() {
             loading={loading}
             statusCol={selected.statusCol}
             boldCol={selected.boldCol}
+            centerCols={selected.centerCols}
             serial
             summary={summary}
             emptyText="No employees match the current filters."

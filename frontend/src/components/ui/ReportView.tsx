@@ -78,6 +78,9 @@ interface ReportViewProps {
   /** Column indices to right-align. Columns whose cells are raw numbers are
    *  right-aligned automatically regardless. */
   numericCols?: number[];
+  /** Column indices to centre — dates and short codes, which read badly
+   *  ragged-left in a wide table but are not numbers to be totalled. */
+  centerCols?: number[];
   /** Optional two-tier header: group label + lower-row sub-header per visible
    *  column, parallel to `columns`. */
   groups?: (string | undefined)[];
@@ -187,6 +190,7 @@ export function ReportView({
   serial,
   summary,
   numericCols,
+  centerCols,
   groups,
   subHeaders,
   emptyText = 'No records found.',
@@ -264,10 +268,16 @@ export function ReportView({
     ].map((i) => i + shift),
   );
 
+  const centerColX = new Set((centerCols ?? []).map((i) => i + shift));
+
   // Header cells align with their column's data: numeric and status → right,
-  // everything else (including the serial column) → left.
+  // centred columns → centre, everything else (including the serial) → left.
   const headAlign = (i: number) =>
-    numericColX.has(i) || i === statusColX ? 'text-right' : 'text-left';
+    numericColX.has(i) || i === statusColX
+      ? 'text-right'
+      : centerColX.has(i)
+        ? 'text-center'
+        : 'text-left';
 
   const table = (
     t: ReportBlock['tables'][number],
@@ -350,6 +360,9 @@ export function ReportView({
                     className={cn(
                       'break-words px-3 py-3',
                       numericColX.has(ci) && 'text-right tabular-nums',
+                      !numericColX.has(ci) &&
+                        centerColX.has(ci) &&
+                        'text-center',
                       ci === boldColX
                         ? 'font-semibold text-slate-900 dark:text-slate-100'
                         : ci === darkColX

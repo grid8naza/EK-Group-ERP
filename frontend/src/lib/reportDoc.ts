@@ -48,6 +48,10 @@ export interface ReportSpec {
   /** Indices (into `columns`) of numeric columns to right-align. Columns whose
    *  cells are raw numbers are right-aligned automatically regardless. */
   numericCols?: readonly number[];
+  /** Indices (into `columns`) of columns to CENTRE — dates, short codes and
+   *  the like, which read badly ragged-left in a wide table but are not
+   *  numbers to be totalled. */
+  centerCols?: readonly number[];
   /** Optional two-tier header: the group label per column and the lower-row
    *  sub-header per column (both parallel to `columns`, no serial). Leave
    *  undefined for the usual single-row header. */
@@ -75,6 +79,12 @@ function numericColIndices(spec: ReportSpec): Set<number> {
     if (typeof v === 'number') set.add(i);
   });
   return set;
+}
+
+/** Centre-aligned columns, shifted for a prepended serial column. */
+function centerAlignedOutputCols(spec: ReportSpec): Set<number> {
+  const shift = spec.serial ? 1 : 0;
+  return new Set((spec.centerCols ?? []).map((i) => i + shift));
 }
 
 /** numericColIndices shifted for a prepended serial column (→ output indices). */
@@ -112,6 +122,12 @@ export interface ReportColumn<T> {
    */
   numeric?: boolean;
   /**
+   * Centre the column in every output. For values that are neither prose nor
+   * arithmetic — a date, a phone number — which look mislaid pushed to the
+   * left of a wide cell.
+   */
+  center?: boolean;
+  /**
    * Two-tier header: columns sharing the same `group` collapse into one spanning
    * group label on the top header row, with `subHeader` (falling back to
    * `header`) shown on the row beneath. Columns with no `group` span both rows.
@@ -131,6 +147,8 @@ export interface SelectedColumns<T> {
   darkCol?: number;
   /** Indices of the visible columns that are numeric (right-aligned). */
   numericCols: number[];
+  /** Indices of the visible columns that are centred. */
+  centerCols: number[];
   /** Build a row's cells for the visible columns, in order. */
   cells: (row: T) => Cell[];
   /** Per-visible-column group label (parallel to `columns`); undefined when the
@@ -161,6 +179,9 @@ export function selectColumns<T>(
     darkCol: darkIdx === -1 ? undefined : darkIdx,
     numericCols: visible
       .map((c, i) => (c.numeric ? i : -1))
+      .filter((i) => i >= 0),
+    centerCols: visible
+      .map((c, i) => (c.center ? i : -1))
       .filter((i) => i >= 0),
     cells: (row: T) => visible.map((c) => c.cell(row)),
     groups: grouped ? visible.map((c) => c.group) : undefined,
@@ -283,6 +304,7 @@ export function printReport(
   const autoPrint = opts?.autoPrint ?? false;
   const { columns, weights } = reportColumns(spec);
   const rightCols = rightAlignedOutputCols(spec);
+  const ctrCols = centerAlignedOutputCols(spec);
   const colgroup = `<colgroup>${columns
     .map((_, i) => `<col style="width:${colPercent(weights, i)}">`)
     .join('')}</colgroup>`;
@@ -313,7 +335,13 @@ export function printReport(
         return `<tr${t.shade?.[i] ? ' class="lvl1"' : ''}>${cells
           .map(
             (v, ci) =>
-              `<td${rightCols.has(ci) ? ' class="num"' : ''}>${esc(fmt(v))}</td>`,
+              `<td${
+                rightCols.has(ci)
+                  ? ' class="num"'
+                  : ctrCols.has(ci)
+                    ? ' class="ctr"'
+                    : ''
+              }>${esc(fmt(v))}</td>`,
           )
           .join('')}</tr>`;
       })
@@ -370,6 +398,7 @@ export function printReport(
          weight as well as the tint, matching the screen view. */
       tr.lvl1 td{background:#eef4f1;font-weight:bold}
       td.num{text-align:right;font-variant-numeric:tabular-nums}
+      td.ctr{text-align:center}
       ${spec.serial ? 'td:first-child{text-align:center}' : ''}
       .summary{margin-top:14px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc;display:flex;flex-wrap:wrap;gap:6px 20px;font-size:12px;page-break-inside:avoid}
       .summary-title{font-weight:bold;text-transform:uppercase;letter-spacing:.04em;color:#64748b;margin-right:6px}
@@ -428,6 +457,7 @@ export function pdfReport(spec: ReportSpec): void {
     }
   };
   const rightCols = rightAlignedOutputCols(spec);
+  const ctrCols = centerAlignedOutputCols(spec);
   const columnStyles: Record<number, { cellWidth: number; halign?: 'center' }> =
     Object.fromEntries(
       columns.map((_, i) => [
@@ -535,6 +565,8 @@ export function pdfReport(spec: ReportSpec): void {
             d.cell.styles.fillColor = [247, 235, 215];
             d.cell.styles.fontStyle = 'bold';
           }
+          if (d.section === 'body' && ctrCols.has(d.column.index))
+            d.cell.styles.halign = 'center';
           if (d.section === 'body' && rightCols.has(d.column.index))
             d.cell.styles.halign = 'right';
         },

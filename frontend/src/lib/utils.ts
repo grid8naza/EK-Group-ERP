@@ -4,6 +4,30 @@ export function cn(
   return classes.filter(Boolean).join(' ');
 }
 
+/**
+ * A date as a person writes it here: dd/mm/yy.
+ *
+ * For reports and printed documents, where an ISO date reads as a machine
+ * timestamp and the year in full costs width a wide table cannot spare. The
+ * time is dropped — the things dated this way are days, not moments.
+ *
+ * A date-only string is read back as UTC, because that is how the engine parses
+ * it; taking it as local would show the day before to anybody west of
+ * Greenwich. A value that will not parse comes back untouched rather than as
+ * "Invalid Date": a report should show what it was given, not complain about it.
+ */
+export function formatDayMonthYear(value?: string | null): string {
+  if (!value) return '-';
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const d = new Date(dateOnly ? `${value}T00:00:00Z` : value);
+  if (isNaN(d.getTime())) return value;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const day = dateOnly ? d.getUTCDate() : d.getDate();
+  const month = (dateOnly ? d.getUTCMonth() : d.getMonth()) + 1;
+  const year = dateOnly ? d.getUTCFullYear() : d.getFullYear();
+  return `${pad(day)}/${pad(month)}/${pad(year % 100)}`;
+}
+
 export function formatDate(value?: string | null): string {
   if (!value) return '-';
   const d = new Date(value);

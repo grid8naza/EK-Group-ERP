@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { MapPin } from 'lucide-react';
 import { useFetch } from '@/lib/hooks';
+import { formatDayMonthYear } from '@/lib/utils';
 import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -53,6 +54,8 @@ const COLUMNS = [
   'Event',
 ] as const;
 const WEIGHTS = [9, 15, 9, 9, 14, 12, 12, 12, 10] as const;
+/** From, To and Event. */
+const CENTER_COLS = [2, 3, 8];
 
 /** The words a person uses for what the derived change set says happened. */
 const eventOf = (r: RegisterRow) => {
@@ -118,8 +121,8 @@ export default function PostingsRegisterReportPage() {
               .map((r) => [
                 r.employeeCode,
                 r.employeeName,
-                r.effectiveFrom,
-                r.effectiveTo ?? 'present',
+                formatDayMonthYear(r.effectiveFrom),
+                r.effectiveTo ? formatDayMonthYear(r.effectiveTo) : 'present',
                 r.designationName,
                 r.branchName ?? '-',
                 r.divisionName ?? '-',
@@ -151,12 +154,15 @@ export default function PostingsRegisterReportPage() {
 
   const spec: ReportSpec = {
     companyName,
-    subtitle: `Postings Register ${from} to ${to} - ${total} ${
+    subtitle: `Postings Register ${formatDayMonthYear(from)} to ${formatDayMonthYear(to)} - ${total} ${
       total === 1 ? 'posting' : 'postings'
     }`,
     columns: [...COLUMNS],
     weights: [...WEIGHTS],
     blocks,
+    // From, To and the derived Event — dates and a short label, which read
+    // badly ragged-left between two wide text columns.
+    centerCols: CENTER_COLS,
     fileBase: 'postings-register',
     serial: true,
     summary,
@@ -225,6 +231,7 @@ export default function PostingsRegisterReportPage() {
             weights={[...WEIGHTS]}
             blocks={blocks}
             loading={loading}
+            centerCols={CENTER_COLS}
             serial
             summary={summary}
             emptyText="No postings in this period."

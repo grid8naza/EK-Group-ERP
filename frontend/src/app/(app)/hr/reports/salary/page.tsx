@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Wallet } from 'lucide-react';
 import { useFetch } from '@/lib/hooks';
+import { formatDayMonthYear } from '@/lib/utils';
 import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -224,7 +225,7 @@ export default function SalaryRegisterReportPage() {
 
   const spec: ReportSpec = {
     companyName,
-    subtitle: `Salary Register as at ${data?.on ?? on} - ${totals.people} ${
+    subtitle: `Salary Register as at ${formatDayMonthYear(data?.on ?? on)} - ${totals.people} ${
       totals.people === 1 ? 'employee' : 'employees'
     }`,
     columns,
