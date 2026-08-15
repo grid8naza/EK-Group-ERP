@@ -10,6 +10,7 @@ import {
   Mail,
   X,
   KeyRound,
+  Wallet,
   User as UserIcon,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
@@ -26,6 +27,7 @@ import { LockButton } from '@/components/ui/LockButton';
 import { StatusToggle } from '@/components/ui/StatusToggle';
 import { Tabs, type TabDef } from '@/components/ui/Tabs';
 import { UserAccessPanel } from '@/components/cpanel/UserAccessPanel';
+import { SalaryPanel } from '@/components/hr/SalaryPanel';
 import {
   Drawer,
   DrawerFooter,
@@ -117,8 +119,8 @@ const empty = {
 
 type Form = typeof empty;
 
-/** The drawer's two halves: the person, and the way in. */
-type Tab = 'employee' | 'access';
+/** The drawer's three parts: the person, what they are paid, and the way in. */
+type Tab = 'employee' | 'salary' | 'access';
 
 export default function EmployeesPage() {
   const { can, canTab, activeCompanyId, activeBranchId } = useAuth();
@@ -168,6 +170,8 @@ export default function EmployeesPage() {
   const [login, setLogin] = useState<AppUser | null | undefined>(undefined);
   /** Unsaved work on the User Access tab, as that panel reports it. */
   const [accessDirty, setAccessDirty] = useState(false);
+  /** Likewise the Salary tab — true while its package editor is open. */
+  const [salaryDirty, setSalaryDirty] = useState(false);
   /**
    * The employee form as it stood when last loaded or saved. Compared against
    * rather than a touched-a-field flag, so the drawer stops claiming unsaved
@@ -205,6 +209,13 @@ export default function EmployeesPage() {
         key: 'employee',
         label: 'Employee',
         icon: <UserCog className="h-4 w-4" />,
+      },
+      {
+        key: 'salary',
+        label: 'Salary',
+        icon: <Wallet className="h-4 w-4" />,
+        // A package has to belong to somebody.
+        disabled: !editing,
       },
       {
         key: 'access',
@@ -294,6 +305,7 @@ export default function EmployeesPage() {
     setTab(defaultTab);
     setLogin(undefined);
     setAccessDirty(false);
+    setSalaryDirty(false);
   };
 
   /**
@@ -310,8 +322,8 @@ export default function EmployeesPage() {
     employeeBaseline !== '' &&
     JSON.stringify(form) !== employeeBaseline;
   const drawerDirty = useCallback(
-    () => employeeDirty || accessDirty,
-    [employeeDirty, accessDirty],
+    () => employeeDirty || accessDirty || salaryDirty,
+    [employeeDirty, accessDirty, salaryDirty],
   );
 
   /**
@@ -325,26 +337,41 @@ export default function EmployeesPage() {
   };
 
   /**
-   * Move between the two tabs, asking first where that would lose something.
+   * Move between the tabs, asking first where that would lose something.
    *
-   * Only leaving User Access asks: that panel is unmounted on the way out and
-   * its half-typed login goes with it. The Employee form is held here and
+   * Only the two side panels ask: each is unmounted on the way out and its
+   * half-finished work goes with it. The Employee form is held here and
    * survives the round trip, so switching away from it costs nothing.
    */
   const switchTab = async (next: Tab) => {
     if (next === tab) return;
-    if (tab === 'access' && accessDirty) {
+
+    const leaving =
+      tab === 'access' && accessDirty
+        ? {
+            what: 'the login',
+            where: 'User Access',
+            clear: () => setAccessDirty(false),
+          }
+        : tab === 'salary' && salaryDirty
+          ? {
+              what: 'the package',
+              where: 'Salary',
+              clear: () => setSalaryDirty(false),
+            }
+          : null;
+
+    if (leaving) {
       const ok = await confirm({
-        title: 'Leave the login unsaved?',
-        message:
-          'What has been entered on User Access has not been saved. Switching tabs loses it.',
+        title: `Leave ${leaving.what} unsaved?`,
+        message: `What has been entered on ${leaving.where} has not been saved. Switching tabs loses it.`,
         danger: true,
         confirmText: 'Yes',
         cancelText: 'No',
         defaultCancel: true,
       });
       if (!ok) return;
-      setAccessDirty(false);
+      leaving.clear();
     }
     setTab(next);
   };
@@ -894,8 +921,8 @@ export default function EmployeesPage() {
               dataEntry
             />
           ) : (
-            // The User Access tab saves the LOGIN, not the employee, and does
-            // it with its own button — one Save that means two different
+            // Salary and User Access save their OWN thing — a package, a login
+            // — each with its own button. One Save meaning three different
             // things depending on the tab is the confusion worth avoiding.
             <CloseFooter onClose={() => void requestClose()} />
           )
@@ -913,7 +940,13 @@ export default function EmployeesPage() {
           />
         )}
 
-        {tab === 'access' ? (
+        {tab === 'salary' ? (
+          <SalaryPanel
+            employeeId={editing?.id ?? null}
+            readOnly={view}
+            onDirtyChange={setSalaryDirty}
+          />
+        ) : tab === 'access' ? (
           login === undefined ? (
             <p className="px-1 py-6 text-sm text-slate-400">Loading login…</p>
           ) : (

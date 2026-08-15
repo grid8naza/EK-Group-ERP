@@ -419,11 +419,11 @@ model SubMenu {
 /// rather than a string somebody typed. `key` is what the page passes to
 /// canTab(); renaming a LABEL is free, renaming a key orphans the privilege.
 model SubMenuTab {
-  id        Int    @id @default(autoincrement())
-  subMenuId Int
-  key       String
-  label     String
-  sortOrder Int    @default(0)
+  id              Int      @id @default(autoincrement())
+  subMenuId       Int
+  key             String
+  label           String
+  sortOrder       Int      @default(0)
   /// Start this tab HIDDEN for every group but Administrators, rather than
   /// visible like the rest.
   ///

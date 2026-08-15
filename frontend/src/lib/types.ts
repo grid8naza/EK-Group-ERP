@@ -1530,6 +1530,42 @@ export interface HrDesignation {
   isLocked?: boolean;
 }
 
+/** Whether a salary component is paid on top of the basic or taken out of it. */
+export type SalaryComponentKind = 'ALLOWANCE' | 'DEDUCTION';
+
+/** One allowance or deduction on a package. */
+export interface SalaryComponent {
+  id?: number;
+  kind: SalaryComponentKind;
+  /** A SALARY_ALLOWANCE / SALARY_DEDUCTION LookupValue id. */
+  componentId: number;
+  componentName?: string;
+  amount: number;
+}
+
+/**
+ * What an employee is paid, from a date.
+ *
+ * A series, not a current value: an increment is a NEW package starting the day
+ * it takes effect, and payroll asks which one was in force on the day being paid
+ * for. The totals are worked out server-side so no two readers disagree.
+ */
+export interface SalaryPackage {
+  id: number;
+  employeeId: number;
+  effectiveFrom: string;
+  /** Null = until further notice. */
+  effectiveTo?: string | null;
+  basicSalary: number;
+  remarks?: string | null;
+  components: SalaryComponent[];
+  totalAllowances: number;
+  totalDeductions: number;
+  grossSalary: number;
+  netSalary: number;
+  createdAt?: string;
+}
+
 /** Employee Master (HR → HR Records). Category and group are derived from the
  *  designation server-side — neither is stored on the employee. */
 export type EmployeeSex = 'MALE' | 'FEMALE' | 'OTHER';

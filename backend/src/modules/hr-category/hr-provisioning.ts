@@ -72,9 +72,18 @@ export const HR_EXTRA_MENUS = [
         tabs: [
           { key: 'employee', label: 'Employee', order: 1 },
           {
+            key: 'salary',
+            label: 'Salary',
+            order: 2,
+            // What everybody earns, on one screen. Starts shut for the same
+            // reason User Access does, and is opened per group from the
+            // Privileges screen.
+            hiddenByDefault: true,
+          },
+          {
             key: 'access',
             label: 'User Access',
-            order: 2,
+            order: 3,
             // Logins and roles are given out here, so this one starts shut and
             // is opened per group from the Privileges screen.
             hiddenByDefault: true,
@@ -185,6 +194,35 @@ export const HR_LOOKUPS: {
     code: 'EMPLOYEE_GRADE',
     name: 'Employee Grade',
     values: ['A', 'B', 'C', 'D', 'E'],
+  },
+  {
+    // The pay components a salary package is built from. Lists rather than
+    // columns so a new allowance never needs a migration — and so a payroll
+    // report can pivot whatever the business has defined into a column each.
+    code: 'SALARY_ALLOWANCE',
+    name: 'Salary Allowance',
+    values: [
+      'House Rent Allowance',
+      'Dearness Allowance',
+      'Conveyance Allowance',
+      'Medical Allowance',
+      'Food Allowance',
+      'Special Allowance',
+      'Attendance Incentive',
+    ],
+  },
+  {
+    code: 'SALARY_DEDUCTION',
+    name: 'Salary Deduction',
+    values: [
+      'Provident Fund',
+      'ESI',
+      'Professional Tax',
+      'Income Tax (TDS)',
+      'Salary Advance',
+      'Loan Recovery',
+      'Late / Absence',
+    ],
   },
   {
     code: 'BLOOD_GROUP',

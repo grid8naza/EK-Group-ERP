@@ -208,13 +208,13 @@ model Employee {
   /// pairing — no "since when", no proficiency. The day one of them grows a
   /// column of its own it becomes a table; today it would be three tables to
   /// say what three columns say.
-  educationIds          Int[]
-  skillIds              Int[]
-  languageIds           Int[]
+  educationIds Int[]
+  skillIds     Int[]
+  languageIds  Int[]
 
   // ---- the job ----
-  companyId     Int
-  branchId      Int? // null = the company as a whole (head office, roving staff)
+  companyId          Int
+  branchId           Int? // null = the company as a whole (head office, roving staff)
   /// Division and department, taken from the COMPANY'S OWN structure: a
   /// division is a Cpanel CostCenter, a department the CostObject under it.
   ///
@@ -226,21 +226,21 @@ model Employee {
   /// Plain ids with no @relation (the cross-domain rule); the service checks
   /// the centre belongs to the company and the object to the centre. Both
   /// optional: a company that does not work in cost centres still has staff.
-  costCenterId  Int?
-  costObjectId  Int?
+  costCenterId       Int?
+  costObjectId       Int?
   /// What they are. The CATEGORY and GROUP are not stored here — a designation
   /// already knows both, and a second copy is a second thing to keep in step.
   /// The form still asks for all three, because that is how a person finds the
   /// designation; only the answer is stored.
-  designationId Int
+  designationId      Int
   /// Their grade — an EMPLOYEE_GRADE LookupValue (A…E out of the box, editable
   /// in HR → Lookups). A plain Int for the cross-domain reason above.
   ///
   /// Beside the designation rather than derived from it: two people can hold
   /// the same designation on different grades, which is the whole point of
   /// having one.
-  gradeId       Int?
-  dateOfJoin    DateTime
+  gradeId            Int?
+  dateOfJoin         DateTime
   /// How long they are on probation, in months. Null = none agreed.
   probationMonths    Int?
   /// When they were actually confirmed. Kept beside the period rather than
@@ -250,24 +250,101 @@ model Employee {
   /// Their manager — another employee, so the line of report is answerable to
   /// somebody who exists. SetNull rather than cascade: when a manager leaves,
   /// their reports stay employed.
-  reportsToId   Int?
+  reportsToId        Int?
   /// Whether this person is drawn on the organisation chart. On by default —
   /// the chart is of the whole staff — with an off switch for the records that
   /// would clutter it rather than explain it.
-  showInOrgChart Boolean @default(true)
+  showInOrgChart     Boolean   @default(true)
 
   isActive  Boolean  @default(true)
   isLocked  Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  designation HrDesignation @relation(fields: [designationId], references: [id], onDelete: Restrict)
-  reportsTo   Employee?     @relation("EmployeeReportsTo", fields: [reportsToId], references: [id], onDelete: SetNull)
-  reports     Employee[]    @relation("EmployeeReportsTo")
+  designation    HrDesignation           @relation(fields: [designationId], references: [id], onDelete: Restrict)
+  reportsTo      Employee?               @relation("EmployeeReportsTo", fields: [reportsToId], references: [id], onDelete: SetNull)
+  reports        Employee[]              @relation("EmployeeReportsTo")
+  salaryPackages EmployeeSalaryPackage[]
 
   @@unique([companyId, code])
   @@index([companyId, branchId])
   @@index([designationId])
   @@index([reportsToId])
   @@map("employees")
+}
+
+/// Whether a salary component is paid ON TOP of the basic or taken OUT of it.
+enum SalaryComponentKind {
+  ALLOWANCE
+  DEDUCTION
+}
+
+/// What one employee is paid, from a date.
+///
+/// A package is never edited into a raise. An increment is a NEW package with a
+/// later `effectiveFrom`, and the row it supersedes keeps its own figures for
+/// ever — which is what lets a payslip re-run for March next year still come out
+/// at March's salary. The series IS the history.
+///
+/// Payroll asks "what was in force on this date" rather than "what is current":
+/// the package whose period contains the day being paid for. That is why the
+/// period is stored rather than a flag, and why the periods may not overlap.
+model EmployeeSalaryPackage {
+  id         Int @id @default(autoincrement())
+  employeeId Int
+
+  /// The day this package starts paying. Required — a package with no start
+  /// cannot be selected by a payroll run, which is the only thing packages are
+  /// for.
+  effectiveFrom DateTime
+  /// The last day it applies. NULL means "until further notice", which is what
+  /// the newest package almost always is; raising an increment closes the one
+  /// before it the day before the new one starts.
+  effectiveTo   DateTime?
+
+  /// The figure everything else is quoted against. Decimal, not Float: this is
+  /// money, and the accounts domain settled on Decimal(18,2) for the same
+  /// reason.
+  basicSalary Decimal @db.Decimal(18, 2)
+
+  /// Why this package exists — "annual increment", "promoted to Supervisor".
+  remarks String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee   Employee                  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  components EmployeeSalaryComponent[]
+
+  /// Two packages starting the same day would leave payroll with a coin to
+  /// toss. The service checks the whole period for overlap; this catches the
+  /// exact collision at the database.
+  @@unique([employeeId, effectiveFrom])
+  @@index([employeeId, effectiveFrom])
+  @@map("employee_salary_packages")
+}
+
+/// One line of a package: an allowance paid or a deduction taken.
+///
+/// A ROW per component rather than a column per component, because the list is
+/// the business's to maintain (HR → Lookups, SALARY_ALLOWANCE and
+/// SALARY_DEDUCTION) — a new allowance must not need a migration. Reports pivot
+/// these rows back into a column each, which is the shape a payroll sheet wants.
+model EmployeeSalaryComponent {
+  id          Int                 @id @default(autoincrement())
+  packageId   Int
+  kind        SalaryComponentKind
+  /// A SALARY_ALLOWANCE or SALARY_DEDUCTION LookupValue id — a plain Int, since
+  /// LookupValue is a Cpanel table and the cross-domain rule forbids the key.
+  /// The service checks each id against the lookup its `kind` names.
+  componentId Int
+  amount      Decimal             @db.Decimal(18, 2)
+  sortOrder   Int                 @default(0)
+
+  package EmployeeSalaryPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  /// The same allowance twice in one package is a typo, not a second payment.
+  @@unique([packageId, kind, componentId])
+  @@index([packageId])
+  @@map("employee_salary_components")
 }
