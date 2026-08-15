@@ -241,6 +241,18 @@ model Employee {
   /// the same designation on different grades, which is the whole point of
   /// having one.
   gradeId            Int?
+  /// How they are engaged — an EMPLOYEE_TYPE LookupValue (Permanent, Part Time,
+  /// Temporary out of the box). Beside the designation, because the same job
+  /// can be held on different terms.
+  employeeTypeId     Int?
+  /// Where they stand with the company today — an EMPLOYEE_STATUS LookupValue
+  /// (On Probation, In Service, On Leave, Resigned, Terminated).
+  ///
+  /// Entered rather than derived, and so NOT the same thing as `isActive` or as
+  /// a missing `dateOfConfirmation`. Those are facts about the record; this is
+  /// what HR say the position is, and it is the one a manager and a payroll run
+  /// have to agree on.
+  statusId           Int?
   dateOfJoin         DateTime
   /// How long they are on probation, in months. Null = none agreed.
   probationMonths    Int?

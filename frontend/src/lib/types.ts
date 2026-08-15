@@ -1662,6 +1662,16 @@ export interface Employee {
   /** An EMPLOYEE_GRADE LookupValue (A…E out of the box). */
   gradeId?: number | null;
   gradeName?: string | null;
+  /** An EMPLOYEE_TYPE LookupValue — Permanent, Part Time, Temporary. */
+  employeeTypeId?: number | null;
+  employeeTypeName?: string | null;
+  /**
+   * An EMPLOYEE_STATUS LookupValue — On Probation, In Service, On Leave,
+   * Resigned, Terminated. Entered, not derived: distinct from `isActive` and
+   * from a missing `dateOfConfirmation`.
+   */
+  statusId?: number | null;
+  statusName?: string | null;
 
   dateOfJoin: string;
   /** Months. Null = no probation agreed. */

@@ -177,6 +177,18 @@ export class SaveEmployeeDto {
   @IsInt()
   gradeId?: number | null;
 
+  /** An EMPLOYEE_TYPE LookupValue id — Permanent, Part Time, Temporary. */
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsInt()
+  employeeTypeId?: number | null;
+
+  /** An EMPLOYEE_STATUS LookupValue id — where they stand today. */
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsInt()
+  statusId?: number | null;
+
   @ApiPropertyOptional({ example: '2026-08-14' })
   @IsOptional()
   @IsDateString()

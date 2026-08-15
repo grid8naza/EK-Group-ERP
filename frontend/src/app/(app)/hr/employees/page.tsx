@@ -110,7 +110,9 @@ const empty = {
   categoryId: '',
   groupId: '',
   designationId: '',
+  employeeTypeId: '',
   gradeId: '',
+  statusId: '',
   dateOfJoin: '',
   probationMonths: '',
   dateOfConfirmation: '',
@@ -146,6 +148,8 @@ export default function EmployeesPage() {
   const languageValues = useLookupValues('LANGUAGE');
   const gradeValues = useLookupValues('EMPLOYEE_GRADE');
   const bloodGroupValues = useLookupValues('BLOOD_GROUP');
+  const employeeTypeValues = useLookupValues('EMPLOYEE_TYPE');
+  const statusValues = useLookupValues('EMPLOYEE_STATUS');
   const asOptions = (vals: LookupValue[]) =>
     vals.map((v) => ({ value: v.id, label: v.label }));
 
@@ -480,7 +484,9 @@ export default function EmployeesPage() {
     categoryId: String(e.categoryId),
     groupId: String(e.groupId),
     designationId: String(e.designationId),
+    employeeTypeId: e.employeeTypeId != null ? String(e.employeeTypeId) : '',
     gradeId: e.gradeId != null ? String(e.gradeId) : '',
+    statusId: e.statusId != null ? String(e.statusId) : '',
     dateOfJoin: e.dateOfJoin,
     probationMonths: e.probationMonths != null ? String(e.probationMonths) : '',
     dateOfConfirmation: e.dateOfConfirmation ?? '',
@@ -609,7 +615,9 @@ export default function EmployeesPage() {
       costCenterId: idOrNull(form.costCenterId),
       costObjectId: idOrNull(form.costObjectId),
       designationId: Number(form.designationId),
+      employeeTypeId: idOrNull(form.employeeTypeId),
       gradeId: idOrNull(form.gradeId),
+      statusId: idOrNull(form.statusId),
       dateOfJoin: form.dateOfJoin,
       probationMonths: form.probationMonths
         ? Number(form.probationMonths)
@@ -1391,6 +1399,22 @@ export default function EmployeesPage() {
                   label: d.name,
                 }))}
               />
+              {/* How they are ENGAGED, next to what they do — the same job can
+                  be held on permanent, part-time or temporary terms. */}
+              <Select
+                label="Employee Type"
+                value={form.employeeTypeId}
+                onChange={(e) =>
+                  setForm({ ...form, employeeTypeId: e.target.value })
+                }
+                placeholder="— Not stated —"
+                sortOptions={false}
+                options={asOptions(employeeTypeValues).map((o) => ({
+                  ...o,
+                  value: String(o.value),
+                }))}
+              />
+
               {/* Beside the designation, not derived from it: two people can
                   hold the same designation on different grades, which is the
                   whole point of having one. */}
@@ -1401,6 +1425,20 @@ export default function EmployeesPage() {
                 placeholder="— None —"
                 sortOptions={false}
                 options={asOptions(gradeValues).map((o) => ({
+                  ...o,
+                  value: String(o.value),
+                }))}
+              />
+              {/* Where they stand today. Entered rather than worked out: it is
+                  not the Active flag below, nor a missing confirmation date —
+                  it is what HR say the position is. */}
+              <Select
+                label="Employee Status"
+                value={form.statusId}
+                onChange={(e) => setForm({ ...form, statusId: e.target.value })}
+                placeholder="— Not stated —"
+                sortOptions={false}
+                options={asOptions(statusValues).map((o) => ({
                   ...o,
                   value: String(o.value),
                 }))}

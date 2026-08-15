@@ -70,6 +70,8 @@ const LIST_LABELS: Record<string, string> = {
   SKILL: 'Skills',
   LANGUAGE: 'Languages known',
   EMPLOYEE_GRADE: 'Employee grade',
+  EMPLOYEE_TYPE: 'Employee type',
+  EMPLOYEE_STATUS: 'Employee status',
   BLOOD_GROUP: 'Blood group',
 };
 
@@ -345,6 +347,10 @@ export class HrEmployeeService {
         ? { designationId: dto.designationId }
         : {}),
       ...(dto.gradeId !== undefined ? { gradeId: dto.gradeId } : {}),
+      ...(dto.employeeTypeId !== undefined
+        ? { employeeTypeId: dto.employeeTypeId }
+        : {}),
+      ...(dto.statusId !== undefined ? { statusId: dto.statusId } : {}),
       ...(dto.dateOfJoin !== undefined
         ? { dateOfJoin: new Date(dto.dateOfJoin) }
         : {}),
@@ -405,6 +411,20 @@ export class HrEmployeeService {
         ids: [dto.gradeId],
       });
     }
+    if (dto.employeeTypeId !== undefined && dto.employeeTypeId !== null) {
+      asked.push({
+        key: 'employeeTypeId',
+        code: 'EMPLOYEE_TYPE',
+        ids: [dto.employeeTypeId],
+      });
+    }
+    if (dto.statusId !== undefined && dto.statusId !== null) {
+      asked.push({
+        key: 'statusId',
+        code: 'EMPLOYEE_STATUS',
+        ids: [dto.statusId],
+      });
+    }
     if (dto.bloodGroupId !== undefined && dto.bloodGroupId !== null) {
       asked.push({
         key: 'bloodGroupId',
@@ -437,7 +457,12 @@ export class HrEmployeeService {
       // Deduplicated and ordered, so two saves of the same answer produce the
       // same row. Only the LISTS are rebuilt here — the single-value fields
       // (grade, blood group) are written from the dto like any other scalar.
-      if (a.key !== 'gradeId' && a.key !== 'bloodGroupId') {
+      if (
+        a.key !== 'gradeId' &&
+        a.key !== 'bloodGroupId' &&
+        a.key !== 'employeeTypeId' &&
+        a.key !== 'statusId'
+      ) {
         out[a.key] = [...new Set(a.ids)].sort((x, y) => x - y);
       }
     }
@@ -672,6 +697,16 @@ export class HrEmployeeService {
       gradeName:
         row.gradeId != null
           ? (names.lookupLabels.get(row.gradeId) ?? null)
+          : null,
+      employeeTypeId: row.employeeTypeId,
+      employeeTypeName:
+        row.employeeTypeId != null
+          ? (names.lookupLabels.get(row.employeeTypeId) ?? null)
+          : null,
+      statusId: row.statusId,
+      statusName:
+        row.statusId != null
+          ? (names.lookupLabels.get(row.statusId) ?? null)
           : null,
 
       dateOfJoin: row.dateOfJoin.toISOString().slice(0, 10),

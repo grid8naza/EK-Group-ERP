@@ -224,6 +224,33 @@ export const HR_LOOKUPS: {
     values: ['A', 'B', 'C', 'D', 'E'],
   },
   {
+    /**
+     * Where somebody stands with the company today.
+     *
+     * "In Service" is the ordinary state — the standard HR term for a confirmed
+     * employee currently working. Not "Active": the record already has an
+     * Active flag, and two things called active on one form is one too many.
+     *
+     * Ordered as a working life runs rather than alphabetically, so the list
+     * reads as a progression and the common answer is near the top.
+     */
+    code: 'EMPLOYEE_STATUS',
+    name: 'Employee Status',
+    values: [
+      'On Probation',
+      'In Service',
+      'On Leave',
+      'Resigned',
+      'Terminated',
+    ],
+  },
+  {
+    /** What kind of engagement it is — how they are employed, not how they are. */
+    code: 'EMPLOYEE_TYPE',
+    name: 'Employee Type',
+    values: ['Permanent', 'Part Time', 'Temporary'],
+  },
+  {
     // The pay components a salary package is built from. Lists rather than
     // columns so a new allowance never needs a migration — and so a payroll
     // report can pivot whatever the business has defined into a column each.

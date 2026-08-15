@@ -75,6 +75,22 @@ export default function EmployeeListReportPage() {
         cell: (e) => e.gradeName ?? '-',
       },
       {
+        key: 'type',
+        header: 'Type',
+        weight: 10,
+        center: true,
+        cell: (e) => e.employeeTypeName ?? '-',
+      },
+      {
+        // What HR say the position is. Distinct from the Status column at the
+        // end, which is the record's own Active flag.
+        key: 'empStatus',
+        header: 'Emp. Status',
+        weight: 12,
+        center: true,
+        cell: (e) => e.statusName ?? '-',
+      },
+      {
         key: 'category',
         header: 'Category',
         weight: 11,
