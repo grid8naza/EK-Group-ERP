@@ -839,7 +839,8 @@ async function migrateAccountsReportMenu(
  */
 /**
  * The HR module's menus, relabelled: the primary went "Human Resources" → "HR
- * Master" → "HR Setup", and the extra went "HR Data" → "HR Records".
+ * Master" → "HR Setup", and the two extras "HR Data" → "HR Records" and
+ * "HR Reports" → "HR Analysis".
  *
  * The extra one matters MORE than the primary, not less. A primary menu is
  * matched by moduleId, so a declaration renamed without this would merely show
@@ -864,6 +865,7 @@ async function migrateAccountsReportMenu(
 const HR_MENU_RENAMES: { from: string[]; to: string }[] = [
   { from: ['Human Resources', 'HR Master'], to: 'HR Setup' },
   { from: ['HR Data'], to: 'HR Records' },
+  { from: ['HR Reports'], to: 'HR Analysis' },
 ];
 
 async function migrateHrMenus(prisma: Prisma.TransactionClient): Promise<void> {

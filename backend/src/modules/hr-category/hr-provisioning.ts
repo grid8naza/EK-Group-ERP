@@ -9,7 +9,7 @@ import { Prisma } from '@prisma/client';
  *
  * Three menus, split by what the rows ARE rather than by which service serves
  * them: the classification a person is described BY (HR Setup), the people
- * themselves (HR Records), and what is read back out (HR Reports).
+ * themselves (HR Records), and what is read back out (HR Analysis).
  */
 
 /**
@@ -93,7 +93,7 @@ export const HR_EXTRA_MENUS = [
      * can see the place reports will go, and staff are not shown a heading with
      * nothing under it.
      */
-    name: 'HR Reports',
+    name: 'HR Analysis',
     icon: 'report',
     subs: [] as {
       name: string;
