@@ -6,7 +6,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { formatDayMonthYear } from '../../common/zoned-time';
-import { SaveShiftAssignmentDto } from './hr-shift.dto';
+import { BulkAssignShiftDto, SaveShiftAssignmentDto } from './hr-shift.dto';
 import { shiftMinutes } from './hr-shift.service';
 
 /** A date with the time thrown away — a roster line is whole days. */
@@ -120,6 +120,17 @@ export class HrRosterService {
       orderBy: { code: 'asc' },
     });
 
+    // Named rather than numbered: with every branch in view at once, "which
+    // branch" is the column the reader is scanning down.
+    const branchNames = new Map(
+      (
+        await this.prisma.branch.findMany({
+          where: { companyId },
+          select: { id: true, name: true },
+        })
+      ).map((b) => [b.id, b.name]),
+    );
+
     return {
       on: isoDay(date),
       rows: employees.map((e) => {
@@ -129,6 +140,8 @@ export class HrRosterService {
           employeeCode: e.code,
           employeeName: e.name,
           designationName: e.designation.name,
+          branchId: e.branchId,
+          branchName: e.branchId ? (branchNames.get(e.branchId) ?? null) : null,
           shiftId: line?.shiftId ?? null,
           shiftCode: line?.shiftCode ?? null,
           shiftName: line?.shiftName ?? null,
@@ -213,6 +226,63 @@ export class HrRosterService {
       });
     });
     return this.findAll(employeeId);
+  }
+
+  /**
+   * Put a whole list of people on one shift, from one day.
+   *
+   * The reason this exists: rostering a bakery of ninety by opening ninety
+   * records is not a job anybody does, so they stop rostering. Each person
+   * still goes through `create` — the predecessor closes, the overlap is
+   * checked — because a bulk action that skipped the rules would just be a
+   * faster way to make a mess.
+   *
+   * It does NOT stop at the first refusal. One person with an overlapping line
+   * must not cost the other eighty-nine their assignment; what failed comes
+   * back named, so the caller can say exactly who still needs doing.
+   */
+  async assignMany(dto: BulkAssignShiftDto) {
+    const employeeIds = [...new Set(dto.employeeIds ?? [])];
+    if (!employeeIds.length) {
+      throw new BadRequestException('Nobody is selected.');
+    }
+    const names = new Map(
+      (
+        await this.prisma.employee.findMany({
+          where: { id: { in: employeeIds } },
+          select: { id: true, name: true },
+        })
+      ).map((e) => [e.id, e.name]),
+    );
+
+    const failed: {
+      employeeId: number;
+      employeeName: string;
+      reason: string;
+    }[] = [];
+    let assigned = 0;
+    for (const employeeId of employeeIds) {
+      try {
+        await this.create(employeeId, {
+          shiftId: dto.shiftId,
+          effectiveFrom: dto.effectiveFrom,
+          effectiveTo: dto.effectiveTo ?? null,
+          remarks: dto.remarks ?? null,
+        });
+        assigned++;
+      } catch (e) {
+        failed.push({
+          employeeId,
+          employeeName: names.get(employeeId) ?? `#${employeeId}`,
+          reason:
+            e instanceof BadRequestException || e instanceof NotFoundException
+              ? ((e.getResponse() as { message?: string })?.message ??
+                e.message)
+              : 'Could not be put on this shift.',
+        });
+      }
+    }
+    return { assigned, failed };
   }
 
   async remove(employeeId: number, assignmentId: number) {

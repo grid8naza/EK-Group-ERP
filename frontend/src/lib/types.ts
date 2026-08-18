@@ -3562,6 +3562,8 @@ export interface RosterRegisterRow {
   employeeCode: string;
   employeeName: string;
   designationName: string;
+  branchId: number | null;
+  branchName: string | null;
   shiftId: number | null;
   shiftCode: string | null;
   shiftName: string | null;
@@ -3577,4 +3579,11 @@ export interface RosterRegisterRow {
 export interface RosterRegister {
   on: string;
   rows: RosterRegisterRow[];
+}
+
+/** What came of putting a list of people on one shift. */
+export interface BulkAssignResult {
+  assigned: number;
+  /** The ones that could not be, named and with the reason. */
+  failed: { employeeId: number; employeeName: string; reason: string }[];
 }

@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  ArrayNotEmpty,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -121,4 +122,19 @@ export class SaveShiftAssignmentDto {
   @IsString()
   @MaxLength(500)
   remarks?: string | null;
+}
+
+/**
+ * One shift, one start date, a list of people.
+ *
+ * Rostering a bakery of ninety by opening ninety records is not a job anybody
+ * does, so this is the same assignment applied down a list. Each person still
+ * goes through the ordinary rules.
+ */
+export class BulkAssignShiftDto extends SaveShiftAssignmentDto {
+  @ApiProperty({ type: [Number] })
+  @IsArray()
+  @IsInt({ each: true })
+  @ArrayNotEmpty()
+  employeeIds: number[];
 }

@@ -141,6 +141,20 @@ export const HR_EXTRA_MENUS = [
         icon: 'calendar-check',
         order: 2,
       },
+      {
+        /**
+         * Rostering the whole branch from one list.
+         *
+         * The Roster TAB on an employee is the right place to read and correct
+         * one person's history; it is the wrong place to put ninety people on
+         * the morning shift. Same series underneath, same rules — this is the
+         * list view of it.
+         */
+        name: 'Roster',
+        route: '/hr/roster',
+        icon: 'clock',
+        order: 3,
+      },
     ],
   },
   {

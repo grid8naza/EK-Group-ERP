@@ -19,6 +19,7 @@ import { LockDto } from '../../common/lock.dto';
 import { HrShiftService } from './hr-shift.service';
 import { HrRosterService } from './hr-roster.service';
 import {
+  BulkAssignShiftDto,
   CreateHrShiftDto,
   SaveShiftAssignmentDto,
   UpdateHrShiftDto,
@@ -130,19 +131,40 @@ export class HrRosterController {
   }
 }
 
-/** Who is on what across a branch, as at a date. */
+/**
+ * Who is on what across the company, as at a date — and the screen that sets
+ * it for a list of people at once.
+ */
 @ApiTags('hr-reports')
 @ApiBearerAuth()
 @Controller('hr-rosters')
 export class HrRosterRegisterController {
   constructor(private readonly service: HrRosterService) {}
 
+  /**
+   * `branchId=all` reads every branch; a number reads that one; absent falls
+   * back to the branch in context. The roster screen filters by branch itself,
+   * so it needs to be able to ask for more than the one the header names.
+   */
   @Get()
   register(
     @CompanyId() companyId?: number,
     @BranchId() branchId?: number,
     @Query('on') on?: string,
+    @Query('branchId') branchFilter?: string,
   ) {
-    return this.service.register(companyId, branchId ?? null, on);
+    const scope =
+      branchFilter === undefined
+        ? (branchId ?? null)
+        : branchFilter === 'all'
+          ? null
+          : Number(branchFilter) || null;
+    return this.service.register(companyId, scope, on);
+  }
+
+  /** Put a whole list of people on one shift, from one day. */
+  @Post('assign')
+  assign(@Body() dto: BulkAssignShiftDto) {
+    return this.service.assignMany(dto);
   }
 }
