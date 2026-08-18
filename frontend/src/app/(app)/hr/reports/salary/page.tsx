@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Wallet } from 'lucide-react';
 import { useFetch } from '@/lib/hooks';
 import { formatDayMonthYear } from '@/lib/utils';
@@ -46,13 +46,17 @@ interface Register {
   rows: RegisterRow[];
 }
 
-const money = (n: number) =>
-  n === 0
-    ? '-'
-    : n.toLocaleString(undefined, {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
+const amount = (n: number) =>
+  n.toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+
+/**
+ * A figure on an employee's line. Nothing reads as a dash rather than 0.00,
+ * because an allowance somebody does not get is not an allowance of nothing.
+ */
+const money = (n: number) => (n === 0 ? '-' : amount(n));
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -99,16 +103,28 @@ export default function SalaryRegisterReportPage() {
    *
    * Only the ones somebody is actually paid: a register with a column for every
    * allowance ever defined would be mostly dashes.
+   *
+   * The head is the lookup value's ALIAS where it has one ("HRA"), and the full
+   * label only where it has not. A register is a grid of figures, and
+   * "Conveyance Allowance" sets a column three times the width of the numbers
+   * beneath it — which is what pushes the totals off the edge of a printed page.
+   * The alias is edited in HR → Lookups, so the width of this report is the
+   * business's to decide without anybody touching it here.
    */
   const componentCols = useMemo(() => {
-    const seen = new Map<string, { key: string; name: string; kind: string }>();
+    const seen = new Map<
+      string,
+      { key: string; head: string; name: string; kind: string }
+    >();
     for (const r of rows) {
       for (const c of r.components) {
         const key = `${c.kind}:${c.componentId}`;
         if (!seen.has(key)) {
+          const name = c.componentName ?? `#${c.componentId}`;
           seen.set(key, {
             key,
-            name: c.componentName ?? `#${c.componentId}`,
+            head: c.componentAlias?.trim() || name,
+            name,
             kind: c.kind,
           });
         }
@@ -116,111 +132,244 @@ export default function SalaryRegisterReportPage() {
     }
     return [...seen.values()].sort((a, b) =>
       a.kind === b.kind
-        ? a.name.localeCompare(b.name)
+        ? a.head.localeCompare(b.head)
         : a.kind === 'ALLOWANCE'
           ? -1
           : 1,
     );
   }, [rows]);
 
-  // Fixed columns, then a column per component, then the totals.
+  // Allowances and deductions kept apart, because each side of the payslip
+  // sits next to the total it adds up to.
+  const allowanceCols = useMemo(
+    () => componentCols.filter((c) => c.kind === 'ALLOWANCE'),
+    [componentCols],
+  );
+  const deductionCols = useMemo(
+    () => componentCols.filter((c) => c.kind !== 'ALLOWANCE'),
+    [componentCols],
+  );
+
+  /**
+   * The register reads left to right the way a payslip is worked out:
+   * Basic → what is added → Gross → what is taken off → Net. Each total
+   * follows the columns that make it, so a reader can check the arithmetic
+   * across the row without jumping over the other side of the payslip.
+   */
   const { columns, weights, groups } = useMemo(() => {
     const fixed = ['Emp. ID', 'Employee', 'Designation', 'Basic'];
-    const tail = ['Gross', 'Deductions', 'Net'];
-    const cols = [...fixed, ...componentCols.map((c) => c.name), ...tail];
+    const cols = [
+      ...fixed,
+      ...allowanceCols.map((c) => c.head),
+      'Gross',
+      ...deductionCols.map((c) => c.head),
+      'Deductions',
+      'Net',
+    ];
     // The two-tier header says which side of the payslip a column is on —
-    // without it a wide register is a row of numbers with no sign.
+    // without it a wide register is a row of numbers with no sign. The
+    // totals stay ungrouped: they belong to the row, not to either side.
     const grp: (string | undefined)[] = [
       ...fixed.map(() => undefined),
-      ...componentCols.map((c) =>
-        c.kind === 'ALLOWANCE' ? 'Allowances' : 'Deductions',
-      ),
-      ...tail.map(() => undefined),
+      ...allowanceCols.map(() => 'Allowances'),
+      undefined,
+      ...deductionCols.map(() => 'Deductions'),
+      undefined,
+      undefined,
     ];
     const w = [
-      9, 15, 13, 9,
-      ...componentCols.map(() => 10),
-      10, 10, 10,
+      9,
+      15,
+      13,
+      9,
+      ...allowanceCols.map(() => 10),
+      10,
+      ...deductionCols.map(() => 10),
+      10,
+      10,
     ];
     return { columns: cols, weights: w, groups: grp };
-  }, [componentCols]);
+  }, [allowanceCols, deductionCols]);
 
-  const blocks = useMemo<ReportBlock[]>(() => {
-    const keyOf = (r: RegisterRow) =>
+  /** How the register is being read — what the combo above is set to. */
+  const keyOf = useCallback(
+    (r: RegisterRow) =>
       groupBy === 'division'
         ? (r.divisionName ?? '— No division —')
         : groupBy === 'branch'
           ? (r.branchName ?? '— Whole company —')
-          : (r.designationName ?? '— No designation —');
+          : (r.designationName ?? '— No designation —'),
+    [groupBy],
+  );
 
-    const grouped = new Map<string, RegisterRow[]>();
+  /** The rows under each heading, headings in alphabetical order. */
+  const grouped = useMemo(() => {
+    const map = new Map<string, RegisterRow[]>();
     for (const r of rows) {
       const k = keyOf(r);
-      if (!grouped.has(k)) grouped.set(k, []);
-      grouped.get(k)!.push(r);
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(r);
     }
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [rows, keyOf]);
 
-    return [...grouped.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([heading, list]) => ({
+  /**
+   * One employee's line. Written beside the totals line below it, and in the
+   * same column order, because the two drifting apart is how a subtotal ends up
+   * under the wrong column.
+   */
+  const rowCells = useCallback(
+    (r: RegisterRow) => {
+      const byKey = new Map(
+        r.components.map((c) => [`${c.kind}:${c.componentId}`, c.amount]),
+      );
+      return [
+        r.employeeCode,
+        r.employeeName,
+        r.designationName,
+        // No package on this date reads as a dash the whole way across, not as
+        // zeroes — the difference matters.
+        r.packageId ? money(r.basicSalary) : '-',
+        ...allowanceCols.map((c) =>
+          byKey.has(c.key) ? money(byKey.get(c.key)!) : '-',
+        ),
+        r.packageId ? money(r.grossSalary) : '-',
+        ...deductionCols.map((c) =>
+          byKey.has(c.key) ? money(byKey.get(c.key)!) : '-',
+        ),
+        r.packageId ? money(r.totalDeductions) : '-',
+        r.packageId ? money(r.netSalary) : '-',
+      ];
+    },
+    [allowanceCols, deductionCols],
+  );
+
+  /**
+   * A totals line over a set of employees.
+   *
+   * Every money column adds up, including a column per allowance and per
+   * deduction — a total that skipped them would leave the reader adding the
+   * middle of the report by hand. Somebody with no package contributes nothing
+   * rather than breaking the sum; a total of zero prints as 0.00, not as the
+   * dash a missing figure uses, since "they are paid nothing" and "nobody has
+   * said what they are paid" are different answers.
+   *
+   * The label goes in the Employee column rather than the Emp. ID one: it is
+   * the widest column, and the eye is already reading down it.
+   */
+  const totalCells = useCallback(
+    (label: string, list: RegisterRow[]) => {
+      const sum = (of: (r: RegisterRow) => number) =>
+        list.reduce((t, r) => t + (r.packageId ? of(r) : 0), 0);
+      const component = (key: string) =>
+        list.reduce(
+          (t, r) =>
+            t +
+            r.components
+              .filter((c) => `${c.kind}:${c.componentId}` === key)
+              .reduce((n, c) => n + c.amount, 0),
+          0,
+        );
+      return [
+        '',
+        label,
+        '',
+        amount(sum((r) => r.basicSalary)),
+        ...allowanceCols.map((c) => amount(component(c.key))),
+        amount(sum((r) => r.grossSalary)),
+        ...deductionCols.map((c) => amount(component(c.key))),
+        amount(sum((r) => r.totalDeductions)),
+        amount(sum((r) => r.netSalary)),
+      ];
+    },
+    [allowanceCols, deductionCols],
+  );
+
+  const blocks = useMemo<ReportBlock[]>(() => {
+    const groups: ReportBlock[] = grouped.map(([heading, list]) => {
+      const body = [...list]
+        .sort((a, b) => a.employeeCode.localeCompare(b.employeeCode))
+        .map(rowCells);
+      // The subtotal sits INSIDE the table, at the foot of the rows it adds
+      // up — a heading is a caption, and the reader running down a column
+      // wants the answer at the bottom of that column.
+      body.push(totalCells(`Total — ${heading}`, list));
+      return {
         heading,
         count: list.length,
         tables: [
           {
-            rows: [...list]
-              .sort((a, b) => a.employeeCode.localeCompare(b.employeeCode))
-              .map((r) => {
-                const byKey = new Map(
-                  r.components.map((c) => [
-                    `${c.kind}:${c.componentId}`,
-                    c.amount,
-                  ]),
-                );
-                return [
-                  r.employeeCode,
-                  r.employeeName,
-                  r.designationName,
-                  // No package on this date reads as a dash the whole way
-                  // across, not as zeroes — the difference matters.
-                  r.packageId ? money(r.basicSalary) : '-',
-                  ...componentCols.map((c) =>
-                    byKey.has(c.key) ? money(byKey.get(c.key)!) : '-',
-                  ),
-                  r.packageId ? money(r.grossSalary) : '-',
-                  r.packageId ? money(r.totalDeductions) : '-',
-                  r.packageId ? money(r.netSalary) : '-',
-                ];
-              }),
+            rows: body,
+            shade: [...list.map(() => false), true],
+            noSerial: [...list.map(() => false), true],
           },
         ],
-      }));
-  }, [rows, groupBy, componentCols]);
+      };
+    });
 
-  const totals = useMemo(() => {
-    const paid = rows.filter((r) => r.packageId);
-    return {
+    // The grand total stands on its own, under everything, so it is never
+    // mistaken for the last group's subtotal — and without a column header,
+    // which over a single summed line would only announce a serial number, an
+    // employee id and a designation that the line does not have.
+    if (rows.length) {
+      groups.push({
+        tables: [
+          {
+            rows: [totalCells('Grand Total', rows)],
+            shade: [true],
+            noSerial: [true],
+            noHeader: true,
+          },
+        ],
+      });
+    }
+    return groups;
+  }, [rows, grouped, rowCells, totalCells]);
+
+  /**
+   * The headline counts, for the filter bar and the report's own subtitle.
+   *
+   * The money is not here any more: it is on the grand total line, worked out
+   * by the same function that works out every other total on the page.
+   */
+  const totals = useMemo(
+    () => ({
       people: rows.length,
-      unpaid: rows.length - paid.length,
-      gross: paid.reduce((t, r) => t + r.grossSalary, 0),
-      deductions: paid.reduce((t, r) => t + r.totalDeductions, 0),
-      net: paid.reduce((t, r) => t + r.netSalary, 0),
-    };
-  }, [rows]);
+      unpaid: rows.filter((r) => !r.packageId).length,
+    }),
+    [rows],
+  );
 
+  /**
+   * The distribution, and only the distribution: how many people are in each
+   * group the report is currently cut by — each designation, or each division,
+   * or each branch, according to the combo above.
+   *
+   * The money is NOT repeated here. Every figure the summary used to carry is
+   * now on the grand total line, in the column it belongs to and to the same
+   * two decimals; saying it twice, once rounded to whole rupees, was two
+   * answers to one question.
+   */
   const summary = useMemo(
-    () => [
-      { label: 'Employees', value: totals.people },
-      { label: 'Without a Package', value: totals.unpaid },
-      // Raw numbers: the summary strip formats them itself, and a string
-      // here would be right-aligned as text and excluded from any rounding.
-      { label: 'Total Gross', value: Math.round(totals.gross * 100) / 100 },
-      {
-        label: 'Total Deductions',
-        value: Math.round(totals.deductions * 100) / 100,
-      },
-      { label: 'Total Net Payable', value: Math.round(totals.net * 100) / 100 },
-    ],
-    [totals],
+    () =>
+      grouped.map(([heading, list]) => ({
+        label: heading,
+        value: list.length,
+      })),
+    [grouped],
+  );
+
+  /**
+   * Everything from Basic rightwards is money, and right-aligned everywhere.
+   *
+   * Stated rather than left to be inferred: the exports guess only from cells
+   * that are raw numbers, and these are pre-formatted strings ("15,500.00")
+   * so that every figure carries its two decimals. Without this the screen
+   * right-aligned them and the printed page did not.
+   */
+  const numericCols = useMemo(
+    () => columns.map((_, i) => i).filter((i) => i >= 3),
+    [columns],
   );
 
   const spec: ReportSpec = {
@@ -234,17 +383,12 @@ export default function SalaryRegisterReportPage() {
     fileBase: 'salary-register',
     serial: true,
     summary,
+    numericCols,
   };
 
   const canPrint = can(ROUTE, 'print');
   const popupBlocked = () =>
     toast.error('Pop-up blocked — allow pop-ups to print.');
-
-  // Everything from Basic rightwards is money.
-  const numericCols = useMemo(
-    () => columns.map((_, i) => i).filter((i) => i >= 3),
-    [columns],
-  );
 
   return (
     <div className="mx-auto flex h-full max-w-7xl flex-col">

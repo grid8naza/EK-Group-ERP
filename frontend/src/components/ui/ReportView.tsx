@@ -8,6 +8,7 @@ import {
   reportColumns,
   selectColumns,
   headerPlan,
+  serialCells,
   type Cell,
   type ReportBlock,
   type ReportColumn,
@@ -283,103 +284,115 @@ export function ReportView({
     t: ReportBlock['tables'][number],
     key: string,
     hasHeading: boolean,
-  ) => (
-    <div key={key}>
-      <table className="w-full table-fixed text-left text-sm">
-        <colgroup>
-          {eff.columns.map((col, i) => (
-            <col key={col} style={{ width: colPercent(eff.weights, i) }} />
-          ))}
-        </colgroup>
-        {/* Column header sits just below the sticky block heading (h-10) when
-            the block has one, otherwise pins to the top. */}
-        <thead className={cn('sticky z-10', hasHeading ? 'top-11' : 'top-0')}>
-          {plan ? (
-            <>
+  ) => {
+    // Blank on rows that asked not to be numbered (a total is not the next
+    // record). Computed the same way print, PDF and Excel compute it.
+    const sl = serialCells(t);
+    return (
+      <div key={key}>
+        <table className="w-full table-fixed text-left text-sm">
+          <colgroup>
+            {eff.columns.map((col, i) => (
+              <col key={col} style={{ width: colPercent(eff.weights, i) }} />
+            ))}
+          </colgroup>
+          {/* Column header sits just below the sticky block heading (h-10) when
+            the block has one, otherwise pins to the top. A table that says it
+            carries no header (a lone grand-total line) gets none. */}
+          <thead
+            className={cn(
+              'sticky z-10',
+              hasHeading ? 'top-11' : 'top-0',
+              t.noHeader && 'hidden',
+            )}
+          >
+            {plan ? (
+              <>
+                <tr className={HEAD_ROW_CLASS}>
+                  {plan.top.map((c, i) => (
+                    <th
+                      key={i}
+                      colSpan={c.colspan}
+                      rowSpan={c.rowspan}
+                      className="px-3 py-2 text-center"
+                    >
+                      {c.label}
+                    </th>
+                  ))}
+                </tr>
+                <tr className={HEAD_ROW_CLASS}>
+                  {plan.bottom.map((s, i) => (
+                    <th key={i} className={cn('px-3 py-2.5', headAlign(i))}>
+                      {s}
+                    </th>
+                  ))}
+                </tr>
+              </>
+            ) : (
               <tr className={HEAD_ROW_CLASS}>
-                {plan.top.map((c, i) => (
-                  <th
-                    key={i}
-                    colSpan={c.colspan}
-                    rowSpan={c.rowspan}
-                    className="px-3 py-2 text-center"
-                  >
-                    {c.label}
+                {eff.columns.map((col, i) => (
+                  <th key={col} className={cn('px-3 py-2.5', headAlign(i))}>
+                    {col}
                   </th>
                 ))}
               </tr>
-              <tr className={HEAD_ROW_CLASS}>
-                {plan.bottom.map((s, i) => (
-                  <th key={i} className={cn('px-3 py-2.5', headAlign(i))}>
-                    {s}
-                  </th>
-                ))}
+            )}
+          </thead>
+          <tbody>
+            {t.rows.map((row, ri) => (
+              <tr
+                key={ri}
+                className={cn(
+                  'border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-100/70 dark:border-slate-800/60 dark:hover:bg-slate-800/50',
+                  // Zebra striping — even rows carry a faint neutral tint.
+                  ri % 2 === 1 && 'bg-slate-50/70 dark:bg-slate-900/40',
+                  // A level-1 row (e.g. a group heading among its members). Last,
+                  // so it wins over the zebra tint — and matching what print and
+                  // PDF already did with the same flag, which on screen did
+                  // nothing at all until now.
+                  t.shade?.[ri] &&
+                    'bg-emerald-50 font-semibold dark:bg-emerald-950/30',
+                )}
+              >
+                {(serial ? [sl[ri], ...row] : row).map((v, ci) =>
+                  serial && ci === 0 ? (
+                    <td
+                      key={ci}
+                      className="px-3 py-3 tabular-nums text-slate-400 dark:text-slate-500"
+                    >
+                      {sl[ri]}
+                    </td>
+                  ) : ci === statusColX ? (
+                    <td key={ci} className="px-3 py-3 text-right">
+                      <StatusPill value={String(v)} />
+                    </td>
+                  ) : (
+                    <td
+                      key={ci}
+                      className={cn(
+                        'break-words px-3 py-3',
+                        numericColX.has(ci) && 'text-right tabular-nums',
+                        !numericColX.has(ci) &&
+                          centerColX.has(ci) &&
+                          'text-center',
+                        ci === boldColX
+                          ? 'font-semibold text-slate-900 dark:text-slate-100'
+                          : ci === darkColX
+                            ? 'text-slate-900 dark:text-slate-100'
+                            : 'text-slate-600 dark:text-slate-300',
+                      )}
+                    >
+                      {fmt(v)}
+                    </td>
+                  ),
+                )}
               </tr>
-            </>
-          ) : (
-            <tr className={HEAD_ROW_CLASS}>
-              {eff.columns.map((col, i) => (
-                <th key={col} className={cn('px-3 py-2.5', headAlign(i))}>
-                  {col}
-                </th>
-              ))}
-            </tr>
-          )}
-        </thead>
-        <tbody>
-          {t.rows.map((row, ri) => (
-            <tr
-              key={ri}
-              className={cn(
-                'border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-100/70 dark:border-slate-800/60 dark:hover:bg-slate-800/50',
-                // Zebra striping — even rows carry a faint neutral tint.
-                ri % 2 === 1 && 'bg-slate-50/70 dark:bg-slate-900/40',
-                // A level-1 row (e.g. a group heading among its members). Last,
-                // so it wins over the zebra tint — and matching what print and
-                // PDF already did with the same flag, which on screen did
-                // nothing at all until now.
-                t.shade?.[ri] &&
-                  'bg-emerald-50 font-semibold dark:bg-emerald-950/30',
-              )}
-            >
-              {(serial ? [ri + 1, ...row] : row).map((v, ci) =>
-                serial && ci === 0 ? (
-                  <td
-                    key={ci}
-                    className="px-3 py-3 tabular-nums text-slate-400 dark:text-slate-500"
-                  >
-                    {ri + 1}
-                  </td>
-                ) : ci === statusColX ? (
-                  <td key={ci} className="px-3 py-3 text-right">
-                    <StatusPill value={String(v)} />
-                  </td>
-                ) : (
-                  <td
-                    key={ci}
-                    className={cn(
-                      'break-words px-3 py-3',
-                      numericColX.has(ci) && 'text-right tabular-nums',
-                      !numericColX.has(ci) &&
-                        centerColX.has(ci) &&
-                        'text-center',
-                      ci === boldColX
-                        ? 'font-semibold text-slate-900 dark:text-slate-100'
-                        : ci === darkColX
-                          ? 'text-slate-900 dark:text-slate-100'
-                          : 'text-slate-600 dark:text-slate-300',
-                    )}
-                  >
-                    {fmt(v)}
-                  </td>
-                ),
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  };
 
   return (
     <div className="pt-4">
@@ -526,7 +539,7 @@ export function ReportView({
 
       {summary && summary.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm dark:border-slate-800 dark:bg-slate-900/50">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          <span className="text-xs font-semibold tracking-wide text-slate-500 dark:text-slate-400">
             Summary
           </span>
           {summary.map((s) => (

@@ -6,6 +6,7 @@
 import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { formatDateTime } from './utils';
 import type { Company } from './types';
 
 export type Cell = string | number;
@@ -16,6 +17,24 @@ export interface ReportTable {
   /** Optional per-row flag; true renders that row with a light highlight
    *  (e.g. primary / level-1 rows). Parallel to `rows`. */
   shade?: boolean[];
+  /**
+   * Per-row flag; true leaves that row's Sl. No cell blank. Parallel to `rows`,
+   * and only meaningful with `serial`.
+   *
+   * For total rows: a subtotal is not the next record, and numbering it makes a
+   * table of two employees look like a table of three. The count carries on
+   * from the numbered rows either way, so flagged rows may sit anywhere.
+   */
+  noSerial?: boolean[];
+  /**
+   * Draw this table without its column header.
+   *
+   * For a table that is one summary line rather than a list of records: a
+   * grand total repeating "Sl. No / Emp. ID / Employee" over a row that has
+   * none of them announces columns it does not fill. The widths still come
+   * from the same spec, so the figures stay under the columns they belong to.
+   */
+  noHeader?: boolean;
 }
 export interface ReportBlock {
   /**
@@ -207,6 +226,18 @@ export const qty = (v: number, decimals: number) =>
 const SERIAL_HEAD = 'Sl. No';
 const SERIAL_WEIGHT = 6;
 
+/**
+ * One table's Sl. No column, blank on the rows that asked not to be numbered.
+ *
+ * Shared by all four renderers so a row is numbered the same on screen, in
+ * print, in the PDF and in the spreadsheet — four copies of "i + 1" is how they
+ * drift apart.
+ */
+export function serialCells(t: ReportTable): (number | string)[] {
+  let n = 0;
+  return t.rows.map((_, i) => (t.noSerial?.[i] ? '' : ++n));
+}
+
 /** Columns/weights with the serial column prepended when `serial` is set. */
 export function reportColumns(
   spec: Pick<ReportSpec, 'columns' | 'weights' | 'serial'>,
@@ -328,10 +359,11 @@ export function printReport(
     : `<thead><tr>${columns
         .map((c) => `<th>${esc(c)}</th>`)
         .join('')}</tr></thead>`;
-  const tableFor = (t: ReportTable) =>
-    `<table>${colgroup}${head}<tbody>${t.rows
+  const tableFor = (t: ReportTable) => {
+    const sl = serialCells(t);
+    return `<table>${colgroup}${t.noHeader ? '' : head}<tbody>${t.rows
       .map((r, i) => {
-        const cells = spec.serial ? [i + 1, ...r] : r;
+        const cells = spec.serial ? [sl[i], ...r] : r;
         return `<tr${t.shade?.[i] ? ' class="lvl1"' : ''}>${cells
           .map(
             (v, ci) =>
@@ -346,6 +378,7 @@ export function printReport(
           .join('')}</tr>`;
       })
       .join('')}</tbody></table>`;
+  };
   const summary =
     spec.summary && spec.summary.length
       ? `<div class="summary"><span class="summary-title">Summary</span>${spec.summary
@@ -401,7 +434,7 @@ export function printReport(
       td.ctr{text-align:center}
       ${spec.serial ? 'td:first-child{text-align:center}' : ''}
       .summary{margin-top:14px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc;display:flex;flex-wrap:wrap;gap:6px 20px;font-size:12px;page-break-inside:avoid}
-      .summary-title{font-weight:bold;text-transform:uppercase;letter-spacing:.04em;color:#64748b;margin-right:6px}
+      .summary-title{font-weight:bold;letter-spacing:.04em;color:#64748b;margin-right:6px}
       .summary-item b{color:#0f172a}
       .toolbar{display:flex;gap:8px;margin-bottom:14px}
       .toolbar button{padding:6px 16px;font-size:13px;font-family:inherit;border:1px solid #cbd5e1;border-radius:6px;background:#f1f5f9;color:#334155;cursor:pointer}
@@ -416,7 +449,7 @@ export function printReport(
     </div>
     <h1>${esc(spec.companyName)}</h1>
     <p class="sub">${esc(spec.subtitle)}</p>
-    <p class="date">${new Date().toLocaleString()}</p>
+    <p class="date">${formatDateTime(new Date())}</p>
     ${body || '<p>No records match the current filters.</p>'}
     ${summary}
     ${autoPrint ? autoPrintScript : ''}
@@ -446,7 +479,7 @@ export function pdfReport(spec: ReportSpec): void {
   doc.text(spec.subtitle, cx, 21, { align: 'center' });
   doc.setFontSize(9);
   doc.setTextColor(120);
-  doc.text(new Date().toLocaleString(), cx, 27, { align: 'center' });
+  doc.text(formatDateTime(new Date()), cx, 27, { align: 'center' });
   doc.setTextColor(20);
 
   let y = 34;
@@ -525,8 +558,13 @@ export function pdfReport(spec: ReportSpec): void {
       }
       autoTable(doc, {
         startY: y,
-        head: pdfHead as unknown as string[][],
-        body: t.rows.map((r, i) => (spec.serial ? [i + 1, ...r] : r).map(fmt)),
+        head: (t.noHeader ? [] : pdfHead) as unknown as string[][],
+        body: (() => {
+          const sl = serialCells(t);
+          return t.rows.map((r, i) =>
+            (spec.serial ? [sl[i], ...r] : r).map(fmt),
+          );
+        })(),
         // Match the HTML report: light beige header, dark slate text, thin tan
         // grid lines, and vertically-centered spanning header cells.
         styles: {
@@ -587,7 +625,7 @@ export function pdfReport(spec: ReportSpec): void {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
     doc.setTextColor(90, 80, 70);
-    doc.text('SUMMARY', 19, y + 1.5);
+    doc.text('Summary', 19, y + 1.5);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(40);
     const line = spec.summary
@@ -629,16 +667,18 @@ export function excelReport(
   ];
   const rows: Cell[][] = [];
   for (const b of spec.blocks)
-    for (const t of b.tables)
+    for (const t of b.tables) {
+      const sl = serialCells(t);
       t.rows.forEach((r, i) =>
         rows.push([
-          ...(spec.serial ? [i + 1] : []),
+          ...(spec.serial ? [sl[i]] : []),
           ...(sectionLabel ? [b.section ?? ''] : []),
           ...(headingLabel ? [b.heading ?? ''] : []),
           ...(subheadingLabel ? [t.subheading ?? ''] : []),
           ...r,
         ]),
       );
+    }
   const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Report');

@@ -1578,6 +1578,12 @@ export interface SalaryComponent {
   /** A SALARY_ALLOWANCE / SALARY_DEDUCTION LookupValue id. */
   componentId: number;
   componentName?: string;
+  /**
+   * The lookup value's alias — a short form for a column head, where the full
+   * label ("House Rent Allowance") would set a column far wider than the
+   * figures under it. Null / absent where nobody has given one.
+   */
+  componentAlias?: string | null;
   amount: number;
 }
 

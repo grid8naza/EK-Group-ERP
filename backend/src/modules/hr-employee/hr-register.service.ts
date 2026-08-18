@@ -161,16 +161,19 @@ export class HrRegisterService {
         ),
       ),
     ];
+    // The alias travels with the label. A register turns each component into a
+    // COLUMN, and "House Rent Allowance" sets a column width that the figures
+    // under it never need — which is what the alias on a lookup value is for.
     const labels = componentIds.length
       ? new Map(
           (
             await this.prisma.lookupValue.findMany({
               where: { id: { in: componentIds } },
-              select: { id: true, label: true },
+              select: { id: true, label: true, alias: true },
             })
-          ).map((v) => [v.id, v.label]),
+          ).map((v) => [v.id, v]),
         )
-      : new Map<number, string>();
+      : new Map<number, { id: number; label: string; alias: string | null }>();
 
     return {
       on: isoDay(date),
@@ -179,7 +182,9 @@ export class HrRegisterService {
         const components = (pkg?.components ?? []).map((c) => ({
           kind: c.kind,
           componentId: c.componentId,
-          componentName: labels.get(c.componentId) ?? `#${c.componentId}`,
+          componentName: labels.get(c.componentId)?.label ?? `#${c.componentId}`,
+          /** The short form for a column head; null where none was given. */
+          componentAlias: labels.get(c.componentId)?.alias ?? null,
           amount: Number(c.amount),
         }));
         const basic = pkg ? Number(pkg.basicSalary) : 0;
