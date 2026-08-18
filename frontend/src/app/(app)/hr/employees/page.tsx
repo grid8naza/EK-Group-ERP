@@ -100,6 +100,22 @@ const MARITAL_STATUSES = [
   { value: 'WIDOWED', label: 'Widowed' },
 ];
 
+/**
+ * Minutes after midnight ↔ the "HH:mm" a time field speaks.
+ *
+ * Blank means "whatever the branch keeps", which is the answer for almost
+ * everybody — so an empty field is null on the wire rather than midnight.
+ */
+const minutesToTime = (m?: number | null) =>
+  m === null || m === undefined
+    ? ''
+    : `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+const timeToMinutes = (t: string) => {
+  if (!t) return null;
+  const [h, m] = t.split(':').map(Number);
+  return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
+};
+
 const empty = {
   name: '',
   dateOfBirth: '',
@@ -141,6 +157,9 @@ const empty = {
   dateOfConfirmation: '',
   reportsToId: '',
   showInOrgChart: true,
+  // Their own hours as a time field reads them; blank = the branch's.
+  defaultTimeIn: '',
+  defaultTimeOut: '',
   isActive: true,
 };
 
@@ -529,6 +548,8 @@ export default function EmployeesPage() {
     dateOfConfirmation: e.dateOfConfirmation ?? '',
     reportsToId: e.reportsToId != null ? String(e.reportsToId) : '',
     showInOrgChart: e.showInOrgChart ?? true,
+    defaultTimeIn: minutesToTime(e.defaultTimeIn),
+    defaultTimeOut: minutesToTime(e.defaultTimeOut),
     isActive: e.isActive,
   });
 
@@ -665,6 +686,8 @@ export default function EmployeesPage() {
       dateOfConfirmation: form.dateOfConfirmation || null,
       reportsToId: idOrNull(form.reportsToId),
       showInOrgChart: form.showInOrgChart,
+      defaultTimeIn: timeToMinutes(form.defaultTimeIn),
+      defaultTimeOut: timeToMinutes(form.defaultTimeOut),
       isActive: form.isActive,
     };
 
@@ -1576,6 +1599,39 @@ export default function EmployeesPage() {
                   setForm({ ...form, dateOfConfirmation: iso })
                 }
               />
+
+              {/* The hours THIS person works, where they are not the branch's.
+                  Blank for almost everybody: attendance sheets fill themselves
+                  in from the branch's working day, and this is the override for
+                  the baker who starts at four every morning. Not a roster — a
+                  genuine rota, where the same person works mornings one week
+                  and nights the next, is a different thing entirely. */}
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-300">
+                  Time In (their own hours)
+                </span>
+                <input
+                  type="time"
+                  className="input-base"
+                  value={form.defaultTimeIn}
+                  onChange={(e) =>
+                    setForm({ ...form, defaultTimeIn: e.target.value })
+                  }
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-300">
+                  Time Out (their own hours)
+                </span>
+                <input
+                  type="time"
+                  className="input-base"
+                  value={form.defaultTimeOut}
+                  onChange={(e) =>
+                    setForm({ ...form, defaultTimeOut: e.target.value })
+                  }
+                />
+              </label>
 
               {/* Whether this person is drawn on the organisation chart. Yes
                   for almost everybody — the chart is of the whole staff — with

@@ -182,7 +182,8 @@ export class HrRegisterService {
         const components = (pkg?.components ?? []).map((c) => ({
           kind: c.kind,
           componentId: c.componentId,
-          componentName: labels.get(c.componentId)?.label ?? `#${c.componentId}`,
+          componentName:
+            labels.get(c.componentId)?.label ?? `#${c.componentId}`,
           /** The short form for a column head; null where none was given. */
           componentAlias: labels.get(c.componentId)?.alias ?? null,
           amount: Number(c.amount),

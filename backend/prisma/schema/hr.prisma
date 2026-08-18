@@ -275,6 +275,16 @@ model Employee {
   /// the chart is of the whole staff — with an off switch for the records that
   /// would clutter it rather than explain it.
   showInOrgChart     Boolean   @default(true)
+  /// The hours THIS person works, where they are not the branch's — minutes
+  /// after local midnight, as in AttendanceSetting. Null = whatever the branch
+  /// keeps, which is the usual answer.
+  ///
+  /// Here rather than in a roster because the exception is the person, not the
+  /// day: the baker who starts at four starts at four every morning. A genuine
+  /// rota, where the same person works mornings one week and nights the next,
+  /// is a shift master and is not this.
+  defaultTimeIn      Int?
+  defaultTimeOut     Int?
 
   isActive  Boolean  @default(true)
   isLocked  Boolean  @default(false)
@@ -286,6 +296,7 @@ model Employee {
   reports        Employee[]              @relation("EmployeeReportsTo")
   salaryPackages EmployeeSalaryPackage[]
   postings       EmployeePosting[]
+  attendance     AttendanceEntry[]
 
   @@unique([companyId, code])
   @@index([companyId, branchId])
@@ -425,4 +436,179 @@ model EmployeePosting {
   @@index([employeeId, effectiveFrom])
   @@index([designationId])
   @@map("employee_postings")
+}
+
+// ---------------------------------------------------------------------------
+// Attendance (SRS §8.9, FR-HRP-02) — what everybody did, day by day.
+//
+// Marked by the branch incharge rather than by the staff: most of them have no
+// login, and the ones who do are not the ones who answer for the shift. The
+// sheet for a day is a DOCUMENT — marked, then verified, then approved through
+// the ordinary workflow engine — because attendance is what payroll pays on,
+// and one person's unchecked keystroke should not be able to move somebody's
+// wage.
+//
+// FR-HRP-03 keeps the door open for punching machines and biometric devices.
+// Nothing here assumes a person typed it: an entry records a time in, a time
+// out and a type, which is exactly what a device reports. The day a device is
+// connected it writes these same rows and the incharge reviews them instead of
+// entering them.
+// ---------------------------------------------------------------------------
+
+/// The working day a branch keeps, and what a fresh sheet is filled in with.
+///
+/// One row per company, plus one per branch that differs — the branch row wins
+/// where it exists, and where it does not the company's own row is the answer.
+/// Two levels rather than a setting per employee: a bakery has a shift, not two
+/// hundred of them. The ones who genuinely differ carry an override on their own
+/// record (Employee.defaultTimeIn / defaultTimeOut).
+model AttendanceSetting {
+  id        Int  @id @default(autoincrement())
+  companyId Int
+  /// NULL = the company's own default, used by every branch without one.
+  branchId  Int?
+
+  /// Minutes after local midnight (09:00 → 540), the same units and for the
+  /// same reason as a checklist's start time: this is a time of DAY, and the
+  /// server runs in UTC.
+  defaultTimeIn  Int @default(540)
+  defaultTimeOut Int @default(1080)
+  /// What a fresh line says before anybody touches it — an ATTENDANCE_TYPE
+  /// LookupValue, normally Present. A plain Int: LookupValue is Cpanel's.
+  defaultTypeId  Int?
+
+  /// The days of the week this branch does not work, 0 = Sunday … 6 = Saturday.
+  /// Those days come up pre-filled as the weekly off rather than as absence —
+  /// the difference between "not due at work" and "did not turn up".
+  weeklyOffDays Int[] @default([])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// One row per branch, and one for the company itself. Postgres counts NULLs
+  /// as distinct, so the company-level row is guarded in the service as well.
+  @@unique([companyId, branchId])
+  @@map("attendance_settings")
+}
+
+/// A dated day off — the public and company holidays, kept per year.
+///
+/// Beside the weekly off rather than folded into it: one is a rule about the
+/// week, the other a list of dates that changes every year and is set months
+/// ahead. A sheet for a holiday comes up pre-filled as one.
+model AttendanceHoliday {
+  id        Int    @id @default(autoincrement())
+  companyId Int
+  /// NULL = the whole company. A branch may keep a local holiday of its own.
+  branchId  Int?
+  date      DateTime
+  name      String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, branchId, date])
+  @@index([companyId, date])
+  @@map("attendance_holidays")
+}
+
+/// Where a day's sheet has got to.
+///
+/// DRAFT is being marked; SUBMITTED is anywhere inside the workflow, whatever
+/// the configured step is called ("Verified" and "Approved" are labels the
+/// business sets in Cpanel → Workflows, not states in code); APPROVED is
+/// signed off and closed to further marking.
+enum AttendanceSheetStatus {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+/// One branch's attendance for one day — the thing that is marked, verified
+/// and approved.
+///
+/// The document is the DAY, not the month: a shift is answered for while the
+/// people who worked it are still on the premises, and a month-old dispute is
+/// nobody's memory. The month is assembled by the register report, which reads
+/// the days back.
+model AttendanceSheet {
+  id        Int  @id @default(autoincrement())
+  companyId Int
+  /// NULL where the company keeps no branches. A branch marks its own people.
+  branchId  Int?
+  /// The day itself, held as a date-only marker (midnight UTC).
+  date      DateTime
+
+  status AttendanceSheetStatus @default(DRAFT)
+
+  /// The engine's instance, and the label of the step it has reached — the
+  /// same pair every other document in the workflow carries.
+  workflowInstanceId Int?
+  workflowStatus     String?
+
+  /// Who marked it and when. The verifier and approver are not repeated here:
+  /// the workflow's own trail already says who did what, and a second copy is a
+  /// second thing to keep in step.
+  markedByUserId Int?
+  markedAt       DateTime?
+
+  /// About the day as a whole — a power cut, a strike, a festival rush.
+  remarks String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entries AttendanceEntry[]
+
+  /// One sheet per branch per day. The database says so as well as the service,
+  /// because two sheets for one day is two answers for payroll.
+  @@unique([companyId, branchId, date])
+  @@index([companyId, date])
+  @@map("attendance_sheets")
+}
+
+/// One person's line on one day's sheet.
+model AttendanceEntry {
+  id         Int @id @default(autoincrement())
+  sheetId    Int
+  employeeId Int
+
+  /// An ATTENDANCE_TYPE LookupValue — Present, Absent, Half Day, the leaves,
+  /// the weekly off. A list rather than an enum because which kinds of day a
+  /// business recognises is the business's to keep, and because the register
+  /// pivots whatever they have defined into a column each.
+  typeId Int
+
+  /// Minutes after local midnight, as in AttendanceSetting. Null on the days
+  /// where the question does not arise — an absence has no time in.
+  timeIn  Int?
+  timeOut Int?
+  /// What in and out come to, worked out on save so a report never has to
+  /// re-derive it and two readers can never disagree. A time out BEFORE the
+  /// time in is read as a shift that crossed midnight, which is an ordinary
+  /// night in a bakery.
+  workedMinutes Int?
+
+  /// True where anything on this line differs from what the day was filled in
+  /// with — a different time, a different type. The whole point of defaults is
+  /// that only the exceptions are touched, so the exceptions are worth
+  /// knowing: this is what the sheet highlights and what a verifier reads
+  /// first. Recorded as at marking, so a later change to the settings does not
+  /// silently rewrite the past.
+  isException Boolean @default(false)
+
+  /// Why it differs — "left early, dentist", "covered the night shift".
+  remarks String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sheet    AttendanceSheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  employee Employee        @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@unique([sheetId, employeeId])
+  @@index([employeeId])
+  @@map("attendance_entries")
 }

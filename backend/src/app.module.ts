@@ -40,6 +40,7 @@ import { HrCategoryModule } from './modules/hr-category/hr-category.module';
 import { HrGroupModule } from './modules/hr-group/hr-group.module';
 import { HrDesignationModule } from './modules/hr-designation/hr-designation.module';
 import { HrEmployeeModule } from './modules/hr-employee/hr-employee.module';
+import { HrAttendanceModule } from './modules/hr-attendance/hr-attendance.module';
 import { WorkflowModule } from './modules/workflow/workflow.module';
 import { ChatModule } from './modules/chat/chat.module';
 import { MailModule } from './modules/mail/mail.module';
@@ -100,6 +101,7 @@ import { MasterDataModule } from './master-data/master-data.module';
     HrGroupModule,
     HrDesignationModule,
     HrEmployeeModule,
+    HrAttendanceModule,
     WorkflowModule,
     ChatModule,
     MailModule,

@@ -47,6 +47,20 @@ export const HR_SUBS = [
     icon: 'id-card',
     order: 4,
   },
+  {
+    // The working day a branch keeps — what a fresh attendance sheet comes up
+    // filled in with. Setup rather than Records: it is a rule, not a person.
+    name: 'Attendance Settings',
+    route: '/hr/attendance-settings',
+    icon: 'clock',
+    order: 5,
+  },
+  {
+    name: 'Holiday Calendar',
+    route: '/hr/holidays',
+    icon: 'calendar-days',
+    order: 6,
+  },
 ];
 
 /**
@@ -98,6 +112,18 @@ export const HR_EXTRA_MENUS = [
           },
         ],
       },
+      {
+        /**
+         * The day's sheet for a branch. A form rather than a report: it is
+         * marked, and then it goes through a workflow — who may mark, who
+         * verifies and who approves is configured in Cpanel → Workflows
+         * against this screen, not written into the code.
+         */
+        name: 'Attendance',
+        route: '/hr/attendance',
+        icon: 'calendar-check',
+        order: 2,
+      },
     ],
   },
   {
@@ -137,6 +163,24 @@ export const HR_EXTRA_MENUS = [
         order: 4,
         objectType: ObjectType.REPORT,
       },
+      {
+        // The month on one page, a column per day — the sheet this module was
+        // drawn from, assembled back out of the days that were marked.
+        name: 'Attendance Register',
+        route: '/hr/reports/attendance',
+        icon: 'calendar-check',
+        order: 5,
+        objectType: ObjectType.REPORT,
+      },
+      {
+        // One person, one month, in and out and hours. What you print when
+        // somebody queries their wage.
+        name: 'Time Card',
+        route: '/hr/reports/time-card',
+        icon: 'clock',
+        order: 6,
+        objectType: ObjectType.REPORT,
+      },
     ],
   },
 ];
@@ -168,7 +212,7 @@ export const HR_EXTRA_MENUS = [
 export const HR_LOOKUPS: {
   code: string;
   name: string;
-  values: (string | { code: string; label: string })[];
+  values: (string | { code: string; label: string; alias?: string })[];
 }[] = [
   {
     code: 'EDUCATION',
@@ -280,6 +324,33 @@ export const HR_LOOKUPS: {
     ],
   },
   {
+    /**
+     * What a day counted as — the kinds of day the business recognises.
+     *
+     * A list rather than an enum for the reason every list here is one: which
+     * leaves exist is the business's to keep, and a new one ("Compensatory
+     * Off") must not need a migration. The register pivots whatever is defined
+     * into a column each, exactly as the salary register does with allowances.
+     *
+     * Every value carries an ALIAS, because the monthly register is a grid of
+     * one cell per person per day and only a letter fits: P, A, HD, SL. They
+     * are the same letters the attendance sheet this was drawn from has used
+     * for years, so the printed page reads the way the office already reads it.
+     */
+    code: 'ATTENDANCE_TYPE',
+    name: 'Attendance Type',
+    values: [
+      { code: 'PRESENT', label: 'Present', alias: 'P' },
+      { code: 'HALF_DAY', label: 'Half Day', alias: 'HD' },
+      { code: 'ABSENT', label: 'Absent', alias: 'A' },
+      { code: 'SICK_LEAVE', label: 'Sick Leave', alias: 'SL' },
+      { code: 'CASUAL_LEAVE', label: 'Casual Leave', alias: 'CL' },
+      { code: 'VACATION', label: 'Vacation', alias: 'V' },
+      { code: 'WEEKLY_OFF', label: 'Weekly Off', alias: 'WO' },
+      { code: 'HOLIDAY', label: 'Holiday', alias: 'H' },
+    ],
+  },
+  {
     code: 'BLOOD_GROUP',
     name: 'Blood Group',
     // Seeded in the order a form asks for it — by type, positive before
@@ -348,6 +419,11 @@ export async function seedHrDefaults(
                   .replace(/^_|_$/g, '')
               : v.code,
           label,
+          // The short form a grid is headed or filled with — "P" for Present,
+          // "HRA" for House Rent Allowance. Only where one was given: an alias
+          // is a convenience, and inventing one from the label would produce
+          // exactly the noise it exists to avoid.
+          alias: typeof v === 'string' ? null : (v.alias ?? null),
           sortOrder: i + 1,
         };
       }),

@@ -378,6 +378,12 @@ export class HrEmployeeService {
       ...(dto.showInOrgChart !== undefined
         ? { showInOrgChart: dto.showInOrgChart }
         : {}),
+      ...(dto.defaultTimeIn !== undefined
+        ? { defaultTimeIn: dto.defaultTimeIn }
+        : {}),
+      ...(dto.defaultTimeOut !== undefined
+        ? { defaultTimeOut: dto.defaultTimeOut }
+        : {}),
       ...(dto.isActive !== undefined ? { isActive: dto.isActive } : {}),
     };
   }
@@ -792,6 +798,9 @@ export class HrEmployeeService {
       reportsToId: row.reportsToId,
       reportsToName: row.reportsTo?.name ?? null,
       showInOrgChart: row.showInOrgChart,
+      /** Their own hours, where they do not work the branch's. */
+      defaultTimeIn: row.defaultTimeIn,
+      defaultTimeOut: row.defaultTimeOut,
 
       isActive: row.isActive,
       isLocked: row.isLocked,

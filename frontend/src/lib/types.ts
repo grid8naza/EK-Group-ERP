@@ -1689,6 +1689,9 @@ export interface Employee {
   reportsToName?: string | null;
   /** Whether this person is drawn on the organisation chart. */
   showInOrgChart?: boolean;
+  /** Their own hours, in minutes after midnight; null = the branch's. */
+  defaultTimeIn?: number | null;
+  defaultTimeOut?: number | null;
 
   isActive: boolean;
   isLocked?: boolean;
@@ -3326,4 +3329,179 @@ export interface SavedBroadcastDraft {
 export interface BroadcastPage {
   hasMore: boolean;
   items: BroadcastCard[];
+}
+
+// ---------------------------------------------------------------------------
+// Attendance (SRS §8.9, FR-HRP-02) — the day's sheet, its rules, its reports.
+// ---------------------------------------------------------------------------
+
+/** How far a day's sheet has got. */
+export type AttendanceSheetStatus =
+  'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+
+/** The working day a company or one of its branches keeps. */
+export interface AttendanceSetting {
+  id: number;
+  companyId: number;
+  /** Null = the company's own default, used by branches without one. */
+  branchId: number | null;
+  /** Minutes after local midnight — 09:00 is 540. */
+  defaultTimeIn: number;
+  defaultTimeOut: number;
+  defaultTypeId: number | null;
+  /** 0 = Sunday … 6 = Saturday. */
+  weeklyOffDays: number[];
+}
+
+export interface AttendanceHoliday {
+  id: number;
+  companyId: number;
+  branchId: number | null;
+  date: string;
+  name: string;
+}
+
+/** One employee's line on one day. */
+export interface AttendanceRow {
+  employeeId: number;
+  employeeCode: string;
+  employeeName: string;
+  designationName: string;
+  entryId: number | null;
+  typeId: number | null;
+  timeIn: number | null;
+  timeOut: number | null;
+  workedMinutes: number | null;
+  remarks: string | null;
+  /** True where this line differs from what the day was filled in with. */
+  isException: boolean;
+  expectedTypeId: number | null;
+  expectedTimeIn: number | null;
+  expectedTimeOut: number | null;
+}
+
+/** The whole sheet for one branch on one day. */
+export interface AttendanceSheet {
+  date: string;
+  companyId: number;
+  branchId: number | null;
+  sheetId: number | null;
+  status: AttendanceSheetStatus;
+  workflowStatus: string | null;
+  remarks: string | null;
+  markedAt: string | null;
+  defaults: {
+    timeIn: number;
+    timeOut: number;
+    typeId: number | null;
+    /** True where the branch keeps its own working day. */
+    fromBranch: boolean;
+  };
+  holidayName: string | null;
+  weeklyOff: boolean;
+  /** False on a weekly off or a holiday — nobody is due in. */
+  working: boolean;
+  canMark: boolean;
+  /** True where a workflow decides who marks, rather than the screen's privilege. */
+  markingGoverned: boolean;
+  workflow: {
+    instanceId: number | null;
+    status: 'IN_PROGRESS' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | null;
+    currentSequence: number;
+    stalled?: boolean;
+    myTask: WorkflowViewerTask | null;
+    timeline: WorkflowTimelineEntry[];
+  } | null;
+  firstStep: {
+    buttonText: string;
+    actionType: string;
+    canCancel: boolean;
+  } | null;
+  rows: AttendanceRow[];
+}
+
+/** One day of a month, as the sheet calendar sees it. */
+export interface AttendanceMonthDay {
+  date: string;
+  status: AttendanceSheetStatus | null;
+  workflowStatus: string | null;
+  marked: number;
+  weeklyOff: boolean;
+  holidayName: string | null;
+}
+
+/** An attendance type as the reports head a column with it. */
+export interface AttendanceType {
+  id: number;
+  label: string;
+  /** The letter a grid cell carries — the alias, or the label if none. */
+  alias: string;
+  code: string;
+}
+
+export interface AttendanceRegisterRow {
+  employeeId: number;
+  employeeCode: string;
+  employeeName: string;
+  designationName: string;
+  /** yyyy-mm-dd → what that day counted as. */
+  cells: Record<
+    string,
+    { alias: string; typeId: number; isException: boolean }
+  >;
+  /** typeId → how many days. */
+  counts: Record<string, number>;
+  workedMinutes: number;
+  markedDays: number;
+}
+
+export interface AttendanceRegister {
+  year: number;
+  month: number;
+  days: {
+    date: string;
+    day: number;
+    weekday: number;
+    weeklyOff: boolean;
+    holidayName: string | null;
+  }[];
+  types: AttendanceType[];
+  rows: AttendanceRegisterRow[];
+}
+
+export interface TimeCardDay {
+  date: string;
+  weekday: number;
+  weeklyOff: boolean;
+  holidayName: string | null;
+  /** False before they joined or after they left. */
+  employed: boolean;
+  typeId: number | null;
+  typeLabel: string | null;
+  typeAlias: string | null;
+  timeIn: number | null;
+  timeOut: number | null;
+  workedMinutes: number | null;
+  isException: boolean;
+  remarks: string | null;
+  status: AttendanceSheetStatus | null;
+  workflowStatus: string | null;
+}
+
+export interface TimeCard {
+  year: number;
+  month: number;
+  employee: {
+    id: number;
+    code: string;
+    name: string;
+    designationName: string;
+    defaultTimeIn: number;
+    defaultTimeOut: number;
+  };
+  types: AttendanceType[];
+  counts: Record<string, number>;
+  workedMinutes: number;
+  unmarkedDays: number;
+  rows: TimeCardDay[];
 }

@@ -228,6 +228,25 @@ export class SaveEmployeeDto {
   @IsBoolean()
   showInOrgChart?: boolean;
 
+  /**
+   * The hours THIS person works, where they are not the branch's — minutes
+   * after local midnight (07:00 = 420). Null = whatever the branch keeps, which
+   * is the usual answer. Attendance sheets open pre-filled from it.
+   */
+  @ApiPropertyOptional({ nullable: true, example: 420 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(24 * 60 - 1)
+  defaultTimeIn?: number | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 960 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(24 * 60 - 1)
+  defaultTimeOut?: number | null;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
