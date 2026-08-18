@@ -13,13 +13,17 @@ import {
   KeyRound,
   Trash2,
   UserPlus,
+  UserCheck,
+  UserX,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { resolveIcon } from '@/lib/icons';
+import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
+import { Badge } from '@/components/ui/Badge';
 import { Input, Select, Textarea, Checkbox } from '@/components/ui/Field';
 import type {
   AppUser,
@@ -150,6 +154,16 @@ export function UserAccessPanel({
 }: UserAccessPanelProps) {
   const toast = useToast();
   const confirm = useConfirm();
+  const { user: signedIn } = useAuth();
+
+  /**
+   * Nobody switches off the account they are signed in with.
+   *
+   * The server checks `isActive` on every request, not only at sign-in, so this
+   * would take the administrator's own next click away from them — including
+   * the one that would put it back.
+   */
+  const isSelf = !!user && !!signedIn && user.id === signedIn.id;
 
   const [companies, setCompanies] = useState<Company[]>([]);
   // Groups keyed by companyId.
@@ -169,6 +183,8 @@ export function UserAccessPanel({
 
   const [form, setForm] = useState({ ...empty });
   const [saving, setSaving] = useState(false);
+  /** True while the activate / deactivate switch is being written. */
+  const [switching, setSwitching] = useState(false);
   /**
    * True once "Give this employee a login" has been pressed. Until then an
    * employee with no account sees a short invitation rather than a blank form —
@@ -742,6 +758,61 @@ export function UserAccessPanel({
     }
   };
 
+  /**
+   * Switch a login off, or back on again.
+   *
+   * The answer to "this person has gone on leave / is under investigation /
+   * has left, but their work must stay theirs". Removing the login destroys the
+   * account; deactivating keeps it, its roles and everything raised in its name
+   * intact, and simply refuses the sign-in. Reversible in one click, which is
+   * exactly what removal is not.
+   *
+   * It writes ON ITS OWN rather than waiting for Save — suspending access is
+   * something an administrator does NOW, and making it wait behind an unrelated
+   * half-finished edit is how somebody stays signed in who should not be. The
+   * server refuses the next request as well as the next sign-in, so it takes
+   * effect on a session already open.
+   */
+  const setLoginActive = async (next: boolean) => {
+    if (!user || isSelf) return;
+    const ok = await confirm({
+      title: next ? 'Activate login' : 'Deactivate login',
+      message: next
+        ? `Let "${user.username}" sign in again? Everything the account had — its companies, roles and modules — is still as it was.`
+        : `Stop "${user.username}" signing in? The account and everything raised in its name stays; ${user.name} simply cannot get in until it is activated again. Any session they have open stops working at once.`,
+      danger: !next,
+      confirmText: next ? 'Activate' : 'Deactivate',
+    });
+    if (!ok) return;
+    // Read before the awaits: whether there is unsaved work decides what may be
+    // handed back to the host below.
+    const wasDirty = dirty;
+    setSwitching(true);
+    try {
+      const saved = await api.patch<AppUser>(`/users/${user.id}`, {
+        isActive: next,
+      });
+      toast.success(next ? 'Login activated.' : 'Login deactivated.');
+      // Fold the new state into the form AND into the baseline, so the switch
+      // itself never reads as unsaved work — while anything actually typed
+      // stays both on screen and still unsaved.
+      setForm((f) => {
+        const base = baselineRef.current
+          ? (JSON.parse(baselineRef.current) as typeof empty)
+          : f;
+        baselineRef.current = JSON.stringify({ ...base, isActive: next });
+        return { ...f, isActive: next };
+      });
+      // Telling the host re-seeds this form from the server, which would throw
+      // away a half-finished edit. Left to the next Save when there is one.
+      if (!wasDirty) onSaved?.(saved);
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Failed to save.');
+    } finally {
+      setSwitching(false);
+    }
+  };
+
   const removeLogin = async () => {
     if (!user) return;
     const ok = await confirm({
@@ -811,6 +882,27 @@ export function UserAccessPanel({
           <span className="font-mono text-xs text-slate-400">
             {user?.employee?.code ?? employee?.code}
           </span>
+          {/* Whether they can actually get in, beside whose account it is —
+              the first thing anybody opening this panel wants to know. */}
+          {user && (
+            <Badge color={form.isActive ? 'green' : 'red'} className="ml-auto">
+              {form.isActive ? 'Login active' : 'Login deactivated'}
+            </Badge>
+          )}
+        </div>
+      )}
+
+      {/* Said plainly as well as badged: a suspended account otherwise looks
+          exactly like a working one, and "why can they not sign in" is the
+          question this panel exists to answer. */}
+      {user && !form.isActive && (
+        <div className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">
+          <UserX className="mt-0.5 h-4 w-4 flex-none" />
+          <p>
+            This login is deactivated — {user.name} cannot sign in, on the web
+            or the mobile app. Everything the account holds is untouched and
+            comes back the moment it is activated again.
+          </p>
         </div>
       )}
 
@@ -895,14 +987,23 @@ export function UserAccessPanel({
                       setForm({ ...form, mobileEnabled: e.target.checked })
                     }
                   />
-                  <span className="h-5 w-px bg-slate-200 dark:bg-slate-700" />
-                  <Checkbox
-                    label="Active"
-                    checked={form.isActive}
-                    onChange={(e) =>
-                      setForm({ ...form, isActive: e.target.checked })
-                    }
-                  />
+                  {/* Whether the account is switched on at all is NOT a
+                      channel, and an existing login turns it off through the
+                      button below — one place, that acts at once. Offered here
+                      only while the login is being created, where there is no
+                      saved account to act on yet. */}
+                  {!user && (
+                    <>
+                      <span className="h-5 w-px bg-slate-200 dark:bg-slate-700" />
+                      <Checkbox
+                        label="Active from the start"
+                        checked={form.isActive}
+                        onChange={(e) =>
+                          setForm({ ...form, isActive: e.target.checked })
+                        }
+                      />
+                    </>
+                  )}
                 </div>
                 <p className="mt-1.5 text-xs text-slate-400">
                   Web-only users can sign in here; mobile-only users use the
@@ -1327,13 +1428,44 @@ export function UserAccessPanel({
       {!readOnly && (
         <div className="flex items-center justify-between gap-3 border-t border-slate-200 pt-4 dark:border-slate-700">
           {user ? (
-            <button
-              type="button"
-              className="btn-secondary inline-flex items-center gap-2 text-rose-600"
-              onClick={removeLogin}
-            >
-              <Trash2 className="h-4 w-4" /> Remove login
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Before Remove, and the milder of the two: somebody reaching
+                  for "they must not get in" should meet the reversible one
+                  first. */}
+              <button
+                type="button"
+                className={cn(
+                  'btn-secondary inline-flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-50',
+                  form.isActive ? 'text-amber-600' : 'text-emerald-600',
+                )}
+                onClick={() => setLoginActive(!form.isActive)}
+                disabled={switching || isSelf}
+                title={
+                  isSelf
+                    ? 'This is the login you are signed in with — switching it off would lock you out'
+                    : undefined
+                }
+              >
+                {form.isActive ? (
+                  <>
+                    <UserX className="h-4 w-4" />{' '}
+                    {switching ? 'Deactivating…' : 'Deactivate login'}
+                  </>
+                ) : (
+                  <>
+                    <UserCheck className="h-4 w-4" />{' '}
+                    {switching ? 'Activating…' : 'Activate login'}
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
+                className="btn-secondary inline-flex items-center gap-2 text-rose-600"
+                onClick={removeLogin}
+              >
+                <Trash2 className="h-4 w-4" /> Remove login
+              </button>
+            </div>
           ) : (
             <button
               type="button"
