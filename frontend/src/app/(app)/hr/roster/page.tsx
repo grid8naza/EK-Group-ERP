@@ -14,6 +14,8 @@ import { Checkbox, DateInput, Select, Textarea } from '@/components/ui/Field';
 import type {
   Branch,
   BulkAssignResult,
+  CostCenter,
+  CostObject,
   HrShift,
   RosterRegister,
   RosterRegisterRow,
@@ -65,11 +67,27 @@ export default function RosterPage() {
     [activeCompanyId],
   );
   const { data: shifts } = useFetch<HrShift[]>('/hr-shifts', [activeCompanyId]);
+  // Division and department come from the COMPANY's own structure — a division
+  // is a cost centre, a department the cost object under it — exactly as on the
+  // employee form and the postings tab.
+  const { data: costCenters } = useFetch<CostCenter[]>(
+    activeCompanyId ? `/cost-centers?companyId=${activeCompanyId}` : null,
+    [activeCompanyId],
+  );
+  const { data: costObjects } = useFetch<CostObject[]>(
+    activeCompanyId ? `/cost-objects?companyId=${activeCompanyId}` : null,
+    [activeCompanyId],
+  );
 
   // ---- the assignment drawer ----
   const [open, setOpen] = useState(false);
+  // Every field is "leave it as it is" until something is chosen: a transfer
+  // that also changes the shift is one action, and so is one that does not.
   const [form, setForm] = useState({
     shiftId: '',
+    branchId: '',
+    costCenterId: '',
+    costObjectId: '',
     effectiveFrom: today(),
     effectiveTo: '',
     remarks: '',
@@ -124,6 +142,9 @@ export default function RosterPage() {
     setFailures([]);
     setForm({
       shiftId: '',
+      branchId: '',
+      costCenterId: '',
+      costObjectId: '',
       // The day being looked at is the day they are most likely to mean.
       effectiveFrom: on,
       effectiveTo: '',
@@ -133,8 +154,8 @@ export default function RosterPage() {
   };
 
   const assign = async () => {
-    if (!form.shiftId) {
-      toast.error('Which shift?');
+    if (!changing) {
+      toast.error('Choose a branch, a division, a department or a shift.');
       return;
     }
     if (!form.effectiveFrom) {
@@ -143,18 +164,30 @@ export default function RosterPage() {
     }
     setSaving(true);
     try {
+      // Only what was actually chosen is sent — an absent field means "leave
+      // it as it is", which is what an untouched dropdown has to mean.
       const res = await api.post<BulkAssignResult>('/hr-rosters/assign', {
         employeeIds: [...picked],
-        shiftId: Number(form.shiftId),
+        ...(form.shiftId ? { shiftId: Number(form.shiftId) } : {}),
+        ...(form.branchId ? { branchId: Number(form.branchId) } : {}),
+        ...(form.costCenterId
+          ? { costCenterId: Number(form.costCenterId) }
+          : {}),
+        ...(form.costObjectId
+          ? { costObjectId: Number(form.costObjectId) }
+          : {}),
         effectiveFrom: form.effectiveFrom,
         effectiveTo: form.effectiveTo || null,
         remarks: form.remarks.trim() || null,
       });
       setFailures(res.failed);
-      if (res.assigned) {
-        toast.success(
-          `${res.assigned} ${res.assigned === 1 ? 'person' : 'people'} put on the shift.`,
-        );
+      const done = [
+        res.moved && `${res.moved} moved`,
+        res.assigned && `${res.assigned} put on the shift`,
+      ].filter(Boolean);
+      if (done.length) toast.success(`${done.join(', ')}.`);
+      else if (!res.failed.length) {
+        toast.success('Nothing to change — they were already like that.');
       }
       if (!res.failed.length) {
         setOpen(false);
@@ -171,6 +204,27 @@ export default function RosterPage() {
       setSaving(false);
     }
   };
+
+  /**
+   * The departments offered — those under the chosen division, or all of them
+   * until one is chosen. Filtered rather than validated afterwards: a
+   * department under a different division is the one mistake two loose
+   * dropdowns are guaranteed to make.
+   */
+  const departments = useMemo(() => {
+    const all = (costObjects ?? []).filter((o) => o.isActive);
+    return form.costCenterId
+      ? all.filter((o) => o.costCenterId === Number(form.costCenterId))
+      : all;
+  }, [costObjects, form.costCenterId]);
+
+  /** Has anything actually been chosen to change? */
+  const changing = !!(
+    form.shiftId ||
+    form.branchId ||
+    form.costCenterId ||
+    form.costObjectId
+  );
 
   const shiftById = useMemo(
     () => new Map((shifts ?? []).map((s) => [s.id, s])),
@@ -388,10 +442,8 @@ export default function RosterPage() {
       <Drawer
         open={open}
         onClose={() => setOpen(false)}
-        title={
-          picked.size === 1 ? 'Put on a shift' : `Put ${picked.size} on a shift`
-        }
-        subtitle="From the day it takes effect — the shift before it closes the day before"
+        title={picked.size === 1 ? 'Assign' : `Assign ${picked.size} people`}
+        subtitle="Where they work, what they work, or both — from the day it takes effect"
         footer={
           <DrawerFooter
             onCancel={() => setOpen(false)}
@@ -402,18 +454,59 @@ export default function RosterPage() {
         }
       >
         <div className="space-y-4">
-          <Select
-            label="Shift"
-            required
-            value={form.shiftId}
-            onChange={(e) => setForm({ ...form, shiftId: e.target.value })}
-            options={(shifts ?? [])
-              .filter((s) => s.isActive)
-              .map((s) => ({
-                value: s.id,
-                label: `${s.code} — ${s.name} (${toTime(s.timeIn)}–${toTime(s.timeOut)})`,
-              }))}
-          />
+          {/* Where they work. Left alone unless something is chosen — this is
+              one drawer for a transfer, a shift change, or both at once, and
+              an untouched dropdown must not move anybody. */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Select
+              label="Branch"
+              value={form.branchId}
+              placeholder="Leave as it is"
+              onChange={(e) => setForm({ ...form, branchId: e.target.value })}
+              options={(branches ?? [])
+                .filter((b) => b.isActive)
+                .map((b) => ({ value: b.id, label: b.name }))}
+            />
+            <Select
+              label="Division"
+              value={form.costCenterId}
+              placeholder="Leave as it is"
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  costCenterId: e.target.value,
+                  // A department belongs to ONE division, so changing the
+                  // division drops a department that is no longer under it.
+                  costObjectId: '',
+                })
+              }
+              options={(costCenters ?? [])
+                .filter((c) => c.isActive)
+                .map((c) => ({ value: c.id, label: c.name }))}
+            />
+            <Select
+              label="Department"
+              value={form.costObjectId}
+              placeholder="Leave as it is"
+              onChange={(e) =>
+                setForm({ ...form, costObjectId: e.target.value })
+              }
+              options={departments.map((o) => ({ value: o.id, label: o.name }))}
+            />
+            <Select
+              label="Shift"
+              value={form.shiftId}
+              placeholder="Leave as it is"
+              onChange={(e) => setForm({ ...form, shiftId: e.target.value })}
+              options={(shifts ?? [])
+                .filter((s) => s.isActive)
+                .map((s) => ({
+                  value: s.id,
+                  label: `${s.code} — ${s.name} (${toTime(s.timeIn)}–${toTime(s.timeOut)})`,
+                }))}
+            />
+          </div>
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <DateInput
               label="From"
@@ -436,7 +529,9 @@ export default function RosterPage() {
           />
 
           <p className="text-xs text-slate-400">
-            Everybody ticked goes on the same shift from the same day. Anyone
+            Everybody ticked gets the same change from the same day. Moving
+            somebody also writes the transfer into their service record, and
+            anybody already there is left alone rather than moved twice. Anyone
             whose branch does not work that shift, or who already has a line
             covering it, is left as they are and listed here.
           </p>

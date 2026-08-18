@@ -125,16 +125,60 @@ export class SaveShiftAssignmentDto {
 }
 
 /**
- * One shift, one start date, a list of people.
+ * One change, one start date, a list of people.
  *
- * Rostering a bakery of ninety by opening ninety records is not a job anybody
- * does, so this is the same assignment applied down a list. Each person still
- * goes through the ordinary rules.
+ * Rostering — or moving — a bakery of ninety by opening ninety records is not
+ * a job anybody does, so this is the same assignment applied down a list. Each
+ * person still goes through the ordinary rules.
+ *
+ * Every field below is OPTIONAL and absent means "leave it as it is": a
+ * transfer that also changes the shift is one action, and so is a transfer that
+ * does not. At least one of them has to be given, which the service checks.
  */
-export class BulkAssignShiftDto extends SaveShiftAssignmentDto {
+export class BulkAssignDto {
   @ApiProperty({ type: [Number] })
   @IsArray()
   @IsInt({ each: true })
   @ArrayNotEmpty()
   employeeIds: number[];
+
+  /** The day it all takes effect — the posting and the shift alike. */
+  @ApiProperty({ example: '2026-03-01' })
+  @IsDateString()
+  effectiveFrom: string;
+
+  /** Only meaningful for the shift; a posting runs until the next one. */
+  @ApiPropertyOptional({ nullable: true, example: '2026-03-31' })
+  @IsOptional()
+  @IsDateString()
+  effectiveTo?: string | null;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  shiftId?: number;
+
+  /** Where they work from that day. Absent = leave them where they are. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  branchId?: number;
+
+  /** Division — a Cpanel CostCenter, as on the employee and the posting. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  costCenterId?: number;
+
+  /** Department — the CostObject under that division. */
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  costObjectId?: number;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  remarks?: string | null;
 }

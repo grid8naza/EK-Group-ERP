@@ -19,7 +19,7 @@ import { LockDto } from '../../common/lock.dto';
 import { HrShiftService } from './hr-shift.service';
 import { HrRosterService } from './hr-roster.service';
 import {
-  BulkAssignShiftDto,
+  BulkAssignDto,
   CreateHrShiftDto,
   SaveShiftAssignmentDto,
   UpdateHrShiftDto,
@@ -162,9 +162,9 @@ export class HrRosterRegisterController {
     return this.service.register(companyId, scope, on);
   }
 
-  /** Put a whole list of people on one shift, from one day. */
+  /** Move and/or roster a whole list of people, from one day. */
   @Post('assign')
-  assign(@Body() dto: BulkAssignShiftDto) {
-    return this.service.assignMany(dto);
+  assign(@Body() dto: BulkAssignDto, @CompanyId() companyId?: number) {
+    return this.service.assignMany(companyId, dto);
   }
 }

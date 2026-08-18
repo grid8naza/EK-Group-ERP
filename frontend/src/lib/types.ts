@@ -3581,9 +3581,12 @@ export interface RosterRegister {
   rows: RosterRegisterRow[];
 }
 
-/** What came of putting a list of people on one shift. */
+/** What came of moving and/or rostering a list of people. */
 export interface BulkAssignResult {
+  /** How many were put on the shift. */
   assigned: number;
+  /** How many actually moved — people already there are not moved twice. */
+  moved: number;
   /** The ones that could not be, named and with the reason. */
   failed: { employeeId: number; employeeName: string; reason: string }[];
 }

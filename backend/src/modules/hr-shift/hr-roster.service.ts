@@ -6,7 +6,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { formatDayMonthYear } from '../../common/zoned-time';
-import { BulkAssignShiftDto, SaveShiftAssignmentDto } from './hr-shift.dto';
+import { BulkAssignDto, SaveShiftAssignmentDto } from './hr-shift.dto';
 import { shiftMinutes } from './hr-shift.service';
 
 /** A date with the time thrown away — a roster line is whole days. */
@@ -229,31 +229,61 @@ export class HrRosterService {
   }
 
   /**
-   * Put a whole list of people on one shift, from one day.
+   * Move and/or roster a whole list of people, from one day.
    *
-   * The reason this exists: rostering a bakery of ninety by opening ninety
-   * records is not a job anybody does, so they stop rostering. Each person
-   * still goes through `create` — the predecessor closes, the overlap is
-   * checked — because a bulk action that skipped the rules would just be a
-   * faster way to make a mess.
+   * The reason this exists: doing either to a bakery of ninety by opening
+   * ninety records is not a job anybody does, so it stops being done. Each
+   * person still goes through the ordinary rules — the predecessor closes, the
+   * overlap is checked — because a bulk action that skipped them would just be
+   * a faster way to make a mess.
+   *
+   * A MOVE writes two things, because this system keeps them apart and both are
+   * true: the employee's own branch / division / department, which is where
+   * they work today and what every listing and the attendance sheet read, and a
+   * POSTING from the same date, which is the service record of the transfer.
+   * Writing only the first would lose the history; only the second would move
+   * nobody.
+   *
+   * Placement is applied BEFORE the shift, so a shift only the new branch works
+   * is accepted — "move them to Kadathy and put them on the night bake" has to
+   * be one action, not two that must be done in the right order.
    *
    * It does NOT stop at the first refusal. One person with an overlapping line
-   * must not cost the other eighty-nine their assignment; what failed comes
-   * back named, so the caller can say exactly who still needs doing.
+   * must not cost the other eighty-nine theirs; what failed comes back named,
+   * so the caller can say exactly who still needs doing.
    */
-  async assignMany(dto: BulkAssignShiftDto) {
+  async assignMany(companyId: number | undefined, dto: BulkAssignDto) {
+    if (!companyId) throw new BadRequestException('No active company.');
     const employeeIds = [...new Set(dto.employeeIds ?? [])];
     if (!employeeIds.length) {
       throw new BadRequestException('Nobody is selected.');
     }
-    const names = new Map(
-      (
-        await this.prisma.employee.findMany({
-          where: { id: { in: employeeIds } },
-          select: { id: true, name: true },
-        })
-      ).map((e) => [e.id, e.name]),
-    );
+    const moving =
+      dto.branchId !== undefined ||
+      dto.costCenterId !== undefined ||
+      dto.costObjectId !== undefined;
+    if (!moving && dto.shiftId === undefined) {
+      throw new BadRequestException(
+        'Say what to change — a branch, a division, a department or a shift.',
+      );
+    }
+    // Checked ONCE: the same place is being applied to everybody, so a company
+    // that does not work in divisions should say so before ninety attempts.
+    if (moving) await this.assertPlace(companyId, dto);
+
+    const people = await this.prisma.employee.findMany({
+      where: { id: { in: employeeIds }, companyId },
+      select: {
+        id: true,
+        name: true,
+        companyId: true,
+        branchId: true,
+        costCenterId: true,
+        costObjectId: true,
+        designationId: true,
+      },
+    });
+    const byId = new Map(people.map((e) => [e.id, e]));
 
     const failed: {
       employeeId: number;
@@ -261,28 +291,198 @@ export class HrRosterService {
       reason: string;
     }[] = [];
     let assigned = 0;
+    let moved = 0;
+
     for (const employeeId of employeeIds) {
-      try {
-        await this.create(employeeId, {
-          shiftId: dto.shiftId,
-          effectiveFrom: dto.effectiveFrom,
-          effectiveTo: dto.effectiveTo ?? null,
-          remarks: dto.remarks ?? null,
+      const employee = byId.get(employeeId);
+      if (!employee) {
+        failed.push({
+          employeeId,
+          employeeName: `#${employeeId}`,
+          reason: 'Not an employee of this company.',
         });
-        assigned++;
+        continue;
+      }
+      try {
+        if (moving && (await this.movePerson(employee, dto))) moved++;
+        if (dto.shiftId !== undefined) {
+          await this.create(employeeId, {
+            shiftId: dto.shiftId,
+            effectiveFrom: dto.effectiveFrom,
+            effectiveTo: dto.effectiveTo ?? null,
+            remarks: dto.remarks ?? null,
+          });
+          assigned++;
+        }
       } catch (e) {
         failed.push({
           employeeId,
-          employeeName: names.get(employeeId) ?? `#${employeeId}`,
+          employeeName: employee.name,
           reason:
             e instanceof BadRequestException || e instanceof NotFoundException
               ? ((e.getResponse() as { message?: string })?.message ??
                 e.message)
-              : 'Could not be put on this shift.',
+              : 'Could not be changed.',
         });
       }
     }
-    return { assigned, failed };
+    return { assigned, moved, failed };
+  }
+
+  /**
+   * Move one person: their current placement, and the posting recording it.
+   *
+   * Returns false where nothing actually changes — running the same assignment
+   * twice must not leave two transfers in a service record that says the person
+   * never went anywhere.
+   */
+  private async movePerson(
+    employee: {
+      id: number;
+      companyId: number;
+      branchId: number | null;
+      costCenterId: number | null;
+      costObjectId: number | null;
+      designationId: number;
+    },
+    dto: BulkAssignDto,
+  ) {
+    const branchId =
+      dto.branchId !== undefined ? dto.branchId : employee.branchId;
+    const costCenterId =
+      dto.costCenterId !== undefined ? dto.costCenterId : employee.costCenterId;
+    const costObjectId =
+      dto.costObjectId !== undefined ? dto.costObjectId : employee.costObjectId;
+
+    if (
+      branchId === employee.branchId &&
+      costCenterId === employee.costCenterId &&
+      costObjectId === employee.costObjectId
+    ) {
+      return false;
+    }
+
+    const from = day(dto.effectiveFrom);
+    await this.prisma.$transaction(async (tx) => {
+      await tx.employee.update({
+        where: { id: employee.id },
+        data: { branchId, costCenterId, costObjectId },
+      });
+      // The service record, written the way the Postings tab writes it: the
+      // open-ended posting before this one closes the day before.
+      await tx.employeePosting.updateMany({
+        where: {
+          employeeId: employee.id,
+          effectiveTo: null,
+          effectiveFrom: { lt: from },
+        },
+        data: { effectiveTo: dayBefore(from) },
+      });
+      const clash = await tx.employeePosting.findFirst({
+        where: { employeeId: employee.id, effectiveFrom: from },
+        select: { id: true },
+      });
+      if (clash) {
+        throw new BadRequestException(
+          `There is already a posting starting ${formatDayMonthYear(from)}. Close or move that one first.`,
+        );
+      }
+      await tx.employeePosting.create({
+        data: {
+          employeeId: employee.id,
+          effectiveFrom: from,
+          effectiveTo: null,
+          companyId: employee.companyId,
+          branchId,
+          costCenterId,
+          costObjectId,
+          // Carried forward: this is a transfer, not a promotion, and a posting
+          // has to say what somebody holds as well as where they hold it.
+          designationId: employee.designationId,
+          remarks: dto.remarks?.trim() || null,
+        },
+      });
+    });
+    return true;
+  }
+
+  /**
+   * The place being assigned has to hang together, and the company has to work
+   * that way at all.
+   *
+   * The same three sentences the employee form and the postings tab use, for
+   * the same three things that can be wrong: a level the company does not use,
+   * a row belonging to somebody else, and a department under a different
+   * division — which is what two loose dropdowns actually produce.
+   */
+  private async assertPlace(companyId: number, dto: BulkAssignDto) {
+    const company = await this.prisma.company.findUnique({
+      where: { id: companyId },
+      select: {
+        name: true,
+        branchApplicable: true,
+        costCenterApplicable: true,
+        costObjectApplicable: true,
+      },
+    });
+    if (!company) throw new BadRequestException('No such company.');
+
+    if (dto.branchId !== undefined) {
+      if (!company.branchApplicable) {
+        throw new BadRequestException(
+          `${company.name} does not work in branches.`,
+        );
+      }
+      const branch = await this.prisma.branch.findFirst({
+        where: { id: dto.branchId, companyId },
+        select: { id: true },
+      });
+      if (!branch) {
+        throw new BadRequestException('That branch is not in this company.');
+      }
+    }
+
+    if (dto.costCenterId !== undefined) {
+      if (!company.costCenterApplicable) {
+        throw new BadRequestException(
+          `${company.name} does not work in divisions.`,
+        );
+      }
+      const centre = await this.prisma.costCenter.findFirst({
+        where: { id: dto.costCenterId, companyId },
+        select: { id: true },
+      });
+      if (!centre) {
+        throw new BadRequestException('That division is not in this company.');
+      }
+    }
+
+    if (dto.costObjectId !== undefined) {
+      if (!company.costObjectApplicable) {
+        throw new BadRequestException(
+          `${company.name} does not work in departments.`,
+        );
+      }
+      const object = await this.prisma.costObject.findFirst({
+        where: { id: dto.costObjectId, companyId },
+        select: { costCenterId: true },
+      });
+      if (!object) {
+        throw new BadRequestException(
+          'That department is not in this company.',
+        );
+      }
+      // Checked as a PAIR: a department under a different division is the one
+      // mistake two independent dropdowns are guaranteed to make.
+      if (
+        dto.costCenterId !== undefined &&
+        object.costCenterId !== dto.costCenterId
+      ) {
+        throw new BadRequestException(
+          'That department belongs to a different division.',
+        );
+      }
+    }
   }
 
   async remove(employeeId: number, assignmentId: number) {
