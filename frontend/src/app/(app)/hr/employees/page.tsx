@@ -1061,6 +1061,7 @@ export default function EmployeesPage() {
         ) : tab === 'roster' ? (
           <RosterPanel
             employeeId={editing?.id ?? null}
+            branchId={editing?.branchId ?? null}
             readOnly={view}
             onDirtyChange={setRosterDirty}
           />

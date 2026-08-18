@@ -430,12 +430,18 @@ export default function RosterPage() {
                       </td>
                       {/* View before Change, the order every listing here
                           keeps. This row is one day's answer; View is the
-                          whole series behind it. */}
+                          whole series behind it — where a line already written
+                          is corrected, as opposed to Change, which starts a
+                          new one from a date. */}
                       <td className="px-3 py-2">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
-                            title="See every shift this person has been on"
+                            title={
+                              canEdit
+                                ? 'See and edit every shift this person has been on'
+                                : 'See every shift this person has been on'
+                            }
                             className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 transition hover:border-brand-400 hover:text-brand-600 dark:border-slate-700 dark:text-slate-300"
                             onClick={() => setViewing(r)}
                           >
@@ -578,21 +584,43 @@ export default function RosterPage() {
         </div>
       </Drawer>
 
-      {/* One person's whole series, read-only. The SAME panel the Roster tab
-          on Employee Master uses — one place decides how a roster reads, so
-          the two can never drift apart. */}
+      {/* One person's whole series — and, for anybody who may edit, the place
+          to correct it: change the shift on a line, move its dates, drop one
+          that was entered by mistake.
+
+          The SAME panel the Roster tab on Employee Master uses. One place
+          decides how a roster reads AND how it is edited, so the list and the
+          tab cannot drift apart, and the series rules are the ones already
+          proven rather than a second set written here.
+
+          The list is re-read on close: a shift changed in here is a different
+          answer in the row behind it. */}
       <Drawer
         open={!!viewing}
-        onClose={() => setViewing(null)}
+        onClose={() => {
+          setViewing(null);
+          refetch();
+        }}
         title={viewing?.employeeName ?? 'Roster'}
         subtitle={
           viewing
             ? `${viewing.employeeCode} · ${viewing.designationName}`
             : undefined
         }
-        footer={<CloseFooter onClose={() => setViewing(null)} />}
+        footer={
+          <CloseFooter
+            onClose={() => {
+              setViewing(null);
+              refetch();
+            }}
+          />
+        }
       >
-        <RosterPanel employeeId={viewing?.employeeId ?? null} readOnly />
+        <RosterPanel
+          employeeId={viewing?.employeeId ?? null}
+          branchId={viewing?.branchId ?? null}
+          readOnly={!canEdit}
+        />
       </Drawer>
     </div>
   );

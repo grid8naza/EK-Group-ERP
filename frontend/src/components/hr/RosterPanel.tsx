@@ -43,12 +43,21 @@ const hours = (m: number) =>
 export interface RosterPanelProps {
   /** The employee whose roster this is; null before the record exists. */
   employeeId: number | null;
+  /**
+   * The branch THEY are at, so the shift list offers what their branch works.
+   *
+   * Not the branch in the header: this panel is opened from a list that can
+   * show every branch at once, and a dropdown offering a shift the person's
+   * branch does not work is a dropdown whose every choice the server refuses.
+   */
+  branchId?: number | null;
   readOnly?: boolean;
   onDirtyChange?: (dirty: boolean) => void;
 }
 
 export function RosterPanel({
   employeeId,
+  branchId,
   readOnly = false,
   onDirtyChange,
 }: RosterPanelProps) {
@@ -62,9 +71,13 @@ export function RosterPanel({
   const [form, setForm] = useState<Form>({ ...emptyForm });
   const [saving, setSaving] = useState(false);
 
-  // The shifts this branch can see — the endpoint scopes to the active branch,
-  // which is the same rule the server enforces on save.
-  const { data: shifts } = useFetch<HrShift[]>('/hr-shifts');
+  // The shifts THIS PERSON's branch works — the same rule the server enforces
+  // on save, so nothing is offered that would only be refused. Falls back to
+  // the branch in the header when the caller does not say.
+  const { data: shifts } = useFetch<HrShift[]>(
+    branchId ? `/hr-shifts?branchId=${branchId}` : '/hr-shifts',
+    [branchId],
+  );
 
   const open = adding || editingId !== null;
   useEffect(() => {
