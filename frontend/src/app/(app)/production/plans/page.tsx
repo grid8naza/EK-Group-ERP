@@ -14,6 +14,7 @@ import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, CloseFooter } from '@/components/ui/Drawer';
 import { Badge } from '@/components/ui/Badge';
 import type { ProductionPlan, ProductionPlanStatus, Unit } from '@/lib/types';
+import { formatDateTime, formatDayMonthYear } from '@/lib/utils';
 
 const ROUTE = '/production/plans';
 
@@ -21,10 +22,8 @@ const statusColor = (s: ProductionPlanStatus) =>
   s === 'CONFIRMED' ? 'green' : s === 'CANCELLED' ? 'slate' : 'amber';
 const statusLabel = (s: ProductionPlanStatus) =>
   s.charAt(0) + s.slice(1).toLowerCase();
-const fmt = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleString() : '—';
-const fmtDate = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleDateString() : '—';
+const fmt = (iso?: string | null) => (iso ? formatDateTime(iso) : '—');
+const fmtDate = (iso?: string | null) => (iso ? formatDayMonthYear(iso) : '—');
 
 export default function ProductionPlansPage() {
   const { can } = useAuth();

@@ -10,7 +10,7 @@ import {
   CalendarClock,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { cn, formatDayMonthYear } from '@/lib/utils';
 import { useLookupValues } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -253,7 +253,7 @@ export function SalaryPanel({
     if (!employeeId) return;
     const ok = await confirm({
       title: 'Delete this package',
-      message: `Delete the package effective from ${p.effectiveFrom}? Anything already paid against it stays as it was paid.`,
+      message: `Delete the package effective from ${formatDayMonthYear(p.effectiveFrom)}? Anything already paid against it stays as it was paid.`,
       danger: true,
       confirmText: 'Delete',
     });
@@ -345,8 +345,10 @@ export function SalaryPanel({
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 bg-slate-50 px-3 py-2.5 dark:bg-slate-800/50">
                       <CalendarClock className="h-4 w-4 flex-none text-brand-600" />
                       <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-                        {p.effectiveFrom} &rarr;{' '}
-                        {p.effectiveTo ?? 'until further notice'}
+                        {formatDayMonthYear(p.effectiveFrom)} &rarr;{' '}
+                        {p.effectiveTo
+                          ? formatDayMonthYear(p.effectiveTo)
+                          : 'until further notice'}
                       </span>
                       {current && <Badge color="green">In force</Badge>}
                       {/* The newest row is the only one an increment follows;

@@ -1,3 +1,4 @@
+import { formatDayMonthYear } from '@/lib/utils';
 import type { TaskStatus } from '@/lib/types';
 
 /**
@@ -39,5 +40,5 @@ export function dueLabel(iso: string | null): string {
   if (days === -1) return 'Yesterday';
   if (days < 0) return `${Math.abs(days)}d late`;
   if (days <= 6) return `in ${days}d`;
-  return due.toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
+  return formatDayMonthYear(due);
 }

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma, TaskPriority, TaskStatus } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { formatDayMonthYear } from '../../common/zoned-time';
 import {
   USER_LOOKUP,
   UserLookupPort,
@@ -499,9 +500,7 @@ export class TaskService {
   async alertAssigned(task: AssignedTaskAlert, raisedBy: number | null) {
     const assignees = task.assignees.map((a) => a.userId);
     if (!assignees.length) return;
-    const due = task.dueAt
-      ? ` Due ${task.dueAt.toISOString().slice(0, 10)}.`
-      : '';
+    const due = task.dueAt ? ` Due ${formatDayMonthYear(task.dueAt)}.` : '';
     await this.notifications.publish({
       audience: { userIds: assignees },
       category: 'TASK',

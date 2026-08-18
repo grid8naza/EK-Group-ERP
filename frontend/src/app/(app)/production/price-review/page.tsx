@@ -10,7 +10,7 @@ import {
   Info,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { cn, formatDateTime } from '@/lib/utils';
 import { useFetch, useUnsavedChangesGuard } from '@/lib/hooks';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useToast } from '@/providers/ToastProvider';
@@ -489,7 +489,7 @@ export default function PriceReviewPage() {
           )}
           title={
             r.lastCostedAt
-              ? new Date(r.lastCostedAt).toLocaleString()
+              ? formatDateTime(r.lastCostedAt)
               : 'This cost has never been established from a BOM.'
           }
         >

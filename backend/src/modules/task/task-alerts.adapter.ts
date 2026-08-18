@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { formatDayMonthYear } from '../../common/zoned-time';
 import { AlertSourcePort } from '../../contracts/alert-source.port';
 import {
   NOTIFICATION,
@@ -75,7 +76,7 @@ export class TaskAlertsAdapter implements AlertSourcePort {
       const sourceKey = `${taskDuePrefix(task.id)}${late ? 'overdue' : 'due'}`;
       live.push(sourceKey);
 
-      const on = task.dueAt?.toISOString().slice(0, 10) ?? '';
+      const on = task.dueAt ? formatDayMonthYear(task.dueAt) : '';
       await this.notifications.publish({
         // The raiser as well as the assignees: being answerable for work is
         // exactly being told when it is late.

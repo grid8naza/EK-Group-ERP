@@ -7,10 +7,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Select } from '@/components/ui/Field';
-import {
-  ReportView,
-  ReportExportButtons,
-} from '@/components/ui/ReportView';
+import { ReportView, ReportExportButtons } from '@/components/ui/ReportView';
 import {
   printReport,
   pdfReport,

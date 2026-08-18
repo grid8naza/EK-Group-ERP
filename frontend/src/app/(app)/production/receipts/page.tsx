@@ -12,13 +12,12 @@ import { DataTable, type Column } from '@/components/ui/DataTable';
 import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, CloseFooter } from '@/components/ui/Drawer';
 import type { ProductionReceipt, Unit } from '@/lib/types';
+import { formatDateTime, formatDayMonthYear } from '@/lib/utils';
 
 const ROUTE = '/production/receipts';
 
-const fmt = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleString() : '—';
-const fmtDate = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleDateString() : '—';
+const fmt = (iso?: string | null) => (iso ? formatDateTime(iso) : '—');
+const fmtDate = (iso?: string | null) => (iso ? formatDayMonthYear(iso) : '—');
 
 export default function ProductionReceiptsPage() {
   const { can } = useAuth();

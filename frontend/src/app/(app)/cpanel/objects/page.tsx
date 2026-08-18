@@ -38,7 +38,7 @@ import { IconPicker } from '@/components/ui/IconPicker';
 import { StatCard } from '@/components/ui/StatCard';
 import { Badge } from '@/components/ui/Badge';
 import { Tabs, type TabDef } from '@/components/ui/Tabs';
-import { formatDate } from '@/lib/utils';
+import { formatDateTime } from '@/lib/utils';
 import type {
   ErpObject,
   ObjectListResponse,
@@ -449,7 +449,7 @@ export default function ObjectsPage() {
       sortable: true,
       render: (r) => (
         <span className="whitespace-nowrap text-slate-500 dark:text-slate-400">
-          {formatDate(r.createdAt)}
+          {formatDateTime(r.createdAt)}
         </span>
       ),
     },
@@ -858,7 +858,7 @@ export default function ObjectsPage() {
                           <div className="flex items-center justify-between">
                             <Badge color="blue">Rev #{r.revisionNumber}</Badge>
                             <span className="text-xs text-slate-400">
-                              {formatDate(r.createdAt)}
+                              {formatDateTime(r.createdAt)}
                             </span>
                           </div>
                           <p className="mt-2 text-sm text-slate-700 dark:text-slate-200">

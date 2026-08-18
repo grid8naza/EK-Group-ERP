@@ -28,6 +28,7 @@ import type {
   PartyStatement,
   StatementRow,
 } from '@/lib/types';
+import { formatDayMonthYear } from '@/lib/utils';
 
 const ROUTE = '/accounts/reports/statement-of-account';
 
@@ -36,7 +37,7 @@ const money = (n: number) =>
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-const asDate = (iso: string) => new Date(iso).toLocaleDateString();
+const asDate = (iso: string) => formatDayMonthYear(iso);
 
 const ALL_COLUMNS: ReportColumn<StatementRow>[] = [
   { key: 'date', header: 'Date', weight: 10, cell: (r) => asDate(r.date) },

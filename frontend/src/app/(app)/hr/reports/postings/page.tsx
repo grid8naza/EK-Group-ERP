@@ -8,10 +8,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Select, DateInput } from '@/components/ui/Field';
-import {
-  ReportView,
-  ReportExportButtons,
-} from '@/components/ui/ReportView';
+import { ReportView, ReportExportButtons } from '@/components/ui/ReportView';
 import {
   printReport,
   pdfReport,
@@ -139,7 +136,9 @@ export default function PostingsRegisterReportPage() {
   const total = blocks.reduce((n, b) => n + (b.count ?? 0), 0);
 
   const summary = useMemo(() => {
-    const rows = (data ?? []).filter((r) => !(mode === 'moves' && !r.startedInPeriod));
+    const rows = (data ?? []).filter(
+      (r) => !(mode === 'moves' && !r.startedInPeriod),
+    );
     const promotions = rows.filter(
       (r) => r.startedInPeriod && r.changes.includes('DESIGNATION'),
     ).length;

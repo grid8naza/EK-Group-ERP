@@ -26,7 +26,7 @@ import { Input, Textarea, Checkbox } from '@/components/ui/Field';
 import { PeopleField, type PickedPerson } from '@/components/workplace/people';
 import { ChecklistHistoryDrawer } from '@/components/workplace/ChecklistHistoryDrawer';
 import { PRIORITY_TONE } from '@/components/workplace/task-ui';
-import { cn } from '@/lib/utils';
+import { cn, formatDayMonthYear } from '@/lib/utils';
 import type {
   AudienceOptions,
   ChecklistFrequency,
@@ -105,7 +105,7 @@ const blank = (): Form => ({
   items: [''],
 });
 
-/** "at 08:00 tomorrow", "on Mon 18 Aug at 06:00" — when it next comes out. */
+/** "at 08:00 tomorrow", "on Mon 18/08/2026 at 06:00" — when it next comes out. */
 function nextRunLabel(nextRunAt: string | null): string {
   if (!nextRunAt) return 'never';
   const at = new Date(nextRunAt);
@@ -120,11 +120,8 @@ function nextRunLabel(nextRunAt: string | null): string {
   );
   if (days === 0) return `at ${time} today`;
   if (days === 1) return `at ${time} tomorrow`;
-  return `on ${at.toLocaleDateString(undefined, {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-  })} at ${time}`;
+  const weekday = at.toLocaleDateString(undefined, { weekday: 'short' });
+  return `on ${weekday} ${formatDayMonthYear(at)} at ${time}`;
 }
 
 /** "Every day at 06:00", "Mon, Thu at 07:30", "Day 1 at 09:00". */
@@ -530,7 +527,8 @@ export function ChecklistScreen() {
                   </>
                 ) : t.hasEnded ? (
                   <span className="text-slate-400">
-                    Ended {t.endsOn} — it will not come round again.
+                    Ended {formatDayMonthYear(t.endsOn)} — it will not come
+                    round again.
                   </span>
                 ) : !t.isActive ? (
                   <span className="text-slate-400">
@@ -538,7 +536,8 @@ export function ChecklistScreen() {
                   </span>
                 ) : t.notStarted ? (
                   <span className="text-slate-400">
-                    Starts {t.startsOn} · first {nextRunLabel(t.nextRunAt)}
+                    Starts {formatDayMonthYear(t.startsOn)} · first{' '}
+                    {nextRunLabel(t.nextRunAt)}
                   </span>
                 ) : (
                   <span className="text-slate-400">

@@ -15,7 +15,7 @@ import {
   User as UserIcon,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { cn, formatDayMonthYear } from '@/lib/utils';
 import { useFetch, useLookupValues } from '@/lib/hooks';
 import { mediaUrl } from '@/lib/login-screen';
 import { useToast } from '@/providers/ToastProvider';
@@ -843,7 +843,7 @@ export default function EmployeesPage() {
     {
       key: 'dateOfJoin',
       header: 'Joined',
-      accessor: (r) => r.dateOfJoin.split('-').reverse().join('-'),
+      accessor: (r) => formatDayMonthYear(r.dateOfJoin),
       sortAccessor: (r) => r.dateOfJoin,
     },
     {

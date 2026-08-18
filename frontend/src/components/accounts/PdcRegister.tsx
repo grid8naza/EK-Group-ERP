@@ -12,7 +12,7 @@ import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
 import { ReadOnlyFieldset } from '@/components/ui/ReadOnlyFieldset';
 import { DateInput, Input } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import { formatDate, isoDate } from '@/lib/utils';
+import { formatDayMonthYear, isoDate } from '@/lib/utils';
 import { money } from '@/components/accounts/voucher-common';
 import type { PdcStatus, VoucherInstrument } from '@/lib/types';
 
@@ -208,7 +208,7 @@ export function PdcRegister({
         sortAccessor: (r) => r.instrumentDate ?? '',
         render: (r) => (
           <span className="font-medium text-slate-800 dark:text-slate-100">
-            {formatDate(r.instrumentDate)}
+            {formatDayMonthYear(r.instrumentDate)}
           </span>
         ),
       },
@@ -243,7 +243,7 @@ export function PdcRegister({
               <Badge color={s.tone}>{s.label}</Badge>
               {since && (
                 <span className="ml-2 text-xs text-slate-400">
-                  {formatDate(since)}
+                  {formatDayMonthYear(since)}
                 </span>
               )}
             </div>
@@ -379,7 +379,7 @@ export function PdcRegister({
           {(history?.events ?? []).map((e) => (
             <li key={e.id} className="flex gap-3">
               <span className="w-24 flex-none text-xs tabular-nums text-slate-400">
-                {formatDate(e.date)}
+                {formatDayMonthYear(e.date)}
               </span>
               <span className="min-w-0">
                 <Badge color={STATUS[e.status].tone}>

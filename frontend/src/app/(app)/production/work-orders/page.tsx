@@ -14,6 +14,7 @@ import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, CloseFooter } from '@/components/ui/Drawer';
 import { Badge } from '@/components/ui/Badge';
 import type { WorkOrder, WorkOrderStatus, Product, Unit } from '@/lib/types';
+import { formatDateTime, formatDayMonthYear } from '@/lib/utils';
 
 const ROUTE = '/production/work-orders';
 
@@ -28,10 +29,8 @@ const statusColor = (s: WorkOrderStatus) =>
 const statusLabel = (s: WorkOrderStatus) =>
   s === 'IN_PROGRESS' ? 'In progress' : s.charAt(0) + s.slice(1).toLowerCase();
 
-const fmt = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleString() : '—';
-const fmtDate = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleDateString() : '—';
+const fmt = (iso?: string | null) => (iso ? formatDateTime(iso) : '—');
+const fmtDate = (iso?: string | null) => (iso ? formatDayMonthYear(iso) : '—');
 
 export default function WorkOrdersPage() {
   const { can } = useAuth();

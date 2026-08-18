@@ -7,21 +7,30 @@ export function cn(
 /**
  * A date as a person writes it here: dd/mm/yyyy.
  *
- * For reports and printed documents, where an ISO date reads as a machine
- * timestamp. The time is dropped — the things dated this way are days, not
- * moments. The year is written in full: a service record spans decades, and
- * "01/01/30" leaves the reader deciding whether that is 1930 or 2030.
+ * THE date format of this application — screens, reports and printed documents
+ * alike. Nothing shows a date any other way: an ISO date reads as a machine
+ * timestamp, and the browser's own locale would show a New York user a date
+ * their Gulf colleague reads as a different day. The time is dropped — the
+ * things dated this way are days, not moments. The year is written in full: a
+ * service record spans decades, and "01/01/30" leaves the reader deciding
+ * whether that is 1930 or 2030.
  *
  * A date-only string is read back as UTC, because that is how the engine parses
  * it; taking it as local would show the day before to anybody west of
  * Greenwich. A value that will not parse comes back untouched rather than as
  * "Invalid Date": a report should show what it was given, not complain about it.
  */
-export function formatDayMonthYear(value?: string | null): string {
+export function formatDayMonthYear(value?: string | Date | null): string {
   if (!value) return '-';
-  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
-  const d = new Date(dateOnly ? `${value}T00:00:00Z` : value);
-  if (isNaN(d.getTime())) return value;
+  // A Date has already been resolved to a moment in this zone; only a bare
+  // yyyy-mm-dd string needs the UTC reading below.
+  const raw = typeof value === 'string' ? value : null;
+  const dateOnly = raw ? /^\d{4}-\d{2}-\d{2}$/.test(raw) : false;
+  const d =
+    raw === null
+      ? (value as Date)
+      : new Date(dateOnly ? `${raw}T00:00:00Z` : raw);
+  if (isNaN(d.getTime())) return raw ?? '-';
   const pad = (n: number) => String(n).padStart(2, '0');
   const day = dateOnly ? d.getUTCDate() : d.getDate();
   const month = (dateOnly ? d.getUTCMonth() : d.getMonth()) + 1;
@@ -29,14 +38,29 @@ export function formatDayMonthYear(value?: string | null): string {
   return `${pad(day)}/${pad(month)}/${year}`;
 }
 
-export function formatDate(value?: string | null): string {
+/**
+ * A moment: the same dd/mm/yyyy, with the clock after it.
+ *
+ * For the things where the time of day is the point — when a document was
+ * raised, when a cost was last recomputed, when a backup ran. The date half is
+ * written exactly as {@link formatDayMonthYear} writes it, so a column of
+ * timestamps and a column of dates line up as the same format.
+ *
+ * `withSeconds` for audit-flavoured places, where two entries a few seconds
+ * apart need telling apart.
+ */
+export function formatDateTime(
+  value?: string | Date | null,
+  opts?: { withSeconds?: boolean },
+): string {
   if (!value) return '-';
-  const d = new Date(value);
-  if (isNaN(d.getTime())) return value;
+  const d = typeof value === 'string' ? new Date(value) : value;
+  if (isNaN(d.getTime())) return typeof value === 'string' ? value : '-';
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
-    d.getHours(),
-  )}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  const time = `${pad(d.getHours())}:${pad(d.getMinutes())}${
+    opts?.withSeconds ? `:${pad(d.getSeconds())}` : ''
+  }`;
+  return `${formatDayMonthYear(value)} ${time}`;
 }
 
 /**

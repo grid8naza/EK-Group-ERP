@@ -13,7 +13,7 @@ import {
   Truck,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
-import { dec2 } from '@/lib/utils';
+import { dec2, formatDateTime, formatDayMonthYear } from '@/lib/utils';
 import { useDocumentLink, useFetch, useUnsavedChangesGuard } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -53,8 +53,7 @@ const statusColor = (s: SalesOrderStatus) =>
           ? 'blue'
           : 'amber';
 
-const fmtDelivery = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleString() : '—';
+const fmtDelivery = (iso?: string | null) => (iso ? formatDateTime(iso) : '—');
 const toLocalInput = (iso?: string | null) => {
   if (!iso) return '';
   const d = new Date(iso);
@@ -728,9 +727,7 @@ function DraftEditor(props: {
           <Fact label="PO number" value={order.poNumber ?? '—'} />
           <Fact
             label="PO date"
-            value={
-              order.poDate ? new Date(order.poDate).toLocaleDateString() : '—'
-            }
+            value={order.poDate ? formatDayMonthYear(order.poDate) : '—'}
           />
           <Fact label="Customer" value={companyName(order.buyerCompanyId)} />
           <Fact label="Branch" value={branchName(order.buyerBranchId)} />

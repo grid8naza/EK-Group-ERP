@@ -10,7 +10,7 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { DateInput, Select } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
-import { formatDate, isoDate } from '@/lib/utils';
+import { formatDayMonthYear, isoDate } from '@/lib/utils';
 import { money } from '@/components/accounts/voucher-common';
 import type { CoaAccount } from '@/lib/types';
 
@@ -105,7 +105,7 @@ export default function BankReconciliationPage() {
         header: 'Book date',
         sortable: true,
         sortAccessor: (r) => r.date,
-        accessor: (r) => formatDate(r.date),
+        accessor: (r) => formatDayMonthYear(r.date),
       },
       {
         key: 'voucherNo',
@@ -151,7 +151,7 @@ export default function BankReconciliationPage() {
               }}
             />
           ) : (
-            <span>{r.bankDate ? formatDate(r.bankDate) : '—'}</span>
+            <span>{r.bankDate ? formatDayMonthYear(r.bankDate) : '—'}</span>
           ),
       },
       {

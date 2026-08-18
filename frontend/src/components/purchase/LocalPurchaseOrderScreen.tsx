@@ -12,7 +12,7 @@ import {
   Ban,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
-import { dec2 } from '@/lib/utils';
+import { dec2, formatDateTime, formatDayMonthYear } from '@/lib/utils';
 import { useDocumentLink, useFetch, useUnsavedChangesGuard } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -55,8 +55,7 @@ const statusColor = (s: LocalPurchaseOrderStatus) =>
           ? 'blue'
           : 'amber';
 
-const fmtDelivery = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleString() : '—';
+const fmtDelivery = (iso?: string | null) => (iso ? formatDateTime(iso) : '—');
 // datetime-local wants "YYYY-MM-DDTHH:mm" in local time.
 const toLocalInput = (iso?: string | null) => {
   if (!iso) return '';
@@ -500,7 +499,7 @@ export function LocalPurchaseOrderScreen() {
     {
       key: 'date',
       header: 'Placed',
-      accessor: (r) => new Date(r.createdAt).toLocaleDateString(),
+      accessor: (r) => formatDayMonthYear(r.createdAt),
       className: 'text-center',
       headerClassName: 'text-center',
     },

@@ -9,6 +9,8 @@
  * out again in each one.
  */
 
+import { formatDayMonthYear } from './utils';
+
 /** 1234.5 → "1,234.50", grouped the Indian way — 12,34,567.00. */
 export const money = (v: number) =>
   (v || 0).toLocaleString('en-IN', {
@@ -27,12 +29,9 @@ export const esc = (s: unknown) =>
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;');
 
-/** An ISO date as it is read here: 10-08-2026. Blank stays blank. */
-export const fmtDate = (iso?: string | null) => {
-  if (!iso) return '';
-  const [y, m, d] = iso.slice(0, 10).split('-');
-  return d && m && y ? `${d}-${m}-${y}` : iso;
-};
+/** An ISO date as it is read here: 10/08/2026. Blank stays blank. */
+export const fmtDate = (iso?: string | null) =>
+  iso ? formatDayMonthYear(iso.slice(0, 10)) : '';
 
 /**
  * Open a print window and write a built document into it.

@@ -11,7 +11,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { cn, formatDayMonthYear } from '@/lib/utils';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -235,7 +235,7 @@ export function PostingsPanel({
     if (!employeeId) return;
     const ok = await confirm({
       title: 'Delete this posting',
-      message: `Delete the posting from ${p.effectiveFrom}? The service record will no longer show it.`,
+      message: `Delete the posting from ${formatDayMonthYear(p.effectiveFrom)}? The service record will no longer show it.`,
       danger: true,
       confirmText: 'Delete',
     });
@@ -504,7 +504,8 @@ function PostingCard({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 bg-slate-50 px-3 py-2.5 dark:bg-slate-800/50">
         <CalendarClock className="h-4 w-4 flex-none text-brand-600" />
         <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-          {p.effectiveFrom} &rarr; {p.effectiveTo ?? 'present'}
+          {formatDayMonthYear(p.effectiveFrom)} &rarr;{' '}
+          {p.effectiveTo ? formatDayMonthYear(p.effectiveTo) : 'present'}
         </span>
         {current && <Badge color="green">Current</Badge>}
         {promoted && (

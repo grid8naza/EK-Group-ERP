@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ClipboardList, Plus, Trash2 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
-import { money2, dec2 } from '@/lib/utils';
+import { money2, dec2, formatDayMonthYear } from '@/lib/utils';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -56,8 +56,7 @@ const todayInput = () => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 };
 const dateInput = (iso?: string | null) => (iso ? iso.slice(0, 10) : '');
-const fmtDate = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleDateString() : '—';
+const fmtDate = (iso?: string | null) => (iso ? formatDayMonthYear(iso) : '—');
 
 export function OpeningStockScreen({
   type,

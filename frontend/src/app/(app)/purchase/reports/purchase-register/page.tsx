@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { Receipt } from 'lucide-react';
 import { useFetch } from '@/lib/hooks';
+import { formatDayMonthYear } from '@/lib/utils';
 import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -64,7 +65,8 @@ interface PurchaseRow {
   total: number;
 }
 
-const asDate = (v: string | null) => (v ? v.slice(0, 10) : '');
+const asDate = (v: string | null) =>
+  v ? formatDayMonthYear(v.slice(0, 10)) : '';
 
 /** The first day of the month a report opens on, and today's date. */
 const today = () => new Date().toISOString().slice(0, 10);

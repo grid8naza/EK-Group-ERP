@@ -15,6 +15,7 @@ import { Drawer, CloseFooter } from '@/components/ui/Drawer';
 import { Input } from '@/components/ui/Field';
 import { Badge } from '@/components/ui/Badge';
 import type { MaterialRequest, MaterialRequestStatus, Unit } from '@/lib/types';
+import { formatDateTime } from '@/lib/utils';
 
 const ROUTE = '/production/material-requests';
 
@@ -22,8 +23,7 @@ const statusColor = (s: MaterialRequestStatus) =>
   s === 'ISSUED' ? 'green' : s === 'CANCELLED' ? 'slate' : 'amber';
 const statusLabel = (s: MaterialRequestStatus) =>
   s.charAt(0) + s.slice(1).toLowerCase();
-const fmt = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleString() : '—';
+const fmt = (iso?: string | null) => (iso ? formatDateTime(iso) : '—');
 
 const shortCount = (mr: MaterialRequest) =>
   mr.lines.filter((l) => l.requiredQty > l.availableQty).length;

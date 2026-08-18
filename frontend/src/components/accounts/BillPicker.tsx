@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { cn } from '@/lib/utils';
+import { cn, formatDayMonthYear } from '@/lib/utils';
 import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
 import { Input, MoneyInput } from '@/components/ui/Field';
 import type { BalanceSide, OutstandingBill } from '@/lib/types';
@@ -316,7 +316,7 @@ export function BillPicker({
                       {b.billRef ?? '—'}
                     </span>
                     <span className="text-xs text-slate-500">
-                      {new Date(b.date).toLocaleDateString()}
+                      {formatDayMonthYear(b.date)}
                     </span>
                     <span
                       className={cn(
@@ -331,9 +331,7 @@ export function BillPicker({
                           : 'Within the agreed credit period'
                       }
                     >
-                      {b.dueDate
-                        ? new Date(b.dueDate).toLocaleDateString()
-                        : '—'}
+                      {b.dueDate ? formatDayMonthYear(b.dueDate) : '—'}
                     </span>
                     <span className="text-right tabular-nums">
                       {money(b.pending)}

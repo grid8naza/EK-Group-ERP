@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import { Ban, Plus, Trash2 } from 'lucide-react';
 import { useFetch } from '@/lib/hooks';
 import { resolveIcon } from '@/lib/icons';
-import { isoDate } from '@/lib/utils';
+import { formatDayMonthYear, isoDate } from '@/lib/utils';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { DataTable, type Column } from '@/components/ui/DataTable';
 import { Select } from '@/components/ui/Field';
@@ -51,7 +51,8 @@ export const paise = (v: string | number | null | undefined) =>
 
 /** The date HERE, not in UTC — see isoDate. */
 export const today = () => isoDate();
-export const asDate = (iso: string) => new Date(iso).toLocaleDateString();
+/** Every date on screen is dd/mm/yyyy — never the browser's own locale. */
+export const asDate = (iso: string) => formatDayMonthYear(iso);
 
 export const statusColor = (s: VoucherStatus) =>
   s === 'POSTED' ? 'green' : s === 'CANCELLED' ? 'slate' : 'blue';

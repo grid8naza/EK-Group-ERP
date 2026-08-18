@@ -1,3 +1,4 @@
+import { formatDayMonthYear } from '@/lib/utils';
 import type { BroadcastPriority } from '@/lib/types';
 
 /**
@@ -42,7 +43,7 @@ export const PRIORITY_TAG: Record<BroadcastPriority, string> = {
   URGENT: 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300',
 };
 
-/** "Shows until 20 Aug", "Expired", "Until dismissed" — the life left in it. */
+/** "Shows until 20/08/2026", "Expired", "Until dismissed" — the life left in it. */
 export function expiryLabel(
   expiresAt: string | null,
   hasExpired: boolean,
@@ -57,8 +58,5 @@ export function expiryLabel(
   );
   if (days <= 0) return 'Shows until today';
   if (days === 1) return 'Shows until tomorrow';
-  return `Shows until ${d.toLocaleDateString(undefined, {
-    day: '2-digit',
-    month: 'short',
-  })}`;
+  return `Shows until ${formatDayMonthYear(d)}`;
 }

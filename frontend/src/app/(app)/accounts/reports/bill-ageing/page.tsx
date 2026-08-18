@@ -17,6 +17,7 @@ import {
   type ReportSpec,
 } from '@/lib/reportDoc';
 import type { AgeingReport, Company, PartyLite } from '@/lib/types';
+import { formatDayMonthYear } from '@/lib/utils';
 
 const ROUTE = '/accounts/reports/bill-ageing';
 
@@ -27,8 +28,7 @@ const money = (n: number) =>
         maximumFractionDigits: 2,
       })
     : '';
-const asDate = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString() : '';
+const asDate = (iso: string | null) => (iso ? formatDayMonthYear(iso) : '');
 
 /**
  * Bill ageing — every bill still standing, by how long it has been overdue.

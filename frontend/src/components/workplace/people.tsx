@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Search, X } from 'lucide-react';
 import { API_URL, api } from '@/lib/api';
-import { cn } from '@/lib/utils';
+import { cn, formatDateTime, formatDayMonthYear } from '@/lib/utils';
 import type { ChatDirectoryUser } from '@/lib/types';
 
 /**
@@ -51,11 +51,7 @@ export function dayLabel(iso: string): string {
   const same = (a: Date, b: Date) => a.toDateString() === b.toDateString();
   if (same(d, today)) return 'Today';
   if (same(d, yesterday)) return 'Yesterday';
-  return d.toLocaleDateString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    year: d.getFullYear() === today.getFullYear() ? undefined : 'numeric',
-  });
+  return formatDayMonthYear(d);
 }
 
 /** Compact time for a list — clock today, date before that. */
@@ -63,18 +59,12 @@ export function listTime(iso: string | null): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (d.toDateString() === new Date().toDateString()) return clockOf(iso);
-  return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short' });
+  return formatDayMonthYear(d);
 }
 
 /** The full stamp, for a message you have opened rather than skimmed. */
 export function fullTime(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatDateTime(iso);
 }
 
 export const humanSize = (bytes: number) => {

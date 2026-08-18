@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { X, Info } from 'lucide-react';
 import { mediaUrl } from '@/lib/login-screen';
-import { formatDate } from '@/lib/utils';
+import { formatDayMonthYear } from '@/lib/utils';
 import type { SoftwareInfo } from '@/lib/software-info';
 
 /** Read-only panel showing the software / licence details. */
@@ -38,7 +38,7 @@ export function SoftwareInfoDialog({
     {
       label: 'Subscription Expiry',
       value: info?.subscriptionExpiry
-        ? formatDate(info.subscriptionExpiry).slice(0, 10)
+        ? formatDayMonthYear(info.subscriptionExpiry)
         : '—',
     },
   ];

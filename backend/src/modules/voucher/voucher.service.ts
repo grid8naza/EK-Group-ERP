@@ -14,6 +14,7 @@ import {
   VoucherStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { formatDayMonthYear } from '../../common/zoned-time';
 import {
   NUMBERING,
   NumberingPort,
@@ -1324,7 +1325,7 @@ export class VoucherService {
     const last = pdc.events.at(-1);
     if (last && date < last.date) {
       throw new BadRequestException(
-        `It was ${said(last.status)} on ${last.date.toISOString().slice(0, 10)} — ` +
+        `It was ${said(last.status)} on ${formatDayMonthYear(last.date)} — ` +
           `this cannot have happened before that.`,
       );
     }
@@ -2316,7 +2317,7 @@ export class VoucherService {
     throw new BadRequestException(
       clash.status === 'CANCELLED'
         ? `Bill “${ref}” was already raised for that party and later cancelled — that number cannot be used again (${at}).`
-        : `Bill “${ref}” already exists for that party, dated ${clash.date.toISOString().slice(0, 10)} (${at}).`,
+        : `Bill “${ref}” already exists for that party, dated ${formatDayMonthYear(clash.date)} (${at}).`,
     );
   }
 

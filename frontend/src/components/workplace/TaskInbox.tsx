@@ -8,7 +8,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { Badge } from '@/components/ui/Badge';
-import { formatDate } from '@/lib/utils';
+import { formatDayMonthYear } from '@/lib/utils';
 import type { WorkflowTaskItem, WorkflowTaskKind } from '@/lib/types';
 
 /** Compact relative time, falling back to a short date for older items. */
@@ -24,7 +24,7 @@ function relativeTime(value?: string | null): string {
   if (hrs < 24) return `${hrs}h ago`;
   const days = Math.floor(hrs / 24);
   if (days < 7) return `${days}d ago`;
-  return formatDate(value).slice(0, 10);
+  return formatDayMonthYear(value);
 }
 
 const docLabel = (t: Pick<WorkflowTaskItem, 'documentRef' | 'documentId'>) =>

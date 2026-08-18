@@ -142,6 +142,23 @@ export function addDays(date: string, days: number): string {
   return at.toISOString().slice(0, 10);
 }
 
+/**
+ * A date as it is written to a person: dd/mm/yyyy.
+ *
+ * The house format, the same one the screens use. Only for text a human reads —
+ * an alert body, an error message. Anything crossing the wire as data stays ISO,
+ * because that is what the client parses.
+ *
+ * Read as UTC: a stored date-only value is midnight UTC that day, and taking it
+ * as local would name the day before for anybody west of Greenwich.
+ */
+export function formatDayMonthYear(value: Date | string): string {
+  const at = typeof value === 'string' ? dateMarker(value.slice(0, 10)) : value;
+  if (isNaN(at.getTime())) return String(value);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(at.getUTCDate())}/${pad(at.getUTCMonth() + 1)}/${at.getUTCFullYear()}`;
+}
+
 /** `360` → `06:00`, for anything that shows a stored time of day. */
 export function formatMinutes(minutes: number): string {
   const m = ((minutes % 1440) + 1440) % 1440;

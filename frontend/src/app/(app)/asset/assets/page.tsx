@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Cpu } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
-import { money2, dec2 } from '@/lib/utils';
+import { money2, dec2, formatDayMonthYear } from '@/lib/utils';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -421,7 +421,7 @@ export default function AssetsPage() {
       key: 'purchaseDate',
       header: 'Purchase Date',
       accessor: (r) =>
-        r.purchaseDate ? new Date(r.purchaseDate).toLocaleDateString() : '-',
+        r.purchaseDate ? formatDayMonthYear(r.purchaseDate) : '-',
       sortAccessor: (r) => r.purchaseDate ?? '',
     },
     {

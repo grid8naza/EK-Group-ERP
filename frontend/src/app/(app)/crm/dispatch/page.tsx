@@ -21,6 +21,7 @@ import type {
   Branch,
   Unit,
 } from '@/lib/types';
+import { formatDayMonthYear } from '@/lib/utils';
 
 const ROUTE = '/crm/dispatch';
 
@@ -28,8 +29,7 @@ const statusColor = (s: DispatchStatus) =>
   s === 'RECEIVED' ? 'green' : s === 'CANCELLED' ? 'slate' : 'amber';
 const statusLabel = (s: DispatchStatus) =>
   s.charAt(0) + s.slice(1).toLowerCase();
-const fmtDate = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleDateString() : '—';
+const fmtDate = (iso?: string | null) => (iso ? formatDayMonthYear(iso) : '—');
 const money = (n: number) =>
   n.toLocaleString(undefined, {
     minimumFractionDigits: 2,

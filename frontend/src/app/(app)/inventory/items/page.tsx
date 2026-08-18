@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Box } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
-import { money2, dec2 } from '@/lib/utils';
+import { money2, dec2, formatDayMonthYear } from '@/lib/utils';
 import { useFetch } from '@/lib/hooks';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
@@ -377,9 +377,7 @@ export default function ItemsPage() {
       key: 'lastPurchaseDate',
       header: 'Last Purchase Date',
       accessor: (r) =>
-        r.lastPurchaseDate
-          ? new Date(r.lastPurchaseDate).toLocaleDateString()
-          : '-',
+        r.lastPurchaseDate ? formatDayMonthYear(r.lastPurchaseDate) : '-',
       sortAccessor: (r) => r.lastPurchaseDate ?? '',
       className: 'text-center',
       headerClassName: 'text-center',

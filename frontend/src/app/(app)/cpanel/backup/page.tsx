@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { api, ApiError, API_URL, getToken } from '@/lib/api';
 import { useFetch } from '@/lib/hooks';
+import { formatDateTime } from '@/lib/utils';
 import { useToast } from '@/providers/ToastProvider';
 import { useConfirm } from '@/providers/ConfirmProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -35,11 +36,6 @@ function formatBytes(n: number): string {
     i++;
   }
   return `${v.toFixed(1)} ${units[i]}`;
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
 }
 
 // The action the high security password drawer is gating.
@@ -393,7 +389,7 @@ export default function BackupPage() {
     {
       key: 'createdAt',
       header: 'Created',
-      accessor: (r) => formatDate(r.createdAt),
+      accessor: (r) => formatDateTime(r.createdAt),
     },
     { key: 'createdBy', header: 'By', accessor: (r) => r.createdBy ?? '-' },
     { key: 'note', header: 'Note', accessor: (r) => r.note ?? '-' },
@@ -443,7 +439,7 @@ export default function BackupPage() {
     {
       key: 'createdAt',
       header: 'Created',
-      accessor: (r) => formatDate(r.createdAt),
+      accessor: (r) => formatDateTime(r.createdAt),
     },
     { key: 'createdBy', header: 'By', accessor: (r) => r.createdBy ?? '-' },
     { key: 'note', header: 'Note', accessor: (r) => r.note ?? '-' },

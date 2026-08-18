@@ -21,7 +21,7 @@ import { useAlerts } from '@/providers/AlertProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { categoryMeta } from '@/components/workplace/alert-ui';
 import { dayLabel, listTime } from '@/components/workplace/people';
-import { cn } from '@/lib/utils';
+import { cn, formatDayMonthYear } from '@/lib/utils';
 import type {
   WorkplaceDashboard,
   WorkplaceItem,
@@ -104,7 +104,7 @@ function dueLabel(item: WorkplaceItem): string | null {
   if (days < 0) return `${Math.abs(days)} ${days === -1 ? 'day' : 'days'} late`;
   if (days === 0) return 'Due today';
   if (days === 1) return 'Due tomorrow';
-  return `Due ${due.toLocaleDateString(undefined, { day: '2-digit', month: 'short' })}`;
+  return `Due ${formatDayMonthYear(due)}`;
 }
 
 /**
@@ -224,11 +224,10 @@ export function DashboardScreen() {
                 {user?.name ? `, ${user.name.split(' ')[0]}` : ''}
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                {new Date().toLocaleDateString(undefined, {
-                  weekday: 'long',
-                  day: 'numeric',
-                  month: 'long',
-                })}
+                {/* The weekday is worth having on a greeting line; the date
+                    itself is written the way every other date here is. */}
+                {new Date().toLocaleDateString(undefined, { weekday: 'long' })},{' '}
+                {formatDayMonthYear(new Date())}
                 {data
                   ? ` · across ${data.companies.length} ${data.companies.length === 1 ? 'company' : 'companies'}`
                   : ''}

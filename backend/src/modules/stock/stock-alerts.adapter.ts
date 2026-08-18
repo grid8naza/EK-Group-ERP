@@ -1,5 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { formatDayMonthYear } from '../../common/zoned-time';
 import { AlertSourcePort } from '../../contracts/alert-source.port';
 import {
   NOTIFICATION,
@@ -310,7 +311,7 @@ export class StockAlertsAdapter implements AlertSourcePort {
 
       const unitSrc = item?.unit || product?.unit;
       const unit = unitSrc?.symbol || unitSrc?.code || '';
-      const on = batch.expiryDate!.toISOString().slice(0, 10);
+      const on = formatDayMonthYear(batch.expiryDate!);
       const expired = batch.expiryDate! <= now;
       const key = `${EXPIRY_NAMESPACE}${companyId}:batch:${batch.id}`;
       keys.push(key);

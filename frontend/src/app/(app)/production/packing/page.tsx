@@ -13,13 +13,12 @@ import { LockButton } from '@/components/ui/LockButton';
 import { Drawer, DrawerFooter, CloseFooter } from '@/components/ui/Drawer';
 import { Select } from '@/components/ui/Field';
 import type { Packing, Product, Unit } from '@/lib/types';
+import { formatDateTime, formatDayMonthYear } from '@/lib/utils';
 
 const ROUTE = '/production/packing';
 
-const fmt = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleString() : '—';
-const fmtDate = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleDateString() : '—';
+const fmt = (iso?: string | null) => (iso ? formatDateTime(iso) : '—');
+const fmtDate = (iso?: string | null) => (iso ? formatDayMonthYear(iso) : '—');
 
 type DraftLine = { productId: string; quantity: string };
 

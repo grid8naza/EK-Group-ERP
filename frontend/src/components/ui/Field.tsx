@@ -229,24 +229,26 @@ export function MoneyInput({
   );
 }
 
-// ---- DateInput: a typed DD-MM-YYYY field that auto-formats as you type ----
+// ---- DateInput: a typed DD/MM/YYYY field that auto-formats as you type ----
 // Sidesteps the native <input type="date"> quirk where single-digit months
 // don't auto-advance to the year. `value`/`onChange` speak ISO (YYYY-MM-DD).
+// What is typed reads the same way every date on screen is written — see
+// formatDayMonthYear.
 
 function isoToDisplay(iso?: string | null): string {
   const m = iso ? /^(\d{4})-(\d{2})-(\d{2})/.exec(iso) : null;
-  return m ? `${m[3]}-${m[2]}-${m[1]}` : '';
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : '';
 }
 
-/** Eight digits (or fewer, mid-typing) punctuated as DD-MM-YYYY. */
+/** Eight digits (or fewer, mid-typing) punctuated as DD/MM/YYYY. */
 function format(digits: string): string {
   let out = digits.slice(0, 2);
-  if (digits.length >= 3) out += '-' + digits.slice(2, 4);
-  if (digits.length >= 5) out += '-' + digits.slice(4, 8);
+  if (digits.length >= 3) out += '/' + digits.slice(2, 4);
+  if (digits.length >= 5) out += '/' + digits.slice(4, 8);
   return out;
 }
 
-/** A DD-MM-YYYY display string → ISO YYYY-MM-DD, or '' when incomplete/invalid. */
+/** A DD/MM/YYYY display string → ISO YYYY-MM-DD, or '' when incomplete/invalid. */
 function displayToIso(display: string): string {
   const digits = display.replace(/\D/g, '');
   if (digits.length !== 8) return '';
@@ -281,7 +283,7 @@ export function DateInput({
   id,
   disabled,
   className,
-  placeholder = 'DD-MM-YYYY',
+  placeholder = 'DD/MM/YYYY',
   onKeyDown,
   label,
   required,

@@ -5,7 +5,7 @@ import { ExternalLink } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useToast } from '@/providers/ToastProvider';
 import { CloseFooter, Drawer } from '@/components/ui/Drawer';
-import { cn } from '@/lib/utils';
+import { cn, formatDayMonthYear } from '@/lib/utils';
 import type {
   ChecklistDayStatus,
   ChecklistHistory,
@@ -53,13 +53,13 @@ const DAY_STATUS: Record<ChecklistDayStatus, { label: string; tone: string }> =
 /** How long a window the register offers. */
 const WINDOWS = [30, 90, 180];
 
-/** "Fri 14 Aug" — a register is read by date, so the weekday earns its place. */
-const dayLabelOf = (date: string) =>
-  new Date(`${date}T00:00:00`).toLocaleDateString(undefined, {
+/** "Fri 14/08/2026" — a register is read by date, so the weekday earns its place. */
+const dayLabelOf = (date: string) => {
+  const weekday = new Date(`${date}T00:00:00`).toLocaleDateString(undefined, {
     weekday: 'short',
-    day: 'numeric',
-    month: 'short',
   });
+  return `${weekday} ${formatDayMonthYear(date)}`;
+};
 
 /**
  * The register for one recurring checklist: one row per day it was expected,

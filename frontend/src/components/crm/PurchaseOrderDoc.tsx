@@ -1,5 +1,6 @@
 'use client';
 
+import { formatDateTime, formatDayMonthYear } from '@/lib/utils';
 import { Badge } from '@/components/ui/Badge';
 import { WorkflowStallNotice } from '@/components/workflow/StallNotice';
 import type { PurchaseOrder, PurchaseOrderStatus } from '@/lib/types';
@@ -15,10 +16,8 @@ const statusColor = (s: PurchaseOrderStatus) =>
           ? 'blue'
           : 'amber';
 
-const fmt = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleString() : '—';
-const fmtDate = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleDateString() : '—';
+const fmt = (iso?: string | null) => (iso ? formatDateTime(iso) : '—');
+const fmtDate = (iso?: string | null) => (iso ? formatDayMonthYear(iso) : '—');
 const money = (n: number) =>
   n.toLocaleString(undefined, {
     minimumFractionDigits: 2,

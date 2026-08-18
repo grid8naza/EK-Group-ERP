@@ -1,5 +1,6 @@
 'use client';
 
+import { formatDayMonthYear } from '@/lib/utils';
 import type { StockDocumentRow, StockTransaction } from '@/lib/types';
 
 /** One line as the document says it, already resolved for printing. */
@@ -61,8 +62,7 @@ export function StockDocumentPrint({
   // the same figure the stock-unit pair would give.
   const amountOf = (l: PrintLine) => l.qty * l.rate;
   const total = lines.reduce((sum, l) => sum + amountOf(l), 0);
-  const fmtDate = (v?: string | null) =>
-    v ? new Date(v).toLocaleDateString('en-GB') : '—';
+  const fmtDate = (v?: string | null) => (v ? formatDayMonthYear(v) : '—');
 
   return (
     <div className="print-root hidden text-black print:block">
