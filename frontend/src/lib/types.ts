@@ -3404,9 +3404,14 @@ export interface AttendanceSheet {
   weeklyOff: boolean;
   /** False on a weekly off or a holiday — nobody is due in. */
   working: boolean;
+  /** Whose sheet this is; null = the branch's own, for everybody in no team. */
+  teamId: number | null;
+  teamName: string | null;
   canMark: boolean;
   /** True where a workflow decides who marks, rather than the screen's privilege. */
   markingGoverned: boolean;
+  /** True where this viewer may mark it because they LEAD the team. */
+  marksAsLeader: boolean;
   workflow: {
     instanceId: number | null;
     status: 'IN_PROGRESS' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | null;
@@ -3589,4 +3594,48 @@ export interface BulkAssignResult {
   moved: number;
   /** The ones that could not be, named and with the reason. */
   failed: { employeeId: number; employeeName: string; reason: string }[];
+}
+
+// ---------------------------------------------------------------------------
+// Teams — who answers for whose attendance (SRS §8.9).
+// ---------------------------------------------------------------------------
+
+/** A working team at a branch, and the person who leads it. */
+export interface HrTeam {
+  id: number;
+  companyId: number;
+  /** Where the team works. Null only where the company keeps no branches. */
+  branchId: number | null;
+  name: string;
+  /** The employee who answers for it — and who marks its attendance. */
+  leaderEmployeeId: number;
+  leaderCode: string;
+  leaderName: string;
+  remarks: string | null;
+  isActive: boolean;
+  isLocked: boolean;
+  memberIds: number[];
+  members: {
+    id: number;
+    code: string;
+    name: string;
+    designationName: string;
+  }[];
+}
+
+/** One team's day, as the attendance screen's team strip shows it. */
+export interface AttendanceTeamLine {
+  /** Null = the branch's own sheet, for everybody in no team. */
+  teamId: number | null;
+  teamName: string;
+  leaderName: string | null;
+  headcount: number;
+  status: AttendanceSheetStatus | null;
+  workflowStatus: string | null;
+  marked: number;
+}
+
+export interface AttendanceTeamsOfDay {
+  date: string;
+  sheets: AttendanceTeamLine[];
 }

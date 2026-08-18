@@ -298,6 +298,8 @@ model Employee {
   postings       EmployeePosting[]
   attendance     AttendanceEntry[]
   shifts         EmployeeShiftAssignment[]
+  teamMembership HrTeamMember?
+  teamsLed       HrTeam[]                  @relation("HrTeamLeader")
 
   @@unique([companyId, code])
   @@index([companyId, branchId])
@@ -539,6 +541,16 @@ model AttendanceSheet {
   companyId Int
   /// NULL where the company keeps no branches. A branch marks its own people.
   branchId  Int?
+  /// The TEAM whose day this is, where the branch works in teams.
+  ///
+  /// NULL means the branch's own sheet — everybody there who is in no team.
+  /// A branch with no teams therefore has exactly one sheet a day, which is
+  /// what it had before teams existed and why nothing already marked moved.
+  ///
+  /// One sheet per team rather than one per branch because a team LEADER marks
+  /// it and answers for it: a document two people are half-responsible for is a
+  /// document nobody submits.
+  teamId    Int?
   /// The day itself, held as a date-only marker (midnight UTC).
   date      DateTime
 
@@ -562,10 +574,14 @@ model AttendanceSheet {
   updatedAt DateTime @updatedAt
 
   entries AttendanceEntry[]
+  team    HrTeam?           @relation(fields: [teamId], references: [id], onDelete: Restrict)
 
-  /// One sheet per branch per day. The database says so as well as the service,
-  /// because two sheets for one day is two answers for payroll.
-  @@unique([companyId, branchId, date])
+  /// One sheet per team per day. Postgres counts NULLs as distinct, so this
+  /// does NOT by itself stop a second BRANCH sheet (teamId null) for the same
+  /// day — the service checks for one before creating, as it does for the
+  /// company-level attendance setting, and for the same reason: two sheets for
+  /// one day is two answers for payroll.
+  @@unique([companyId, branchId, teamId, date])
   @@index([companyId, date])
   @@map("attendance_sheets")
 }
@@ -721,4 +737,71 @@ model EmployeeShiftAssignment {
   @@index([employeeId, effectiveFrom])
   @@index([shiftId])
   @@map("employee_shift_assignments")
+}
+
+
+// ---------------------------------------------------------------------------
+// Teams — who answers for whose attendance.
+// ---------------------------------------------------------------------------
+
+/// A working team at a branch, and the person who leads it.
+///
+/// Its whole purpose is answerability: the leader marks their team's day and
+/// submits it, so a branch of ninety is marked by six people who each know the
+/// dozen in front of them, rather than by one person guessing.
+///
+/// A team belongs to ONE branch — the sheet it produces is a branch's day — and
+/// an employee belongs to at most one team, because two leaders marking the
+/// same person on the same day is exactly the argument the sheet cannot settle.
+model HrTeam {
+  id        Int  @id @default(autoincrement())
+  companyId Int
+  /// Where the team works. NULL only where the company keeps no branches.
+  branchId  Int?
+
+  name    String
+  /// Who answers for it. An employee rather than a user: teams are led by the
+  /// person on the floor, and whether they hold a login is a separate fact
+  /// (they need one to mark, and the service says so plainly if they have none).
+  leaderEmployeeId Int
+
+  remarks String?
+
+  isActive  Boolean  @default(true)
+  isLocked  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  leader  Employee          @relation("HrTeamLeader", fields: [leaderEmployeeId], references: [id], onDelete: Restrict)
+  members HrTeamMember[]
+  /// Restrict, not Cascade: a team is not deleted out from under the days it
+  /// has already answered for.
+  sheets  AttendanceSheet[]
+
+  /// Two teams of one name in a company is a sheet nobody can identify.
+  @@unique([companyId, name])
+  @@index([companyId, branchId])
+  @@index([leaderEmployeeId])
+  @@map("hr_teams")
+}
+
+/// One person's membership of a team.
+///
+/// Current state, not a series: which team somebody is in today is what decides
+/// whose sheet they appear on, and a team they left last year changes nothing
+/// about a day already marked — the entry on that day's sheet is the record.
+model HrTeamMember {
+  id         Int @id @default(autoincrement())
+  teamId     Int
+  employeeId Int
+
+  createdAt DateTime @default(now())
+
+  team     HrTeam   @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  /// At most ONE team per person — see the note on HrTeam.
+  @@unique([employeeId])
+  @@index([teamId])
+  @@map("hr_team_members")
 }

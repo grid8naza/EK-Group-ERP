@@ -34,6 +34,16 @@ const num = (v?: string) => {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 };
 
+/**
+ * Whose sheet is being asked for.
+ *
+ * A number is that team; anything else — absent, blank, "none" — is the
+ * branch's own sheet, the one for everybody in no team. Absent and "none" mean
+ * the same thing on purpose: a branch that keeps no teams should not have to
+ * say so on every request.
+ */
+const teamOf = (v?: string) => num(v) ?? null;
+
 /** The day's sheet: opening it, marking it, and sending it for approval. */
 @ApiTags('hr-attendance')
 @ApiBearerAuth()
@@ -49,6 +59,7 @@ export class AttendanceController {
   sheet(
     @CurrentUser() user: AuthUser,
     @Query('date') date: string,
+    @Query('teamId') teamId?: string,
     @CompanyId() companyId?: number,
     @BranchId() branchId?: number,
   ) {
@@ -57,7 +68,28 @@ export class AttendanceController {
       companyId!,
       branchId ?? null,
       date || new Date().toISOString().slice(0, 10),
+      teamOf(teamId),
       user.isSuperAdmin,
+    );
+  }
+
+  /**
+   * The day's sheets at this branch — one per team, plus the branch's own
+   * where anybody is in no team.
+   *
+   * What a branch manager opens the screen for: which teams are marked, which
+   * are still waiting, and how far each has got.
+   */
+  @Get('teams')
+  teams(
+    @Query('date') date: string,
+    @CompanyId() companyId?: number,
+    @BranchId() branchId?: number,
+  ) {
+    return this.service.teamsOfDay(
+      companyId!,
+      branchId ?? null,
+      date || new Date().toISOString().slice(0, 10),
     );
   }
 
@@ -93,6 +125,7 @@ export class AttendanceController {
           companyId!,
           branchId ?? null,
           dto.date,
+          dto.teamId ?? null,
           user.isSuperAdmin,
         ),
       );
@@ -102,6 +135,7 @@ export class AttendanceController {
   submit(
     @CurrentUser() user: AuthUser,
     @Body('date') date: string,
+    @Body('teamId') teamId: number | null,
     @CompanyId() companyId?: number,
     @BranchId() branchId?: number,
   ) {
@@ -110,6 +144,7 @@ export class AttendanceController {
       companyId!,
       branchId ?? null,
       date,
+      teamId ?? null,
       user.isSuperAdmin,
     );
   }
@@ -118,6 +153,7 @@ export class AttendanceController {
   act(
     @CurrentUser() user: AuthUser,
     @Body('date') date: string,
+    @Body('teamId') teamId: number | null,
     @Body() dto: ActAttendanceDto,
     @CompanyId() companyId?: number,
     @BranchId() branchId?: number,
@@ -128,6 +164,7 @@ export class AttendanceController {
       branchId ?? null,
       date,
       dto,
+      teamId ?? null,
       user.isSuperAdmin,
     );
   }

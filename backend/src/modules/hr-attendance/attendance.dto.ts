@@ -114,6 +114,15 @@ export class SaveAttendanceSheetDto {
   @IsDateString()
   date: string;
 
+  /**
+   * Whose sheet this is. Null / absent = the branch's own — everybody there
+   * who is in no team, which is the only sheet a branch without teams has.
+   */
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsInt()
+  teamId?: number | null;
+
   /** About the day as a whole, not about one person. */
   @ApiPropertyOptional({ nullable: true })
   @IsOptional()

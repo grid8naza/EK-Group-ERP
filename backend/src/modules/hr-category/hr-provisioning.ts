@@ -48,13 +48,22 @@ export const HR_SUBS = [
     order: 4,
   },
   {
+    // Who works together, and who answers for them. A master: the teams are a
+    // fact about how the branch is organised, and the sheets they produce are
+    // the transaction.
+    name: 'Team Master',
+    route: '/hr/teams',
+    icon: 'users',
+    order: 5,
+  },
+  {
     // The named working patterns — Morning, Night, General. A master, so it
     // sits with the other things a person is described by. Who is ON one is
     // the roster, which lives on the employee's own record.
     name: 'Shift Master',
     route: '/hr/shifts',
     icon: 'clock',
-    order: 5,
+    order: 6,
   },
   {
     // The working day a branch keeps — what a fresh attendance sheet comes up
@@ -62,13 +71,13 @@ export const HR_SUBS = [
     name: 'Attendance Settings',
     route: '/hr/attendance-settings',
     icon: 'clock',
-    order: 6,
+    order: 7,
   },
   {
     name: 'Holiday Calendar',
     route: '/hr/holidays',
     icon: 'calendar-days',
-    order: 7,
+    order: 8,
   },
 ];
 

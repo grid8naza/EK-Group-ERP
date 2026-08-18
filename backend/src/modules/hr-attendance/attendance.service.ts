@@ -75,21 +75,23 @@ export class AttendanceService {
     companyId: number,
     branchId: number | null,
     date: string,
+    teamId: number | null,
     isSuperAdmin = false,
   ) {
     if (!companyId) throw new BadRequestException('No active company.');
     const on = day(date);
     if (isNaN(on.getTime()))
       throw new BadRequestException('That is not a date.');
+    if (teamId) await this.assertTeam(companyId, branchId, teamId);
 
     const [defaults, types, holiday, roster, existing] = await Promise.all([
       this.settings.effective(companyId, branchId),
       this.settings.typeIds(),
       this.settings.holidayOn(companyId, branchId, on),
-      this.roster(companyId, branchId, on),
+      this.roster(companyId, branchId, on, teamId),
       this.prisma.attendanceSheet.findFirst({
-        where: { companyId, branchId, date: on },
-        include: { entries: true },
+        where: { companyId, branchId, teamId, date: on },
+        include: { entries: true, team: { select: { name: true } } },
       }),
     ]);
 
@@ -144,10 +146,10 @@ export class AttendanceService {
           branchId,
           ...(await this.docTypeTuple()),
         );
-    // Who may MARK is the workflow's answer too, not just the screen's Add
-    // privilege: a Mark step names its people, and where one is configured it
-    // supersedes the privilege exactly as it does on every other document.
+    // Who may MARK: the team's own leader always, plus whoever the workflow's
+    // Mark step names — which is what covers the day a leader is off sick.
     const gate = await this.markerGate(userId, companyId, branchId);
+    const leads = await this.leadsTeam(userId, teamId);
 
     return {
       date: isoDay(on),
@@ -168,14 +170,97 @@ export class AttendanceService {
       holidayName: holiday?.name ?? null,
       weeklyOff,
       working,
+      teamId,
+      teamName: existing?.team?.name ?? (await this.teamName(teamId)),
       canMark:
         this.canMark(existing?.status ?? null, state?.myTask?.canEdit) &&
-        (isSuperAdmin || !gate.governed || gate.allowed),
+        (isSuperAdmin || leads || !gate.governed || gate.allowed),
       /** True where a workflow decides who marks, so the screen can say why. */
       markingGoverned: gate.governed,
+      /** True where this viewer marks it because they LEAD the team. */
+      marksAsLeader: leads,
       workflow: state,
       firstStep,
       rows,
+    };
+  }
+
+  /**
+   * The day's sheets at one branch — one per team, plus the branch's own.
+   *
+   * What a branch manager opens the screen for: which teams are marked, which
+   * are still waiting, and how far each has got. A team with nobody in it is
+   * still listed, because an empty team is a thing to notice rather than to
+   * hide; the branch's own sheet appears only where somebody is in no team,
+   * since an empty one would be a row nobody can ever act on.
+   */
+  async teamsOfDay(companyId: number, branchId: number | null, date: string) {
+    if (!companyId) return { date, sheets: [] };
+    const on = day(date);
+
+    const [teams, sheets, unteamed] = await Promise.all([
+      this.prisma.hrTeam.findMany({
+        where: { companyId, branchId, isActive: true },
+        select: {
+          id: true,
+          name: true,
+          leader: { select: { name: true } },
+          _count: { select: { members: true } },
+        },
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.attendanceSheet.findMany({
+        where: { companyId, branchId, date: on },
+        select: {
+          teamId: true,
+          status: true,
+          workflowStatus: true,
+          _count: { select: { entries: true } },
+        },
+      }),
+      this.prisma.employee.count({
+        where: {
+          companyId,
+          branchId,
+          teamMembership: { is: null },
+          dateOfJoin: { lte: on },
+          OR: [
+            { lastWorkingDay: { gte: on } },
+            { lastWorkingDay: null, isActive: true },
+          ],
+        },
+      }),
+    ]);
+
+    const byTeam = new Map(sheets.map((s) => [s.teamId, s]));
+    const line = (
+      teamId: number | null,
+      name: string,
+      leaderName: string | null,
+      headcount: number,
+    ) => {
+      const sheet = byTeam.get(teamId);
+      return {
+        teamId,
+        teamName: name,
+        leaderName,
+        headcount,
+        status: sheet?.status ?? null,
+        workflowStatus: sheet?.workflowStatus ?? null,
+        marked: sheet?._count.entries ?? 0,
+      };
+    };
+
+    return {
+      date: isoDay(on),
+      sheets: [
+        ...teams.map((t) =>
+          line(t.id, t.name, t.leader.name, t._count.members),
+        ),
+        // Everybody in no team. Last, and only where there is anybody: it is
+        // the remainder, not a team.
+        ...(unteamed > 0 ? [line(null, 'Not in a team', null, unteamed)] : []),
+      ],
     };
   }
 
@@ -257,16 +342,21 @@ export class AttendanceService {
     const on = day(dto.date);
     if (isNaN(on.getTime()))
       throw new BadRequestException('That is not a date.');
+    const teamId = dto.teamId ?? null;
+    if (teamId) await this.assertTeam(companyId, branchId, teamId);
 
     const gate = await this.markerGate(userId, companyId, branchId);
-    if (gate.governed && !gate.allowed && !isSuperAdmin) {
+    const leads = await this.leadsTeam(userId, teamId);
+    if (!leads && gate.governed && !gate.allowed && !isSuperAdmin) {
       throw new ForbiddenException(
-        'A workflow decides who marks attendance here, and you are not on its marking step.',
+        teamId
+          ? 'Only this team’s leader, or somebody on the workflow’s marking step, may mark it.'
+          : 'A workflow decides who marks attendance here, and you are not on its marking step.',
       );
     }
 
     const existing = await this.prisma.attendanceSheet.findFirst({
-      where: { companyId, branchId, date: on },
+      where: { companyId, branchId, teamId, date: on },
       select: { id: true, status: true },
     });
     if (existing) {
@@ -287,7 +377,7 @@ export class AttendanceService {
       this.settings.effective(companyId, branchId),
       this.settings.typeIds(),
       this.settings.holidayOn(companyId, branchId, on),
-      this.roster(companyId, branchId, on),
+      this.roster(companyId, branchId, on, teamId),
     ]);
     const weeklyOff = defaults.weeklyOffDays.includes(on.getUTCDay());
     const dayType = holiday
@@ -303,7 +393,9 @@ export class AttendanceService {
       const employee = rosterById.get(line.employeeId);
       if (!employee) {
         throw new BadRequestException(
-          'Somebody on this sheet does not work at this branch on this day.',
+          teamId
+            ? 'Somebody on this sheet is not in this team on this day.'
+            : 'Somebody on this sheet does not work at this branch on this day.',
         );
       }
       if (seen.has(line.employeeId)) {
@@ -344,6 +436,7 @@ export class AttendanceService {
             data: {
               companyId,
               branchId,
+              teamId,
               date: on,
               remarks: dto.remarks?.trim() || null,
               markedByUserId: userId,
@@ -375,11 +468,12 @@ export class AttendanceService {
     companyId: number,
     branchId: number | null,
     date: string,
+    teamId: number | null,
     isSuperAdmin = false,
   ) {
     const on = day(date);
     const sheet = await this.prisma.attendanceSheet.findFirst({
-      where: { companyId, branchId, date: on },
+      where: { companyId, branchId, teamId, date: on },
       include: { _count: { select: { entries: true } } },
     });
     if (!sheet) {
@@ -403,7 +497,12 @@ export class AttendanceService {
       moduleId,
       objectId,
       documentId: sheet.id,
-      documentRef: await this.documentRef(companyId, branchId, sheet.date),
+      documentRef: await this.documentRef(
+        companyId,
+        branchId,
+        teamId,
+        sheet.date,
+      ),
       // A sheet has no money on it. The headcount is its headline figure — the
       // one that means something in an approver's inbox, and the one a limit
       // would be set on if a business wanted big branches signed off higher up.
@@ -418,7 +517,7 @@ export class AttendanceService {
         workflowStatus: res?.statusLabel ?? null,
       },
     });
-    return this.sheet(userId, companyId, branchId, date, isSuperAdmin);
+    return this.sheet(userId, companyId, branchId, date, teamId, isSuperAdmin);
   }
 
   /** Act on the sheet's workflow task — verify, approve, reject, send back. */
@@ -428,11 +527,12 @@ export class AttendanceService {
     branchId: number | null,
     date: string,
     dto: ActAttendanceDto,
+    teamId: number | null,
     isSuperAdmin = false,
   ) {
     const on = day(date);
     const sheet = await this.prisma.attendanceSheet.findFirst({
-      where: { companyId, branchId, date: on },
+      where: { companyId, branchId, teamId, date: on },
       select: { id: true, markedByUserId: true },
     });
     if (!sheet) throw new NotFoundException('There is no sheet for that day.');
@@ -462,7 +562,14 @@ export class AttendanceService {
           where: { id: sheet.id },
           data: { status: AttendanceSheetStatus.DRAFT, workflowStatus: null },
         });
-        return this.sheet(userId, companyId, branchId, date, isSuperAdmin);
+        return this.sheet(
+          userId,
+          companyId,
+          branchId,
+          date,
+          teamId,
+          isSuperAdmin,
+        );
       }
     }
 
@@ -479,7 +586,7 @@ export class AttendanceService {
         workflowStatus: res.statusLabel ?? null,
       },
     });
-    return this.sheet(userId, companyId, branchId, date, isSuperAdmin);
+    return this.sheet(userId, companyId, branchId, date, teamId, isSuperAdmin);
   }
 
   // ------------------------------------------------------------- internals --
@@ -494,11 +601,22 @@ export class AttendanceService {
    * on March's sheets and off April's, and a record deactivated without a last
    * working day simply stops appearing from today.
    */
-  private roster(companyId: number, branchId: number | null, on: Date) {
+  private roster(
+    companyId: number,
+    branchId: number | null,
+    on: Date,
+    teamId: number | null,
+  ) {
     return this.prisma.employee.findMany({
       where: {
         companyId,
         branchId,
+        // A team's sheet is its members. The branch's own sheet — no team — is
+        // everybody there who is in NO team, so nobody is marked twice and
+        // nobody falls between the two.
+        ...(teamId
+          ? { teamMembership: { teamId } }
+          : { teamMembership: { is: null } }),
         dateOfJoin: { lte: on },
         OR: [
           { lastWorkingDay: { gte: on } },
@@ -623,10 +741,62 @@ export class AttendanceService {
     );
   }
 
+  /**
+   * Does the signed-in user LEAD this team?
+   *
+   * Their login names an employee (every login does), and a team names the
+   * employee who leads it. Nobody leads the branch's own sheet — that one has
+   * no team, so it falls to the workflow's marking step as it always did.
+   */
+  private async leadsTeam(userId: number, teamId: number | null) {
+    if (!teamId) return false;
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { employeeId: true },
+    });
+    if (!user?.employeeId) return false;
+    const team = await this.prisma.hrTeam.findUnique({
+      where: { id: teamId },
+      select: { leaderEmployeeId: true },
+    });
+    return team?.leaderEmployeeId === user.employeeId;
+  }
+
+  /** The team has to be this company's, and at the branch being marked. */
+  private async assertTeam(
+    companyId: number,
+    branchId: number | null,
+    teamId: number,
+  ) {
+    const team = await this.prisma.hrTeam.findFirst({
+      where: { id: teamId, companyId },
+      select: { branchId: true, isActive: true, name: true },
+    });
+    if (!team) throw new BadRequestException('No such team in this company.');
+    if (team.branchId !== branchId) {
+      throw new BadRequestException(
+        `${team.name} does not work at this branch.`,
+      );
+    }
+    if (!team.isActive) {
+      throw new BadRequestException(`${team.name} is no longer in use.`);
+    }
+  }
+
+  private async teamName(teamId: number | null) {
+    if (!teamId) return null;
+    const team = await this.prisma.hrTeam.findUnique({
+      where: { id: teamId },
+      select: { name: true },
+    });
+    return team?.name ?? null;
+  }
+
   /** How the day names itself in an approver's inbox. */
   private async documentRef(
     companyId: number,
     branchId: number | null,
+    teamId: number | null,
     date: Date,
   ) {
     const branch = branchId
@@ -641,7 +811,12 @@ export class AttendanceService {
           where: { id: companyId },
           select: { code: true },
         });
-    const place = branch?.name ?? company?.code ?? '';
+    const team = await this.teamName(teamId);
+    // The team first where there is one: an approver's inbox is a list of
+    // these, and "Oven Team" is what tells two of them apart.
+    const place = [team, branch?.name ?? company?.code ?? '']
+      .filter(Boolean)
+      .join(' · ');
     return `Attendance ${formatDayMonthYear(date)}${place ? ` · ${place}` : ''}`;
   }
 

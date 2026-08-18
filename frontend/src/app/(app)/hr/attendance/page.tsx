@@ -24,6 +24,7 @@ import type {
   AttendanceRow,
   AttendanceSheet,
   AttendanceSheetStatus,
+  AttendanceTeamsOfDay,
 } from '@/lib/types';
 
 const ROUTE = '/hr/attendance';
@@ -82,6 +83,12 @@ export default function AttendancePage() {
   const confirm = useConfirm();
 
   const [date, setDate] = useState(today());
+  /**
+   * Whose sheet is open — a team, or null for the branch's own (everybody in
+   * no team). Undefined until the day's teams have been read, so the screen
+   * can open on the ONE the viewer actually marks rather than guessing.
+   */
+  const [teamId, setTeamId] = useState<number | null | undefined>(undefined);
   const [sheet, setSheet] = useState<AttendanceSheet | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -100,11 +107,11 @@ export default function AttendancePage() {
 
   /** Pull the day, and take what came back as the clean state. */
   const load = useCallback(
-    async (on: string) => {
+    async (on: string, team: number | null) => {
       setLoading(true);
       try {
         const data = await api.get<AttendanceSheet>(
-          `/hr-attendance/sheet?date=${on}`,
+          `/hr-attendance/sheet?date=${on}${team ? `&teamId=${team}` : ''}`,
         );
         setSheet(data);
         const next: Record<number, Draft> = {};
@@ -131,11 +138,40 @@ export default function AttendancePage() {
     [],
   );
 
-  // Re-read on the day, and whenever the active branch changes — a sheet
-  // belongs to a branch, and the header decides which one.
+  /**
+   * The day's teams at this branch — one sheet each, plus the branch's own.
+   *
+   * Read before the sheet, because WHICH sheet to open is decided from it: a
+   * leader lands on their own team, and everybody else on the first one.
+   */
+  const { data: teams, refetch: refetchTeams } = useFetch<AttendanceTeamsOfDay>(
+    `/hr-attendance/teams?date=${date}`,
+    [date, activeBranchId],
+  );
+
+  // Picking the sheet to open. Only until the viewer picks one themselves —
+  // after that their choice stands, even as the day or the branch changes.
+  const [picked, setPicked] = useState(false);
   useEffect(() => {
-    void load(date);
-  }, [date, activeBranchId, load]);
+    setPicked(false);
+    setTeamId(undefined);
+  }, [activeBranchId]);
+  useEffect(() => {
+    if (picked || !teams) return;
+    const lines = teams.sheets;
+    if (!lines.length) {
+      setTeamId(null);
+      return;
+    }
+    setTeamId(lines[0].teamId);
+  }, [teams, picked]);
+
+  // Re-read on the day, the team, and whenever the active branch changes — a
+  // sheet belongs to a branch and a team, and the header decides the branch.
+  useEffect(() => {
+    if (teamId === undefined) return;
+    void load(date, teamId);
+  }, [date, teamId, activeBranchId, load]);
 
   const dirty =
     baseline !== '' &&
@@ -207,6 +243,7 @@ export default function AttendancePage() {
     try {
       const data = await api.post<AttendanceSheet>('/hr-attendance/sheet', {
         date: sheet.date,
+        teamId: sheet.teamId,
         remarks: dayRemarks || null,
         entries: sheet.rows.map((r) => {
           const d = drafts[r.employeeId];
@@ -249,9 +286,10 @@ export default function AttendancePage() {
     try {
       const data = await api.post<AttendanceSheet>(
         '/hr-attendance/sheet/submit',
-        { date: sheet.date },
+        { date: sheet.date, teamId: sheet.teamId },
       );
       setSheet(data);
+      refetchTeams();
       toast.success('Sent for approval.');
     } catch (e) {
       toast.error(e instanceof ApiError ? e.message : 'Failed to send.');
@@ -269,13 +307,15 @@ export default function AttendancePage() {
     try {
       const data = await api.post<AttendanceSheet>('/hr-attendance/sheet/act', {
         date: sheet.date,
+        teamId: sheet.teamId,
         action,
         comment: comment || undefined,
       });
       setSheet(data);
       setComment('');
       toast.success(`${label} done.`);
-      await load(sheet.date);
+      refetchTeams();
+      await load(sheet.date, sheet.teamId);
     } catch (e) {
       toast.error(
         e instanceof ApiError ? e.message : 'That did not go through.',
@@ -362,12 +402,20 @@ export default function AttendancePage() {
           <div className="min-w-0 flex-1">
             <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-200">
               {formatDayMonthYear(date)}
+              {sheet?.teamName && (
+                <span className="text-slate-500 dark:text-slate-400">
+                  · {sheet.teamName}
+                </span>
+              )}
               {sheet && (
                 <Badge color={STATUS_TONE[sheet.status] as 'blue'}>
                   {sheet.workflowStatus ??
                     sheet.status.charAt(0) +
                       sheet.status.slice(1).toLowerCase()}
                 </Badge>
+              )}
+              {sheet?.marksAsLeader && (
+                <Badge color="violet">You lead this team</Badge>
               )}
               {sheet?.markedAt && (
                 <span className="text-xs font-normal text-slate-400">
@@ -389,13 +437,61 @@ export default function AttendancePage() {
           </span>
         </div>
 
+        {/* The day's sheets — one per team, plus the branch's own for anybody
+            in no team. Each is a document of its own, marked and submitted by
+            its leader, so this strip is both the picker and the answer to
+            "which teams are still to mark". Hidden where a branch keeps no
+            teams: one tab is not a choice. */}
+        {(teams?.sheets.length ?? 0) > 1 && (
+          <div className="flex flex-wrap gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+            {teams!.sheets.map((t) => {
+              const here = t.teamId === sheet?.teamId;
+              return (
+                <button
+                  key={t.teamId ?? 'none'}
+                  type="button"
+                  onClick={() => {
+                    setPicked(true);
+                    setTeamId(t.teamId);
+                  }}
+                  className={cn(
+                    'rounded-lg border px-3 py-1.5 text-left text-sm transition',
+                    here
+                      ? 'border-brand-600 bg-brand-50 dark:border-brand-600 dark:bg-brand-950/40'
+                      : 'border-slate-200 bg-white hover:border-brand-400 dark:border-slate-700 dark:bg-slate-900',
+                  )}
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="font-medium text-slate-800 dark:text-slate-100">
+                      {t.teamName}
+                    </span>
+                    {t.status ? (
+                      <Badge color={STATUS_TONE[t.status] as 'blue'}>
+                        {t.workflowStatus ??
+                          t.status.charAt(0) + t.status.slice(1).toLowerCase()}
+                      </Badge>
+                    ) : (
+                      <Badge color="slate">Not marked</Badge>
+                    )}
+                  </span>
+                  <span className="mt-0.5 block text-xs text-slate-400">
+                    {t.headcount} {t.headcount === 1 ? 'person' : 'people'}
+                    {t.leaderName && ` · ${t.leaderName}`}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         <div className="min-h-0 flex-1 overflow-auto">
           {loading ? (
             <p className="p-6 text-sm text-slate-400">Opening the day…</p>
           ) : !sheet?.rows.length ? (
             <p className="p-6 text-sm text-slate-400">
-              Nobody is posted to this branch on this day. Employees appear here
-              from the day they join until their last working day.
+              {sheet?.teamName
+                ? `Nobody is in ${sheet.teamName} on this day. People are put into a team in HR → Team Master.`
+                : 'Nobody is posted to this branch on this day. Employees appear here from the day they join until their last working day.'}
             </p>
           ) : (
             <table className="w-full text-left text-sm">
