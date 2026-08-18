@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Clock, Moon, Search, Users } from 'lucide-react';
+import { Clock, Eye, Moon, Search, Users } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { cn, formatDayMonthYear } from '@/lib/utils';
 import { useFetch } from '@/lib/hooks';
@@ -9,8 +9,9 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
-import { Drawer, DrawerFooter } from '@/components/ui/Drawer';
+import { CloseFooter, Drawer, DrawerFooter } from '@/components/ui/Drawer';
 import { Checkbox, DateInput, Select, Textarea } from '@/components/ui/Field';
+import { RosterPanel } from '@/components/hr/RosterPanel';
 import type {
   Branch,
   BulkAssignResult,
@@ -78,6 +79,14 @@ export default function RosterPage() {
     activeCompanyId ? `/cost-objects?companyId=${activeCompanyId}` : null,
     [activeCompanyId],
   );
+
+  /**
+   * The person whose whole roster is being read, or null.
+   *
+   * The list answers for ONE day; this is every shift they have been on and
+   * from when — which is the question that follows "why are they on nights".
+   */
+  const [viewing, setViewing] = useState<RosterRegisterRow | null>(null);
 
   // ---- the assignment drawer ----
   const [open, setOpen] = useState(false);
@@ -419,16 +428,29 @@ export default function RosterPage() {
                           ? formatDayMonthYear(r.effectiveFrom)
                           : '—'}
                       </td>
-                      <td className="px-3 py-2 text-right">
-                        {canEdit && (
+                      {/* View before Change, the order every listing here
+                          keeps. This row is one day's answer; View is the
+                          whole series behind it. */}
+                      <td className="px-3 py-2">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
+                            title="See every shift this person has been on"
                             className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 transition hover:border-brand-400 hover:text-brand-600 dark:border-slate-700 dark:text-slate-300"
-                            onClick={() => openFor([r.employeeId])}
+                            onClick={() => setViewing(r)}
                           >
-                            {r.shiftId ? 'Change' : 'Assign'}
+                            <Eye className="h-3.5 w-3.5" />
                           </button>
-                        )}
+                          {canEdit && (
+                            <button
+                              type="button"
+                              className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 transition hover:border-brand-400 hover:text-brand-600 dark:border-slate-700 dark:text-slate-300"
+                              onClick={() => openFor([r.employeeId])}
+                            >
+                              {r.shiftId ? 'Change' : 'Assign'}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -554,6 +576,23 @@ export default function RosterPage() {
             </div>
           )}
         </div>
+      </Drawer>
+
+      {/* One person's whole series, read-only. The SAME panel the Roster tab
+          on Employee Master uses — one place decides how a roster reads, so
+          the two can never drift apart. */}
+      <Drawer
+        open={!!viewing}
+        onClose={() => setViewing(null)}
+        title={viewing?.employeeName ?? 'Roster'}
+        subtitle={
+          viewing
+            ? `${viewing.employeeCode} · ${viewing.designationName}`
+            : undefined
+        }
+        footer={<CloseFooter onClose={() => setViewing(null)} />}
+      >
+        <RosterPanel employeeId={viewing?.employeeId ?? null} readOnly />
       </Drawer>
     </div>
   );
