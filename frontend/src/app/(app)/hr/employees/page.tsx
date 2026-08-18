@@ -13,6 +13,7 @@ import {
   Wallet,
   MapPin,
   User as UserIcon,
+  Clock,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { cn, formatDayMonthYear } from '@/lib/utils';
@@ -30,6 +31,7 @@ import { Tabs, type TabDef } from '@/components/ui/Tabs';
 import { UserAccessPanel } from '@/components/cpanel/UserAccessPanel';
 import { SalaryPanel } from '@/components/hr/SalaryPanel';
 import { PostingsPanel } from '@/components/hr/PostingsPanel';
+import { RosterPanel } from '@/components/hr/RosterPanel';
 import {
   Drawer,
   DrawerFooter,
@@ -166,7 +168,7 @@ const empty = {
 type Form = typeof empty;
 
 /** The drawer's three parts: the person, what they are paid, and the way in. */
-type Tab = 'employee' | 'postings' | 'salary' | 'access';
+type Tab = 'employee' | 'postings' | 'roster' | 'salary' | 'access';
 
 export default function EmployeesPage() {
   const { can, canTab, activeCompanyId, activeBranchId } = useAuth();
@@ -222,6 +224,8 @@ export default function EmployeesPage() {
   const [salaryDirty, setSalaryDirty] = useState(false);
   /** And the Postings tab, while its posting editor is open. */
   const [postingsDirty, setPostingsDirty] = useState(false);
+  /** And the Roster tab, while its shift editor is open. */
+  const [rosterDirty, setRosterDirty] = useState(false);
   /**
    * The employee form as it stood when last loaded or saved. Compared against
    * rather than a touched-a-field flag, so the drawer stops claiming unsaved
@@ -265,6 +269,13 @@ export default function EmployeesPage() {
         label: 'Postings',
         icon: <MapPin className="h-4 w-4" />,
         // A posting has to belong to somebody.
+        disabled: !editing,
+      },
+      {
+        key: 'roster',
+        label: 'Roster',
+        icon: <Clock className="h-4 w-4" />,
+        // A roster line has to belong to somebody.
         disabled: !editing,
       },
       {
@@ -393,8 +404,13 @@ export default function EmployeesPage() {
     employeeBaseline !== '' &&
     JSON.stringify(form) !== employeeBaseline;
   const drawerDirty = useCallback(
-    () => employeeDirty || accessDirty || salaryDirty || postingsDirty,
-    [employeeDirty, accessDirty, salaryDirty, postingsDirty],
+    () =>
+      employeeDirty ||
+      accessDirty ||
+      salaryDirty ||
+      postingsDirty ||
+      rosterDirty,
+    [employeeDirty, accessDirty, salaryDirty, postingsDirty, rosterDirty],
   );
 
   /**
@@ -436,7 +452,13 @@ export default function EmployeesPage() {
                 where: 'Postings',
                 clear: () => setPostingsDirty(false),
               }
-            : null;
+            : tab === 'roster' && rosterDirty
+              ? {
+                  what: 'the shift',
+                  where: 'Roster',
+                  clear: () => setRosterDirty(false),
+                }
+              : null;
 
     if (leaving) {
       const ok = await confirm({
@@ -1035,6 +1057,12 @@ export default function EmployeesPage() {
             employee={editing}
             readOnly={view}
             onDirtyChange={setPostingsDirty}
+          />
+        ) : tab === 'roster' ? (
+          <RosterPanel
+            employeeId={editing?.id ?? null}
+            readOnly={view}
+            onDirtyChange={setRosterDirty}
           />
         ) : tab === 'salary' ? (
           <SalaryPanel

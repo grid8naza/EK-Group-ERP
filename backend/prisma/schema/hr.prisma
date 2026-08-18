@@ -297,6 +297,7 @@ model Employee {
   salaryPackages EmployeeSalaryPackage[]
   postings       EmployeePosting[]
   attendance     AttendanceEntry[]
+  shifts         EmployeeShiftAssignment[]
 
   @@unique([companyId, code])
   @@index([companyId, branchId])
@@ -611,4 +612,113 @@ model AttendanceEntry {
   @@unique([sheetId, employeeId])
   @@index([employeeId])
   @@map("attendance_entries")
+}
+
+// ---------------------------------------------------------------------------
+// Shifts and the roster (SRS §8.9, FR-HRP-01: "shifts and rosters per branch").
+// ---------------------------------------------------------------------------
+
+/// A named working pattern — Morning 06:00–14:00, Night 22:00–06:00.
+///
+/// Per company, and optionally down to ONE BRANCH: a shift only the bakery
+/// works has no business appearing on the office's roster. A shift with no
+/// branch is the company's, offered everywhere.
+///
+/// Distinct from AttendanceSetting, which is what a branch works BY DEFAULT.
+/// This is a pattern somebody can be put ON, for the days a rota says so.
+model HrShift {
+  id        Int @id @default(autoincrement())
+  companyId Int
+
+  /// True = every branch in the company, and the links below are empty.
+  ///
+  /// The same shape the other masters use for their company links: a flag for
+  /// "all of them" beside a set of rows for "these ones". A shift kept by three
+  /// branches out of five is the ordinary case, and one column could only ever
+  /// say one branch or all of them.
+  allBranches Boolean @default(true)
+
+  /// The short form, typed rather than generated: it is what fills a cell on a
+  /// roster and what people call the shift out loud — "he's on N this week".
+  code String
+  name String
+
+  /// Minutes after local midnight, as everywhere else a time of day is stored.
+  /// A finish at or before the start is a shift that crosses midnight, which is
+  /// what a night shift is.
+  timeIn  Int
+  timeOut Int
+  /// Unpaid break inside the shift, in minutes. Taken off the hours a rostered
+  /// day is worth.
+  breakMinutes Int @default(0)
+
+  remarks String?
+
+  isActive  Boolean  @default(true)
+  isLocked  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignments EmployeeShiftAssignment[]
+  branches    HrShiftBranch[]
+
+  /// One code per company. Two shifts called "N" is a roster nobody can read.
+  @@unique([companyId, code])
+  @@index([companyId])
+  @@map("hr_shifts")
+}
+
+/// Links a shift to a branch that works it (when not `allBranches`).
+///
+/// branchId is a plain id -> Cpanel Branch, with no cross-domain FK, as
+/// everywhere else in this file.
+model HrShiftBranch {
+  id       Int @id @default(autoincrement())
+  shiftId  Int
+  branchId Int
+
+  shift HrShift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  @@unique([shiftId, branchId])
+  @@index([branchId])
+  @@map("hr_shift_branches")
+}
+
+/// Who is on which shift, from when — the roster.
+///
+/// A dated SERIES, exactly like a posting or a salary package: putting somebody
+/// on nights is a new row starting the day it takes effect, and the one before
+/// it closes the day before. That is what lets last March's attendance still
+/// resolve against the shift they were actually on in March, rather than the
+/// one they are on now.
+///
+/// The attendance sheet reads this FIRST — before the person's own hours and
+/// before the branch's working day — because a roster is the most specific
+/// statement anybody has made about that day.
+model EmployeeShiftAssignment {
+  id         Int @id @default(autoincrement())
+  employeeId Int
+  shiftId    Int
+
+  /// The day this assignment starts. Required — an assignment with no start
+  /// cannot be placed in the series, which is the only thing the series is for.
+  effectiveFrom DateTime
+  /// The last day of it. NULL = until changed, which the newest row usually is.
+  effectiveTo   DateTime?
+
+  /// Why they were moved — "covering nights while Suresh is on leave".
+  remarks String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  shift    HrShift  @relation(fields: [shiftId], references: [id], onDelete: Restrict)
+
+  /// Two assignments starting the same day would fork the series. The service
+  /// checks the whole period for overlap; this catches the exact collision.
+  @@unique([employeeId, effectiveFrom])
+  @@index([employeeId, effectiveFrom])
+  @@index([shiftId])
+  @@map("employee_shift_assignments")
 }

@@ -58,7 +58,13 @@ export default function AttendanceSettingsPage() {
   const { data, refetch } = useFetch<AttendanceSetting[]>(
     '/hr-attendance-settings',
   );
-  const { data: branches } = useFetch<Branch[]>('/branches');
+  // Scoped to the active company: /branches answers for ALL of them unless
+  // asked, and a picker offering another company's branches is a picker that
+  // can only produce a rejected save.
+  const { data: branches } = useFetch<Branch[]>(
+    activeCompanyId ? `/branches?companyId=${activeCompanyId}` : null,
+    [activeCompanyId],
+  );
   const types = useLookupValues('ATTENDANCE_TYPE');
 
   const [drafts, setDrafts] = useState<Draft[]>([]);

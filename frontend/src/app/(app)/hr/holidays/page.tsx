@@ -36,7 +36,13 @@ export default function HolidaysPage() {
     `/hr-holidays?year=${year}`,
     [year],
   );
-  const { data: branches } = useFetch<Branch[]>('/branches');
+  // Scoped to the active company: /branches answers for ALL of them unless
+  // asked, and a picker offering another company's branches is a picker that
+  // can only produce a rejected save.
+  const { data: branches } = useFetch<Branch[]>(
+    activeCompanyId ? `/branches?companyId=${activeCompanyId}` : null,
+    [activeCompanyId],
+  );
 
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<AttendanceHoliday | null>(null);

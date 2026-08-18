@@ -114,6 +114,10 @@ export class AttendanceService {
         employeeCode: e.code,
         employeeName: e.name,
         designationName: e.designation.name,
+        /** The shift they were rostered on, so the sheet can say where the
+         *  pre-filled times came from. Null where nobody rostered them. */
+        shiftCode: e.shifts?.[0]?.shift.code ?? null,
+        shiftName: e.shifts?.[0]?.shift.name ?? null,
         /** Null until the day is saved — the line is a proposal until then. */
         entryId: saved?.id ?? null,
         typeId: saved?.typeId ?? expected.typeId,
@@ -508,6 +512,29 @@ export class AttendanceService {
         defaultTimeIn: true,
         defaultTimeOut: true,
         designation: { select: { name: true } },
+        // The shift they were ROSTERED on that day, if any. Read here rather
+        // than through the shift module: a module reads the tables of the
+        // domains it works with, and importing across would be the one thing
+        // the boundary rule forbids.
+        shifts: {
+          where: {
+            effectiveFrom: { lte: on },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gte: on } }],
+          },
+          orderBy: { effectiveFrom: 'desc' },
+          take: 1,
+          select: {
+            shift: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                timeIn: true,
+                timeOut: true,
+              },
+            },
+          },
+        },
       },
       orderBy: { code: 'asc' },
     });
@@ -516,21 +543,33 @@ export class AttendanceService {
   /**
    * What one person's line says before anybody touches it.
    *
-   * The employee's own hours where they have them, else the branch's. On a day
-   * nobody is due at work the times are blank rather than the branch's — a
-   * weekly off with a nine-to-six on it would be a claim that somebody worked.
+   * Three answers in order of how specific they are: the shift they were
+   * ROSTERED on that day, then their own hours, then the branch's working day.
+   * A roster is the most specific thing anybody has said about that day, so it
+   * wins — which is the whole reason to keep one.
+   *
+   * On a day nobody is due at work the times are blank whatever the roster
+   * says: a weekly off with a nine-to-six against it would be a claim that
+   * somebody worked.
    */
   private expected(
-    employee: { defaultTimeIn: number | null; defaultTimeOut: number | null },
+    employee: {
+      defaultTimeIn: number | null;
+      defaultTimeOut: number | null;
+      shifts?: { shift: { timeIn: number; timeOut: number } }[];
+    },
     defaults: { defaultTimeIn: number; defaultTimeOut: number },
     dayTypeId: number | null,
     working: boolean,
   ): Expected {
     if (!working) return { typeId: dayTypeId, timeIn: null, timeOut: null };
+    const rostered = employee.shifts?.[0]?.shift;
     return {
       typeId: dayTypeId,
-      timeIn: employee.defaultTimeIn ?? defaults.defaultTimeIn,
-      timeOut: employee.defaultTimeOut ?? defaults.defaultTimeOut,
+      timeIn:
+        rostered?.timeIn ?? employee.defaultTimeIn ?? defaults.defaultTimeIn,
+      timeOut:
+        rostered?.timeOut ?? employee.defaultTimeOut ?? defaults.defaultTimeOut,
     };
   }
 

@@ -3367,6 +3367,9 @@ export interface AttendanceRow {
   employeeCode: string;
   employeeName: string;
   designationName: string;
+  /** The shift they were rostered on, where one says so. */
+  shiftCode: string | null;
+  shiftName: string | null;
   entryId: number | null;
   typeId: number | null;
   timeIn: number | null;
@@ -3504,4 +3507,74 @@ export interface TimeCard {
   workedMinutes: number;
   unmarkedDays: number;
   rows: TimeCardDay[];
+}
+
+// ---------------------------------------------------------------------------
+// Shifts and the roster (SRS §8.9, FR-HRP-01).
+// ---------------------------------------------------------------------------
+
+/** A named working pattern — Morning 06:00–14:00, Night 22:00–06:00. */
+export interface HrShift {
+  id: number;
+  companyId: number;
+  /** True = every branch; then branchIds is empty. */
+  allBranches: boolean;
+  /** The branches that work this shift, when not all of them. */
+  branchIds: number[];
+  /** The short form a roster is read by — M, N, GEN. */
+  code: string;
+  name: string;
+  /** Minutes after local midnight. */
+  timeIn: number;
+  timeOut: number;
+  breakMinutes: number;
+  /** Start to finish less the break, worked out server-side. */
+  workMinutes: number;
+  /** True where the shift finishes on the following day. */
+  overnight: boolean;
+  remarks: string | null;
+  isActive: boolean;
+  isLocked: boolean;
+}
+
+/** One line of somebody's roster — this shift, from this day. */
+export interface ShiftAssignment {
+  id: number;
+  employeeId: number;
+  shiftId: number;
+  shiftCode: string;
+  shiftName: string;
+  timeIn: number;
+  timeOut: number;
+  breakMinutes: number;
+  workMinutes: number;
+  overnight: boolean;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  remarks: string | null;
+  /** True of the line in force today. */
+  current: boolean;
+}
+
+/** Who is on what across a branch, as at a date. */
+export interface RosterRegisterRow {
+  employeeId: number;
+  employeeCode: string;
+  employeeName: string;
+  designationName: string;
+  shiftId: number | null;
+  shiftCode: string | null;
+  shiftName: string | null;
+  timeIn: number | null;
+  timeOut: number | null;
+  workMinutes: number | null;
+  effectiveFrom: string | null;
+  effectiveTo: string | null;
+  /** True where their hours come from their own record rather than a shift. */
+  ownHours: boolean;
+}
+
+export interface RosterRegister {
+  on: string;
+  rows: RosterRegisterRow[];
 }

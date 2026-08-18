@@ -48,18 +48,27 @@ export const HR_SUBS = [
     order: 4,
   },
   {
+    // The named working patterns — Morning, Night, General. A master, so it
+    // sits with the other things a person is described by. Who is ON one is
+    // the roster, which lives on the employee's own record.
+    name: 'Shift Master',
+    route: '/hr/shifts',
+    icon: 'clock',
+    order: 5,
+  },
+  {
     // The working day a branch keeps — what a fresh attendance sheet comes up
     // filled in with. Setup rather than Records: it is a rule, not a person.
     name: 'Attendance Settings',
     route: '/hr/attendance-settings',
     icon: 'clock',
-    order: 5,
+    order: 6,
   },
   {
     name: 'Holiday Calendar',
     route: '/hr/holidays',
     icon: 'calendar-days',
-    order: 6,
+    order: 7,
   },
 ];
 
@@ -94,9 +103,17 @@ export const HR_EXTRA_MENUS = [
             order: 2,
           },
           {
+            // Which shift they are on, and from when. Beside Postings because
+            // it is the same kind of thing — a dated series about where and
+            // how somebody works — and visible by default for the same reason.
+            key: 'roster',
+            label: 'Roster',
+            order: 3,
+          },
+          {
             key: 'salary',
             label: 'Salary',
-            order: 3,
+            order: 4,
             // What everybody earns, on one screen. Starts shut for the same
             // reason User Access does, and is opened per group from the
             // Privileges screen.
@@ -105,7 +122,7 @@ export const HR_EXTRA_MENUS = [
           {
             key: 'access',
             label: 'User Access',
-            order: 4,
+            order: 5,
             // Logins and roles are given out here, so this one starts shut and
             // is opened per group from the Privileges screen.
             hiddenByDefault: true,
@@ -173,12 +190,21 @@ export const HR_EXTRA_MENUS = [
         objectType: ObjectType.REPORT,
       },
       {
+        // Who is on which shift right now — the question a manager asks before
+        // the week starts, and the one the roster exists to answer.
+        name: 'Shift Roster',
+        route: '/hr/reports/roster',
+        icon: 'clock',
+        order: 6,
+        objectType: ObjectType.REPORT,
+      },
+      {
         // One person, one month, in and out and hours. What you print when
         // somebody queries their wage.
         name: 'Time Card',
         route: '/hr/reports/time-card',
         icon: 'clock',
-        order: 6,
+        order: 7,
         objectType: ObjectType.REPORT,
       },
     ],
