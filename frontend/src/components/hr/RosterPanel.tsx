@@ -200,10 +200,13 @@ export function RosterPanel({
       <FormSection>Roster</FormSection>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
+        {/* Two readings of the same series. Read-only, it is a history and the
+            note says how to read it; editable, it is a thing you act on and the
+            note says what acting does. */}
         <p className="text-xs text-slate-400">
-          The shift they work, from when. Putting somebody on a new shift closes
-          the one before it — the attendance sheet then fills their day in from
-          whichever was in force.
+          {readOnly
+            ? 'Every shift they have been on, and from when. The attendance sheet fills each day in from whichever was in force — so this is what last month was marked against, not only what today is.'
+            : 'The shift they work, from when. Putting somebody on a new shift closes the one before it — the attendance sheet then fills their day in from whichever was in force.'}
         </p>
         {!readOnly && !open && (
           <button

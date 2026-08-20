@@ -126,7 +126,16 @@ export class UpdateHrTeamDto extends CreateHrTeamDto {
  * row is a moment where they are in neither or in both.
  */
 export class TransferTeamMembersDto {
-  /** Where they are now. Null = in no team, i.e. the branch's own sheet. */
+  /**
+   * Where they are now — an assertion the service checks before it moves
+   * anybody, so a transfer built from a stale screen cannot quietly move
+   * somebody else's people. Null means "in no team".
+   *
+   * ABSENT means "wherever they are", for a caller moving a mixed selection
+   * into one team and not claiming to know where each of them started. The
+   * screen that names both sides sends it; the one that names only the
+   * destination does not.
+   */
   @ApiPropertyOptional({ nullable: true })
   @IsOptional()
   @IsInt()

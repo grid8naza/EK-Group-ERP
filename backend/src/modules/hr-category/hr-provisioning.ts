@@ -158,16 +158,18 @@ export const HR_EXTRA_MENUS = [
       },
       {
         /**
-         * Rostering the whole branch from one list.
+         * Moving a list of people in one action — to another team, branch,
+         * division, department or shift, from one effective date.
          *
-         * The Roster TAB on an employee is the right place to read and correct
-         * one person's history; it is the wrong place to put ninety people on
-         * the morning shift. Same series underneath, same rules — this is the
-         * list view of it.
+         * Reading and correcting ONE person's history belongs on their own
+         * record, under Roster and Postings. This is the other half of the
+         * job: a transfer that means opening ninety records is a transfer that
+         * stops being done, and doing it across three screens is how it ends
+         * up half applied.
          */
-        name: 'Roster',
+        name: 'Transfer',
         route: '/hr/roster',
-        icon: 'clock',
+        icon: 'arrow-right-left',
         order: 4,
       },
     ],
@@ -234,6 +236,16 @@ export const HR_EXTRA_MENUS = [
         route: '/hr/reports/time-card',
         icon: 'clock',
         order: 7,
+        objectType: ObjectType.REPORT,
+      },
+      {
+        // Who is in which team on a day, under whom, and doing what. The
+        // roster answers "what hours"; this answers "whose sheet, and whose
+        // signature at the bottom of it".
+        name: 'Team Register',
+        route: '/hr/reports/teams',
+        icon: 'users',
+        order: 8,
         objectType: ObjectType.REPORT,
       },
     ],

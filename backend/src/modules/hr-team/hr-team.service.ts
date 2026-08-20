@@ -304,9 +304,12 @@ export class HrTeamService {
     const employeeIds = [...new Set(dto.employeeIds ?? [])];
     if (!employeeIds.length)
       throw new BadRequestException('Nobody is selected.');
+    // Absent means "wherever they are" — the caller is naming the destination
+    // only. Null still means the definite claim "in no team".
+    const fromStated = dto.fromTeamId !== undefined;
     const fromTeamId = dto.fromTeamId ?? null;
     const toTeamId = dto.toTeamId ?? null;
-    if (fromTeamId === toTeamId) {
+    if (fromStated && fromTeamId === toTeamId) {
       throw new BadRequestException('They are already there.');
     }
     if (!dto.effectiveFrom) {
@@ -344,14 +347,32 @@ export class HrTeamService {
         'One of those people is not an employee of this company.',
       );
     }
-    const misplaced = people.filter(
-      (p) => (p.teamMemberships[0]?.teamId ?? null) !== fromTeamId,
-    );
-    if (misplaced.length) {
-      throw new ConflictException(
-        `${misplaced.map((p) => p.name).join(', ')} ${misplaced.length === 1 ? 'is' : 'are'} not in the team you are moving them out of on ${formatDayMonthYear(from)}. Reopen the screen and try again.`,
+    // Only where the caller SAID where they were. A screen that names both
+    // sides is asserting something checkable, and a stale one would otherwise
+    // move somebody else's people; a screen that names only the destination is
+    // asserting nothing, so there is nothing to check.
+    if (fromStated) {
+      const misplaced = people.filter(
+        (p) => (p.teamMemberships[0]?.teamId ?? null) !== fromTeamId,
       );
+      if (misplaced.length) {
+        throw new ConflictException(
+          `${misplaced.map((p) => p.name).join(', ')} ${misplaced.length === 1 ? 'is' : 'are'} not in the team you are moving them out of on ${formatDayMonthYear(from)}. Reopen the screen and try again.`,
+        );
+      }
     }
+
+    // Whoever is already in the destination on that day is left alone: ending
+    // their spell and opening an identical one is churn in the record, not a
+    // transfer. Only meaningful for the destination-only caller, since the
+    // other one has already asserted they are somewhere else.
+    const moving = toTeamId
+      ? people.filter((p) => p.teamMemberships[0]?.teamId !== toTeamId)
+      : people;
+    if (!moving.length) {
+      throw new BadRequestException('They are already there.');
+    }
+    const movingIds = moving.map((p) => p.id);
     if (to && to.branchId !== null) {
       const elsewhere = people.filter((p) => p.branchId !== to.branchId);
       if (elsewhere.length) {
@@ -362,7 +383,7 @@ export class HrTeamService {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      for (const person of people) {
+      for (const person of moving) {
         const current = person.teamMemberships[0];
         if (!current) continue;
         if (current.effectiveFrom >= from) {
@@ -382,7 +403,7 @@ export class HrTeamService {
         // Named rather than counted: it is a decision about a person.
         const clash = await tx.hrTeamMember.findFirst({
           where: {
-            employeeId: { in: employeeIds },
+            employeeId: { in: movingIds },
             OR: [{ effectiveTo: null }, { effectiveTo: { gte: from } }],
           },
           select: {
@@ -398,7 +419,7 @@ export class HrTeamService {
           );
         }
         await tx.hrTeamMember.createMany({
-          data: employeeIds.map((employeeId) => ({
+          data: movingIds.map((employeeId) => ({
             teamId: toTeamId,
             employeeId,
             effectiveFrom: from,
@@ -408,7 +429,7 @@ export class HrTeamService {
         });
       }
     });
-    return { moved: employeeIds.length, effectiveFrom: isoDay(from) };
+    return { moved: movingIds.length, effectiveFrom: isoDay(from) };
   }
 
   // -------------------------------------------------------------- guards --

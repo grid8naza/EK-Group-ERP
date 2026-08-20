@@ -1,23 +1,34 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Clock, Eye, Moon, Search, Users } from 'lucide-react';
+import {
+  ArrowRightLeft,
+  Clock,
+  Eye,
+  Moon,
+  Search,
+  UserMinus,
+  UserPlus,
+  Users,
+} from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
 import { cn, formatDayMonthYear } from '@/lib/utils';
 import { useFetch } from '@/lib/hooks';
 import { useAuth } from '@/providers/AuthProvider';
 import { useToast } from '@/providers/ToastProvider';
+import { useConfirm } from '@/providers/ConfirmProvider';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Badge } from '@/components/ui/Badge';
 import { CloseFooter, Drawer, DrawerFooter } from '@/components/ui/Drawer';
 import { Checkbox, DateInput, Select, Textarea } from '@/components/ui/Field';
-import { RosterPanel } from '@/components/hr/RosterPanel';
+import { ColumnToggle } from '@/components/ui/ColumnToggle';
 import type {
   Branch,
   BulkAssignResult,
   CostCenter,
   CostObject,
   HrShift,
+  HrTeam,
   RosterRegister,
   RosterRegisterRow,
 } from '@/lib/types';
@@ -31,33 +42,71 @@ const toTime = (m: number | null) =>
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+/** One row-action button, so the four of them cannot drift apart. */
+const ACTION_BTN =
+  'rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 transition hover:border-brand-400 hover:text-brand-600 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300 disabled:hover:border-slate-200 disabled:hover:text-slate-300 dark:border-slate-700 dark:text-slate-300 dark:disabled:border-slate-800 dark:disabled:text-slate-600';
+
 /** The shift filter's two answers that are not a shift. */
 const ALL = '';
 const NONE = 'none';
+/** The team dropdown's answer that is not a team — out of every one. */
+const NO_TEAM = 'none';
 
 /**
- * The roster, as a list of everybody (SRS §8.9, FR-HRP-01).
+ * The columns that can be put away, and their headings.
  *
- * The Roster tab on an employee is the right place to read and correct ONE
- * person's history. It is the wrong place to put ninety people on the morning
- * shift, and a job that means opening ninety records is a job that stops being
- * done — so this is the same series seen the other way round: every employee at
- * once, filtered by branch and by what they are on now, and assigned in one go.
+ * Emp. ID and Employee are not among them: a row nobody can identify is a row
+ * nobody can act on, and every action here is about a person.
+ */
+const OPTIONAL_COLS = [
+  { key: 'designation', label: 'Designation' },
+  { key: 'branch', label: 'Branch' },
+  { key: 'team', label: 'Team' },
+  { key: 'shift', label: 'Shift' },
+  { key: 'timing', label: 'Timing' },
+  { key: 'from', label: 'From' },
+];
+
+/**
+ * Transfer — moving a list of people, in one action (SRS §8.9, FR-HRP-01).
+ *
+ * Five things can move, together or singly: the TEAM whose leader answers for
+ * their attendance, the BRANCH they are posted to, their DIVISION and
+ * DEPARTMENT, and the SHIFT they work. All from one effective date, because
+ * that is how a transfer actually happens — somebody moves to the Kadathy
+ * bakery, onto the night bake, in the packing team, from the 1st, and making
+ * that three visits to three screens is how it ends up half done.
+ *
+ * The list is here to pick FROM, not to browse: it shows everybody as at a day
+ * with what they are on, which is what tells you who needs moving. Reading and
+ * correcting one person's history belongs on their own record, under Roster.
  *
  * The rules do not change because the screen did. Each person still goes
- * through the ordinary assignment: the line before closes the day before, an
- * overlap is refused. One refusal does not cost the rest their assignment —
- * what failed comes back named, so it can be put right without guessing.
+ * through the ordinary assignment — the line before closes the day before, an
+ * overlap is refused — and the team through the ordinary membership transfer.
+ * One refusal does not cost the rest theirs; what failed comes back named, so
+ * it can be put right without guessing.
  */
 export default function RosterPage() {
   const { can, activeCompanyId, activeBranchId } = useAuth();
   const toast = useToast();
+  const confirm = useConfirm();
 
   const [on, setOn] = useState(today());
   const [branchFilter, setBranchFilter] = useState<string>(ALL);
   const [shiftFilter, setShiftFilter] = useState<string>(ALL);
+  /** '' = everybody, 'in' = in a team, 'out' = in none. */
+  const [teamFilter, setTeamFilter] = useState<string>(ALL);
   const [search, setSearch] = useState('');
   const [picked, setPicked] = useState<Set<number>>(new Set());
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set());
+  const shows = (key: string) => !hiddenCols.has(key);
+  const toggleCol = (key: string) =>
+    setHiddenCols((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(key)) next.add(key);
+      return next;
+    });
 
   const { data, loading, refetch } = useFetch<RosterRegister>(
     `/hr-rosters?on=${on}&branchId=${branchFilter || 'all'}`,
@@ -68,6 +117,11 @@ export default function RosterPage() {
     [activeCompanyId],
   );
   const { data: shifts } = useFetch<HrShift[]>('/hr-shifts', [activeCompanyId]);
+  // The teams somebody can be moved INTO. Every branch's, because the transfer
+  // may move them to another branch in the same action.
+  const { data: teams } = useFetch<HrTeam[]>('/hr-teams?branchId=all', [
+    activeCompanyId,
+  ]);
   // Division and department come from the COMPANY's own structure — a division
   // is a cost centre, a department the cost object under it — exactly as on the
   // employee form and the postings tab.
@@ -81,10 +135,12 @@ export default function RosterPage() {
   );
 
   /**
-   * The person whose whole roster is being read, or null.
+   * The person being read, or null.
    *
-   * The list answers for ONE day; this is every shift they have been on and
-   * from when — which is the question that follows "why are they on nights".
+   * Where they stand on the day in the header: their team and who leads it,
+   * where they are posted, and the hours they are marked against. Not their
+   * history — the whole series is on their own record, and this screen's
+   * question is who needs moving, which one day answers.
    */
   const [viewing, setViewing] = useState<RosterRegisterRow | null>(null);
 
@@ -93,6 +149,7 @@ export default function RosterPage() {
   // Every field is "leave it as it is" until something is chosen: a transfer
   // that also changes the shift is one action, and so is one that does not.
   const [form, setForm] = useState({
+    teamId: '',
     shiftId: '',
     branchId: '',
     costCenterId: '',
@@ -106,6 +163,12 @@ export default function RosterPage() {
 
   const rows = useMemo(() => data?.rows ?? [], [data]);
 
+  /** Two teams can share a name across branches, so the list says which. */
+  const branchNames = useMemo(
+    () => new Map((branches ?? []).map((b) => [b.id, b.name])),
+    [branches],
+  );
+
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
@@ -113,6 +176,10 @@ export default function RosterPage() {
       if (shiftFilter !== ALL && shiftFilter !== NONE) {
         if (String(r.shiftId ?? '') !== shiftFilter) return false;
       }
+      // Assigned = in a team on this day, which is the same question the
+      // Assign and Transfer buttons ask of each row.
+      if (teamFilter === 'in' && !r.teamName) return false;
+      if (teamFilter === 'out' && r.teamName) return false;
       if (!q) return true;
       return (
         r.employeeName.toLowerCase().includes(q) ||
@@ -120,7 +187,7 @@ export default function RosterPage() {
         r.designationName.toLowerCase().includes(q)
       );
     });
-  }, [rows, shiftFilter, search]);
+  }, [rows, shiftFilter, teamFilter, search]);
 
   // A row that scrolls out of the filter must not stay quietly selected —
   // "assign 12" has to mean the twelve on screen.
@@ -150,6 +217,7 @@ export default function RosterPage() {
     setPicked(new Set(ids));
     setFailures([]);
     setForm({
+      teamId: '',
       shiftId: '',
       branchId: '',
       costCenterId: '',
@@ -162,37 +230,248 @@ export default function RosterPage() {
     setOpen(true);
   };
 
+  /**
+   * Where one person stands on the day being looked at, as label/value pairs.
+   *
+   * The membership is found in the TEAMS rather than taken off the row: the row
+   * carries the team's name, but the division, department and dates of the
+   * spell are the membership's own, and they are what somebody opening this is
+   * actually asking about.
+   */
+  const standing = (r: RosterRegisterRow) => {
+    const spell = (teams ?? [])
+      .flatMap((t) =>
+        t.members
+          .filter(
+            (m) =>
+              m.id === r.employeeId &&
+              m.effectiveFrom <= on &&
+              (!m.effectiveTo || m.effectiveTo >= on),
+          )
+          .map((m) => ({ team: t, member: m })),
+      )
+      .at(0);
+    const divisionName = spell?.member.costCenterId
+      ? ((costCenters ?? []).find((c) => c.id === spell.member.costCenterId)
+          ?.name ?? '—')
+      : '—';
+    const departmentName = spell?.member.costObjectId
+      ? ((costObjects ?? []).find((o) => o.id === spell.member.costObjectId)
+          ?.name ?? '—')
+      : '—';
+
+    return [
+      { label: 'Employee', value: `${r.employeeCode} · ${r.employeeName}` },
+      { label: 'Designation', value: r.designationName },
+      { label: 'Branch', value: r.branchName ?? 'The whole company' },
+      { label: 'Team', value: spell ? spell.team.name : 'Not in a team' },
+      {
+        label: 'Team leader',
+        value: spell ? spell.team.leaderName : '—',
+      },
+      { label: 'Division (in the team)', value: divisionName },
+      { label: 'Department (in the team)', value: departmentName },
+      {
+        label: 'In the team from',
+        value: spell ? formatDayMonthYear(spell.member.effectiveFrom) : '—',
+      },
+      {
+        label: 'Until',
+        value: spell
+          ? spell.member.effectiveTo
+            ? formatDayMonthYear(spell.member.effectiveTo)
+            : 'until changed'
+          : '—',
+      },
+      {
+        label: 'Shift',
+        value: r.shiftId ? `${r.shiftCode} — ${r.shiftName}` : 'Not on a shift',
+      },
+      {
+        label: 'Hours',
+        value:
+          r.timeIn === null && r.timeOut === null
+            ? "The branch's working day"
+            : `${toTime(r.timeIn)} – ${toTime(r.timeOut)}`,
+      },
+      {
+        // Which of the four answers their day is filled in from. Worth saying:
+        // a team's shift beats their own roster line, so hours that look like
+        // theirs may be the team's.
+        label: 'Those hours come from',
+        value: r.shiftFromTeam
+          ? "The team's shift"
+          : r.shiftId
+            ? 'Their own roster line'
+            : r.ownHours
+              ? 'Their own hours'
+              : "The branch's working day",
+      },
+    ];
+  };
+
+  // ---- Assign: one person, into a team they are not yet in ----
+  const [assigning, setAssigning] = useState<RosterRegisterRow | null>(null);
+  const [assignForm, setAssignForm] = useState({
+    teamId: '',
+    costCenterId: '',
+    costObjectId: '',
+    effectiveFrom: today(),
+  });
+
+  const openAssign = (r: RosterRegisterRow) => {
+    setAssigning(r);
+    setAssignForm({
+      teamId: '',
+      costCenterId: '',
+      costObjectId: '',
+      effectiveFrom: on,
+    });
+  };
+
+  /** The teams this person could actually join — their branch's, and active. */
+  const teamsFor = (r: RosterRegisterRow | null) =>
+    (teams ?? []).filter(
+      (t) => t.isActive && (t.branchId === null || t.branchId === r?.branchId),
+    );
+
+  const saveAssign = async () => {
+    if (!assigning) return;
+    if (!assignForm.teamId) {
+      toast.error('Which team are they joining?');
+      return;
+    }
+    if (!assignForm.costCenterId || !assignForm.costObjectId) {
+      toast.error(
+        'Say which division and department the team has them working in.',
+      );
+      return;
+    }
+    if (!assignForm.effectiveFrom) {
+      toast.error('From which day?');
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.post('/hr-teams/transfer', {
+        toTeamId: Number(assignForm.teamId),
+        employeeIds: [assigning.employeeId],
+        effectiveFrom: assignForm.effectiveFrom,
+        costCenterId: Number(assignForm.costCenterId),
+        costObjectId: Number(assignForm.costObjectId),
+      });
+      toast.success(`${assigning.employeeName} joined the team.`);
+      setAssigning(null);
+      refetch();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Failed to assign.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  /**
+   * Take one person out of their team, from the day on screen.
+   *
+   * Their spell CLOSES the day before — it is not deleted, because the days
+   * already marked under that leader are read back through it. From this day
+   * they are marked on the branch's own sheet, which is where anybody in no
+   * team is marked.
+   */
+  const removeFromTeam = async (r: RosterRegisterRow) => {
+    const ok = await confirm({
+      title: `Take ${r.employeeName} out of ${r.teamName}?`,
+      message: `Their spell in ${r.teamName} ends the day before ${formatDayMonthYear(on)}. From then they are unassigned, and marked on the branch's own sheet. Days already marked are untouched — the entry on each of those sheets is the record of who answered for them at the time.`,
+      danger: true,
+      confirmText: 'Take them out',
+      cancelText: 'Leave them in',
+      defaultCancel: true,
+    });
+    if (!ok) return;
+    try {
+      await api.post('/hr-teams/transfer', {
+        toTeamId: null,
+        employeeIds: [r.employeeId],
+        effectiveFrom: on,
+      });
+      toast.success(`${r.employeeName} is no longer in ${r.teamName}.`);
+      refetch();
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : 'Failed to remove.');
+    }
+  };
+
   const assign = async () => {
     if (!changing) {
-      toast.error('Choose a branch, a division, a department or a shift.');
+      toast.error(
+        'Choose a team, a branch, a division, a department or a shift.',
+      );
       return;
     }
     if (!form.effectiveFrom) {
       toast.error('From which day?');
       return;
     }
+    const placing = !!(
+      form.shiftId ||
+      form.branchId ||
+      form.costCenterId ||
+      form.costObjectId
+    );
     setSaving(true);
     try {
       // Only what was actually chosen is sent — an absent field means "leave
       // it as it is", which is what an untouched dropdown has to mean.
-      const res = await api.post<BulkAssignResult>('/hr-rosters/assign', {
-        employeeIds: [...picked],
-        ...(form.shiftId ? { shiftId: Number(form.shiftId) } : {}),
-        ...(form.branchId ? { branchId: Number(form.branchId) } : {}),
-        ...(form.costCenterId
-          ? { costCenterId: Number(form.costCenterId) }
-          : {}),
-        ...(form.costObjectId
-          ? { costObjectId: Number(form.costObjectId) }
-          : {}),
-        effectiveFrom: form.effectiveFrom,
-        effectiveTo: form.effectiveTo || null,
-        remarks: form.remarks.trim() || null,
-      });
+      const res = placing
+        ? await api.post<BulkAssignResult>('/hr-rosters/assign', {
+            employeeIds: [...picked],
+            ...(form.shiftId ? { shiftId: Number(form.shiftId) } : {}),
+            ...(form.branchId ? { branchId: Number(form.branchId) } : {}),
+            ...(form.costCenterId
+              ? { costCenterId: Number(form.costCenterId) }
+              : {}),
+            ...(form.costObjectId
+              ? { costObjectId: Number(form.costObjectId) }
+              : {}),
+            effectiveFrom: form.effectiveFrom,
+            effectiveTo: form.effectiveTo || null,
+            remarks: form.remarks.trim() || null,
+          })
+        : { moved: 0, assigned: 0, failed: [] };
       setFailures(res.failed);
+
+      /**
+       * The team, after the placement — a team refuses anybody who does not
+       * work at its branch, so a move to the branch has to have landed first
+       * for a move to that branch's team to be accepted.
+       *
+       * Its own endpoint because a membership is its own dated series, and
+       * `fromTeamId` is left unsaid: this screen names where they are GOING,
+       * and a mixed selection has no single answer for where each of them
+       * started. The division and department chosen above go on the new
+       * membership too — the same two answers, about the same work.
+       */
+      let joined = 0;
+      if (form.teamId && !res.failed.length) {
+        const team = await api.post<{ moved: number }>('/hr-teams/transfer', {
+          toTeamId: form.teamId === NO_TEAM ? null : Number(form.teamId),
+          employeeIds: [...picked],
+          effectiveFrom: form.effectiveFrom,
+          ...(form.costCenterId
+            ? { costCenterId: Number(form.costCenterId) }
+            : {}),
+          ...(form.costObjectId
+            ? { costObjectId: Number(form.costObjectId) }
+            : {}),
+        });
+        joined = team.moved;
+      }
+
       const done = [
         res.moved && `${res.moved} moved`,
         res.assigned && `${res.assigned} put on the shift`,
+        joined &&
+          `${joined} ${form.teamId === NO_TEAM ? 'taken out of their team' : 'put in the team'}`,
       ].filter(Boolean);
       if (done.length) toast.success(`${done.join(', ')}.`);
       else if (!res.failed.length) {
@@ -208,7 +487,7 @@ export default function RosterPage() {
       }
       refetch();
     } catch (e) {
-      toast.error(e instanceof ApiError ? e.message : 'Failed to assign.');
+      toast.error(e instanceof ApiError ? e.message : 'Failed to transfer.');
     } finally {
       setSaving(false);
     }
@@ -229,6 +508,7 @@ export default function RosterPage() {
 
   /** Has anything actually been chosen to change? */
   const changing = !!(
+    form.teamId ||
     form.shiftId ||
     form.branchId ||
     form.costCenterId ||
@@ -239,7 +519,8 @@ export default function RosterPage() {
     () => new Map((shifts ?? []).map((s) => [s.id, s])),
     [shifts],
   );
-  const unrostered = shown.filter((r) => !r.shiftId).length;
+  // In no team on this day — the count this screen exists to work through.
+  const unassigned = shown.filter((r) => !r.teamName).length;
 
   /** Where somebody's hours come from, said in the row. */
   const source = (r: RosterRegisterRow) =>
@@ -252,9 +533,9 @@ export default function RosterPage() {
   return (
     <div className="mx-auto flex h-full max-w-[100rem] flex-col">
       <PageHeader
-        title="Roster"
-        description="Everybody at once — who is on which shift, and putting a list of them on one"
-        icon={<Clock className="h-5 w-5" />}
+        title="Transfer"
+        description="Move a list of people — to another team, branch, division, department or shift, from one day"
+        icon={<ArrowRightLeft className="h-5 w-5" />}
         actions={
           canEdit && (
             <button
@@ -263,13 +544,11 @@ export default function RosterPage() {
               onClick={() => openFor([...picked])}
               disabled={picked.size === 0}
               title={
-                picked.size === 0
-                  ? 'Tick the people to put on a shift'
-                  : undefined
+                picked.size === 0 ? 'Tick the people to transfer' : undefined
               }
             >
               <Users className="h-4 w-4" />
-              Assign shift
+              Transfer
               {picked.size > 0 && ` (${picked.size})`}
             </button>
           )
@@ -309,6 +588,20 @@ export default function RosterPage() {
               })),
             ]}
           />
+          {/* The question this screen is usually opened with: who has nobody
+              answering for their attendance yet. */}
+          <Select
+            label="Team"
+            wrapClassName="w-48"
+            sortOptions={false}
+            value={teamFilter}
+            placeholder="Assigned & unassigned"
+            onChange={(e) => setTeamFilter(e.target.value)}
+            options={[
+              { value: 'in', label: 'Assigned — in a team' },
+              { value: 'out', label: 'Unassigned — in no team' },
+            ]}
+          />
           <label className="relative w-64">
             <span className="mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-300">
               Search
@@ -323,12 +616,17 @@ export default function RosterPage() {
           </label>
           <span className="ml-auto text-sm text-slate-500 dark:text-slate-400">
             {shown.length} of {rows.length}
-            {unrostered > 0 && (
+            {unassigned > 0 && (
               <span className="ml-2 text-amber-600 dark:text-amber-400">
-                · {unrostered} not on a shift
+                · {unassigned} unassigned
               </span>
             )}
           </span>
+          <ColumnToggle
+            columns={OPTIONAL_COLS}
+            hidden={hiddenCols}
+            onToggle={toggleCol}
+          />
         </div>
 
         <div className="min-h-0 flex-1 overflow-auto">
@@ -350,12 +648,17 @@ export default function RosterPage() {
                   </th>
                   <th className="w-24 px-3 py-2.5">Emp. ID</th>
                   <th className="px-3 py-2.5">Employee</th>
-                  <th className="px-3 py-2.5">Designation</th>
-                  <th className="px-3 py-2.5">Branch</th>
-                  <th className="px-3 py-2.5">Shift</th>
-                  <th className="w-40 px-3 py-2.5">Timing</th>
-                  <th className="w-32 px-3 py-2.5">From</th>
-                  <th className="w-24 px-3 py-2.5" />
+                  {shows('designation') && (
+                    <th className="px-3 py-2.5">Designation</th>
+                  )}
+                  {shows('branch') && <th className="px-3 py-2.5">Branch</th>}
+                  {shows('team') && <th className="px-3 py-2.5">Team</th>}
+                  {shows('shift') && <th className="px-3 py-2.5">Shift</th>}
+                  {shows('timing') && (
+                    <th className="w-40 px-3 py-2.5">Timing</th>
+                  )}
+                  {shows('from') && <th className="w-32 px-3 py-2.5">From</th>}
+                  <th className="w-32 px-3 py-2.5" />
                 </tr>
               </thead>
               <tbody>
@@ -389,71 +692,135 @@ export default function RosterPage() {
                       <td className="px-3 py-2 font-medium text-slate-800 dark:text-slate-100">
                         {r.employeeName}
                       </td>
-                      <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
-                        {r.designationName}
-                      </td>
-                      <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
-                        {r.branchName ?? '—'}
-                      </td>
-                      <td className="px-3 py-2">
-                        {r.shiftId ? (
-                          <span className="inline-flex items-center gap-2">
-                            <span className="font-mono font-semibold text-slate-700 dark:text-slate-200">
-                              {r.shiftCode}
+                      {shows('designation') && (
+                        <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
+                          {r.designationName}
+                        </td>
+                      )}
+                      {shows('branch') && (
+                        <td className="whitespace-nowrap px-3 py-2 text-slate-600 dark:text-slate-300">
+                          {r.branchName ?? '—'}
+                        </td>
+                      )}
+                      {/* Who answers for their attendance on this day. Blank
+                          means the branch's own sheet, which is a fact about
+                          them rather than a gap. */}
+                      {shows('team') && (
+                        <td className="whitespace-nowrap px-3 py-2 text-slate-600 dark:text-slate-300">
+                          {r.teamName ?? (
+                            <span className="text-slate-400">
+                              Not in a team
                             </span>
-                            <span className="text-slate-600 dark:text-slate-300">
-                              {r.shiftName}
+                          )}
+                        </td>
+                      )}
+                      {shows('shift') && (
+                        <td className="whitespace-nowrap px-3 py-2">
+                          {r.shiftId ? (
+                            <span className="inline-flex items-center gap-2">
+                              <span className="font-mono font-semibold text-slate-700 dark:text-slate-200">
+                                {r.shiftCode}
+                              </span>
+                              <span className="text-slate-600 dark:text-slate-300">
+                                {r.shiftName}
+                              </span>
+                              {shift?.overnight && (
+                                <Moon
+                                  className="h-3.5 w-3.5 text-violet-500"
+                                  aria-label="Finishes the next day"
+                                />
+                              )}
                             </span>
-                            {shift?.overnight && (
-                              <Moon
-                                className="h-3.5 w-3.5 text-violet-500"
-                                aria-label="Finishes the next day"
-                              />
-                            )}
-                          </span>
-                        ) : (
-                          <Badge color="amber">Not on a shift</Badge>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 tabular-nums text-slate-600 dark:text-slate-300">
-                        {toTime(r.timeIn)} – {toTime(r.timeOut)}
-                        {!r.shiftId && (
-                          <span className="ml-2 text-xs text-slate-400">
-                            {source(r)}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-slate-500 dark:text-slate-400">
-                        {r.effectiveFrom
-                          ? formatDayMonthYear(r.effectiveFrom)
-                          : '—'}
-                      </td>
-                      {/* View before Change, the order every listing here
-                          keeps. This row is one day's answer; View is the
-                          whole series behind it — where a line already written
-                          is corrected, as opposed to Change, which starts a
-                          new one from a date. */}
+                          ) : (
+                            <Badge color="amber">Not on a shift</Badge>
+                          )}
+                        </td>
+                      )}
+                      {shows('timing') && (
+                        <td className="px-3 py-2 tabular-nums text-slate-600 dark:text-slate-300">
+                          {toTime(r.timeIn)} – {toTime(r.timeOut)}
+                          {!r.shiftId && (
+                            <span className="ml-2 text-xs text-slate-400">
+                              {source(r)}
+                            </span>
+                          )}
+                        </td>
+                      )}
+                      {shows('from') && (
+                        <td className="px-3 py-2 text-slate-500 dark:text-slate-400">
+                          {r.effectiveFrom
+                            ? formatDayMonthYear(r.effectiveFrom)
+                            : '—'}
+                        </td>
+                      )}
+                      {/* Assign, View, Transfer. The two writing actions are
+                          the same question asked of opposite answers — is this
+                          person in a team — so exactly one of them is ever
+                          live. Both are SHOWN either way: a button that
+                          appears and disappears down a list of ninety is a
+                          button nobody can aim at, and a greyed one says why
+                          it cannot be pressed. */}
                       <td className="px-3 py-2">
                         <div className="flex items-center justify-end gap-1.5">
+                          {canEdit && (
+                            <button
+                              type="button"
+                              disabled={!!r.teamName}
+                              title={
+                                r.teamName
+                                  ? `Already in ${r.teamName} — use Transfer to move them`
+                                  : 'Put them in a team'
+                              }
+                              className={ACTION_BTN}
+                              onClick={() => openAssign(r)}
+                            >
+                              <UserPlus className="h-3.5 w-3.5" />
+                              <span className="sr-only">Assign</span>
+                            </button>
+                          )}
                           <button
                             type="button"
-                            title={
-                              canEdit
-                                ? 'See and edit every shift this person has been on'
-                                : 'See every shift this person has been on'
-                            }
-                            className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 transition hover:border-brand-400 hover:text-brand-600 dark:border-slate-700 dark:text-slate-300"
+                            title="See where they stand on this day"
+                            className={ACTION_BTN}
                             onClick={() => setViewing(r)}
                           >
                             <Eye className="h-3.5 w-3.5" />
+                            <span className="sr-only">View</span>
                           </button>
                           {canEdit && (
                             <button
                               type="button"
-                              className="rounded-lg border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 transition hover:border-brand-400 hover:text-brand-600 dark:border-slate-700 dark:text-slate-300"
+                              disabled={!r.teamName}
+                              title={
+                                r.teamName
+                                  ? 'Move them to another team, branch, division, department or shift'
+                                  : 'Not in a team — use Assign to put them in one'
+                              }
+                              className={ACTION_BTN}
                               onClick={() => openFor([r.employeeId])}
                             >
-                              {r.shiftId ? 'Change' : 'Assign'}
+                              <ArrowRightLeft className="h-3.5 w-3.5" />
+                              <span className="sr-only">Transfer</span>
+                            </button>
+                          )}
+                          {canEdit && (
+                            <button
+                              type="button"
+                              disabled={!r.teamName}
+                              title={
+                                r.teamName
+                                  ? `Take them out of ${r.teamName} — from then they are marked on the branch's own sheet`
+                                  : 'Not in a team — there is nothing to take them out of'
+                              }
+                              className={cn(
+                                ACTION_BTN,
+                                r.teamName &&
+                                  'hover:border-rose-400 hover:text-rose-600',
+                              )}
+                              onClick={() => void removeFromTeam(r)}
+                            >
+                              <UserMinus className="h-3.5 w-3.5" />
+                              <span className="sr-only">Remove</span>
                             </button>
                           )}
                         </div>
@@ -533,6 +900,30 @@ export default function RosterPage() {
                   label: `${s.code} — ${s.name} (${toTime(s.timeIn)}–${toTime(s.timeOut)})`,
                 }))}
             />
+            {/* Who answers for their attendance. Their old spell closes the
+                day before this one and a new one opens on it, so no day is
+                claimed by two leaders and none by neither. "Out of every team"
+                is offered because leaving a team is a transfer too — those
+                days go back onto the branch's own sheet. */}
+            <Select
+              label="Team"
+              wrapClassName="sm:col-span-2"
+              sortOptions={false}
+              value={form.teamId}
+              placeholder="Leave as it is"
+              onChange={(e) => setForm({ ...form, teamId: e.target.value })}
+              options={[
+                { value: NO_TEAM, label: '— Out of every team —' },
+                ...(teams ?? [])
+                  .filter((t) => t.isActive)
+                  .map((t) => ({
+                    value: String(t.id),
+                    label: t.branchId
+                      ? `${t.name} — ${branchNames.get(t.branchId) ?? ''}`
+                      : t.name,
+                  })),
+              ]}
+            />
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -584,43 +975,144 @@ export default function RosterPage() {
         </div>
       </Drawer>
 
-      {/* One person's whole series — and, for anybody who may edit, the place
-          to correct it: change the shift on a line, move its dates, drop one
-          that was entered by mistake.
-
-          The SAME panel the Roster tab on Employee Master uses. One place
-          decides how a roster reads AND how it is edited, so the list and the
-          tab cannot drift apart, and the series rules are the ones already
-          proven rather than a second set written here.
-
-          The list is re-read on close: a shift changed in here is a different
-          answer in the row behind it. */}
+      {/* Where one person stands on the day being looked at — and nothing
+          else. Not their shift history: this screen's question is "who needs
+          moving, and out of what", which one day answers. The whole series
+          belongs on their own record, under Roster, beside the rest of it. */}
       <Drawer
         open={!!viewing}
-        onClose={() => {
-          setViewing(null);
-          refetch();
-        }}
-        title={viewing?.employeeName ?? 'Roster'}
+        onClose={() => setViewing(null)}
+        title={viewing?.employeeName ?? 'Employee'}
         subtitle={
           viewing
             ? `${viewing.employeeCode} · ${viewing.designationName}`
             : undefined
         }
+        // Nothing to refetch on the way out: nothing in here can change.
+        footer={<CloseFooter onClose={() => setViewing(null)} />}
+      >
+        {/* The team and who leads it, the branch, the division and department
+            THAT TEAM has them doing, and the hours they are marked against —
+            with where those hours came from, since a team's shift beats
+            anything on their own line. */}
+        {viewing && (
+          <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+            <div className="border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs font-medium uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-400">
+              As at {formatDayMonthYear(on)}
+            </div>
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-3 p-4 text-sm sm:grid-cols-2">
+              {standing(viewing).map(({ label, value }) => (
+                <div key={label}>
+                  <dt className="text-xs text-slate-400">{label}</dt>
+                  <dd className="mt-0.5 text-slate-700 dark:text-slate-200">
+                    {value}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
+      </Drawer>
+
+      {/* Assign — one person, into a team they are not in.
+          Its own small form rather than the bulk drawer: joining a team asks
+          three things the bulk drawer treats as optional, and all three are
+          required of a membership. */}
+      <Drawer
+        open={!!assigning}
+        onClose={() => setAssigning(null)}
+        title={assigning ? `Put ${assigning.employeeName} in a team` : 'Assign'}
+        subtitle={
+          assigning
+            ? `${assigning.employeeCode} · ${assigning.designationName}`
+            : undefined
+        }
         footer={
-          <CloseFooter
-            onClose={() => {
-              setViewing(null);
-              refetch();
-            }}
+          <DrawerFooter
+            onCancel={() => setAssigning(null)}
+            onSave={saveAssign}
+            saving={saving}
+            saveLabel="Assign"
           />
         }
       >
-        <RosterPanel
-          employeeId={viewing?.employeeId ?? null}
-          branchId={viewing?.branchId ?? null}
-          readOnly={!canEdit}
-        />
+        <div className="space-y-4">
+          <Select
+            label="Team"
+            required
+            value={assignForm.teamId}
+            placeholder="Which team are they joining"
+            onChange={(e) =>
+              setAssignForm({ ...assignForm, teamId: e.target.value })
+            }
+            options={teamsFor(assigning).map((t) => ({
+              value: String(t.id),
+              label: t.shiftCode
+                ? `${t.name} — ${t.leaderName} · ${t.shiftCode} ${t.shiftName}`
+                : `${t.name} — ${t.leaderName}`,
+            }))}
+          />
+          <p className="-mt-2 text-xs text-slate-400">
+            Only the teams at this person&apos;s branch: nobody can be in a team
+            at a branch they do not work at. Their leader marks them from the
+            day below, and they are marked against the team&apos;s shift.
+          </p>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Select
+              label="Division"
+              required
+              value={assignForm.costCenterId}
+              placeholder="Which division's work"
+              onChange={(e) =>
+                setAssignForm({
+                  ...assignForm,
+                  costCenterId: e.target.value,
+                  costObjectId: '',
+                })
+              }
+              options={(costCenters ?? [])
+                .filter((c) => c.isActive)
+                .map((c) => ({ value: c.id, label: c.name }))}
+            />
+            <Select
+              label="Department"
+              required
+              value={assignForm.costObjectId}
+              placeholder={
+                assignForm.costCenterId
+                  ? 'Which department'
+                  : 'Pick a division first'
+              }
+              onChange={(e) =>
+                setAssignForm({ ...assignForm, costObjectId: e.target.value })
+              }
+              options={(costObjects ?? [])
+                .filter(
+                  (o) =>
+                    o.isActive &&
+                    (!assignForm.costCenterId ||
+                      String(o.costCenterId) === assignForm.costCenterId),
+                )
+                .map((o) => ({ value: o.id, label: o.name }))}
+            />
+          </div>
+          <p className="-mt-2 text-xs text-slate-400">
+            The work THIS TEAM has them doing — the team&apos;s own answer, and
+            nothing to do with the division and department on their employee
+            record.
+          </p>
+
+          <DateInput
+            label="From"
+            required
+            wrapClassName="sm:max-w-[16rem]"
+            value={assignForm.effectiveFrom}
+            onChange={(iso) =>
+              setAssignForm({ ...assignForm, effectiveFrom: iso })
+            }
+          />
+        </div>
       </Drawer>
     </div>
   );

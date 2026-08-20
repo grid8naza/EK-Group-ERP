@@ -71,6 +71,7 @@ export default function ShiftRosterReportPage() {
     'Emp. ID',
     'Employee',
     'Designation',
+    'Team',
     'Shift',
     'Time In',
     'Time Out',
@@ -78,7 +79,7 @@ export default function ShiftRosterReportPage() {
     'From',
     'Until',
   ];
-  const weights = [10, 20, 18, 14, 9, 9, 9, 11, 11];
+  const weights = [9, 17, 15, 13, 12, 8, 8, 8, 5, 5];
 
   const blocks = useMemo<ReportBlock[]>(() => {
     const keyOf = (r: RosterRegisterRow) =>
@@ -114,7 +115,15 @@ export default function ShiftRosterReportPage() {
                 r.employeeCode,
                 r.employeeName,
                 r.designationName,
-                r.shiftName ? `${r.shiftCode} — ${r.shiftName}` : '—',
+                r.teamName ?? '—',
+                // Said on the line, because a team works its shift together
+                // and that beats anything on the person's own roster: these
+                // hours are the team's, and a reader who took them for an
+                // individual line would draw the wrong conclusion from the
+                // blank dates beside them.
+                r.shiftName
+                  ? `${r.shiftCode} — ${r.shiftName}${r.shiftFromTeam ? ' (team)' : ''}`
+                  : '—',
                 toTime(r.timeIn),
                 toTime(r.timeOut),
                 hours(r.workMinutes),
@@ -160,8 +169,8 @@ export default function ShiftRosterReportPage() {
     fileBase: 'shift-roster',
     serial: true,
     summary,
-    centerCols: [4, 5, 7, 8],
-    numericCols: [6],
+    centerCols: [5, 6, 8, 9],
+    numericCols: [7],
   };
 
   const canPrint = can(ROUTE, 'print');
@@ -229,8 +238,8 @@ export default function ShiftRosterReportPage() {
             blocks={blocks}
             loading={loading}
             serial
-            centerCols={[4, 5, 7, 8]}
-            numericCols={[6]}
+            centerCols={[5, 6, 8, 9]}
+            numericCols={[7]}
             summary={summary}
             emptyText="Nobody is on the books at this branch on this day."
           />

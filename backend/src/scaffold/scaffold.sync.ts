@@ -948,16 +948,30 @@ async function migrateTeamsToHrRecords(
 ): Promise<void> {
   const ROUTE = '/hr/teams';
 
-  // Unguarded and idempotent: matched on the OLD name, so it is a no-op once
-  // renamed and leaves an admin's own rename alone.
-  await prisma.subMenu.updateMany({
-    where: { route: ROUTE, subMenuName: 'Team Master' },
-    data: { subMenuName: 'Teams' },
-  });
-  await prisma.objectMaster.updateMany({
-    where: { route: ROUTE, objectName: 'Team Master' },
-    data: { objectName: 'Teams', nameInMenu: 'Teams' },
-  });
+  /**
+   * Screen renames. Unguarded and idempotent: each is matched on the OLD name,
+   * so it is a no-op once renamed and leaves an admin's own rename alone.
+   *
+   * "Roster" → "Transfer" is a change of purpose, not just of label. The screen
+   * was the roster seen as a list; reading and correcting ONE person's history
+   * belongs on their own record, and what the list is actually for is moving a
+   * group of people — to another team, branch, division, department or shift,
+   * from one date. Scoped by route, so the "Shift Roster" report is untouched.
+   */
+  const RENAMES = [
+    { route: ROUTE, from: 'Team Master', to: 'Teams' },
+    { route: '/hr/roster', from: 'Roster', to: 'Transfer' },
+  ];
+  for (const { route, from, to } of RENAMES) {
+    await prisma.subMenu.updateMany({
+      where: { route, subMenuName: from },
+      data: { subMenuName: to },
+    });
+    await prisma.objectMaster.updateMany({
+      where: { route, objectName: from },
+      data: { objectName: to, nameInMenu: to },
+    });
+  }
 
   await runOnce(prisma, 'hr-teams-to-records-v2', async () => {
     const records = await prisma.mainMenu.findMany({
