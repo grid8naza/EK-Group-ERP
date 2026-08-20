@@ -916,7 +916,118 @@ async function migrateHrMenus(prisma: Prisma.TransactionClient): Promise<void> {
     await prisma.lookup.deleteMany({ where: { code: 'DEPARTMENT' } });
   });
 
+  await migrateTeamsToHrRecords(prisma, hr.id);
   await seedEmployeeNumbering(prisma);
+}
+
+/**
+ * "Team Master" moves from HR Setup to HR Records, and is renamed "Teams".
+ *
+ * It sat with the classification a person is described BY — categories, groups,
+ * designations. But a team is a standing arrangement of PEOPLE: dated
+ * membership, a leader, the shift they work together. It belongs beside the
+ * employees it is made of and the attendance its leader marks, and it is
+ * maintained by the same people.
+ *
+ * The SubMenu row is moved rather than replaced, so every privilege already
+ * granted on it follows — they hang off its id. The additive sync would
+ * otherwise leave the old row where it was and create an empty twin under the
+ * new name, which is the one outcome worth avoiding.
+ *
+ * Group visibility has to come too: a main menu is shown to a non-super-admin
+ * only where an explicit `visible` row says so, so a group that could reach the
+ * screen under HR Setup would lose it on arrival at HR Records. Mirrored with
+ * skipDuplicates, so a group that has already decided about HR Records keeps
+ * its decision.
+ *
+ * Idempotent, and a no-op on a fresh DB where the scaffold creates it in place.
+ */
+async function migrateTeamsToHrRecords(
+  prisma: Prisma.TransactionClient,
+  hrModuleId: number,
+): Promise<void> {
+  const ROUTE = '/hr/teams';
+
+  // Unguarded and idempotent: matched on the OLD name, so it is a no-op once
+  // renamed and leaves an admin's own rename alone.
+  await prisma.subMenu.updateMany({
+    where: { route: ROUTE, subMenuName: 'Team Master' },
+    data: { subMenuName: 'Teams' },
+  });
+  await prisma.objectMaster.updateMany({
+    where: { route: ROUTE, objectName: 'Team Master' },
+    data: { objectName: 'Teams', nameInMenu: 'Teams' },
+  });
+
+  await runOnce(prisma, 'hr-teams-to-records-v2', async () => {
+    const records = await prisma.mainMenu.findMany({
+      where: { moduleId: hrModuleId, menuName: 'HR Records' },
+      select: { id: true, companyId: true },
+    });
+
+    for (const menu of records) {
+      // EVERY row on the route, not the first one found. In a dev database
+      // there may already be two: the original under HR Setup, and a twin the
+      // additive sync created under HR Records from the scaffold before this
+      // migration existed. Moving them all puts both in one menu so the dedupe
+      // below can tell which is the original — the oldest.
+      const subs = await prisma.subMenu.findMany({
+        where: {
+          route: ROUTE,
+          mainMenu: { moduleId: hrModuleId, companyId: menu.companyId },
+        },
+        select: { id: true },
+        orderBy: { id: 'asc' },
+      });
+      if (!subs.length) continue;
+
+      const reach = await prisma.groupSubMenuPrivilege.findMany({
+        where: { subMenuId: { in: subs.map((s) => s.id) } },
+        select: { userGroupId: true },
+      });
+      if (reach.length) {
+        await prisma.groupMainMenuAccess.createMany({
+          data: [...new Set(reach.map((r) => r.userGroupId))].map(
+            (userGroupId) => ({
+              userGroupId,
+              mainMenuId: menu.id,
+              visible: true,
+            }),
+          ),
+          skipDuplicates: true,
+        });
+      }
+
+      await prisma.subMenu.updateMany({
+        where: { id: { in: subs.map((s) => s.id) } },
+        data: { mainMenuId: menu.id },
+      });
+    }
+
+    // Keeps the oldest per menu — the original, the one carrying privileges —
+    // and drops the twins. Only meaningful now that the move has gathered them
+    // into one menu; a duplicate spread across two menus reads as two screens.
+    await dedupeScreenRows(prisma, ROUTE);
+
+    // The additive sync never renumbers an existing screen, so both menus would
+    // keep the numbering they had around the move — a gap where Teams was, and
+    // a tie where it landed. Set from the scaffold rather than left to drift.
+    const order: Record<string, number> = {
+      '/hr/shifts': 5,
+      '/hr/attendance-settings': 6,
+      '/hr/holidays': 7,
+      '/hr/employees': 1,
+      '/hr/teams': 2,
+      '/hr/attendance': 3,
+      '/hr/roster': 4,
+    };
+    for (const [route, sortOrder] of Object.entries(order)) {
+      await prisma.subMenu.updateMany({
+        where: { route, mainMenu: { moduleId: hrModuleId } },
+        data: { sortOrder },
+      });
+    }
+  });
 }
 
 /**

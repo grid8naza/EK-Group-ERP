@@ -103,7 +103,7 @@ const formFrom = (row: HrTeam) => ({
 });
 
 /**
- * Team Master (SRS §8.9) — who works together, and who answers for them.
+ * Teams (SRS §8.9) — who works together, and who answers for them.
  *
  * The point is answerability: each team's attendance is its own daily sheet,
  * marked and submitted by its LEADER, so a branch of ninety is marked by six
@@ -633,7 +633,7 @@ export default function TeamsPage() {
   return (
     <div className="mx-auto flex h-full max-w-6xl flex-col">
       <PageHeader
-        title="Team Master"
+        title="Teams"
         description="Who works together, and who answers for their attendance"
         icon={<Users className="h-5 w-5" />}
         actions={

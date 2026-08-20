@@ -490,7 +490,7 @@ export default function AttendancePage() {
           ) : !sheet?.rows.length ? (
             <p className="p-6 text-sm text-slate-400">
               {sheet?.teamName
-                ? `Nobody is in ${sheet.teamName} on this day. People are put into a team in HR → Team Master.`
+                ? `Nobody is in ${sheet.teamName} on this day. People are put into a team in HR → Records → Teams.`
                 : 'Nobody is posted to this branch on this day. Employees appear here from the day they join until their last working day.'}
             </p>
           ) : (

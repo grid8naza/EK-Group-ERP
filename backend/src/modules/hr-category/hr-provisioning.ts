@@ -48,22 +48,13 @@ export const HR_SUBS = [
     order: 4,
   },
   {
-    // Who works together, and who answers for them. A master: the teams are a
-    // fact about how the branch is organised, and the sheets they produce are
-    // the transaction.
-    name: 'Team Master',
-    route: '/hr/teams',
-    icon: 'users',
-    order: 5,
-  },
-  {
     // The named working patterns — Morning, Night, General. A master, so it
     // sits with the other things a person is described by. Who is ON one is
     // the roster, which lives on the employee's own record.
     name: 'Shift Master',
     route: '/hr/shifts',
     icon: 'clock',
-    order: 6,
+    order: 5,
   },
   {
     // The working day a branch keeps — what a fresh attendance sheet comes up
@@ -71,13 +62,13 @@ export const HR_SUBS = [
     name: 'Attendance Settings',
     route: '/hr/attendance-settings',
     icon: 'clock',
-    order: 7,
+    order: 6,
   },
   {
     name: 'Holiday Calendar',
     route: '/hr/holidays',
     icon: 'calendar-days',
-    order: 8,
+    order: 7,
   },
 ];
 
@@ -140,6 +131,21 @@ export const HR_EXTRA_MENUS = [
       },
       {
         /**
+         * Who works together, and who answers for them.
+         *
+         * Records rather than Setup: a team is a standing arrangement of
+         * PEOPLE — dated membership, a leader, the shift they work — and it is
+         * maintained by whoever maintains staff, alongside the employees it is
+         * made of. The classification a person is described BY lives in Setup;
+         * this is not that.
+         */
+        name: 'Teams',
+        route: '/hr/teams',
+        icon: 'users',
+        order: 2,
+      },
+      {
+        /**
          * The day's sheet for a branch. A form rather than a report: it is
          * marked, and then it goes through a workflow — who may mark, who
          * verifies and who approves is configured in Cpanel → Workflows
@@ -148,7 +154,7 @@ export const HR_EXTRA_MENUS = [
         name: 'Attendance',
         route: '/hr/attendance',
         icon: 'calendar-check',
-        order: 2,
+        order: 3,
       },
       {
         /**
@@ -162,7 +168,7 @@ export const HR_EXTRA_MENUS = [
         name: 'Roster',
         route: '/hr/roster',
         icon: 'clock',
-        order: 3,
+        order: 4,
       },
     ],
   },
