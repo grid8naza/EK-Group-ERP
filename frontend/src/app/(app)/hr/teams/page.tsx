@@ -564,10 +564,10 @@ export default function TeamsPage() {
         dirty={drawerDirty}
         title={view ? 'View team' : editing ? 'Edit team' : 'Add a team'}
         subtitle="Its leader marks its attendance, day by day"
-        // Wide enough for the member grid: seven columns, three of them
+        // Wide enough for the member grid: eight columns, four of them
         // controls, and a From date squeezed to "20," is a date nobody can
         // check.
-        width="xl"
+        width="xxl"
         footer={
           view ? (
             <CloseFooter onClose={closeDrawer} />
@@ -691,7 +691,11 @@ export default function TeamsPage() {
                 </p>
               ) : (
                 <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
-                  <table className="w-full text-left text-sm">
+                  {/* A floor, not just a width: `w-full` alone lets the browser
+                      take the room back off the narrowest columns when the
+                      wider ones need it, and the ones it takes it off are the
+                      dates. Below this the container scrolls instead. */}
+                  <table className="w-full min-w-[60rem] text-left text-sm">
                     <thead className="border-b border-slate-200 bg-slate-50 text-[11px] font-medium uppercase tracking-wider text-slate-400 dark:border-slate-800 dark:bg-slate-800/50">
                       <tr>
                         <th className="w-24 px-3 py-2">Emp. ID</th>
@@ -713,10 +717,14 @@ export default function TeamsPage() {
                           <td className="px-3 py-2 font-mono text-xs text-slate-500">
                             {m.employee.code}
                           </td>
-                          <td className="px-3 py-2 font-medium text-slate-800 dark:text-slate-100">
+                          {/* A name and a designation each read as one thing:
+                              broken over two lines they read as two, and a
+                              grid of them is twice as tall for no gain. The
+                              table scrolls sideways instead. */}
+                          <td className="whitespace-nowrap px-3 py-2 font-medium text-slate-800 dark:text-slate-100">
                             {m.employee.name}
                           </td>
-                          <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
+                          <td className="whitespace-nowrap px-3 py-2 text-slate-600 dark:text-slate-300">
                             {m.employee.designationName ?? '—'}
                           </td>
                           {/* The work THIS TEAM has them doing. Chosen here, not

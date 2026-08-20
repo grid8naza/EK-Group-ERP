@@ -19,8 +19,8 @@ interface DrawerProps {
   title?: string;
   subtitle?: string;
   icon?: React.ReactNode;
-  /** sm | md | lg | xl | full (fullscreen) */
-  width?: 'sm' | 'md' | 'lg' | 'xl' | 'full';
+  /** sm | md | lg | xl | xxl | full (fullscreen) */
+  width?: 'sm' | 'md' | 'lg' | 'xl' | 'xxl' | 'full';
   children: React.ReactNode;
   footer?: React.ReactNode;
   /**
@@ -66,6 +66,10 @@ const WIDTHS: Record<NonNullable<DrawerProps['width']>, string> = {
   md: 'max-w-xl',
   lg: 'max-w-3xl',
   xl: 'max-w-5xl',
+  // For a form built around a GRID rather than around fields — a row of eight
+  // columns, several of them controls, needs the width or every date in it
+  // gets squeezed to "20,". Short of fullscreen, which takes the page away.
+  xxl: 'max-w-7xl',
   full: 'max-w-none', // fullscreen — the panel fills the viewport
 };
 
@@ -76,6 +80,7 @@ const PANEL_OFFSET: Record<NonNullable<DrawerProps['width']>, string> = {
   md: '36rem',
   lg: '48rem',
   xl: '64rem',
+  xxl: '80rem',
   full: '100%',
 };
 
