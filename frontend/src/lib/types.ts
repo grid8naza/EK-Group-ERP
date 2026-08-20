@@ -3571,6 +3571,14 @@ export interface RosterRegisterRow {
   designationName: string;
   branchId: number | null;
   branchName: string | null;
+  /**
+   * Division = cost centre, department = the cost object under it — as they
+   * sit on the EMPLOYEE, not the pair a team membership carries.
+   */
+  costCenterId: number | null;
+  divisionName: string | null;
+  costObjectId: number | null;
+  departmentName: string | null;
   /** The team they are in, where they are in one. */
   teamName: string | null;
   /** True where the shift shown is the TEAM's rather than their own line. */

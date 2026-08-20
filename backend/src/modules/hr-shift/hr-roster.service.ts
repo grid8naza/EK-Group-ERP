@@ -104,6 +104,11 @@ export class HrRosterService {
         code: true,
         name: true,
         branchId: true,
+        // Division and department — the cost centre and the cost object under
+        // it, as they sit on the EMPLOYEE. What the register groups by, and
+        // not to be confused with the pair a team membership carries.
+        costCenterId: true,
+        costObjectId: true,
         defaultTimeIn: true,
         defaultTimeOut: true,
         designation: { select: { name: true } },
@@ -149,15 +154,25 @@ export class HrRosterService {
     });
 
     // Named rather than numbered: with every branch in view at once, "which
-    // branch" is the column the reader is scanning down.
-    const branchNames = new Map(
-      (
-        await this.prisma.branch.findMany({
-          where: { companyId },
-          select: { id: true, name: true },
-        })
-      ).map((b) => [b.id, b.name]),
-    );
+    // branch" is the column the reader is scanning down — and the same goes
+    // for the division and department the report can group by.
+    const [branches, centres, objects] = await Promise.all([
+      this.prisma.branch.findMany({
+        where: { companyId },
+        select: { id: true, name: true },
+      }),
+      this.prisma.costCenter.findMany({
+        where: { companyId },
+        select: { id: true, name: true },
+      }),
+      this.prisma.costObject.findMany({
+        where: { companyId },
+        select: { id: true, name: true },
+      }),
+    ]);
+    const branchNames = new Map(branches.map((b) => [b.id, b.name]));
+    const divisionNames = new Map(centres.map((c) => [c.id, c.name]));
+    const departmentNames = new Map(objects.map((o) => [o.id, o.name]));
 
     return {
       on: isoDay(date),
@@ -171,6 +186,15 @@ export class HrRosterService {
           designationName: e.designation.name,
           branchId: e.branchId,
           branchName: e.branchId ? (branchNames.get(e.branchId) ?? null) : null,
+          /** Division = cost centre, department = the cost object under it. */
+          costCenterId: e.costCenterId,
+          divisionName: e.costCenterId
+            ? (divisionNames.get(e.costCenterId) ?? null)
+            : null,
+          costObjectId: e.costObjectId,
+          departmentName: e.costObjectId
+            ? (departmentNames.get(e.costObjectId) ?? null)
+            : null,
           /** The team they are in, where they are in one. */
           teamName: e.teamMemberships[0]?.team.name ?? null,
           /** True where the shift shown is the TEAM's, not their own line. */

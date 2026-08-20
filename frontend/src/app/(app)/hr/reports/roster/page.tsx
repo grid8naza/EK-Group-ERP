@@ -34,6 +34,62 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 /** Nobody on a shift — the group the report exists to surface. */
 const UNROSTERED = '— Not on a shift —';
+/** Nobody's team — marked on the branch's own sheet, along with the rest. */
+const UNTEAMED = '— Not in a team —';
+const NO_BRANCH = '— No branch —';
+const NO_DIVISION = '— No division —';
+const NO_DEPARTMENT = '— No department —';
+const NO_DESIGNATION = '— No designation —';
+
+/**
+ * A group named for what its people LACK sits last, whichever way the report is
+ * grouped: it is the remainder, not a heading. It is also the group a manager
+ * most often opened the report to find, which is why it is never left off.
+ */
+const REMAINDERS = new Set([
+  UNROSTERED,
+  UNTEAMED,
+  NO_BRANCH,
+  NO_DIVISION,
+  NO_DEPARTMENT,
+  NO_DESIGNATION,
+]);
+const byHeading = (a: string, b: string) =>
+  REMAINDERS.has(a) ? 1 : REMAINDERS.has(b) ? -1 : a.localeCompare(b);
+
+/** Every way the register can be read, and what each groups a row under. */
+const GROUPINGS: {
+  value: string;
+  label: string;
+  of: (r: RosterRegisterRow) => string;
+}[] = [
+  {
+    value: 'shift',
+    label: 'Group by shift',
+    of: (r) => (r.shiftName ? `${r.shiftCode} — ${r.shiftName}` : UNROSTERED),
+  },
+  { value: 'team', label: 'Group by team', of: (r) => r.teamName ?? UNTEAMED },
+  {
+    value: 'branch',
+    label: 'Group by branch',
+    of: (r) => r.branchName ?? NO_BRANCH,
+  },
+  {
+    value: 'division',
+    label: 'Group by division',
+    of: (r) => r.divisionName ?? NO_DIVISION,
+  },
+  {
+    value: 'department',
+    label: 'Group by department',
+    of: (r) => r.departmentName ?? NO_DEPARTMENT,
+  },
+  {
+    value: 'designation',
+    label: 'Group by designation',
+    of: (r) => r.designationName ?? NO_DESIGNATION,
+  },
+];
 
 /**
  * The shift roster — who is on what, as at a day.
@@ -82,12 +138,8 @@ export default function ShiftRosterReportPage() {
   const weights = [9, 17, 15, 13, 12, 8, 8, 8, 5, 5];
 
   const blocks = useMemo<ReportBlock[]>(() => {
-    const keyOf = (r: RosterRegisterRow) =>
-      groupBy === 'shift'
-        ? r.shiftName
-          ? `${r.shiftCode} — ${r.shiftName}`
-          : UNROSTERED
-        : (r.designationName ?? '— No designation —');
+    const keyOf =
+      GROUPINGS.find((g) => g.value === groupBy)?.of ?? GROUPINGS[0].of;
 
     const grouped = new Map<string, RosterRegisterRow[]>();
     for (const r of rows) {
@@ -98,14 +150,8 @@ export default function ShiftRosterReportPage() {
 
     return (
       [...grouped.entries()]
-        // The unrostered sit last: they are the exception, not the heading.
-        .sort((a, b) =>
-          a[0] === UNROSTERED
-            ? 1
-            : b[0] === UNROSTERED
-              ? -1
-              : a[0].localeCompare(b[0]),
-        )
+        // The remainder sits last: it is what is left, not a heading.
+        .sort((a, b) => byHeading(a[0], b[0]))
         .map(([heading, list]) => ({
           heading,
           count: list.length,
@@ -140,23 +186,23 @@ export default function ShiftRosterReportPage() {
     );
   }, [rows, groupBy]);
 
-  /** How many people are on each shift — the distribution, nothing else. */
+  /**
+   * The distribution, nothing else — and of whatever the report is grouped by,
+   * so the footer counts the same thing the headings do. A summary of shifts
+   * under a report grouped by team would be answering a question nobody asked.
+   */
   const summary = useMemo(() => {
+    const keyOf =
+      GROUPINGS.find((g) => g.value === groupBy)?.of ?? GROUPINGS[0].of;
     const counts = new Map<string, number>();
     for (const r of rows) {
-      const k = r.shiftName ? `${r.shiftCode} — ${r.shiftName}` : UNROSTERED;
+      const k = keyOf(r);
       counts.set(k, (counts.get(k) ?? 0) + 1);
     }
     return [...counts.entries()]
-      .sort((a, b) =>
-        a[0] === UNROSTERED
-          ? 1
-          : b[0] === UNROSTERED
-            ? -1
-            : a[0].localeCompare(b[0]),
-      )
+      .sort((a, b) => byHeading(a[0], b[0]))
       .map(([label, value]) => ({ label, value }));
-  }, [rows]);
+  }, [rows, groupBy]);
 
   const spec: ReportSpec = {
     companyName,
@@ -216,10 +262,10 @@ export default function ShiftRosterReportPage() {
             sortOptions={false}
             value={groupBy}
             onChange={(e) => setGroupBy(e.target.value)}
-            options={[
-              { value: 'shift', label: 'Group by shift' },
-              { value: 'designation', label: 'Group by designation' },
-            ]}
+            options={GROUPINGS.map((g) => ({
+              value: g.value,
+              label: g.label,
+            }))}
           />
           <span className="ml-auto text-sm text-slate-500 dark:text-slate-400">
             {rows.length} employee{rows.length === 1 ? '' : 's'}
