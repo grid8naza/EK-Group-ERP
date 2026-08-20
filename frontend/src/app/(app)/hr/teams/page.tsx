@@ -53,6 +53,11 @@ const toTime = (m: number | null) =>
     : `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 
 const today = () => new Date().toISOString().slice(0, 10);
+/** `2026-08-20` → `2026-08-21`. A new spell starts after the old one ends. */
+const dayAfter = (iso: string) =>
+  new Date(new Date(`${iso}T00:00:00.000Z`).getTime() + 864e5)
+    .toISOString()
+    .slice(0, 10);
 
 const ROUTE = '/hr/teams';
 
@@ -171,10 +176,19 @@ export default function TeamsPage() {
   const [form, setForm] = useState({ ...empty });
   const [baseline, setBaseline] = useState('');
   const [saving, setSaving] = useState(false);
+  /**
+   * Who a branch move has just ended, waiting to be reassigned at the new one.
+   *
+   * Held apart from the members so the form can say "these people still need
+   * dealing with" after their spells have been closed — the grid shows the
+   * history, this shows the work left.
+   */
+  const [letGo, setLetGo] = useState<number[]>([]);
 
   const closeDrawer = () => {
     setOpen(false);
     setView(false);
+    setLetGo([]);
   };
 
   /**
@@ -234,6 +248,55 @@ export default function TeamsPage() {
   );
 
   /**
+   * Has the team's own definition been changed since it was saved?
+   *
+   * The MEMBERS are deliberately not part of this: adding people is what the
+   * question gates, so counting them would lock the button the moment anybody
+   * used it. What counts is the four fields that say what this team IS — and
+   * two of them, the branch and the shift, decide who may be added and what
+   * they will be marked against.
+   */
+  const headerDirty = useMemo(() => {
+    if (!baseline) return false;
+    const saved = JSON.parse(baseline) as typeof empty;
+    const key = (f: typeof empty) =>
+      [f.name, f.branchId, f.leaderEmployeeId, f.shiftId].join(' ');
+    return key(form) !== key(saved);
+  }, [form, baseline]);
+
+  /**
+   * The people a branch move let go and who have not been taken back on.
+   *
+   * Split by whether they can even be: somebody still posted to the old branch
+   * cannot be in a team at the new one, and saying so by name beats offering
+   * them and letting the save explain. Moving a PERSON between branches is a
+   * service-record change and belongs on their own record, not here.
+   */
+  const reassign = useMemo(() => {
+    const on = today();
+    const outstanding = letGo.filter(
+      (id) =>
+        !form.members.some(
+          (m) => m.employeeId === id && (!m.effectiveTo || m.effectiveTo > on),
+        ),
+    );
+    const byId = new Map((employees ?? []).map((e) => [e.id, e]));
+    const branchId = form.branchId ? Number(form.branchId) : null;
+    const people = outstanding
+      .map((id) => byId.get(id))
+      .filter((e): e is Employee => !!e);
+    return {
+      here: people.filter(
+        (e) => e.isActive && (branchId === null || e.branchId === branchId),
+      ),
+      elsewhere: people.filter(
+        (e) => !e.isActive || (branchId !== null && e.branchId !== branchId),
+      ),
+      any: people.length > 0,
+    };
+  }, [letGo, form.members, form.branchId, employees]);
+
+  /**
    * Why nobody can be added yet, or null when they can.
    *
    * The team has to EXIST first. People join a team, and a team that has not
@@ -252,7 +315,9 @@ export default function TeamsPage() {
       ? 'Choose the branch first — it decides who can be in this team.'
       : !form.shiftId
         ? 'Choose the shift first — everybody added is marked against it.'
-        : null;
+        : headerDirty
+          ? 'Save the team first — its people are added against the branch and shift as saved, not as typed.'
+          : null;
 
   /** Who works at this team's branch — before anybody's commitments. */
   const eligible = useMemo(() => {
@@ -263,17 +328,23 @@ export default function TeamsPage() {
   }, [employees, form.branchId]);
 
   /**
-   * Every spell in every OTHER team, so the picker can leave out anybody whose
-   * days are already spoken for.
+   * Every spell anybody is already committed to — this team's own, as the form
+   * currently holds them, and every other team's.
    *
-   * The spells rather than the people: membership is dated, so somebody whose
-   * spell in the Packing Team ended in March is free from April, and only the
-   * dates being asked for can decide. The picker holds those dates, so it does
+   * One list because it answers one question: is this person free for the days
+   * being asked about. The spells rather than the people, since membership is
+   * DATED — somebody whose spell ended yesterday is free today, whether that
+   * spell was here or somewhere else. The picker holds the dates, so it does
    * the deciding.
    */
-  const engagedElsewhere = useMemo(
-    () =>
-      (data ?? [])
+  const engaged = useMemo(
+    () => [
+      ...form.members.map((m) => ({
+        employeeId: m.employeeId,
+        effectiveFrom: m.effectiveFrom,
+        effectiveTo: m.effectiveTo,
+      })),
+      ...(data ?? [])
         .filter((t) => t.id !== editing?.id)
         .flatMap((t) =>
           t.members.map((m) => ({
@@ -282,7 +353,8 @@ export default function TeamsPage() {
             effectiveTo: m.effectiveTo,
           })),
         ),
-    [data, editing],
+    ],
+    [form.members, data, editing],
   );
 
   /** The leader is chosen from the same branch, member or not. */
@@ -320,6 +392,59 @@ export default function TeamsPage() {
       }));
   }, [shifts, form.branchId]);
 
+  /**
+   * Move the team to another branch.
+   *
+   * Everything hangs off the branch: it decides who may be in the team, which
+   * shifts it can work, and who may lead it. So the leader and the shift go,
+   * and every membership ENDS — nobody can be in a team at a branch they do
+   * not work at.
+   *
+   * Ended, not deleted. A spell that ran until yesterday is the record of who
+   * answered for those days, and the sheets already marked against it are read
+   * back through it; dropping the rows would leave those days unexplained.
+   * A spell that had not started yet is dropped, because it never happened.
+   *
+   * Everybody let go is then handed straight back to be reassigned at the new
+   * branch, with a fresh division, department and start date — the move is a
+   * restructure, and leaving somebody to be remembered about is how a person
+   * ends up on nobody's sheet.
+   */
+  const changeBranch = async (next: string) => {
+    if (next === form.branchId) return;
+    const on = today();
+    const current = form.members.filter(
+      (m) => !m.effectiveTo || m.effectiveTo >= on,
+    );
+
+    if (current.length) {
+      const count = current.length;
+      const ok = await confirm({
+        title: 'Move this team to another branch?',
+        message: `${count === 1 ? 'The one person' : `All ${count} people`} in this team ${count === 1 ? 'works' : 'work'} at ${branchName(form.branchId ? Number(form.branchId) : null)}. Moving it to ${branchName(next ? Number(next) : null)} ends ${count === 1 ? 'their spell' : 'their spells'} on ${formatDayMonthYear(on)} and takes the leader off — nobody can be in a team at a branch they do not work at. Days already marked are untouched, and you will be offered ${count === 1 ? 'them' : 'them all'} again for the new branch.`,
+        danger: true,
+        confirmText: 'Move it',
+        cancelText: 'Keep the branch',
+        defaultCancel: true,
+      });
+      if (!ok) return;
+    }
+
+    setForm({
+      ...form,
+      branchId: next,
+      leaderEmployeeId: '',
+      shiftId: '',
+      members: form.members
+        // A spell that has not begun never happened — there is nothing to end.
+        .filter((m) => m.effectiveFrom <= on)
+        .map((m) =>
+          !m.effectiveTo || m.effectiveTo >= on ? { ...m, effectiveTo: on } : m,
+        ),
+    });
+    setLetGo(current.map((m) => m.employeeId));
+  };
+
   /** Change one person's dates without disturbing anybody else's. */
   const setMember = (employeeId: number, patch: Partial<MemberRow>) =>
     setForm((f) => ({
@@ -333,6 +458,7 @@ export default function TeamsPage() {
     setEditing(null);
     setView(false);
     loadForm({ ...empty });
+    setLetGo([]);
     setOpen(true);
   };
 
@@ -341,6 +467,7 @@ export default function TeamsPage() {
       setEditing(row);
       setView(false);
       loadForm(formFrom(row));
+      setLetGo([]);
       setOpen(true);
     });
 
@@ -353,6 +480,7 @@ export default function TeamsPage() {
     setEditing(row);
     setView(true);
     loadForm(formFrom(row));
+    setLetGo([]);
     setOpen(true);
   };
 
@@ -419,6 +547,8 @@ export default function TeamsPage() {
       if (mode === 'saveNew') {
         setEditing(null);
         loadForm({ ...empty });
+        // A new team inherits nothing, least of all the last one's loose ends.
+        setLetGo([]);
       } else if (mode === 'save') {
         // Stays open on what was just saved — including the member rows as the
         // server settled them, so a second Save is not sending stale dates.
@@ -600,18 +730,7 @@ export default function TeamsPage() {
                     ? 'Where the team works'
                     : 'The whole company'
                 }
-                onChange={(e) =>
-                  // The branch decides who may be in it AND which shifts it can
-                  // work, so changing it clears everything that hung off the
-                  // old one rather than leaving a choice the branch refuses.
-                  setForm({
-                    ...form,
-                    branchId: e.target.value,
-                    leaderEmployeeId: '',
-                    shiftId: '',
-                    members: [],
-                  })
-                }
+                onChange={(e) => void changeBranch(e.target.value)}
                 options={branchOptions}
               />
             </div>
@@ -683,6 +802,53 @@ export default function TeamsPage() {
                 <p className="mb-2 text-xs font-medium text-amber-600 dark:text-amber-400">
                   {peopleBlocked}
                 </p>
+              )}
+
+              {/* What the branch move left to do. The grid below shows their
+                  spells as they now stand — ended, not erased; this says who
+                  still has to be placed, and offers them back in one go. */}
+              {reassign.any && !view && (
+                <div className="mb-3 rounded-xl border border-amber-300 bg-amber-50/60 p-3 text-xs dark:border-amber-900/60 dark:bg-amber-950/20">
+                  <p className="font-medium text-amber-700 dark:text-amber-300">
+                    The branch changed, so these spells were ended. Reassign
+                    them at{' '}
+                    {branchName(form.branchId ? Number(form.branchId) : null)},
+                    with a division, department and start date of their own.
+                  </p>
+
+                  {reassign.here.length > 0 && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className="text-slate-600 dark:text-slate-300">
+                        {reassign.here
+                          .map((e) => `${e.code} ${e.name}`)
+                          .join(', ')}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn-secondary inline-flex items-center gap-2 py-1 text-xs"
+                        disabled={!!peopleBlocked}
+                        title={peopleBlocked ?? undefined}
+                        onClick={() => setPicking(true)}
+                      >
+                        <UserPlus className="h-3.5 w-3.5" /> Reassign{' '}
+                        {reassign.here.length > 1 &&
+                          `(${reassign.here.length})`}
+                      </button>
+                    </div>
+                  )}
+
+                  {reassign.elsewhere.length > 0 && (
+                    <p className="mt-2 text-slate-600 dark:text-slate-300">
+                      {reassign.elsewhere
+                        .map((e) => `${e.code} ${e.name}`)
+                        .join(', ')}{' '}
+                      cannot come along — they are not posted to this branch.
+                      Move them on their own record first, under Postings; a
+                      person&apos;s branch is a service-record change, not a
+                      team&apos;s to make.
+                    </p>
+                  )}
+                </div>
               )}
 
               {chosen.length === 0 ? (
@@ -883,16 +1049,20 @@ export default function TeamsPage() {
         employees={eligible}
         divisions={divisions}
         departments={departments}
-        // Already in this team, or their days already spoken for by another —
-        // neither is a name worth reading down a list of ninety.
-        exclude={form.members.map((m) => m.employeeId)}
-        engagedElsewhere={engagedElsewhere}
+        // Whose days are already spoken for — here or in another team. Neither
+        // is a name worth reading down a list of ninety.
+        engaged={engaged}
+        // The people a branch move just let go come back ticked, so reassigning
+        // a dozen is choosing their terms rather than finding them again.
+        preselect={reassign.here.map((e) => e.id)}
         title="People in the team"
         subtitle="Their leader marks this team's attendance every day"
         askPeriod
         askPlace
         defaultPlacement={{
-          effectiveFrom: today(),
+          // Their old spell ended today, so the new one starts tomorrow —
+          // a day claimed twice is a day two arrangements both answer for.
+          effectiveFrom: reassign.any ? dayAfter(today()) : today(),
           effectiveTo: null,
           costCenterId: null,
           costObjectId: null,

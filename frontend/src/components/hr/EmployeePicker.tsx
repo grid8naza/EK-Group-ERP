@@ -52,8 +52,8 @@ export function EmployeePicker({
   onClose,
   onConfirm,
   employees,
-  exclude,
-  engagedElsewhere,
+  engaged,
+  preselect,
   title = 'Choose people',
   subtitle,
   emptyText = 'Nobody is available to choose.',
@@ -71,25 +71,29 @@ export function EmployeePicker({
   /** The people who MAY be chosen — the caller has already filtered them. */
   employees: Employee[];
   /**
-   * Who is already in, and so is never listed: adding somebody twice is not a
-   * thing anybody means to do, and a list that still offers them is a list you
-   * have to remember your way through.
-   */
-  exclude?: number[];
-  /**
-   * Spells somebody is already committed to elsewhere. Anybody whose spell
-   * overlaps the window's own From/Until is not listed at all — they cannot be
-   * taken on for those days, so offering them would only earn a refusal.
+   * Every spell somebody is already committed to — in the team being edited or
+   * in any other. Anybody whose spell overlaps the window's own From/Until is
+   * not listed: they cannot be taken on for those days, so offering them would
+   * only earn a refusal, and a name you have to remember your way past is a
+   * name that should not be on the list.
    *
-   * Overlapping rather than "in another team at all", because these are DATED:
-   * somebody whose spell ended in March is free from April, and the list says
-   * so as soon as the dates above say April.
+   * One list rather than "already in" and "in another team" as two questions,
+   * because they are one question — is this person free for these days — and
+   * the answer is DATED. Somebody whose spell ended yesterday is free today,
+   * whether that spell was here or somewhere else, and the list says so as soon
+   * as the dates above say today.
    */
-  engagedElsewhere?: {
+  engaged?: {
     employeeId: number;
     effectiveFrom: string;
     effectiveTo: string | null;
   }[];
+  /**
+   * Ticked when the window opens, where they are still free to be. For handing
+   * a named set of people straight back to be dealt with — the people a branch
+   * move has just taken out of a team, say.
+   */
+  preselect?: number[];
   title?: string;
   subtitle?: string;
   emptyText?: string;
@@ -120,7 +124,9 @@ export function EmployeePicker({
   // the next one.
   useEffect(() => {
     if (!open) return;
-    setPicked(new Set());
+    // Whoever the caller handed over — the effect below drops any of them who
+    // turn out not to be free for the dates.
+    setPicked(new Set(preselect ?? []));
     setSearch('');
     setDivision(
       defaultPlacement?.costCenterId
@@ -172,14 +178,12 @@ export function EmployeePicker({
     const start = from || FOREVER_AGO;
     const end = until || FOREVER;
     const busy = new Set<number>();
-    for (const spell of engagedElsewhere ?? []) {
+    for (const spell of engaged ?? []) {
       if (spell.effectiveFrom <= end && start <= (spell.effectiveTo ?? FOREVER))
         busy.add(spell.employeeId);
     }
     return busy;
-  }, [engagedElsewhere, from, until]);
-
-  const already = useMemo(() => new Set(exclude ?? []), [exclude]);
+  }, [engaged, from, until]);
 
   // A tick survives a search — the point of ticking down a filtered list — but
   // not the person leaving the list altogether. Changing the From date can
@@ -187,17 +191,15 @@ export function EmployeePicker({
   // means two is worse than no count at all.
   useEffect(() => {
     setPicked((prev) => {
-      const next = new Set(
-        [...prev].filter((id) => !already.has(id) && !unavailable.has(id)),
-      );
+      const next = new Set([...prev].filter((id) => !unavailable.has(id)));
       return next.size === prev.size ? prev : next;
     });
-  }, [already, unavailable]);
+  }, [unavailable]);
 
   const shown = useMemo(() => {
     const q = search.trim().toLowerCase();
     return employees.filter((e) => {
-      if (already.has(e.id) || unavailable.has(e.id)) return false;
+      if (unavailable.has(e.id)) return false;
       if (!q) return true;
       return (
         e.name.toLowerCase().includes(q) ||
@@ -205,7 +207,7 @@ export function EmployeePicker({
         (e.designationName ?? '').toLowerCase().includes(q)
       );
     });
-  }, [employees, search, already, unavailable]);
+  }, [employees, search, unavailable]);
 
   const allShown = shown.length > 0 && shown.every((e) => picked.has(e.id));
 
