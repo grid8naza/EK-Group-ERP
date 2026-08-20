@@ -116,7 +116,9 @@ export default function RosterPage() {
     activeCompanyId ? `/branches?companyId=${activeCompanyId}` : null,
     [activeCompanyId],
   );
-  const { data: shifts } = useFetch<HrShift[]>('/hr-shifts', [activeCompanyId]);
+  const { data: shifts } = useFetch<HrShift[]>('/hr-shifts?branchId=all', [
+    activeCompanyId,
+  ]);
   // The teams somebody can be moved INTO. Every branch's, because the transfer
   // may move them to another branch in the same action.
   const { data: teams } = useFetch<HrTeam[]>('/hr-teams?branchId=all', [
@@ -313,46 +315,81 @@ export default function RosterPage() {
   // ---- Assign: one person, into a team they are not yet in ----
   const [assigning, setAssigning] = useState<RosterRegisterRow | null>(null);
   const [assignForm, setAssignForm] = useState({
+    branchId: '',
     teamId: '',
     costCenterId: '',
     costObjectId: '',
+    shiftId: '',
     effectiveFrom: today(),
+    effectiveTo: '',
   });
 
   const openAssign = (r: RosterRegisterRow) => {
     setAssigning(r);
     setAssignForm({
+      // Where they are now is where they are most likely staying.
+      branchId: r.branchId ? String(r.branchId) : '',
       teamId: '',
       costCenterId: '',
       costObjectId: '',
+      shiftId: '',
       effectiveFrom: on,
+      effectiveTo: '',
     });
   };
 
-  /** The teams this person could actually join — their branch's, and active. */
-  const teamsFor = (r: RosterRegisterRow | null) =>
-    (teams ?? []).filter(
-      (t) => t.isActive && (t.branchId === null || t.branchId === r?.branchId),
-    );
+  /**
+   * The chosen branch's teams and shifts. Narrowed rather than validated
+   * afterwards: nobody can be in a team at a branch they do not work at, and a
+   * shift is offered per branch, so anything else is a choice the save refuses.
+   */
+  const assignBranchId = assignForm.branchId
+    ? Number(assignForm.branchId)
+    : null;
+  const assignTeams = (teams ?? []).filter(
+    (t) =>
+      t.isActive &&
+      assignBranchId !== null &&
+      (t.branchId === null || t.branchId === assignBranchId),
+  );
+  const assignShifts = (shifts ?? []).filter(
+    (s) =>
+      s.isActive &&
+      (s.allBranches ||
+        (assignBranchId !== null && s.branchIds.includes(assignBranchId))),
+  );
 
   const saveAssign = async () => {
     if (!assigning) return;
-    if (!assignForm.teamId) {
-      toast.error('Which team are they joining?');
-      return;
-    }
-    if (!assignForm.costCenterId || !assignForm.costObjectId) {
+    // Everything but the end date. An assignment that leaves any of them
+    // unsaid is one nobody can be marked against.
+    const missing = [
+      !assignForm.branchId && 'a branch',
+      !assignForm.teamId && 'a team',
+      !assignForm.costCenterId && 'a division',
+      !assignForm.costObjectId && 'a department',
+      !assignForm.shiftId && 'a shift',
+      !assignForm.effectiveFrom && 'the day it starts',
+    ].filter(Boolean);
+    if (missing.length) {
       toast.error(
-        'Say which division and department the team has them working in.',
+        `Say ${missing.join(', ').replace(/, ([^,]*)$/, ' and $1')}.`,
       );
-      return;
-    }
-    if (!assignForm.effectiveFrom) {
-      toast.error('From which day?');
       return;
     }
     setSaving(true);
     try {
+      // Placement first: a team refuses anybody not posted to its branch, so
+      // the move to the branch has to land before the move into its team.
+      await api.post('/hr-rosters/assign', {
+        employeeIds: [assigning.employeeId],
+        branchId: Number(assignForm.branchId),
+        shiftId: Number(assignForm.shiftId),
+        effectiveFrom: assignForm.effectiveFrom,
+        effectiveTo: assignForm.effectiveTo || null,
+      });
+      // The division and department belong to the MEMBERSHIP — the work this
+      // team has them doing — and never to the employee record.
       await api.post('/hr-teams/transfer', {
         toTeamId: Number(assignForm.teamId),
         employeeIds: [assigning.employeeId],
@@ -499,12 +536,40 @@ export default function RosterPage() {
    * department under a different division is the one mistake two loose
    * dropdowns are guaranteed to make.
    */
-  const departments = useMemo(() => {
-    const all = (costObjects ?? []).filter((o) => o.isActive);
-    return form.costCenterId
-      ? all.filter((o) => o.costCenterId === Number(form.costCenterId))
-      : all;
-  }, [costObjects, form.costCenterId]);
+  const departments = useMemo(
+    () =>
+      (costObjects ?? []).filter(
+        (o) =>
+          o.isActive &&
+          !!form.costCenterId &&
+          o.costCenterId === Number(form.costCenterId),
+      ),
+    [costObjects, form.costCenterId],
+  );
+
+  /**
+   * The bulk drawer's team and shift lists.
+   *
+   * Cascaded from its branch ONLY once a branch is chosen. Untouched, that
+   * field means "leave them where they are" — a mixed selection may span
+   * branches — so both lists then offer everything, and the team labels say
+   * which branch each belongs to.
+   */
+  const bulkBranchId = form.branchId ? Number(form.branchId) : null;
+  const bulkTeams = (teams ?? []).filter(
+    (t) =>
+      t.isActive &&
+      (bulkBranchId === null ||
+        t.branchId === null ||
+        t.branchId === bulkBranchId),
+  );
+  const bulkShifts = (shifts ?? []).filter(
+    (s) =>
+      s.isActive &&
+      (bulkBranchId === null ||
+        s.allBranches ||
+        s.branchIds.includes(bulkBranchId)),
+  );
 
   /** Has anything actually been chosen to change? */
   const changing = !!(
@@ -853,14 +918,48 @@ export default function RosterPage() {
               one drawer for a transfer, a shift change, or both at once, and
               an untouched dropdown must not move anybody. */}
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* Branch first, and the team and shift below cascade from it —
+                but only once it is chosen. Untouched, it means "leave them
+                where they are", so both lists then offer every branch's,
+                labelled with which. */}
             <Select
               label="Branch"
               value={form.branchId}
               placeholder="Leave as it is"
-              onChange={(e) => setForm({ ...form, branchId: e.target.value })}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  branchId: e.target.value,
+                  teamId: '',
+                  shiftId: '',
+                })
+              }
               options={(branches ?? [])
                 .filter((b) => b.isActive)
                 .map((b) => ({ value: b.id, label: b.name }))}
+            />
+            {/* Who answers for their attendance. Their old spell closes the
+                day before this one and a new one opens on it, so no day is
+                claimed by two leaders and none by neither. "Out of every team"
+                is offered because leaving a team is a transfer too — those
+                days go back onto the branch's own sheet. */}
+            <Select
+              label="Team"
+              sortOptions={false}
+              value={form.teamId}
+              placeholder="Leave as it is"
+              onChange={(e) => setForm({ ...form, teamId: e.target.value })}
+              options={[
+                { value: NO_TEAM, label: '— Out of every team —' },
+                ...bulkTeams.map((t) => ({
+                  value: String(t.id),
+                  label: form.branchId
+                    ? `${t.name} — ${t.leaderName}`
+                    : t.branchId
+                      ? `${t.name} — ${branchNames.get(t.branchId) ?? ''}`
+                      : t.name,
+                })),
+              ]}
             />
             <Select
               label="Division"
@@ -882,7 +981,9 @@ export default function RosterPage() {
             <Select
               label="Department"
               value={form.costObjectId}
-              placeholder="Leave as it is"
+              placeholder={
+                form.costCenterId ? 'Leave as it is' : 'Pick a division first'
+              }
               onChange={(e) =>
                 setForm({ ...form, costObjectId: e.target.value })
               }
@@ -893,36 +994,10 @@ export default function RosterPage() {
               value={form.shiftId}
               placeholder="Leave as it is"
               onChange={(e) => setForm({ ...form, shiftId: e.target.value })}
-              options={(shifts ?? [])
-                .filter((s) => s.isActive)
-                .map((s) => ({
-                  value: s.id,
-                  label: `${s.code} — ${s.name} (${toTime(s.timeIn)}–${toTime(s.timeOut)})`,
-                }))}
-            />
-            {/* Who answers for their attendance. Their old spell closes the
-                day before this one and a new one opens on it, so no day is
-                claimed by two leaders and none by neither. "Out of every team"
-                is offered because leaving a team is a transfer too — those
-                days go back onto the branch's own sheet. */}
-            <Select
-              label="Team"
-              wrapClassName="sm:col-span-2"
-              sortOptions={false}
-              value={form.teamId}
-              placeholder="Leave as it is"
-              onChange={(e) => setForm({ ...form, teamId: e.target.value })}
-              options={[
-                { value: NO_TEAM, label: '— Out of every team —' },
-                ...(teams ?? [])
-                  .filter((t) => t.isActive)
-                  .map((t) => ({
-                    value: String(t.id),
-                    label: t.branchId
-                      ? `${t.name} — ${branchNames.get(t.branchId) ?? ''}`
-                      : t.name,
-                  })),
-              ]}
+              options={bulkShifts.map((s) => ({
+                value: s.id,
+                label: `${s.code} — ${s.name} (${toTime(s.timeIn)}–${toTime(s.timeOut)})`,
+              }))}
             />
           </div>
 
@@ -934,7 +1009,7 @@ export default function RosterPage() {
               onChange={(iso) => setForm({ ...form, effectiveFrom: iso })}
             />
             <DateInput
-              label="Until (blank = until changed)"
+              label="To (blank = until changed)"
               value={form.effectiveTo}
               onChange={(iso) => setForm({ ...form, effectiveTo: iso })}
             />
@@ -1037,25 +1112,48 @@ export default function RosterPage() {
         }
       >
         <div className="space-y-4">
-          <Select
-            label="Team"
-            required
-            value={assignForm.teamId}
-            placeholder="Which team are they joining"
-            onChange={(e) =>
-              setAssignForm({ ...assignForm, teamId: e.target.value })
-            }
-            options={teamsFor(assigning).map((t) => ({
-              value: String(t.id),
-              label: t.shiftCode
-                ? `${t.name} — ${t.leaderName} · ${t.shiftCode} ${t.shiftName}`
-                : `${t.name} — ${t.leaderName}`,
-            }))}
-          />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* Branch first, and everything below cascades from it: it decides
+                which teams they can be in and which shifts that branch works,
+                so changing it clears both. */}
+            <Select
+              label="Branch"
+              required
+              value={assignForm.branchId}
+              placeholder="Where they work"
+              onChange={(e) =>
+                setAssignForm({
+                  ...assignForm,
+                  branchId: e.target.value,
+                  teamId: '',
+                  shiftId: '',
+                })
+              }
+              options={(branches ?? [])
+                .filter((b) => b.isActive)
+                .map((b) => ({ value: b.id, label: b.name }))}
+            />
+            <Select
+              label="Team"
+              required
+              value={assignForm.teamId}
+              placeholder={
+                assignForm.branchId
+                  ? 'Which team are they joining'
+                  : 'Pick a branch first'
+              }
+              onChange={(e) =>
+                setAssignForm({ ...assignForm, teamId: e.target.value })
+              }
+              options={assignTeams.map((t) => ({
+                value: String(t.id),
+                label: `${t.name} — ${t.leaderName}`,
+              }))}
+            />
+          </div>
           <p className="-mt-2 text-xs text-slate-400">
-            Only the teams at this person&apos;s branch: nobody can be in a team
-            at a branch they do not work at. Their leader marks them from the
-            day below, and they are marked against the team&apos;s shift.
+            Only the teams at that branch: nobody can be in a team at a branch
+            they do not work at. Their leader marks them from the day below.
           </p>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -1103,15 +1201,45 @@ export default function RosterPage() {
             record.
           </p>
 
-          <DateInput
-            label="From"
+          {/* Their OWN shift line. The team's shift beats it while they are
+              in one, so this is what answers for the days they are not. */}
+          <Select
+            label="Shift"
             required
-            wrapClassName="sm:max-w-[16rem]"
-            value={assignForm.effectiveFrom}
-            onChange={(iso) =>
-              setAssignForm({ ...assignForm, effectiveFrom: iso })
+            value={assignForm.shiftId}
+            placeholder={
+              assignForm.branchId
+                ? 'Which hours they work'
+                : 'Pick a branch first'
             }
+            onChange={(e) =>
+              setAssignForm({ ...assignForm, shiftId: e.target.value })
+            }
+            options={assignShifts.map((s) => ({
+              value: s.id,
+              label: `${s.code} — ${s.name} (${toTime(s.timeIn)}–${toTime(s.timeOut)})`,
+            }))}
           />
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <DateInput
+              label="From"
+              required
+              value={assignForm.effectiveFrom}
+              onChange={(iso) =>
+                setAssignForm({ ...assignForm, effectiveFrom: iso })
+              }
+            />
+            {/* The one thing that may be left unsaid: most assignments run
+                until somebody changes them. */}
+            <DateInput
+              label="To (blank = until changed)"
+              value={assignForm.effectiveTo}
+              onChange={(iso) =>
+                setAssignForm({ ...assignForm, effectiveTo: iso })
+              }
+            />
+          </div>
         </div>
       </Drawer>
     </div>

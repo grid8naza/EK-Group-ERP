@@ -31,7 +31,7 @@ import { Tabs, type TabDef } from '@/components/ui/Tabs';
 import { UserAccessPanel } from '@/components/cpanel/UserAccessPanel';
 import { SalaryPanel } from '@/components/hr/SalaryPanel';
 import { PostingsPanel } from '@/components/hr/PostingsPanel';
-import { RosterPanel } from '@/components/hr/RosterPanel';
+import { TeamPanel } from '@/components/hr/TeamPanel';
 import {
   Drawer,
   DrawerFooter,
@@ -225,7 +225,7 @@ export default function EmployeesPage() {
   /** And the Postings tab, while its posting editor is open. */
   const [postingsDirty, setPostingsDirty] = useState(false);
   /** And the Roster tab, while its shift editor is open. */
-  const [rosterDirty, setRosterDirty] = useState(false);
+  const [teamDirty, setTeamDirty] = useState(false);
   /**
    * The employee form as it stood when last loaded or saved. Compared against
    * rather than a touched-a-field flag, so the drawer stops claiming unsaved
@@ -273,9 +273,9 @@ export default function EmployeesPage() {
       },
       {
         key: 'roster',
-        label: 'Roster',
+        label: 'Assignments',
         icon: <Clock className="h-4 w-4" />,
-        // A roster line has to belong to somebody.
+        // An assignment has to belong to somebody.
         disabled: !editing,
       },
       {
@@ -405,12 +405,8 @@ export default function EmployeesPage() {
     JSON.stringify(form) !== employeeBaseline;
   const drawerDirty = useCallback(
     () =>
-      employeeDirty ||
-      accessDirty ||
-      salaryDirty ||
-      postingsDirty ||
-      rosterDirty,
-    [employeeDirty, accessDirty, salaryDirty, postingsDirty, rosterDirty],
+      employeeDirty || accessDirty || salaryDirty || postingsDirty || teamDirty,
+    [employeeDirty, accessDirty, salaryDirty, postingsDirty, teamDirty],
   );
 
   /**
@@ -452,11 +448,11 @@ export default function EmployeesPage() {
                 where: 'Postings',
                 clear: () => setPostingsDirty(false),
               }
-            : tab === 'roster' && rosterDirty
+            : tab === 'roster' && teamDirty
               ? {
-                  what: 'the shift',
-                  where: 'Roster',
-                  clear: () => setRosterDirty(false),
+                  what: 'the assignment',
+                  where: 'Assignments',
+                  clear: () => setTeamDirty(false),
                 }
               : null;
 
@@ -1059,11 +1055,15 @@ export default function EmployeesPage() {
             onDirtyChange={setPostingsDirty}
           />
         ) : tab === 'roster' ? (
-          <RosterPanel
+          // One assignment, not two: the branch, the team, the work that team
+          // has them doing and the hours are all one statement about a person
+          // from a date, and asking them on two forms is how half of it gets
+          // answered.
+          <TeamPanel
             employeeId={editing?.id ?? null}
             branchId={editing?.branchId ?? null}
             readOnly={view}
-            onDirtyChange={setRosterDirty}
+            onDirtyChange={setTeamDirty}
           />
         ) : tab === 'salary' ? (
           <SalaryPanel

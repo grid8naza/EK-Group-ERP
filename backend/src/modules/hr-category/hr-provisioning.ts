@@ -103,11 +103,16 @@ export const HR_EXTRA_MENUS = [
             order: 2,
           },
           {
-            // Which shift they are on, and from when. Beside Postings because
-            // it is the same kind of thing — a dated series about where and
-            // how somebody works — and visible by default for the same reason.
+            // Which team they are in, doing what, on which hours — and from
+            // when. Beside Postings because it is the same kind of thing, a
+            // dated series about where and how somebody works, and visible by
+            // default for the same reason.
+            //
+            // The KEY stays `roster`: it is what the page passes to canTab and
+            // what every group's tab privilege hangs off, and renaming it would
+            // hand a hidden tab back to everybody it was hidden from.
             key: 'roster',
-            label: 'Roster',
+            label: 'Assignments',
             order: 3,
           },
           {
