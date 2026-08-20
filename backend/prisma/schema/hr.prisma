@@ -298,7 +298,9 @@ model Employee {
   postings       EmployeePosting[]
   attendance     AttendanceEntry[]
   shifts         EmployeeShiftAssignment[]
-  teamMembership HrTeamMember?
+  /// A dated SERIES, like postings and roster lines: at most one team on any
+  /// given day, but a person may leave one team and join another over time.
+  teamMemberships HrTeamMember[]
   teamsLed       HrTeam[]                  @relation("HrTeamLeader")
 
   @@unique([companyId, code])
@@ -677,6 +679,7 @@ model HrShift {
 
   assignments EmployeeShiftAssignment[]
   branches    HrShiftBranch[]
+  teams       HrTeam[]
 
   /// One code per company. Two shifts called "N" is a roster nobody can read.
   @@unique([companyId, code])
@@ -751,8 +754,10 @@ model EmployeeShiftAssignment {
 /// dozen in front of them, rather than by one person guessing.
 ///
 /// A team belongs to ONE branch — the sheet it produces is a branch's day — and
-/// an employee belongs to at most one team, because two leaders marking the
-/// same person on the same day is exactly the argument the sheet cannot settle.
+/// an employee belongs to at most one team ON ANY ONE DAY, because two leaders
+/// marking the same person on the same day is exactly the argument the sheet
+/// cannot settle. Membership is dated, so moving between teams over time is
+/// ordinary; see HrTeamMember.
 model HrTeam {
   id        Int  @id @default(autoincrement())
   companyId Int
@@ -765,6 +770,17 @@ model HrTeam {
   /// (they need one to mark, and the service says so plainly if they have none).
   leaderEmployeeId Int
 
+  /// The shift the TEAM works, where it keeps one.
+  ///
+  /// A team works a shift together — that is most of what makes it a team — so
+  /// the hours belong here rather than on each member's own roster. It beats
+  /// the individual roster for anybody in the team: the team's shift is the
+  /// most specific statement anybody has made about their day.
+  ///
+  /// Null where a team keeps no shift of its own, and its people fall back to
+  /// their own roster line, their own hours, or the branch's working day.
+  shiftId Int?
+
   remarks String?
 
   isActive  Boolean  @default(true)
@@ -773,6 +789,7 @@ model HrTeam {
   updatedAt DateTime @updatedAt
 
   leader  Employee          @relation("HrTeamLeader", fields: [leaderEmployeeId], references: [id], onDelete: Restrict)
+  shift   HrShift?          @relation(fields: [shiftId], references: [id], onDelete: Restrict)
   members HrTeamMember[]
   /// Restrict, not Cascade: a team is not deleted out from under the days it
   /// has already answered for.
@@ -785,23 +802,51 @@ model HrTeam {
   @@map("hr_teams")
 }
 
-/// One person's membership of a team.
+/// One person's membership of a team, between two dates.
 ///
-/// Current state, not a series: which team somebody is in today is what decides
-/// whose sheet they appear on, and a team they left last year changes nothing
-/// about a day already marked — the entry on that day's sheet is the record.
+/// A dated SERIES like a posting, a salary package or a roster line, and for
+/// the same reason: the question a sheet asks is "whose team were they in THAT
+/// day", and only dates answer it for a day that has already passed. Somebody
+/// who moved from the Oven Team to the Packing Team in March is on March's oven
+/// sheets and April's packing ones, without anybody rewriting either.
+///
+/// At most one team on any ONE day — two leaders marking the same person on the
+/// same day is exactly the argument a sheet cannot settle — which is a rule
+/// about OVERLAP rather than about rows, so the service enforces it.
 model HrTeamMember {
   id         Int @id @default(autoincrement())
   teamId     Int
   employeeId Int
+
+  /// The day they join this team. Required — a membership with no start cannot
+  /// be placed in the series, which is the only thing the series is for.
+  effectiveFrom DateTime
+  /// Their last day in it. NULL = still in it, which the newest row usually is.
+  effectiveTo   DateTime?
+
+  /// What they do IN THIS TEAM — the division (cost centre) and department
+  /// (cost object under it) of the work, not of the person.
+  ///
+  /// Deliberately unrelated to the employee's own division and department: a
+  /// director on the employee master can spend the morning in the Bakery Team
+  /// doing Operations · Bakery work, and this is where a team says so. Neither
+  /// is copied from nor written back to the Employee record.
+  ///
+  /// Plain ids with no @relation (the cross-domain rule); the service checks
+  /// the centre belongs to the company and the object to the centre. Both
+  /// optional: a company that does not work in divisions still has teams.
+  costCenterId Int?
+  costObjectId Int?
 
   createdAt DateTime @default(now())
 
   team     HrTeam   @relation(fields: [teamId], references: [id], onDelete: Cascade)
   employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
-  /// At most ONE team per person — see the note on HrTeam.
-  @@unique([employeeId])
+  /// Two memberships of the same team starting the same day would fork the
+  /// series. The service checks the whole period against every team.
+  @@unique([teamId, employeeId, effectiveFrom])
+  @@index([employeeId, effectiveFrom])
   @@index([teamId])
   @@map("hr_team_members")
 }

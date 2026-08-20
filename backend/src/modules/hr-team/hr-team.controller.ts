@@ -16,7 +16,11 @@ import { BranchId } from '../../auth/branch.decorator';
 import { LockPrivilegeGuard } from '../../auth/lock-privilege.guard';
 import { LockDto } from '../../common/lock.dto';
 import { HrTeamService } from './hr-team.service';
-import { CreateHrTeamDto, UpdateHrTeamDto } from './hr-team.dto';
+import {
+  CreateHrTeamDto,
+  TransferTeamMembersDto,
+  UpdateHrTeamDto,
+} from './hr-team.dto';
 
 /** Teams — who answers for whose attendance. */
 @ApiTags('hr-teams')
@@ -55,6 +59,18 @@ export class HrTeamController {
   @Post()
   create(@Body() dto: CreateHrTeamDto, @CompanyId() companyId?: number) {
     return this.service.create(companyId, dto);
+  }
+
+  /**
+   * Move people between teams — declared BEFORE the :id routes, since Nest
+   * matches in order and "transfer" would otherwise be read as an id.
+   */
+  @Post('transfer')
+  transfer(
+    @Body() dto: TransferTeamMembersDto,
+    @CompanyId() companyId?: number,
+  ) {
+    return this.service.transfer(companyId, dto);
   }
 
   @Patch(':id')

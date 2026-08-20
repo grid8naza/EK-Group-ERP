@@ -107,6 +107,34 @@ export class HrRosterService {
         defaultTimeIn: true,
         defaultTimeOut: true,
         designation: { select: { name: true } },
+        // A team works its shift together, and that beats an individual line —
+        // the register has to say the same thing the attendance sheet does.
+        // Membership is dated, so this is the team they were in ON `date`.
+        teamMemberships: {
+          where: {
+            effectiveFrom: { lte: date },
+            OR: [{ effectiveTo: null }, { effectiveTo: { gte: date } }],
+          },
+          orderBy: { effectiveFrom: 'desc' },
+          take: 1,
+          select: {
+            team: {
+              select: {
+                name: true,
+                shift: {
+                  select: {
+                    id: true,
+                    code: true,
+                    name: true,
+                    timeIn: true,
+                    timeOut: true,
+                    breakMinutes: true,
+                  },
+                },
+              },
+            },
+          },
+        },
         shifts: {
           where: {
             effectiveFrom: { lte: date },
@@ -135,6 +163,7 @@ export class HrRosterService {
       on: isoDay(date),
       rows: employees.map((e) => {
         const line = e.shifts[0] ? this.view(e.shifts[0]) : null;
+        const teamShift = e.teamMemberships[0]?.team.shift ?? null;
         return {
           employeeId: e.id,
           employeeCode: e.code,
@@ -142,16 +171,24 @@ export class HrRosterService {
           designationName: e.designation.name,
           branchId: e.branchId,
           branchName: e.branchId ? (branchNames.get(e.branchId) ?? null) : null,
-          shiftId: line?.shiftId ?? null,
-          shiftCode: line?.shiftCode ?? null,
-          shiftName: line?.shiftName ?? null,
-          timeIn: line?.timeIn ?? e.defaultTimeIn,
-          timeOut: line?.timeOut ?? e.defaultTimeOut,
-          workMinutes: line?.workMinutes ?? null,
-          effectiveFrom: line?.effectiveFrom ?? null,
-          effectiveTo: line?.effectiveTo ?? null,
+          /** The team they are in, where they are in one. */
+          teamName: e.teamMemberships[0]?.team.name ?? null,
+          /** True where the shift shown is the TEAM's, not their own line. */
+          shiftFromTeam: !!teamShift,
+          shiftId: teamShift?.id ?? line?.shiftId ?? null,
+          shiftCode: teamShift?.code ?? line?.shiftCode ?? null,
+          shiftName: teamShift?.name ?? line?.shiftName ?? null,
+          timeIn: teamShift?.timeIn ?? line?.timeIn ?? e.defaultTimeIn,
+          timeOut: teamShift?.timeOut ?? line?.timeOut ?? e.defaultTimeOut,
+          workMinutes: teamShift
+            ? shiftMinutes(teamShift)
+            : (line?.workMinutes ?? null),
+          /** The team's shift has no dates of its own — it applies while they
+           *  are in the team. */
+          effectiveFrom: teamShift ? null : (line?.effectiveFrom ?? null),
+          effectiveTo: teamShift ? null : (line?.effectiveTo ?? null),
           /** True where their hours come from their own record, not a shift. */
-          ownHours: !line && e.defaultTimeIn !== null,
+          ownHours: !teamShift && !line && e.defaultTimeIn !== null,
         };
       }),
     };

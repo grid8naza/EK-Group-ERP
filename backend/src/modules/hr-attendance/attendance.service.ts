@@ -25,6 +25,18 @@ import { AttendanceSettingsService } from './attendance-settings.service';
 const day = (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00.000Z`);
 const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 
+/**
+ * The team memberships in force on one day.
+ *
+ * Membership is a dated series, so whose sheet somebody belongs on is a
+ * question about the DAY being marked, not about today: a person who moved
+ * teams in March stays on March's old sheets for good.
+ */
+const inTeamOn = (on: Date) => ({
+  effectiveFrom: { lte: on },
+  OR: [{ effectiveTo: null }, { effectiveTo: { gte: on } }],
+});
+
 /** What one line is expected to say before anybody touches it. */
 interface Expected {
   typeId: number | null;
@@ -116,10 +128,18 @@ export class AttendanceService {
         employeeCode: e.code,
         employeeName: e.name,
         designationName: e.designation.name,
-        /** The shift they were rostered on, so the sheet can say where the
-         *  pre-filled times came from. Null where nobody rostered them. */
-        shiftCode: e.shifts?.[0]?.shift.code ?? null,
-        shiftName: e.shifts?.[0]?.shift.name ?? null,
+        /** The shift the pre-filled times came from — the team's where it
+         *  keeps one, else the one they were rostered on. Null where neither. */
+        shiftCode:
+          e.teamMemberships[0]?.team.shift?.code ??
+          e.shifts?.[0]?.shift.code ??
+          null,
+        shiftName:
+          e.teamMemberships[0]?.team.shift?.name ??
+          e.shifts?.[0]?.shift.name ??
+          null,
+        /** True where those hours are the TEAM's rather than this person's. */
+        shiftFromTeam: !!e.teamMemberships[0]?.team.shift,
         /** Null until the day is saved — the line is a proposal until then. */
         entryId: saved?.id ?? null,
         typeId: saved?.typeId ?? expected.typeId,
@@ -205,7 +225,9 @@ export class AttendanceService {
           id: true,
           name: true,
           leader: { select: { name: true } },
-          _count: { select: { members: true } },
+          // Who was in it THAT day — a team of twelve that took on two in June
+          // is a team of ten on a May sheet.
+          _count: { select: { members: { where: inTeamOn(on) } } },
         },
         orderBy: { name: 'asc' },
       }),
@@ -222,7 +244,7 @@ export class AttendanceService {
         where: {
           companyId,
           branchId,
-          teamMembership: { is: null },
+          teamMemberships: { none: inTeamOn(on) },
           dateOfJoin: { lte: on },
           OR: [
             { lastWorkingDay: { gte: on } },
@@ -615,8 +637,8 @@ export class AttendanceService {
         // everybody there who is in NO team, so nobody is marked twice and
         // nobody falls between the two.
         ...(teamId
-          ? { teamMembership: { teamId } }
-          : { teamMembership: { is: null } }),
+          ? { teamMemberships: { some: { teamId, ...inTeamOn(on) } } }
+          : { teamMemberships: { none: inTeamOn(on) } }),
         dateOfJoin: { lte: on },
         OR: [
           { lastWorkingDay: { gte: on } },
@@ -630,6 +652,28 @@ export class AttendanceService {
         defaultTimeIn: true,
         defaultTimeOut: true,
         designation: { select: { name: true } },
+        // The shift their TEAM works, which beats their own roster: a team
+        // works a shift together, and that is most of what makes it a team.
+        // The team they were in THAT day, not the one they are in now.
+        teamMemberships: {
+          where: inTeamOn(on),
+          take: 1,
+          select: {
+            team: {
+              select: {
+                name: true,
+                shift: {
+                  select: {
+                    code: true,
+                    name: true,
+                    timeIn: true,
+                    timeOut: true,
+                  },
+                },
+              },
+            },
+          },
+        },
         // The shift they were ROSTERED on that day, if any. Read here rather
         // than through the shift module: a module reads the tables of the
         // domains it works with, and importing across would be the one thing
@@ -661,10 +705,13 @@ export class AttendanceService {
   /**
    * What one person's line says before anybody touches it.
    *
-   * Three answers in order of how specific they are: the shift they were
-   * ROSTERED on that day, then their own hours, then the branch's working day.
-   * A roster is the most specific thing anybody has said about that day, so it
-   * wins — which is the whole reason to keep one.
+   * Four answers, in order of how specific they are: the shift their TEAM
+   * works, then the shift they were ROSTERED on that day, then their own
+   * hours, then the branch's working day.
+   *
+   * The team first because a team works its shift together — that is most of
+   * what makes it a team — and because the person marking them is that team's
+   * leader, who would otherwise be correcting the same lines every morning.
    *
    * On a day nobody is due at work the times are blank whatever the roster
    * says: a weekly off with a nine-to-six against it would be a claim that
@@ -675,19 +722,22 @@ export class AttendanceService {
       defaultTimeIn: number | null;
       defaultTimeOut: number | null;
       shifts?: { shift: { timeIn: number; timeOut: number } }[];
+      teamMemberships?: {
+        team: { shift: { timeIn: number; timeOut: number } | null };
+      }[];
     },
     defaults: { defaultTimeIn: number; defaultTimeOut: number },
     dayTypeId: number | null,
     working: boolean,
   ): Expected {
     if (!working) return { typeId: dayTypeId, timeIn: null, timeOut: null };
-    const rostered = employee.shifts?.[0]?.shift;
+    const shift =
+      employee.teamMemberships?.[0]?.team.shift ?? employee.shifts?.[0]?.shift;
     return {
       typeId: dayTypeId,
-      timeIn:
-        rostered?.timeIn ?? employee.defaultTimeIn ?? defaults.defaultTimeIn,
+      timeIn: shift?.timeIn ?? employee.defaultTimeIn ?? defaults.defaultTimeIn,
       timeOut:
-        rostered?.timeOut ?? employee.defaultTimeOut ?? defaults.defaultTimeOut,
+        shift?.timeOut ?? employee.defaultTimeOut ?? defaults.defaultTimeOut,
     };
   }
 

@@ -3370,6 +3370,8 @@ export interface AttendanceRow {
   /** The shift they were rostered on, where one says so. */
   shiftCode: string | null;
   shiftName: string | null;
+  /** True where those hours are the TEAM's rather than this person's. */
+  shiftFromTeam: boolean;
   entryId: number | null;
   typeId: number | null;
   timeIn: number | null;
@@ -3569,6 +3571,10 @@ export interface RosterRegisterRow {
   designationName: string;
   branchId: number | null;
   branchName: string | null;
+  /** The team they are in, where they are in one. */
+  teamName: string | null;
+  /** True where the shift shown is the TEAM's rather than their own line. */
+  shiftFromTeam: boolean;
   shiftId: number | null;
   shiftCode: string | null;
   shiftName: string | null;
@@ -3611,16 +3617,46 @@ export interface HrTeam {
   leaderEmployeeId: number;
   leaderCode: string;
   leaderName: string;
+  /** The shift the TEAM works; null where it keeps none of its own. */
+  shiftId: number | null;
+  shiftCode: string | null;
+  shiftName: string | null;
+  shiftTimeIn: number | null;
+  shiftTimeOut: number | null;
   remarks: string | null;
   isActive: boolean;
   isLocked: boolean;
+  /** Who is in it TODAY. Every spell, past and future, is in `members`. */
   memberIds: number[];
-  members: {
-    id: number;
-    code: string;
-    name: string;
-    designationName: string;
-  }[];
+  members: HrTeamMembership[];
+}
+
+/**
+ * One person's spell in a team.
+ *
+ * Dated like a posting or a roster line: the sheet for a day carries whoever
+ * was in the team on that day, so somebody who moved teams in March stays on
+ * March's old sheets and appears on April's new ones.
+ */
+export interface HrTeamMembership {
+  /** The EMPLOYEE's id — what every other screen calls a person. */
+  id: number;
+  /** The membership row, which keeps two spells of the same person apart. */
+  membershipId?: number;
+  code: string;
+  name: string;
+  designationName: string;
+  /**
+   * The division (cost centre) and department (cost object under it) of the
+   * work THIS TEAM has them doing — the membership's own, deliberately
+   * unrelated to the division and department on their employee record.
+   */
+  costCenterId?: number | null;
+  costObjectId?: number | null;
+  /** The day they join it. */
+  effectiveFrom: string;
+  /** Their last day in it. Null = still in it. */
+  effectiveTo: string | null;
 }
 
 /** One team's day, as the attendance screen's team strip shows it. */
