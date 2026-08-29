@@ -2,9 +2,19 @@ import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UNITS, HSN_CODES } from './units.data';
 import { INVENTORY_CATEGORIES, INVENTORY_GROUPS } from './inventory-tree.data';
-import { HR_CATEGORIES, HR_GROUPS, HR_DESIGNATIONS } from './hr.data';
+import {
+  HR_CATEGORIES,
+  HR_GROUPS,
+  HR_DESIGNATIONS,
+  HR_EMPLOYEES,
+} from './hr.data';
 import { ASSET_CATEGORIES, ASSET_GROUPS, ASSETS } from './assets.data';
-import { STORES, COST_CENTERS, COST_OBJECTS } from './operations.data';
+import {
+  BRANCHES,
+  STORES,
+  COST_CENTERS,
+  COST_OBJECTS,
+} from './operations.data';
 import { ITEMS } from './items.data';
 import { PRODUCTS } from './products.data';
 import { RECIPES } from './recipes.data';
@@ -47,6 +57,7 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
         hr: 0,
         assets: 0,
         operations: 0,
+        employees: 0,
         items: 0,
         products: 0,
         recipes: 0,
@@ -58,6 +69,11 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
       n.hr = await this.seedHr();
       n.assets = await this.seedAssets();
       n.operations = await this.seedOperations();
+      // AFTER operations, not with the rest of HR: an employee names the
+      // division and department they sit in, and those are cost centres and
+      // cost objects that seedOperations has only just created. Run with the HR
+      // tree and every seeded employee would come up with no posting at all.
+      n.employees = await this.seedEmployees();
       n.items = await this.seedItems();
       n.products = await this.seedProducts();
       n.recipes = await this.seedRecipes();
@@ -69,6 +85,7 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
           `Master data seeded: +${n.units} units, +${n.hsn} HSN codes, ` +
             `+${n.invCategories} categories, +${n.invGroups} groups, +${n.hr} HR rows, ` +
             `+${n.assets} asset rows, +${n.operations} stores/cost rows, ` +
+            `+${n.employees} employees, ` +
             `+${n.items} items, +${n.products} products, +${n.recipes} recipes, ` +
             `+${n.parties} customers/suppliers.`,
         );
@@ -402,6 +419,128 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
     return made;
   }
 
+  /**
+   * The employees on that tree.
+   *
+   * Keyed on (companyId, code), which is what the Employee table itself is
+   * unique on — a code is only ever unique WITHIN a company, so a bare code
+   * would collide the day a second company starts its own series.
+   *
+   * Everything a seeded employee points at is named by CODE and resolved here:
+   * an id means nothing in another database, and the divisions, departments and
+   * branches these reference are themselves seeded per company. A row whose
+   * designation is missing is SKIPPED rather than half-created — designationId
+   * is required, and an employee with no job is not a record worth having.
+   *
+   * `reportsTo` is resolved in a second pass, after every row exists. Ordering
+   * the data so a manager precedes their reports is not enough on its own: an
+   * existing database may already hold the manager and not the report, or the
+   * other way round.
+   */
+  private async seedEmployees(): Promise<number> {
+    if (!HR_EMPLOYEES.length) return 0;
+    const companies = await this.companies();
+    const missing = new Set<number>();
+    let made = 0;
+
+    const existing = new Set(
+      (
+        await this.prisma.employee.findMany({
+          select: { companyId: true, code: true },
+        })
+      ).map((e) => `${e.companyId}|${e.code}`),
+    );
+
+    const designationId = new Map(
+      (
+        await this.prisma.hrDesignation.findMany({
+          select: { id: true, code: true },
+        })
+      ).map((d) => [d.code, d.id]),
+    );
+    // Branch, division and department codes repeat across companies, so each is
+    // keyed by company as well — the same "SD" is a different division in each.
+    const branchId = new Map(
+      (
+        await this.prisma.branch.findMany({
+          select: { id: true, code: true, companyId: true },
+        })
+      ).map((b) => [`${b.companyId}|${b.code}`, b.id]),
+    );
+    const centreId = new Map(
+      (
+        await this.prisma.costCenter.findMany({
+          select: { id: true, code: true, companyId: true },
+        })
+      ).map((c) => [`${c.companyId}|${c.code}`, c.id]),
+    );
+    const objectId = new Map(
+      (
+        await this.prisma.costObject.findMany({
+          select: { id: true, code: true, companyId: true },
+        })
+      ).map((o) => [`${o.companyId}|${o.code}`, o.id]),
+    );
+
+    for (const e of HR_EMPLOYEES) {
+      if (existing.has(`${e.companyId}|${e.code}`)) continue;
+      if (!companies.has(e.companyId)) {
+        missing.add(e.companyId);
+        continue;
+      }
+      const designation = designationId.get(e.designationCode);
+      if (designation == null) {
+        this.logger.warn(
+          `HR master: skipped employee ${e.code} — no designation ${e.designationCode} here.`,
+        );
+        continue;
+      }
+      await this.prisma.employee.create({
+        data: {
+          code: e.code,
+          name: e.name,
+          companyId: e.companyId,
+          branchId: e.branchCode
+            ? (branchId.get(`${e.companyId}|${e.branchCode}`) ?? null)
+            : null,
+          designationId: designation,
+          dateOfJoin: new Date(`${e.dateOfJoin}T00:00:00.000Z`),
+          costCenterId: e.costCenterCode
+            ? (centreId.get(`${e.companyId}|${e.costCenterCode}`) ?? null)
+            : null,
+          costObjectId: e.costObjectCode
+            ? (objectId.get(`${e.companyId}|${e.costObjectCode}`) ?? null)
+            : null,
+          isActive: e.isActive,
+        },
+      });
+      made++;
+    }
+
+    // Second pass: who answers to whom, now that both ends exist.
+    const byKey = new Map(
+      (
+        await this.prisma.employee.findMany({
+          select: { id: true, code: true, companyId: true, reportsToId: true },
+        })
+      ).map((e) => [`${e.companyId}|${e.code}`, e]),
+    );
+    for (const e of HR_EMPLOYEES) {
+      if (!e.reportsToCode) continue;
+      const row = byKey.get(`${e.companyId}|${e.code}`);
+      const manager = byKey.get(`${e.companyId}|${e.reportsToCode}`);
+      // Never overwrite a reporting line somebody has already set by hand.
+      if (!row || !manager || row.reportsToId != null) continue;
+      await this.prisma.employee.update({
+        where: { id: row.id },
+        data: { reportsToId: manager.id },
+      });
+    }
+
+    this.warnMissingCompanies('Employees', missing);
+    return made;
+  }
+
   // ---- assets --------------------------------------------------------------
 
   private async seedAssets(): Promise<number> {
@@ -514,6 +653,31 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
     const missing = new Set<number>();
     let made = 0;
 
+    // Branches first: a store sits in one, and so does an employee.
+    const haveBranch = new Set(
+      (
+        await this.prisma.branch.findMany({
+          select: { companyId: true, code: true },
+        })
+      ).map((b) => `${b.companyId}:${b.code}`),
+    );
+    for (const b of BRANCHES) {
+      if (!companies.has(b.companyId)) {
+        missing.add(b.companyId);
+        continue;
+      }
+      if (haveBranch.has(`${b.companyId}:${b.code}`)) continue;
+      await this.prisma.branch.create({
+        data: {
+          companyId: b.companyId,
+          code: b.code,
+          name: b.name,
+          isActive: b.isActive,
+        },
+      });
+      made++;
+    }
+
     const haveStore = new Set(
       (
         await this.prisma.store.findMany({
@@ -590,6 +754,11 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
           code: o.code,
           name: o.name,
           costCenterId,
+          // What KIND of department this is. Seeded rather than left null: it is
+          // what groups cost per meal, contribution per counter and running cost
+          // per vehicle, so a department without one silently drops out of that
+          // reporting.
+          categoryCode: o.categoryCode,
           isActive: o.isActive,
         },
       });
