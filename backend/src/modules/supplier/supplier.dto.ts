@@ -34,6 +34,20 @@ export class CreateSupplierDto {
   @MaxLength(30)
   gstNumber?: string | null;
 
+  /**
+   * Where they are, for GST. With our own state it decides whether the bill
+   * carries CGST + SGST or IGST. Either a state NAME or its 2-digit code — the
+   * service resolves both, and fills it from the GSTIN when only that is given.
+   */
+  @IsOptional()
+  @IsString()
+  state?: string | null;
+
+  /** The 2-digit GST state code. Derived from `state` or the GSTIN on save. */
+  @IsOptional()
+  @IsString()
+  stateCode?: string | null;
+
   @IsOptional()
   @IsString()
   @MaxLength(500)
@@ -88,6 +102,20 @@ export class UpdateSupplierDto {
   @IsString()
   @MaxLength(30)
   gstNumber?: string | null;
+
+  /**
+   * Where they are, for GST. With our own state it decides whether the bill
+   * carries CGST + SGST or IGST. Either a state NAME or its 2-digit code — the
+   * service resolves both, and fills it from the GSTIN when only that is given.
+   */
+  @IsOptional()
+  @IsString()
+  state?: string | null;
+
+  /** The 2-digit GST state code. Derived from `state` or the GSTIN on save. */
+  @IsOptional()
+  @IsString()
+  stateCode?: string | null;
 
   @IsOptional()
   @IsString()

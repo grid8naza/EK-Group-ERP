@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { gstStateCode, gstStateName } from '../../common/gst-states';
 import { assertUnlocked } from '../../common/assert-unlocked';
 import {
   CONTROL_ACCOUNT_SELECT,
@@ -20,6 +21,27 @@ import { CreateCustomerDto, UpdateCustomerDto } from './customer.dto';
  * seen from opposite sides, and the statement and ageing reports read them the
  * same way.
  */
+/**
+ * The 2-digit GST state code for a party, from whatever the form gave.
+ *
+ * The GSTIN first — its opening two characters ARE the code, so a registered
+ * party is never asked twice and the code cannot disagree with the number the
+ * return quotes. Then an explicit code, then a state name. Null when nothing
+ * says, which is honest: a bill refuses to be raised rather than guessing, and
+ * guessing here means charging the wrong tax.
+ */
+function resolveState(dto: {
+  gstNumber?: string | null;
+  state?: string | null;
+  stateCode?: string | null;
+}): string | null {
+  return (
+    gstStateCode(dto.gstNumber, dto.stateCode) ??
+    gstStateCode(null, dto.state) ??
+    null
+  );
+}
+
 @Injectable()
 export class CustomerService {
   constructor(private prisma: PrismaService) {}
@@ -79,6 +101,8 @@ export class CustomerService {
             phone: dto.phone?.trim() || null,
             email: dto.email?.trim() || null,
             gstNumber: dto.gstNumber?.trim() || null,
+            state: gstStateName(resolveState(dto)) ?? dto.state?.trim() ?? null,
+            stateCode: resolveState(dto),
             address: dto.address?.trim() || null,
             creditDays: dto.creditDays ?? null,
             creditLimit: dto.creditLimit ?? null,
@@ -136,6 +160,8 @@ export class CustomerService {
         phone: norm(dto.phone),
         email: norm(dto.email),
         gstNumber: norm(dto.gstNumber),
+        state: gstStateName(resolveState(dto)) ?? norm(dto.state),
+        stateCode: resolveState(dto),
         address: norm(dto.address),
         creditDays: dto.creditDays !== undefined ? dto.creditDays : undefined,
         creditLimit:

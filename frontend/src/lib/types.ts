@@ -2102,6 +2102,10 @@ export interface PartyMaster {
   phone?: string | null;
   email?: string | null;
   gstNumber?: string | null;
+  /** Where they are, for GST — the place of supply on a bill. */
+  state?: string | null;
+  /** The 2-digit GST state code, derived on save. */
+  stateCode?: string | null;
   address?: string | null;
   /** Days until a bill falls due — what the ageing report counts against. */
   creditDays?: number | null;

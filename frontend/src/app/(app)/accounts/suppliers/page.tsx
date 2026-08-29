@@ -30,6 +30,7 @@ const empty = {
   phone: '',
   email: '',
   gstNumber: '',
+  state: '',
   address: '',
   creditDays: '',
   creditLimit: '',
@@ -94,6 +95,7 @@ export default function SuppliersPage() {
     phone: s.phone ?? '',
     email: s.email ?? '',
     gstNumber: s.gstNumber ?? '',
+    state: s.state ?? '',
     address: s.address ?? '',
     creditDays: s.creditDays == null ? '' : String(s.creditDays),
     creditLimit: s.creditLimit == null ? '' : String(s.creditLimit),
@@ -150,6 +152,7 @@ export default function SuppliersPage() {
       phone: form.phone.trim() || null,
       email: form.email.trim() || null,
       gstNumber: form.gstNumber.trim() || null,
+      state: form.state.trim() || null,
       address: form.address.trim() || null,
       // Blank means "no term agreed", which is not the same as zero days.
       creditDays: form.creditDays === '' ? null : Number(form.creditDays),
@@ -221,6 +224,7 @@ export default function SuppliersPage() {
     },
     { key: 'phone', header: 'Phone', accessor: (r) => r.phone ?? '—' },
     { key: 'gstNumber', header: 'GSTIN', accessor: (r) => r.gstNumber ?? '—' },
+    { key: 'state', header: 'State', accessor: (r) => r.state ?? '—' },
     {
       key: 'controlAccount',
       header: 'Main ledger',
@@ -350,6 +354,13 @@ export default function SuppliersPage() {
               label="GSTIN"
               value={form.gstNumber}
               onChange={(e) => setForm({ ...form, gstNumber: e.target.value })}
+            />
+            <Input
+              label="State"
+              placeholder="Kerala"
+              title="Where they are, for GST. With our own state it decides whether a bill carries CGST + SGST or IGST. Filled in from the GSTIN when one is given."
+              value={form.state}
+              onChange={(e) => setForm({ ...form, state: e.target.value })}
             />
             <Textarea
               label="Address"

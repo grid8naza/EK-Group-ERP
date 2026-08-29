@@ -16,6 +16,14 @@ model Supplier {
   email            String?
   gstNumber        String? // GSTIN
   address          String?
+  /// Where the supplier is, for GST. The mirror of Customer.state: on an INWARD
+  /// supply it is their state against ours that decides whether the bill we
+  /// receive carries CGST + SGST or IGST, and therefore which credit we may
+  /// claim. Same two fields for the same reason — an unregistered supplier has
+  /// no GSTIN to read a code out of.
+  state            String?
+  /// The 2-digit GST state code ("32" = Kerala).
+  stateCode        String?
   /// Days from a bill's date until it falls due — what an ageing report counts
   /// against. Null = no agreed term, so a bill is due the day it is raised.
   creditDays       Int?
