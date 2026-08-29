@@ -7,6 +7,8 @@ import { DispatchController } from './dispatch.controller';
 import { DispatchService } from './dispatch.service';
 import { ContractController } from './contract.controller';
 import { ContractService } from './contract.service';
+import { LocalSalesOrderController } from './local-sales-order.controller';
+import { LocalSalesOrderService } from './local-sales-order.service';
 
 @Module({
   controllers: [
@@ -14,12 +16,14 @@ import { ContractService } from './contract.service';
     SalesOrderController,
     DispatchController,
     ContractController,
+    LocalSalesOrderController,
   ],
   providers: [
     PurchaseOrderService,
     SalesOrderService,
     DispatchService,
     ContractService,
+    LocalSalesOrderService,
   ],
   // The Order Catalogue asks what the contracts oblige on a day. It lives in the
   // Purchase module, so it reaches this through a port — not by importing here.

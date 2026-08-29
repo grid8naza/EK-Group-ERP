@@ -104,6 +104,20 @@ const SOURCES: Record<string, NumberSource[]> = {
         })
         .then((r) => r.map((x) => x.orderNo)),
   ],
+  // A customer order on a branch. Its own series, kept apart from the ICSO's:
+  // the two share a table, so reading back by companyId alone would have each
+  // one handing out numbers the other had already issued.
+  SALES_ORDER_LOCAL: [
+    (p, companyId, orderNo) =>
+      p.salesOrder
+        .findMany({
+          where: { companyId, orderNo, customerId: { not: null } },
+          select: { orderNo: true },
+          orderBy: { orderNo: 'desc' },
+          take: SCAN_LIMIT,
+        })
+        .then((r) => r.map((x) => x.orderNo)),
+  ],
   // A supply contract, numbered per company like any other document it owns.
   CONTRACT: [
     (p, companyId, contractNo) =>
@@ -127,11 +141,14 @@ const SOURCES: Record<string, NumberSource[]> = {
         })
         .then((r) => r.map((x) => x.orderNo)),
   ],
+  // INTERCOMPANY sales orders only. The local ones (SALES_ORDER_LOCAL below)
+  // share this table, and reading the whole of it would have each series issue
+  // numbers the other had already used.
   SALES_ORDER_IC: [
     (p, companyId, orderNo) =>
       p.salesOrder
         .findMany({
-          where: { companyId, orderNo },
+          where: { companyId, orderNo, customerId: null },
           select: { orderNo: true },
           orderBy: { orderNo: 'desc' },
           take: SCAN_LIMIT,

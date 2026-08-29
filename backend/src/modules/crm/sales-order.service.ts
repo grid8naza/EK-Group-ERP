@@ -363,6 +363,9 @@ export class SalesOrderService {
     if (!companyId) return [];
     const where: Prisma.SalesOrderWhereInput = {
       companyId,
+      // INTERCOMPANY only. Local customer orders share this table and have their
+      // own screen; without this they would appear here as orders with no buyer.
+      customerId: null,
       ...(isSuperAdmin
         ? {}
         : {

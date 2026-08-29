@@ -18,6 +18,7 @@ const SYSTEM_DOCUMENTS: { code: string; name: string }[] = [
   { code: 'PURCHASE_ORDER_IC', name: 'Inter-Company Purchase Order (ICPO)' },
   { code: 'PURCHASE_ORDER_LOCAL', name: 'Local Purchase Order (LPO)' },
   { code: 'SALES_ORDER_IC', name: 'Inter-Company Sales Order (ICSO)' },
+  { code: 'SALES_ORDER_LOCAL', name: 'Customer Order (LSO)' },
   { code: 'CONTRACT', name: 'Supply Contract' },
   { code: 'WORK_ORDER', name: 'Work Order' },
   { code: 'PRODUCTION_PLAN', name: 'Production Plan' },

@@ -1375,6 +1375,7 @@ export async function syncScaffold(
   await grantWorkplaceToEveryone(prisma);
   await orderWorkplaceMenus(prisma);
   await orderPurchaseMenu(prisma);
+  await orderCrmMenu(prisma);
 
   // 4) After the menus, because it hides one of the tabs they just created.
   await hideUserAccessTabByDefault(prisma);
@@ -1510,6 +1511,36 @@ async function orderPurchaseMenu(
       '/purchase/order-catalogue',
       '/purchase/icpo',
       '/purchase/lpo',
+    ];
+    for (const [i, route] of ORDER.entries()) {
+      await prisma.subMenu.updateMany({
+        where: { route },
+        data: { sortOrder: i + 1 },
+      });
+    }
+  });
+}
+
+/**
+ * Order the CRM menu once the LSO has been slotted into it.
+ *
+ * The screens read in the order the work happens: the order that arrives, the
+ * order we answer with, the order a customer places on a branch, the goods going
+ * out, and the standing agreements behind them. The additive sync only sets
+ * sortOrder ON CREATE, so Dispatch and Contracts keep the 3 and 4 they were
+ * seeded with and would tie with the new screen. Pin all five.
+ *
+ * Once, like every other ordering step — an admin who rearranges the menu
+ * afterwards keeps their arrangement.
+ */
+async function orderCrmMenu(prisma: Prisma.TransactionClient): Promise<void> {
+  await runOnce(prisma, 'crm-lso-slotted-in', async () => {
+    const ORDER = [
+      '/crm/icpo-received',
+      '/crm/icso',
+      '/crm/lso',
+      '/crm/dispatch',
+      '/crm/contracts',
     ];
     for (const [i, route] of ORDER.entries()) {
       await prisma.subMenu.updateMany({
