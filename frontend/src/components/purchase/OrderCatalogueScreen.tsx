@@ -7,7 +7,6 @@ import {
   Package,
   RotateCcw,
   ShoppingCart,
-  Info,
   TriangleAlert,
 } from 'lucide-react';
 import { api, ApiError } from '@/lib/api';
@@ -88,7 +87,7 @@ const qty = (n: number, decimals: number) =>
 /**
  * The Order Catalogue.
  *
- * Everything the chosen supplier sells, on cards, with the branch's own numbers
+ * Everything the chosen supplier sells, as a list with the branch's own numbers
  * on each: what it must keep, what it has, what it sold, and — the point of the
  * screen — how much to order. The quantity boxes start on the suggestion, so a
  * manager who agrees with it just presses Create.
@@ -413,16 +412,33 @@ export function OrderCatalogueScreen() {
               </div>
             ) : (
               sections.map(([category, items]) => (
-                <section key={category} className="mb-6">
-                  <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                <section key={category} className="mb-5">
+                  <h2 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                     {category}
                     <span className="ml-2 font-normal normal-case text-slate-400">
                       {items.length} product{items.length === 1 ? '' : 's'}
                     </span>
                   </h2>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                  {/* A LIST, not cards. Ordering is comparing — is 65 right
+                      when the shelf has 19 and it sells 42 a day — and that is
+                      reading DOWN a column, which cards cannot offer. It also
+                      puts forty products on screen instead of four. The wide
+                      columns collapse on a narrow viewport, where the figures
+                      move under the name. */}
+                  <div className="card overflow-hidden">
+                    <div className="hidden border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500 lg:flex lg:items-center dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-400">
+                      <span className="w-10 shrink-0" />
+                      <span className="min-w-0 flex-1 pl-3">Product</span>
+                      <span className="w-24 shrink-0 text-right">Price</span>
+                      <span className="w-20 shrink-0 text-right">Min</span>
+                      <span className="w-20 shrink-0 text-right">Available</span>
+                      <span className="w-20 shrink-0 text-right">Avg / day</span>
+                      <span className="w-16 shrink-0 text-right">Cover</span>
+                      <span className="w-20 shrink-0 text-right">Suggested</span>
+                      <span className="w-28 shrink-0 pl-3 text-right">Order</span>
+                    </div>
                     {items.map((row) => (
-                      <ProductCard
+                      <ProductRow
                         key={row.productId}
                         row={row}
                         value={order[row.productId] ?? ''}
@@ -475,16 +491,19 @@ export function OrderCatalogueScreen() {
   );
 }
 
+
 /**
- * One product's card: the picture and the price, then the four figures the
+ * One product as a LIST ROW: thumbnail, name, price, then the four figures the
  * suggestion is built from, then the box to change it in.
  *
- * The figures are on the card rather than behind a click because the suggestion
+ * The figures are on the row rather than behind a click because the suggestion
  * is an argument, not an instruction — a manager who can see that "42 a day over
  * 21 days, 2 days of cover, 19 on the shelf" is what produced 65 can tell at a
- * glance when it is wrong.
+ * glance when it is wrong. In a list they also line up into columns, so the
+ * comparison that actually decides an order — which of these forty is short —
+ * is one read down the page instead of forty separate ones.
  */
-function ProductCard({
+function ProductRow({
   row,
   value,
   onChange,
@@ -499,166 +518,192 @@ function ProductCard({
   return (
     <div
       className={cn(
-        'card flex flex-col overflow-hidden transition',
+        'flex flex-wrap items-center gap-y-2 border-b border-slate-100 px-3 py-2 text-sm transition last:border-b-0 lg:flex-nowrap dark:border-slate-800/60',
         ordering
-          ? 'border-brand-400 ring-1 ring-brand-400 dark:border-brand-600 dark:ring-brand-600'
-          : 'border-slate-200 dark:border-slate-800',
+          ? 'bg-brand-50/60 dark:bg-brand-950/30'
+          : 'hover:bg-slate-50 dark:hover:bg-slate-800/40',
       )}
     >
-      <div className="relative flex h-32 items-center justify-center bg-slate-50 dark:bg-slate-800/50">
+      {/* Thumbnail. Small on purpose — it is here to be recognised in passing,
+          not studied; the product is identified by its name and code. */}
+      <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-md bg-slate-100 dark:bg-slate-800">
         {row.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={mediaUrl(row.imageUrl)}
-            alt={row.name}
+            alt=""
             className="h-full w-full object-cover"
           />
         ) : (
-          <Package className="h-8 w-8 text-slate-300 dark:text-slate-600" />
-        )}
-        {row.belowLevel && (
-          <span
-            className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-rose-600/90 px-2 py-0.5 text-[11px] font-medium text-white"
-            title={`Below the level set for this branch (${qty(
-              Math.max(row.reorderLevel, row.minStock),
-              row.decimalPlaces,
-            )} ${row.unitSymbol}).`}
-          >
-            <TriangleAlert className="h-3 w-3" /> Low
-          </span>
+          <div className="flex h-full w-full items-center justify-center">
+            <Package className="h-4 w-4 text-slate-300 dark:text-slate-600" />
+          </div>
         )}
       </div>
 
-      <div className="flex flex-1 flex-col gap-2 p-3">
-        <div className="min-w-0">
-          <p
-            className="truncate text-sm font-semibold text-slate-900 dark:text-white"
-            title={row.name}
-          >
-            {row.name}
-          </p>
-          <p className="text-xs text-slate-400">
-            {row.code}
-            {row.packed && <span className="ml-1">· Packed</span>}
-          </p>
-        </div>
-
-        <div className="flex items-baseline justify-between">
-          <span
-            className="text-sm font-semibold text-slate-700 dark:text-slate-200"
-            title="Latest inter-company price. Indicative — the batch that ships carries the real one."
-          >
-            {money(row.price)}
-            <span className="ml-1 text-xs font-normal text-slate-400">
-              / {row.unitSymbol}
+      <div className="min-w-0 flex-1 pl-3">
+        <p
+          className="truncate font-medium text-slate-900 dark:text-white"
+          title={row.name}
+        >
+          {row.name}
+          {row.belowLevel && (
+            <span
+              className="ml-2 inline-flex items-center gap-1 rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] font-medium text-rose-700 dark:bg-rose-950 dark:text-rose-300"
+              title={`Below the level set for this branch (${qty(
+                Math.max(row.reorderLevel, row.minStock),
+                row.decimalPlaces,
+              )} ${row.unitSymbol}).`}
+            >
+              <TriangleAlert className="h-2.5 w-2.5" /> Low
             </span>
-          </span>
-        </div>
+          )}
+        </p>
+        <p className="truncate text-xs text-slate-400">
+          {row.code}
+          {row.packed && <span className="ml-1">· Packed</span>}
+          {row.onOrder > 0 && (
+            <span
+              className="ml-1 text-slate-500 dark:text-slate-400"
+              title="Already coming on an open ICPO from this supplier, and deducted from the suggestion."
+            >
+              · {qty(row.onOrder, row.decimalPlaces)} {row.unitSymbol} on order
+            </span>
+          )}
+        </p>
+      </div>
 
-        {/* The four figures behind the suggestion. */}
-        <dl className="grid grid-cols-2 gap-x-3 gap-y-1 border-t border-slate-100 pt-2 text-xs dark:border-slate-800">
-          <Figure
-            label="Minimum"
-            value={qty(row.minStock, row.decimalPlaces)}
-            hint={
-              row.maxStock > 0
-                ? `This branch keeps a minimum of ${qty(row.minStock, row.decimalPlaces)} and holds at most ${qty(row.maxStock, row.decimalPlaces)} ${row.unitSymbol}.`
-                : `This branch keeps a minimum of ${qty(row.minStock, row.decimalPlaces)} ${row.unitSymbol}.`
-            }
-          />
-          <Figure
-            label="Available"
-            value={qty(row.available, row.decimalPlaces)}
-            tone={row.belowLevel ? 'warn' : undefined}
-            hint="On hand at this branch, less anything already held for another document."
-          />
-          <Figure
-            label="Avg / day"
-            value={qty(row.avgDailySales, 2)}
-            hint={
-              row.shelfLife > 0
-                ? `${qty(row.soldQty, row.decimalPlaces)} ${row.unitSymbol} sold here over the last ${row.windowDays} days — ${row.demandCycles} shelf lives of ${row.shelfLife} days.`
-                : `${qty(row.soldQty, row.decimalPlaces)} ${row.unitSymbol} sold here over the last ${row.windowDays} days. This product tracks no shelf life, so a fixed window is used.`
-            }
-          />
-          <Figure
-            label="Cover"
-            value={`${row.coverDays}d`}
-            hint={
-              row.nextProductionDate
-                ? `This delivery has to last ${row.coverDays} day${row.coverDays === 1 ? '' : 's'} — the next production run is ${row.nextProductionDate}.${
-                    row.shelfLife > 0
-                      ? ` Capped at the ${row.shelfLife}-day shelf life.`
-                      : ''
-                  }`
-                : `Made to order, so the branch carries its own lead time: ${row.coverDays} day${row.coverDays === 1 ? '' : 's'}.`
-            }
-          />
-        </dl>
+      <Cell
+        className="w-24"
+        label="Price"
+        title="Latest inter-company price. Indicative — the batch that ships carries the real one."
+      >
+        {money(row.price)}
+      </Cell>
 
-        {row.onOrder > 0 && (
-          <p
-            className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400"
-            title="Already coming on an open ICPO from this supplier, and deducted from the suggestion."
-          >
-            <Info className="h-3 w-3" />
-            {qty(row.onOrder, row.decimalPlaces)} {row.unitSymbol} already on
-            order
-          </p>
-        )}
+      <Cell
+        className="w-20"
+        label="Min"
+        title={
+          row.maxStock > 0
+            ? `This branch keeps a minimum of ${qty(row.minStock, row.decimalPlaces)} and holds at most ${qty(row.maxStock, row.decimalPlaces)} ${row.unitSymbol}.`
+            : `This branch keeps a minimum of ${qty(row.minStock, row.decimalPlaces)} ${row.unitSymbol}.`
+        }
+      >
+        {qty(row.minStock, row.decimalPlaces)}
+      </Cell>
 
-        <div className="mt-auto flex items-end gap-2 pt-1">
-          <Input
-            label="Order"
-            type="number"
-            min={0}
-            step={step}
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            wrapClassName="flex-1"
-            className="text-right tabular-nums"
-          />
-          <button
-            type="button"
-            className="mb-[1px] shrink-0 rounded-lg border border-slate-200 px-2 py-2 text-xs text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
-            title={`Suggested: ${qty(row.target, row.decimalPlaces)} to cover ${row.coverDays} day${row.coverDays === 1 ? '' : 's'}, less ${qty(row.available, row.decimalPlaces)} available${row.onOrder > 0 ? ` and ${qty(row.onOrder, row.decimalPlaces)} on order` : ''}.`}
-            onClick={() => onChange(String(row.suggestedQty))}
-          >
-            {qty(row.suggestedQty, row.decimalPlaces)} {row.unitSymbol}
-          </button>
-        </div>
+      <Cell
+        className="w-20"
+        label="Available"
+        tone={row.belowLevel ? 'warn' : undefined}
+        title="On hand at this branch, less anything already held for another document."
+      >
+        {qty(row.available, row.decimalPlaces)}
+      </Cell>
+
+      <Cell
+        className="w-20"
+        label="Avg / day"
+        title={
+          row.shelfLife > 0
+            ? `${qty(row.soldQty, row.decimalPlaces)} ${row.unitSymbol} sold here over the last ${row.windowDays} days — ${row.demandCycles} shelf lives of ${row.shelfLife} days.`
+            : `${qty(row.soldQty, row.decimalPlaces)} ${row.unitSymbol} sold here over the last ${row.windowDays} days. This product tracks no shelf life, so a fixed window is used.`
+        }
+      >
+        {qty(row.avgDailySales, 2)}
+      </Cell>
+
+      <Cell
+        className="w-16"
+        label="Cover"
+        title={
+          row.nextProductionDate
+            ? `This delivery has to last ${row.coverDays} day${row.coverDays === 1 ? '' : 's'} — the next production run is ${row.nextProductionDate}.${
+                row.shelfLife > 0
+                  ? ` Capped at the ${row.shelfLife}-day shelf life.`
+                  : ''
+              }`
+            : `Made to order, so the branch carries its own lead time: ${row.coverDays} day${row.coverDays === 1 ? '' : 's'}.`
+        }
+      >
+        {row.coverDays}d
+      </Cell>
+
+      {/* The suggestion, and the way back to it. Clicking puts it in the box —
+          which is what somebody wants after typing over it and changing
+          their mind. */}
+      <div className="w-20 shrink-0 text-right">
+        <span className="text-[11px] uppercase tracking-wide text-slate-400 lg:hidden">
+          Suggested{' '}
+        </span>
+        <button
+          type="button"
+          className="rounded px-1 font-semibold tabular-nums text-brand-700 hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-950"
+          title={`Suggested: ${qty(row.target, row.decimalPlaces)} to cover ${row.coverDays} day${row.coverDays === 1 ? '' : 's'}, less ${qty(row.available, row.decimalPlaces)} available${row.onOrder > 0 ? ` and ${qty(row.onOrder, row.decimalPlaces)} on order` : ''}. Click to use it.`}
+          onClick={() => onChange(String(row.suggestedQty))}
+        >
+          {qty(row.suggestedQty, row.decimalPlaces)}
+        </button>
+      </div>
+
+      <div className="flex w-28 shrink-0 items-center gap-1 pl-3">
+        <Input
+          type="number"
+          min={0}
+          step={step}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          wrapClassName="flex-1"
+          className="!py-1 text-right tabular-nums"
+          aria-label={`Order quantity for ${row.name}`}
+        />
+        <span className="w-8 shrink-0 text-xs text-slate-400">
+          {row.unitSymbol}
+        </span>
       </div>
     </div>
   );
 }
 
-/** One labelled figure on a card, with the reasoning behind it on hover. */
-function Figure({
+/**
+ * One figure in a row. The label shows only on a narrow viewport, where the
+ * columns have wrapped under the name and the header row is hidden — a bare
+ * number with nothing above it says nothing.
+ */
+function Cell({
+  children,
+  className,
   label,
-  value,
-  hint,
+  title,
   tone,
 }: {
-  label: string;
-  value: string;
-  hint: string;
+  children: React.ReactNode;
+  className?: string;
+  label?: string;
+  title: string;
   tone?: 'warn';
 }) {
   return (
-    <div title={hint}>
-      <dt className="text-[11px] uppercase tracking-wide text-slate-400">
-        {label}
-      </dt>
-      <dd
+    <div
+      className={cn('shrink-0 text-right tabular-nums', className)}
+      title={title}
+    >
+      {label && (
+        <span className="text-[11px] uppercase tracking-wide text-slate-400 lg:hidden">
+          {label}{' '}
+        </span>
+      )}
+      <span
         className={cn(
-          'font-medium tabular-nums',
+          'font-medium',
           tone === 'warn'
             ? 'text-rose-600 dark:text-rose-400'
             : 'text-slate-700 dark:text-slate-200',
         )}
       >
-        {value}
-      </dd>
+        {children}
+      </span>
     </div>
   );
 }
