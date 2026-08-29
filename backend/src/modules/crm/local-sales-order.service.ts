@@ -21,6 +21,7 @@ import {
   LocalSalesOrderLineDto,
   UpdateLocalSalesOrderDto,
 } from './local-sales-order.dto';
+import { ContractService } from './contract.service';
 
 const CRM_MODULE_CODE = 'CRM';
 const LSO_ROUTE = '/crm/lso';
@@ -63,6 +64,9 @@ export class LocalSalesOrderService {
     private readonly prisma: PrismaService,
     @Inject(WORKFLOW) private readonly workflow: WorkflowPort,
     @Inject(NUMBERING) private readonly numbering: NumberingPort,
+    // Same module, so a direct injection — the boundary rule forbids reaching
+    // ACROSS modules, and the contracts are CRM's own.
+    private readonly contracts: ContractService,
   ) {}
 
   async create(
@@ -75,7 +79,12 @@ export class LocalSalesOrderService {
     const branchId =
       dto.branchId !== undefined ? dto.branchId : (activeBranchId ?? null);
     await this.assertCustomer(companyId, dto.customerId);
-    const lines = await this.assertLines(companyId, dto.lines);
+    const lines = await this.assertLines(
+      companyId,
+      dto.lines,
+      dto.customerId,
+      dto.deliveryAt ? new Date(dto.deliveryAt) : null,
+    );
 
     for (let attempt = 0; ; attempt++) {
       const orderNo = await this.numbering.nextOrDefault(
@@ -129,7 +138,16 @@ export class LocalSalesOrderService {
       await this.assertCustomer(order.companyId, dto.customerId);
     }
     const lines = dto.lines
-      ? await this.assertLines(order.companyId, dto.lines)
+      ? await this.assertLines(
+          order.companyId,
+          dto.lines,
+          dto.customerId ?? order.customerId ?? undefined,
+          dto.deliveryAt !== undefined
+            ? dto.deliveryAt
+              ? new Date(dto.deliveryAt)
+              : null
+            : order.deliveryAt,
+        )
       : undefined;
 
     await this.prisma.$transaction(async (tx) => {
@@ -364,10 +382,24 @@ export class LocalSalesOrderService {
     }
   }
 
-  /** Lines whose products this company actually sells, each with a quantity. */
+  /**
+   * Lines whose products this company actually sells, each with a quantity —
+   * and priced at the CONTRACT rate wherever a contract covers them.
+   *
+   * The contract price is applied here rather than defaulted on the form, and
+   * it overrides whatever rate was sent. That is what a contract is: a price
+   * agreed for the term, not a suggestion the counter can talk itself out of.
+   * A branch that needs to charge something else is describing a change to the
+   * agreement, and that belongs on the contract.
+   *
+   * Priced as at the DELIVERY date where one is given, since that is when the
+   * goods change hands and which contract is live is a question about that day.
+   */
   private async assertLines(
     companyId: number,
     lines: LocalSalesOrderLineDto[],
+    customerId?: number,
+    on?: Date | null,
   ) {
     const wanted = lines.filter((l) => l.quantity > 0);
     if (!wanted.length) {
@@ -390,6 +422,14 @@ export class LocalSalesOrderService {
         'A product on this order is not one this company sells.',
       );
     }
+    const contractPrice = customerId
+      ? await this.contracts.priceFor(
+          companyId,
+          customerId,
+          (on ?? new Date()).toISOString().slice(0, 10),
+        )
+      : new Map();
+
     return wanted.map((l) => ({
       productId: l.productId,
       // orderedQty mirrors quantity here: on an ICSO the two differ because the
@@ -397,7 +437,7 @@ export class LocalSalesOrderService {
       orderedQty: l.quantity,
       quantity: l.quantity,
       unitId: l.unitId,
-      rate: l.rate ?? 0,
+      rate: contractPrice.get(l.productId)?.rate ?? l.rate ?? 0,
     }));
   }
 

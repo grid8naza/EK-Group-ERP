@@ -72,6 +72,28 @@ export class ContractController {
     return this.service.dueOn(companyId ?? 0, branchId ?? null, on);
   }
 
+  /**
+   * What a customer is owed per product on `date` under their contracts, as
+   * `{ productId: { rate, contractId, contractNo } }`.
+   *
+   * Read by the customer-order form so a line shows the contract price the
+   * moment the product is chosen — and says which contract it came from, rather
+   * than a number the branch cannot account for.
+   */
+  @Get('prices')
+  prices(
+    @CompanyId() companyId: number | undefined,
+    @Query('customerId') customerId?: string,
+    @Query('date') date?: string,
+  ) {
+    const on = date?.slice(0, 10) || new Date().toISOString().slice(0, 10);
+    const customer = Number(customerId);
+    if (!Number.isInteger(customer) || customer <= 0) return {};
+    return this.service
+      .priceFor(companyId ?? 0, customer, on)
+      .then((m) => Object.fromEntries(m));
+  }
+
   @Get(':id')
   findOne(
     @CompanyId() companyId: number | undefined,

@@ -282,6 +282,67 @@ export class ContractService {
     return [...byProduct.values()];
   }
 
+  /**
+   * The price a CUSTOMER is owed for each product on `date`, under whatever
+   * contract covers them.
+   *
+   * Deliberately NOT filtered by supply day, unlike `dueOn`. The two answer
+   * different questions: the days say what goes out on a standing schedule, the
+   * PRICE is agreed for the term. A school that takes bread on Mondays and rings
+   * up on a Tuesday for an extra fifty loaves is still a school with a contract,
+   * and charging it the counter price because Tuesday is not one of its days
+   * would be reading the schedule as if it were the agreement.
+   *
+   * A product on two live contracts for the same customer takes the LOWEST
+   * price. Both were agreed, so both stand; the customer is entitled to the
+   * better of them, and the alternative — picking by contract id — would make
+   * the charge depend on which was typed in first.
+   */
+  async priceFor(
+    companyId: number,
+    customerId: number,
+    date: string,
+  ): Promise<Map<number, { rate: number; contractId: number; contractNo: string }>> {
+    const out = new Map<
+      number,
+      { rate: number; contractId: number; contractNo: string }
+    >();
+    if (!companyId || !customerId) return out;
+    const on = dateMarker(date);
+
+    const contracts = await this.prisma.contract.findMany({
+      where: {
+        companyId,
+        customerId,
+        status: 'ACTIVE',
+        startDate: { lte: on },
+        endDate: { gte: on },
+      },
+      select: {
+        id: true,
+        contractNo: true,
+        lines: {
+          where: { rate: { gt: 0 } },
+          select: { productId: true, rate: true },
+        },
+      },
+    });
+
+    for (const contract of contracts) {
+      for (const line of contract.lines) {
+        const held = out.get(line.productId);
+        if (!held || line.rate < held.rate) {
+          out.set(line.productId, {
+            rate: line.rate,
+            contractId: contract.id,
+            contractNo: contract.contractNo,
+          });
+        }
+      }
+    }
+    return out;
+  }
+
   // -------------------------------------------------------------------------
   // helpers
   // -------------------------------------------------------------------------

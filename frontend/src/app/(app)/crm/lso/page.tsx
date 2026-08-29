@@ -159,6 +159,24 @@ export default function LsoPage() {
     [products],
   );
 
+  /**
+   * What this customer's contracts price each product at, as at the delivery
+   * date. A contract price is not a default the counter can talk itself out of
+   * — the server applies it whatever this form sends — so where one exists the
+   * rate box goes read-only and says which contract it came from.
+   */
+  const priceDate = (deliveryAt || new Date().toISOString()).slice(0, 10);
+  const { data: contractPrices } = useFetch<
+    Record<string, { rate: number; contractId: number; contractNo: string }>
+  >(
+    customerId
+      ? `/contracts/prices?customerId=${customerId}&date=${priceDate}`
+      : null,
+    [customerId, priceDate],
+  );
+  const contractFor = (productId: string) =>
+    productId ? contractPrices?.[productId] : undefined;
+
   // Default the branch to the one in the header — an order is taken AT a branch,
   // and the catalogue reads it back for that branch.
   useEffect(() => {
@@ -232,12 +250,17 @@ export default function LsoPage() {
       ls.map((l, idx) => {
         if (idx !== i) return l;
         const next = { ...l, ...patch };
-        // Seed the price from the product's wholesale rate the first time one is
-        // chosen — a starting point the branch can talk the customer out of, not
-        // a price anybody has agreed.
-        if (patch.productId && !l.rate) {
-          const p = productById.get(Number(patch.productId));
-          if (p?.wholesalePrice) next.rate = String(p.wholesalePrice);
+        if (patch.productId) {
+          // A contract price where one is agreed — that is what the customer is
+          // owed, and the server will apply it regardless. Otherwise the
+          // product's wholesale rate as a starting point the branch can be
+          // talked out of.
+          const contract = contractFor(patch.productId);
+          if (contract) next.rate = String(contract.rate);
+          else if (!l.rate) {
+            const p = productById.get(Number(patch.productId));
+            if (p?.wholesalePrice) next.rate = String(p.wholesalePrice);
+          }
         }
         return next;
       }),
@@ -555,15 +578,41 @@ export default function LsoPage() {
                         {p ? (p.unit?.symbol ?? p.unit?.code ?? '') : ''}
                       </td>
                       <td className="px-1">
-                        <Input
-                          type="number"
-                          min={0}
-                          step="any"
-                          disabled={readOnly}
-                          value={l.rate}
-                          onChange={(e) => setLine(i, { rate: e.target.value })}
-                          className="text-right tabular-nums"
-                        />
+                        {(() => {
+                          const contract = contractFor(l.productId);
+                          return (
+                            <div className="flex items-center justify-end gap-1">
+                              <Input
+                                type="number"
+                                min={0}
+                                step="any"
+                                // A contract price is not editable: it is what
+                                // the customer was promised for the term, and
+                                // the server applies it whatever is sent.
+                                disabled={readOnly || !!contract}
+                                value={l.rate}
+                                onChange={(e) =>
+                                  setLine(i, { rate: e.target.value })
+                                }
+                                wrapClassName="flex-1"
+                                className="text-right tabular-nums"
+                                title={
+                                  contract
+                                    ? `Contract price, from ${contract.contractNo}. Agreed for the term, so it is not edited here — change it on the contract.`
+                                    : undefined
+                                }
+                              />
+                              {contract && (
+                                <span
+                                  className="shrink-0 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                                  title={`Priced by contract ${contract.contractNo}.`}
+                                >
+                                  C
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       <td className="px-1 text-right tabular-nums text-slate-600 dark:text-slate-300">
                         {money(amount)}
