@@ -203,11 +203,12 @@ export const HR_EMPLOYEES: SeedEmployee[] = [
 ];
 
 // One team per Operations department, each led by that department's own
-// supervisor — the person who marks its daily sheet. Kevin Sunny's spell in the
-// Bakery Team predates the rest and is kept at its own start date.
+// supervisor — the person who marks its daily sheet, and its five people under
+// them. Nobody from outside the department is on one: a team is who actually
+// works together, and a director listed among the bakers is a name on a sheet
+// somebody then has to mark present.
 export const HR_TEAMS: SeedTeam[] = [
   { companyId: 1, name: "Bakery Team", branchCode: "HOF", leaderCode: "EKF0006", shiftCode: "M", members: [
-    { employeeCode: "EKF0001", effectiveFrom: "2026-08-20", costCenterCode: "OD", costObjectCode: "BY" },
     { employeeCode: "EKF0006", effectiveFrom: "2026-09-01", costCenterCode: "OD", costObjectCode: "BY" },
     { employeeCode: "EKF0007", effectiveFrom: "2026-09-01", costCenterCode: "OD", costObjectCode: "BY" },
     { employeeCode: "EKF0008", effectiveFrom: "2026-09-01", costCenterCode: "OD", costObjectCode: "BY" },
