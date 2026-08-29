@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { dateMarker } from '../../common/zoned-time';
 import {
   BatchHold,
   ItemStockOnHand,
@@ -8,6 +9,8 @@ import {
   ReserveRequest,
   ReserveResultLine,
   ReservedForLine,
+  SoldQty,
+  SoldQtyWindow,
   StockOnHand,
 } from '../../contracts/stock.port';
 
@@ -104,6 +107,142 @@ export class StockService {
         unitId: unitOf.get(productId) ?? 0,
       };
     });
+  }
+
+  /**
+   * The same reading as onHandFor, narrowed to ONE BRANCH.
+   *
+   * The ledger carries branchId, so the physical side is a filter. Reservations
+   * do NOT — a hold names the store it sits in — so they are narrowed by the
+   * branch's stores instead. Both must be narrowed the same way or a branch with
+   * no stores of its own would show stock it cannot touch, netted against holds
+   * belonging to somewhere else.
+   *
+   * No `forDocument` escape here: this answers "what is on the shelf at this
+   * branch", which nobody asks on behalf of a document holding that stock.
+   */
+  async onHandAtBranch(
+    companyId: number,
+    branchId: number,
+    productIds: number[],
+  ): Promise<StockOnHand[]> {
+    const ids = [...new Set(productIds)];
+    if (!ids.length) return [];
+
+    const stores = await this.prisma.store.findMany({
+      where: { companyId, branchId },
+      select: { id: true },
+    });
+    const storeIds = stores.map((s) => s.id);
+
+    const [ledger, reservations, products] = await Promise.all([
+      this.prisma.stockLedger.groupBy({
+        by: ['productId'],
+        where: { companyId, branchId, productId: { in: ids } },
+        _sum: { qtyIn: true, qtyOut: true },
+      }),
+      // A branch with no stores can hold nothing, and an empty `in` would match
+      // every row rather than none — so skip the query outright.
+      storeIds.length
+        ? this.prisma.stockReservation.groupBy({
+            by: ['productId'],
+            where: {
+              companyId,
+              productId: { in: ids },
+              storeId: { in: storeIds },
+              status: 'ACTIVE',
+            },
+            _sum: { quantity: true },
+          })
+        : Promise.resolve(
+            [] as { productId: number; _sum: { quantity: number | null } }[],
+          ),
+      this.prisma.product.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, unitId: true },
+      }),
+    ]);
+
+    const onHandOf = new Map(
+      ledger.map((r) => [
+        r.productId!,
+        (r._sum.qtyIn ?? 0) - (r._sum.qtyOut ?? 0),
+      ]),
+    );
+    const reservedOf = new Map(
+      reservations.map((r) => [r.productId, r._sum.quantity ?? 0]),
+    );
+    const unitOf = new Map(products.map((p) => [p.id, p.unitId]));
+
+    return ids.map((productId) => {
+      const onHand = onHandOf.get(productId) ?? 0;
+      const reserved = reservedOf.get(productId) ?? 0;
+      return {
+        productId,
+        onHand,
+        reserved,
+        available: onHand - reserved,
+        unitId: unitOf.get(productId) ?? 0,
+      };
+    });
+  }
+
+  /**
+   * What each product SOLD at a branch, each over its OWN window.
+   *
+   * SALE is the only type counted: a delivery note or an intercompany dispatch
+   * is the branch parting with goods for money. Consumption, transfers and
+   * adjustments also take stock out, but none of them is demand, and averaging
+   * them in would have a branch order more because it wrote some off.
+   *
+   * Products asking for the same window are grouped into one query, so a
+   * catalogue of hundreds costs a query per DISTINCT shelf life rather than per
+   * product.
+   */
+  async soldQtyAtBranch(
+    companyId: number,
+    branchId: number,
+    windows: SoldQtyWindow[],
+  ): Promise<SoldQty[]> {
+    if (!windows.length) return [];
+
+    const byWindow = new Map<string, number[]>();
+    for (const w of windows) {
+      const key = `${w.sinceDate}|${w.untilDate}`;
+      const bucket = byWindow.get(key);
+      if (bucket) bucket.push(w.productId);
+      else byWindow.set(key, [w.productId]);
+    }
+
+    const groups = await Promise.all(
+      [...byWindow].map(([key, ids]) => {
+        const [sinceDate, untilDate] = key.split('|');
+        return this.prisma.stockLedger.groupBy({
+          by: ['productId'],
+          where: {
+            companyId,
+            branchId,
+            transactionType: 'SALE',
+            productId: { in: ids },
+            // Half-open: `untilDate` itself is outside the window, so the span
+            // holds exactly as many days as the caller means to divide by.
+            date: { gte: dateMarker(sinceDate), lt: dateMarker(untilDate) },
+          },
+          _sum: { qtyOut: true },
+        });
+      }),
+    );
+
+    const soldOf = new Map<number, number>();
+    for (const rows of groups) {
+      for (const r of rows) soldOf.set(r.productId!, r._sum.qtyOut ?? 0);
+    }
+
+    // A product that moved nothing is 0, not absent.
+    return windows.map((w) => ({
+      productId: w.productId,
+      qty: soldOf.get(w.productId) ?? 0,
+    }));
   }
 
   /**

@@ -1374,6 +1374,7 @@ export async function syncScaffold(
   //    the per-company menus and the screens the steps above have just created.
   await grantWorkplaceToEveryone(prisma);
   await orderWorkplaceMenus(prisma);
+  await orderPurchaseMenu(prisma);
 
   // 4) After the menus, because it hides one of the tabs they just created.
   await hideUserAccessTabByDefault(prisma);
@@ -1483,6 +1484,36 @@ async function orderWorkplaceMenus(
     for (const [i, menuName] of ORDER.entries()) {
       await prisma.mainMenu.updateMany({
         where: { moduleId: workplace.id, menuName },
+        data: { sortOrder: i + 1 },
+      });
+    }
+  });
+}
+
+/**
+ * Put the Order Catalogue at the head of the Purchase menu.
+ *
+ * The catalogue is where a branch's regular order now starts — the blank ICPO
+ * form is for the one-off line — so it leads, then ICPO, then LPO. The additive
+ * sync only sets sortOrder ON CREATE, and ICPO and LPO were seeded at 1 and 2
+ * before the catalogue existed, so a new screen inserted at 1 ties with ICPO and
+ * the two order arbitrarily. Pin all three.
+ *
+ * Once, like every other ordering step — an admin who rearranges the menu
+ * afterwards keeps their arrangement.
+ */
+async function orderPurchaseMenu(
+  prisma: Prisma.TransactionClient,
+): Promise<void> {
+  await runOnce(prisma, 'purchase-catalogue-first', async () => {
+    const ORDER = [
+      '/purchase/order-catalogue',
+      '/purchase/icpo',
+      '/purchase/lpo',
+    ];
+    for (const [i, route] of ORDER.entries()) {
+      await prisma.subMenu.updateMany({
+        where: { route },
         data: { sortOrder: i + 1 },
       });
     }

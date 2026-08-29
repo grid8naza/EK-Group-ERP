@@ -102,6 +102,7 @@ const empty = {
   boxUnitId: '',
   hsnCodeId: '',
   shelfLife: '',
+  demandCycles: '3',
   // Max discount % per authority level, keyed by DISCOUNT_LEVEL LookupValue id.
   discounts: {} as DiscountForm,
   // In-house by default on this screen; switch to Purchased for resale stock.
@@ -390,6 +391,7 @@ export default function ProductsPage() {
     boxUnitId: p.boxUnitId != null ? String(p.boxUnitId) : '',
     hsnCodeId: p.hsnCodeId != null ? String(p.hsnCodeId) : '',
     shelfLife: String(p.shelfLife ?? 0),
+    demandCycles: String(p.demandCycles ?? 3),
     // Editable in the drawer; `empty` holds this screen's default for new rows.
     discounts: discountFormFrom(p.discounts),
     source: (p.source ?? 'MANUFACTURED') as ProductSource,
@@ -498,6 +500,7 @@ export default function ProductsPage() {
       boxUnitId: form.boxApplicable ? idOrNull(form.boxUnitId) : null,
       hsnCodeId: idOrNull(form.hsnCodeId),
       shelfLife: num(form.shelfLife),
+      demandCycles: Math.max(1, num(form.demandCycles) || 3),
       // Sent whole; the server drops the zeros and clears it when not sellable.
       discounts: discountPayload(discountLevels, form.discounts),
       source: form.source,
@@ -1172,9 +1175,21 @@ export default function ProductsPage() {
               type="number"
               min={0}
               id="pf-shelf"
-              onKeyDown={enterTo('pf-hsn')}
+              onKeyDown={enterTo('pf-cycles')}
               value={form.shelfLife}
               onChange={(e) => setForm({ ...form, shelfLife: e.target.value })}
+            />
+            <Input
+              label="Demand Cycles"
+              type="number"
+              min={1}
+              id="pf-cycles"
+              onKeyDown={enterTo('pf-hsn')}
+              title="How many shelf lives of sales history the Order Catalogue averages demand over. 3 cycles of a 7-day shelf life means the last 21 days."
+              value={form.demandCycles}
+              onChange={(e) =>
+                setForm({ ...form, demandCycles: e.target.value })
+              }
             />
             <Select
               id="pf-hsn"

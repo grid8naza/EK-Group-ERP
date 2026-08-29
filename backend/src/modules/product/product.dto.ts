@@ -315,6 +315,14 @@ export class CreateProductDto {
   @Min(0)
   shelfLife?: number; // days (0 = not tracked)
 
+  /// Shelf-life cycles of sales history the Order Catalogue averages demand
+  /// over. 1 = the last shelf life; 3 = three of them. Min 1 — a zero would ask
+  /// for an empty window and divide by nothing.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  demandCycles?: number;
+
   @IsOptional()
   @IsNumber()
   @IsPositive()
@@ -586,6 +594,14 @@ export class UpdateProductDto {
   @IsInt()
   @Min(0)
   shelfLife?: number;
+
+  /// Shelf-life cycles of sales history the Order Catalogue averages demand
+  /// over. 1 = the last shelf life; 3 = three of them. Min 1 — a zero would ask
+  /// for an empty window and divide by nothing.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  demandCycles?: number;
 
   @IsOptional()
   @IsNumber()

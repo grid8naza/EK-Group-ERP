@@ -87,6 +87,33 @@ export interface ReservationDetail {
   retailPrice: number;
 }
 
+/**
+ * How far back to measure one product's sales. Per product, because the window
+ * is derived from the product's own shelf life — a bun and a fruit cake are not
+ * judged over the same run of trade.
+ */
+export interface SoldQtyWindow {
+  productId: number;
+  /** Local calendar date, `YYYY-MM-DD`, INCLUSIVE. Sales on or after it count. */
+  sinceDate: string;
+  /**
+   * Local calendar date, `YYYY-MM-DD`, EXCLUSIVE — sales BEFORE it count.
+   *
+   * Both ends are named so the window holds exactly the number of days the
+   * caller divides by. With only a start, "the last 12 days" spans 13 dates
+   * (`sinceDate` through today) and every average comes out short by a day's
+   * worth. It is also how today — a day only half traded — is left out.
+   */
+  untilDate: string;
+}
+
+/** What one product actually sold in the window asked for. */
+export interface SoldQty {
+  productId: number;
+  /** Sum of qtyOut on SALE movements, in the product's stock unit. */
+  qty: number;
+}
+
 /** A live hold standing in the way of destroying a batch. */
 export interface BatchHold {
   batchId: number;
@@ -114,6 +141,35 @@ export interface StockPort {
     productIds: number[],
     forDocument?: { documentType: string; documentId: number },
   ): Promise<StockOnHand[]>;
+
+  /**
+   * The same reading, narrowed to ONE BRANCH — its stores only.
+   *
+   * A branch counter running out is a fact about that counter, and the
+   * company-wide figure hides it behind a full factory store. Reservations are
+   * netted off the same way, by the stores that sit in the branch.
+   */
+  onHandAtBranch(
+    companyId: number,
+    branchId: number,
+    productIds: number[],
+  ): Promise<StockOnHand[]>;
+
+  /**
+   * What each product SOLD at a branch since its own `sinceDate` — the qtyOut
+   * on SALE movements, which is every delivery note and every intercompany
+   * dispatch out of that branch.
+   *
+   * Windows are per product rather than one date for the lot: what counts as a
+   * representative run of trade follows the goods' shelf life. Products that
+   * moved nothing come back as 0, so the caller gets a row for each one asked
+   * about.
+   */
+  soldQtyAtBranch(
+    companyId: number,
+    branchId: number,
+    windows: SoldQtyWindow[],
+  ): Promise<SoldQty[]>;
 
   /**
    * On-hand per raw-material Item for a company, optionally scoped to one store.

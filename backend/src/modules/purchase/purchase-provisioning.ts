@@ -19,16 +19,26 @@ import { ObjectType } from '@prisma/client';
 // expansions live in each screen's page header.
 export const PURCHASE_SUBS = [
   {
+    // Sits ABOVE ICPO: it is where an order now starts. The blank ICPO form is
+    // still there for a one-off line, but a branch doing its regular order works
+    // from the catalogue — the picture, the price, what it keeps, what it has,
+    // and how much to order, all on one card — and the ICPO comes out of it.
+    name: 'Order Catalogue',
+    route: '/purchase/order-catalogue',
+    icon: 'layout-grid',
+    order: 1,
+  },
+  {
     name: 'ICPO',
     route: '/purchase/icpo',
     icon: 'shopping-cart',
-    order: 1,
+    order: 2,
     tabs: [
       { key: 'order', label: 'Purchase Order', order: 1 },
       { key: 'stock', label: 'Stock & acceptance', order: 2 },
     ],
   },
-  { name: 'LPO', route: '/purchase/lpo', icon: 'truck', order: 2 },
+  { name: 'LPO', route: '/purchase/lpo', icon: 'truck', order: 3 },
 ];
 
 // A second main menu for what was actually BOUGHT, as opposed to what was

@@ -379,6 +379,16 @@ model Product {
   boxUnitId             Int? // unit the box/pack quantity is measured in (e.g. g, Kg)
   hsnCodeId             Int?
   shelfLife             Int           @default(0) // days
+  /// How many SHELF-LIFE CYCLES of sales history the Order Catalogue averages
+  /// demand over: a 7-day bun with 3 cycles is judged on the last 21 days, a
+  /// 30-day cake on the last 90. Per product rather than one fixed number for
+  /// everything, because what counts as a representative run of trade is set by
+  /// how fast the goods turn over — three weeks says nothing about a product
+  /// that keeps for six months, and six months is stale news about a bun.
+  ///
+  /// Ignored when `shelfLife` is 0 (not tracked); the catalogue then falls back
+  /// to a fixed window.
+  demandCycles          Int           @default(3)
   yieldQty              Float         @default(1) // product units one recipe batch yields
   yieldUnitId           Int? // unit the yield quantity is measured in
   // BOM costing inputs. Material cost is computed from the recipe lines; these

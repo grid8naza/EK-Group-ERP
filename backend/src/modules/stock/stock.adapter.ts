@@ -6,6 +6,8 @@ import {
   ReserveRequest,
   ReserveResultLine,
   ReservedForLine,
+  SoldQty,
+  SoldQtyWindow,
   StockOnHand,
   StockPort,
 } from '../../contracts/stock.port';
@@ -27,6 +29,22 @@ export class StockAdapter implements StockPort {
     forDocument?: { documentType: string; documentId: number },
   ): Promise<StockOnHand[]> {
     return this.stock.onHandFor(companyId, productIds, forDocument);
+  }
+
+  onHandAtBranch(
+    companyId: number,
+    branchId: number,
+    productIds: number[],
+  ): Promise<StockOnHand[]> {
+    return this.stock.onHandAtBranch(companyId, branchId, productIds);
+  }
+
+  soldQtyAtBranch(
+    companyId: number,
+    branchId: number,
+    windows: SoldQtyWindow[],
+  ): Promise<SoldQty[]> {
+    return this.stock.soldQtyAtBranch(companyId, branchId, windows);
   }
 
   onHandForItems(

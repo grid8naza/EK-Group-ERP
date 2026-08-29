@@ -901,6 +901,8 @@ export interface Product {
   hsnCodeId?: number | null;
   hsnCode?: { id: number; code: string; description: string } | null;
   shelfLife: number;
+  /** Shelf-life cycles of sales history the Order Catalogue averages over. */
+  demandCycles: number;
   yieldQty: number;
   yieldUnitId?: number | null;
   yieldUnit?: MasterRef | null;
