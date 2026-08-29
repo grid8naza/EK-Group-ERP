@@ -46,6 +46,15 @@ interface CatalogueRow {
   soldQty: number;
   avgDailySales: number;
   coverDays: number;
+  poQty: number;
+  contractQty: number;
+  contractSources: {
+    contractId: number;
+    contractNo: string;
+    customerName: string;
+    quantity: number;
+    rate: number;
+  }[];
   nextProductionDate: string | null;
   minStock: number;
   maxStock: number;
@@ -84,6 +93,37 @@ const qty = (n: number, decimals: number) =>
     maximumFractionDigits: Math.max(decimals, 2),
   });
 
+const roundTo = (value: number, decimals: number) => {
+  const factor = 10 ** Math.max(0, decimals);
+  return Math.round(value * factor) / factor;
+};
+
+/**
+ * The suggestion, for a given number of cover days.
+ *
+ *   (cover x average daily sales) - min stock - available + PO qty + contract qty
+ *
+ * The same arithmetic the server does, repeated here so editing Cover answers
+ * instantly instead of waiting on a round trip. Every input is already on the
+ * row, so nothing has to be fetched to redo it — which is the reason the server
+ * sends them rather than just the answer.
+ *
+ * `onOrder` is deliberately NOT netted off: what is already coming on an open
+ * ICPO is shown as a column to read, not subtracted.
+ */
+const suggestFor = (row: CatalogueRow, coverDays: number) =>
+  roundTo(
+    Math.max(
+      0,
+      row.avgDailySales * coverDays -
+        row.minStock -
+        row.available +
+        row.poQty +
+        row.contractQty,
+    ),
+    row.decimalPlaces,
+  );
+
 /**
  * The Order Catalogue.
  *
@@ -113,6 +153,15 @@ export function OrderCatalogueScreen() {
 
   /** What the user is actually ordering, keyed by product. Empty = not ordered. */
   const [order, setOrder] = useState<Record<number, string>>({});
+  /**
+   * Cover days the user has OVERRIDDEN, keyed by product. Absent = use the one
+   * the server worked out from the production schedule.
+   *
+   * Kept apart from the row rather than written into it: the server's cover is
+   * the argument the screen is making, and a branch that types over it for one
+   * product should still see what the schedule said when they change their mind.
+   */
+  const [coverEdits, setCoverEdits] = useState<Record<number, string>>({});
   const [touched, setTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [data, setData] = useState<CatalogueResult | null>(null);
@@ -181,6 +230,10 @@ export function OrderCatalogueScreen() {
       if (r.suggestedQty > 0) seeded[r.productId] = String(r.suggestedQty);
     }
     setOrder(seeded);
+    // Overridden cover days go too. They were judgements about a different
+    // supplier or a different delivery day, and the schedule this catalogue was
+    // built from is not the one they were typed against.
+    setCoverEdits({});
     setTouched(false);
   }, [rows]);
 
@@ -230,12 +283,48 @@ export function OrderCatalogueScreen() {
     });
   };
 
+  /**
+   * Cover days for a row: the branch's override where they typed one, otherwise
+   * what the production schedule worked out.
+   */
+  const coverOf = (row: CatalogueRow) => {
+    const edited = coverEdits[row.productId];
+    if (edited === undefined || edited === '') return row.coverDays;
+    const n = Number(edited);
+    return Number.isFinite(n) && n > 0 ? n : row.coverDays;
+  };
+
+  /**
+   * Changing the cover re-answers the question the row is asking, so the
+   * quantity moves with it — leaving the old number beside a new cover would be
+   * a suggestion for a period nobody is now ordering for.
+   */
+  const setCover = (row: CatalogueRow, value: string) => {
+    setTouched(true);
+    setCoverEdits((c) => {
+      const next = { ...c };
+      if (value === '') delete next[row.productId];
+      else next[row.productId] = value;
+      return next;
+    });
+    const n = value === '' ? row.coverDays : Number(value);
+    if (!Number.isFinite(n) || n <= 0) return;
+    const fresh = suggestFor(row, n);
+    setOrder((o) => {
+      const next = { ...o };
+      if (fresh > 0) next[row.productId] = String(fresh);
+      else delete next[row.productId];
+      return next;
+    });
+  };
+
   const resetToSuggested = () => {
     const seeded: Record<number, string> = {};
     for (const r of rows) {
       if (r.suggestedQty > 0) seeded[r.productId] = String(r.suggestedQty);
     }
     setOrder(seeded);
+    setCoverEdits({});
     setTouched(false);
   };
 
@@ -433,7 +522,9 @@ export function OrderCatalogueScreen() {
                       <span className="w-20 shrink-0 text-right">Min</span>
                       <span className="w-20 shrink-0 text-right">Available</span>
                       <span className="w-20 shrink-0 text-right">Avg / day</span>
-                      <span className="w-16 shrink-0 text-right">Cover</span>
+                      <span className="w-16 shrink-0 text-right">PO</span>
+                      <span className="w-16 shrink-0 text-right">Contract</span>
+                      <span className="w-20 shrink-0 text-center">Cover</span>
                       <span className="w-20 shrink-0 text-right">Suggested</span>
                       <span className="w-28 shrink-0 pl-3 text-right">Order</span>
                     </div>
@@ -443,6 +534,9 @@ export function OrderCatalogueScreen() {
                         row={row}
                         value={order[row.productId] ?? ''}
                         onChange={(v) => setQty(row.productId, v)}
+                        cover={coverOf(row)}
+                        coverEdited={coverEdits[row.productId] !== undefined}
+                        onCover={(v) => setCover(row, v)}
                       />
                     ))}
                   </div>
@@ -507,13 +601,24 @@ function ProductRow({
   row,
   value,
   onChange,
+  cover,
+  coverEdited,
+  onCover,
 }: {
   row: CatalogueRow;
   value: string;
   onChange: (value: string) => void;
+  /** Cover days in force — the branch's override, or the schedule's answer. */
+  cover: number;
+  /** Whether that is an override, so the row can say the schedule is off. */
+  coverEdited: boolean;
+  onCover: (value: string) => void;
 }) {
   const ordering = Number(value) > 0;
   const step = row.decimalPlaces > 0 ? 10 ** -row.decimalPlaces : 1;
+  // What the suggestion IS at the cover in force — the server's figure is only
+  // right while nobody has changed the cover.
+  const suggested = suggestFor(row, cover);
 
   return (
     <div
@@ -614,21 +719,79 @@ function ProductRow({
         {qty(row.avgDailySales, 2)}
       </Cell>
 
+      {/* Ordered by an outside CUSTOMER from this branch, and owed under a
+          supply contract that day. Both ADD to the suggestion — a caterer's
+          bread is owed to the caterer and cannot also be the bread on the
+          shelf — so they are shown as their own columns rather than folded in
+          where nobody could see them. */}
       <Cell
         className="w-16"
-        label="Cover"
+        label="PO"
+        tone={row.poQty > 0 ? 'add' : undefined}
         title={
-          row.nextProductionDate
-            ? `This delivery has to last ${row.coverDays} day${row.coverDays === 1 ? '' : 's'} — the next production run is ${row.nextProductionDate}.${
-                row.shelfLife > 0
-                  ? ` Capped at the ${row.shelfLife}-day shelf life.`
-                  : ''
-              }`
-            : `Made to order, so the branch carries its own lead time: ${row.coverDays} day${row.coverDays === 1 ? '' : 's'}.`
+          row.poQty > 0
+            ? `${qty(row.poQty, row.decimalPlaces)} ${row.unitSymbol} ordered from this branch by customers, for on or before the delivery date and not yet dispatched. Added to the suggestion.`
+            : 'Nothing ordered from this branch by outside customers for that day.'
         }
       >
-        {row.coverDays}d
+        {row.poQty > 0 ? `+${qty(row.poQty, row.decimalPlaces)}` : '—'}
       </Cell>
+
+      <Cell
+        className="w-16"
+        label="Contract"
+        tone={row.contractQty > 0 ? 'add' : undefined}
+        title={
+          row.contractSources.length
+            ? `Owed under ${row.contractSources.length} contract${row.contractSources.length === 1 ? '' : 's'} that day: ${row.contractSources
+                .map(
+                  (s) =>
+                    `${s.customerName} ${qty(s.quantity, row.decimalPlaces)} (${s.contractNo})`,
+                )
+                .join('; ')}. Added to the suggestion.`
+            : 'No supply contract covers this product on that day.'
+        }
+      >
+        {row.contractQty > 0
+          ? `+${qty(row.contractQty, row.decimalPlaces)}`
+          : '—'}
+      </Cell>
+
+      {/* Cover is EDITABLE: the schedule's answer is a good default and not a
+          fact — a holiday, a festival week or a van that cannot run tomorrow
+          are all reasons a branch knows better. Typing here re-answers the
+          suggestion rather than sitting beside a number computed for a period
+          nobody is now ordering for. */}
+      <div className="flex w-20 shrink-0 items-center justify-end gap-1">
+        <span className="text-[11px] uppercase tracking-wide text-slate-400 lg:hidden">
+          Cover
+        </span>
+        <Input
+          type="number"
+          min={1}
+          step={1}
+          value={String(cover)}
+          onChange={(e) => onCover(e.target.value)}
+          wrapClassName="w-12"
+          className={cn(
+            '!py-1 !px-1 text-center tabular-nums',
+            coverEdited && 'border-brand-400 font-semibold text-brand-700',
+          )}
+          aria-label={`Cover days for ${row.name}`}
+          title={
+            coverEdited
+              ? `Overridden. The schedule says ${row.coverDays} day${row.coverDays === 1 ? '' : 's'}${row.nextProductionDate ? ` — the next production run is ${row.nextProductionDate}` : ''}. Clear the box to go back to it.`
+              : row.nextProductionDate
+                ? `This delivery has to last ${row.coverDays} day${row.coverDays === 1 ? '' : 's'} — the next production run is ${row.nextProductionDate}.${
+                    row.shelfLife > 0
+                      ? ` Capped at the ${row.shelfLife}-day shelf life.`
+                      : ''
+                  }`
+                : `Made to order, so the branch carries its own lead time: ${row.coverDays} day${row.coverDays === 1 ? '' : 's'}.`
+          }
+        />
+        <span className="text-xs text-slate-400">d</span>
+      </div>
 
       {/* The suggestion, and the way back to it. Clicking puts it in the box —
           which is what somebody wants after typing over it and changing
@@ -640,10 +803,26 @@ function ProductRow({
         <button
           type="button"
           className="rounded px-1 font-semibold tabular-nums text-brand-700 hover:bg-brand-50 dark:text-brand-400 dark:hover:bg-brand-950"
-          title={`Suggested: ${qty(row.target, row.decimalPlaces)} to cover ${row.coverDays} day${row.coverDays === 1 ? '' : 's'}, less ${qty(row.available, row.decimalPlaces)} available${row.onOrder > 0 ? ` and ${qty(row.onOrder, row.decimalPlaces)} on order` : ''}. Click to use it.`}
-          onClick={() => onChange(String(row.suggestedQty))}
+          // The whole sum, in the order it is worked out — the screen is making
+          // an argument, and this is where a branch checks it.
+          title={
+            `${qty(row.avgDailySales, 2)} a day x ${cover} day${cover === 1 ? '' : 's'} cover = ${qty(row.avgDailySales * cover, row.decimalPlaces)}` +
+            `, less ${qty(row.minStock, row.decimalPlaces)} minimum and ${qty(row.available, row.decimalPlaces)} available` +
+            (row.poQty > 0
+              ? `, plus ${qty(row.poQty, row.decimalPlaces)} on customer orders`
+              : '') +
+            (row.contractQty > 0
+              ? `, plus ${qty(row.contractQty, row.decimalPlaces)} on contract`
+              : '') +
+            ` = ${qty(suggested, row.decimalPlaces)}.` +
+            (row.onOrder > 0
+              ? ` ${qty(row.onOrder, row.decimalPlaces)} is already on order and is NOT deducted.`
+              : '') +
+            ' Click to use it.'
+          }
+          onClick={() => onChange(String(suggested))}
         >
-          {qty(row.suggestedQty, row.decimalPlaces)}
+          {qty(suggested, row.decimalPlaces)}
         </button>
       </div>
 
@@ -682,7 +861,8 @@ function Cell({
   className?: string;
   label?: string;
   title: string;
-  tone?: 'warn';
+  /** `warn` = short of the level; `add` = demand that RAISES the suggestion. */
+  tone?: 'warn' | 'add';
 }) {
   return (
     <div
@@ -699,7 +879,9 @@ function Cell({
           'font-medium',
           tone === 'warn'
             ? 'text-rose-600 dark:text-rose-400'
-            : 'text-slate-700 dark:text-slate-200',
+            : tone === 'add'
+              ? 'text-amber-600 dark:text-amber-400'
+              : 'text-slate-700 dark:text-slate-200',
         )}
       >
         {children}

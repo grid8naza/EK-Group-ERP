@@ -27,6 +27,9 @@ import { STOCK_POSTING } from './stock-posting.port';
 import { StockPostingAdapter } from '../modules/stock-transaction/stock-posting.adapter';
 import { StockTransactionService } from '../modules/stock-transaction/stock-transaction.service';
 import { DISPATCH } from './dispatch.port';
+import { CONTRACT } from './contract.port';
+import { ContractAdapter } from '../modules/crm/contract.adapter';
+import { ContractService } from '../modules/crm/contract.service';
 import { DispatchLinkAdapter } from '../modules/crm/dispatch-link.adapter';
 import { DispatchLinkService } from '../modules/crm/dispatch-link.service';
 import { ASSET_RATE } from './asset-rate.port';
@@ -120,6 +123,11 @@ import { NotificationSummaryAdapter } from '../modules/notification/notification
     // this from cycling back into STOCK_POSTING above.
     DispatchLinkService,
     { provide: DISPATCH, useClass: DispatchLinkAdapter },
+    // What the supply contracts oblige on a day. The Order Catalogue lives in
+    // Purchase and the contracts in CRM, and this one question is the whole of
+    // what passes between them.
+    ContractService,
+    { provide: CONTRACT, useClass: ContractAdapter },
     // The two rates product costing needs but does not own: a machine's running
     // cost/hour and a designation's cost/hour. Implemented by the modules that
     // own those masters, so costing never imports Asset or HR.
@@ -220,6 +228,7 @@ import { NotificationSummaryAdapter } from '../modules/notification/notification
     RECIPE,
     STOCK_POSTING,
     DISPATCH,
+    CONTRACT,
     ASSET_RATE,
     LABOUR_RATE,
     PURCHASE_PRICE,

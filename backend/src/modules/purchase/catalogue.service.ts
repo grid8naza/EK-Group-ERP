@@ -1,6 +1,7 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { STOCK, StockPort, SoldQtyWindow } from '../../contracts/stock.port';
+import { CONTRACT, ContractPort } from '../../contracts/contract.port';
 import { addDays, appTimeZone, calendarParts, zonedParts } from '../../common/zoned-time';
 import { CatalogueRow, CatalogueResult } from './catalogue.dto';
 
@@ -51,9 +52,20 @@ const OPEN_ORDER_STATUSES = ['DRAFT', 'PLACED', 'APPROVED'] as const;
  *                        because stock that outlives the goods is waste, not
  *                        cover.
  *   available            what the branch already holds, net of its own holds.
- *   on order             what is already coming on an open ICPO. Without it the
- *                        catalogue re-suggests this morning's order every time
- *                        it is opened, and the branch double-orders.
+ *   min stock            the level the branch keeps, subtracted as the buffer it
+ *                        already counts on having.
+ *   PO qty               what outside CUSTOMERS have ordered from this branch
+ *                        for that day. ADDED, not netted: a caterer's bread is
+ *                        owed to the caterer and cannot also be the bread on the
+ *                        shelf.
+ *   contract qty         what the supply contracts oblige that day, read through
+ *                        the CONTRACT port. Added for the same reason.
+ *
+ *   suggested = (cover x average) - min stock - available + PO + contract
+ *
+ * `on order` — what is already coming on an open ICPO — is shown but NOT netted
+ * off, matching the formula asked for. A branch that has already ordered today
+ * will see the same suggestion again, so the column is there to be read.
  *
  * Everything here is READ-ONLY. Ticking quantities and pressing Create raises an
  * ordinary ICPO through the existing endpoint, so the approval workflow, the
@@ -65,6 +77,7 @@ export class CatalogueService {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(STOCK) private readonly stock: StockPort,
+    @Inject(CONTRACT) private readonly contracts: ContractPort,
   ) {}
 
   /**
@@ -123,6 +136,7 @@ export class CatalogueService {
         unitId: true,
         intercompanyPrice: true,
         shelfLife: true,
+        leadTimeDays: true,
         demandCycles: true,
         packed: true,
         prodSun: true,
@@ -169,21 +183,29 @@ export class CatalogueService {
       untilDate: today,
     }));
 
-    const [onHand, sold, onOrder] = await Promise.all([
-      this.stock.onHandAtBranch(companyId, branchId, productIds),
-      this.stock.soldQtyAtBranch(companyId, branchId, windows),
-      this.openOrderQtyFor(companyId, branchId, supplierCompanyId, productIds),
-    ]);
+    const [onHand, sold, onOrder, customerOrders, contractDue] =
+      await Promise.all([
+        this.stock.onHandAtBranch(companyId, branchId, productIds),
+        this.stock.soldQtyAtBranch(companyId, branchId, windows),
+        this.openOrderQtyFor(companyId, branchId, supplierCompanyId, productIds),
+        this.customerOrderQtyFor(companyId, branchId, productIds, wantedOn),
+        this.contracts.dueOn(companyId, branchId, wantedOn),
+      ]);
 
     const onHandOf = new Map(onHand.map((s) => [s.productId, s]));
     const soldOf = new Map(sold.map((s) => [s.productId, s.qty]));
+    const contractOf = new Map(contractDue.map((c) => [c.productId, c]));
 
     const rows: CatalogueRow[] = products.map((p) => {
       const levels = p.branchStocks[0];
       const minStock = levels?.minStock ?? 0;
       const maxStock = levels?.maxStock ?? 0;
       const reorderLevel = levels?.reorderLevel ?? 0;
-      const leadTimeDays = levels?.leadTimeDays ?? 0;
+      // The BRANCH's own lead time wins where somebody set one; otherwise the
+      // product's, which is mostly a fact about the goods rather than about any
+      // one branch. 0 on both means nobody has said, and cover falls back to a
+      // single day.
+      const leadTimeDays = levels?.leadTimeDays || p.leadTimeDays || 0;
 
       const windowDays = this.windowDays(p.shelfLife, p.demandCycles);
       const soldQty = soldOf.get(p.id) ?? 0;
@@ -198,18 +220,21 @@ export class CatalogueService {
       const stock = onHandOf.get(p.id);
       const available = stock?.available ?? 0;
       const pending = onOrder.get(p.id) ?? 0;
+      const poQty = customerOrders.get(p.id) ?? 0;
+      const contract = contractOf.get(p.id);
+      const contractQty = contract?.quantity ?? 0;
 
-      // Demand over the days this delivery must bridge, then the branch's own
-      // floor and ceiling. Min stock is a promise about the shelf — a slow
-      // product still has to be there — so it raises the target; max stock is
-      // what the branch can physically hold, so it caps it.
-      let target = avgDailySales * coverDays;
-      if (minStock > 0) target = Math.max(target, minStock);
-      if (maxStock > 0) target = Math.min(target, maxStock);
+      // The shelf's own need over the days this delivery must bridge.
+      const target = avgDailySales * coverDays;
 
+      // Then the two kinds of demand that are NOT the shelf: goods an outside
+      // customer has already ordered from this branch, and goods a contract
+      // obliges it to hand over that day. Both are owed to somebody by name, so
+      // they are added on top rather than served out of shelf cover — a school's
+      // bread cannot also be the bread a walk-in customer buys.
       const decimals = p.unit?.decimalPlaces ?? 0;
       const suggestedQty = this.round(
-        Math.max(0, target - available - pending),
+        Math.max(0, target - minStock - available + poQty + contractQty),
         decimals,
       );
 
@@ -242,6 +267,9 @@ export class CatalogueService {
         reorderLevel,
         available: this.round(available, decimals),
         onOrder: this.round(pending, decimals),
+        poQty: this.round(poQty, decimals),
+        contractQty: this.round(contractQty, decimals),
+        contractSources: contract?.sources ?? [],
 
         target: this.round(target, decimals),
         suggestedQty,
@@ -387,6 +415,69 @@ export class CatalogueService {
       }
     }
     return pending;
+  }
+
+  /**
+   * What outside CUSTOMERS have already ordered from this branch, per product.
+   *
+   * The mirror of `openOrderQtyFor`, and it moves the suggestion the OTHER way.
+   * An ICPO is stock coming IN, so it is netted off; a customer order is stock
+   * promised OUT, so it is added — goods a caterer has ordered are goods the
+   * branch must have on top of what its own shelf needs.
+   *
+   * A local sales order (`customerId` set) rather than an intercompany one:
+   * `buyerCompanyId` is another group company, whose demand reaches this branch
+   * as an ICPO of its own and would otherwise be counted twice.
+   *
+   * Only orders wanted ON OR BEFORE the delivery date count. An order for next
+   * month is real, but it is not what this delivery has to carry, and adding it
+   * would have the branch order a month of a customer's bread today.
+   */
+  private async customerOrderQtyFor(
+    companyId: number,
+    branchId: number,
+    productIds: number[],
+    wantedOn: string,
+  ): Promise<Map<number, number>> {
+    const orders = await this.prisma.salesOrder.findMany({
+      where: {
+        companyId,
+        branchId,
+        customerId: { not: null },
+        status: { in: ['DRAFT', 'PLACED', 'APPROVED'] },
+        OR: [
+          { deliveryAt: null },
+          { deliveryAt: { lte: new Date(`${wantedOn}T23:59:59.999Z`) } },
+        ],
+      },
+      select: {
+        id: true,
+        lines: {
+          where: { productId: { in: productIds } },
+          select: { productId: true, quantity: true },
+        },
+      },
+    });
+    if (!orders.length) return new Map();
+
+    // An order already shipped is no longer demand — the goods have gone.
+    const dispatched = await this.prisma.dispatch.findMany({
+      where: { salesOrderId: { in: orders.map((o) => o.id) } },
+      select: { salesOrderId: true },
+    });
+    const shipped = new Set(dispatched.map((d) => d.salesOrderId));
+
+    const owed = new Map<number, number>();
+    for (const order of orders) {
+      if (shipped.has(order.id)) continue;
+      for (const line of order.lines) {
+        owed.set(
+          line.productId,
+          (owed.get(line.productId) ?? 0) + line.quantity,
+        );
+      }
+    }
+    return owed;
   }
 
   /** To the unit's own precision — a suggestion of 64.7 pieces helps nobody. */

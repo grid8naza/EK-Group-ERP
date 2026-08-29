@@ -134,6 +134,7 @@ const empty = {
   hsnCodeId: '',
   shelfLife: '',
   demandCycles: '3',
+  leadTimeDays: '0',
   // Defaults for a new finished product: packed, no recipe, and not usable as
   // an ingredient. The two BOM flags are editable in the drawer.
   // Max discount % per authority level, keyed by DISCOUNT_LEVEL LookupValue id.
@@ -449,6 +450,7 @@ export default function ProductsPage() {
     hsnCodeId: p.hsnCodeId != null ? String(p.hsnCodeId) : '',
     shelfLife: String(p.shelfLife ?? 0),
     demandCycles: String(p.demandCycles ?? 3),
+    leadTimeDays: String(p.leadTimeDays ?? 0),
     // Editable in the drawer; `empty` holds this screen's default for new rows.
     discounts: discountFormFrom(p.discounts),
     source: (p.source ?? 'MANUFACTURED') as ProductSource,
@@ -676,6 +678,7 @@ export default function ProductsPage() {
       hsnCodeId: idOrNull(form.hsnCodeId),
       shelfLife: num(form.shelfLife),
       demandCycles: Math.max(1, num(form.demandCycles) || 3),
+      leadTimeDays: num(form.leadTimeDays),
       // Sent whole; the server drops the zeros and clears it when not sellable.
       discounts: discountPayload(discountLevels, form.discounts),
       source: form.source,
@@ -1384,11 +1387,23 @@ export default function ProductsPage() {
               type="number"
               min={1}
               id="pf-cycles"
-              onKeyDown={enterTo('pf-hsn')}
+              onKeyDown={enterTo('pf-lead')}
               title="How many shelf lives of sales history the Order Catalogue averages demand over. 3 cycles of a 7-day shelf life means the last 21 days."
               value={form.demandCycles}
               onChange={(e) =>
                 setForm({ ...form, demandCycles: e.target.value })
+              }
+            />
+            <Input
+              label="Lead Time (days)"
+              type="number"
+              min={0}
+              id="pf-lead"
+              onKeyDown={enterTo('pf-hsn')}
+              title="Days between ordering this product and having it on the shelf. The Order Catalogue uses it for a made-to-order product, where there is no next production run to bridge to."
+              value={form.leadTimeDays}
+              onChange={(e) =>
+                setForm({ ...form, leadTimeDays: e.target.value })
               }
             />
             <Select

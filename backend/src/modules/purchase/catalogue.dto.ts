@@ -56,11 +56,34 @@ export interface CatalogueRow {
   available: number;
   /** Already coming on an open ICPO from this supplier, not yet received. */
   onOrder: number;
+  /**
+   * Ordered from this branch by outside CUSTOMERS, for on or before the delivery
+   * date, not yet dispatched. Demand the branch owes somebody by name, so it is
+   * ADDED to the suggestion rather than netted off.
+   */
+  poQty: number;
+  /** Owed under a supply contract on the delivery date. Added, like poQty. */
+  contractQty: number;
+  /** The contracts behind `contractQty` — so a branch can see WHY it owes. */
+  contractSources: {
+    contractId: number;
+    contractNo: string;
+    customerName: string;
+    quantity: number;
+    rate: number;
+  }[];
 
   // --- the answer ---
-  /** avgDailySales x coverDays, floored at min stock and capped at max stock. */
+  /** avgDailySales x coverDays — the shelf's own need over the cover period. */
   target: number;
-  /** max(0, target - available - onOrder), to the unit's precision. */
+  /**
+   * max(0, (coverDays x avgDailySales) - minStock - available + poQty
+   *        + contractQty), to the unit's precision.
+   *
+   * Recomputed on the screen when the cover days are edited, by the same
+   * arithmetic — every input above is on the row, so the client needs nothing
+   * more from the server to redo it.
+   */
   suggestedQty: number;
   /** Available has fallen under the branch's reorder / minimum level. */
   belowLevel: boolean;

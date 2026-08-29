@@ -903,6 +903,8 @@ export interface Product {
   shelfLife: number;
   /** Shelf-life cycles of sales history the Order Catalogue averages over. */
   demandCycles: number;
+  /** Days from ordering this product to having it on the shelf. */
+  leadTimeDays: number;
   yieldQty: number;
   yieldUnitId?: number | null;
   yieldUnit?: MasterRef | null;

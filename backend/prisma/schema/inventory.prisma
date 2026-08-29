@@ -379,6 +379,17 @@ model Product {
   boxUnitId             Int? // unit the box/pack quantity is measured in (e.g. g, Kg)
   hsnCodeId             Int?
   shelfLife             Int           @default(0) // days
+  /// Days between ordering this product and having it on the shelf.
+  ///
+  /// On the PRODUCT because it is mostly a fact about the goods — how long they
+  /// take to make and travel — rather than about any one branch. A branch that
+  /// genuinely differs still overrides it on ProductBranchStock.leadTimeDays,
+  /// which wins where it is set; this is the figure every other branch uses
+  /// instead of the 0 they all had.
+  ///
+  /// Read by the Order Catalogue for a MADE-TO-ORDER product, where there is no
+  /// next production run to bridge to and the branch has to carry its own wait.
+  leadTimeDays          Int           @default(0)
   /// How many SHELF-LIFE CYCLES of sales history the Order Catalogue averages
   /// demand over: a 7-day bun with 3 cycles is judged on the last 21 days, a
   /// 30-day cake on the last 90. Per product rather than one fixed number for

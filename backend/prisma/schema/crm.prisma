@@ -107,12 +107,16 @@ enum SalesOrderStatus {
 /// Two flavours share this model, told apart by which counterparty is set:
 ///  - ICSO (inter-company): `buyerCompanyId` — converted from an approved ICPO,
 ///    which `purchaseOrderId` points back at.
-///  - LSO (local/external): `customerId` — raised on an external customer. NOT
-///    BUILT YET; the Customer master doesn't exist. It joins this model rather
-///    than getting its own, because unlike ICPO vs LPO nothing inverts here:
-///    `companyId` is the SELLER either way, so the unique constraint, the
-///    numbering key and the company scoping all keep working. Adding it is one
-///    nullable column plus an XOR guard.
+///  - LSO (local/external): `customerId` — raised on an external customer. It
+///    joins this model rather than getting its own, because unlike ICPO vs LPO
+///    nothing inverts here: `companyId` is the SELLER either way, so the unique
+///    constraint, the numbering key and the company scoping all keep working.
+///
+/// The LSO's own entry screen is NOT built yet, and neither is the XOR guard —
+/// there is no create path to guard, since the only writer today is the ICPO
+/// conversion and it always sets buyerCompanyId. Both arrive with that screen.
+/// The column is here now because the Order Catalogue already reads these
+/// orders as demand on the branch, and would otherwise have nothing to read.
 model SalesOrder {
   id        Int  @id @default(autoincrement())
   companyId Int // the SELLER — owns the order, its numbering and its visibility
@@ -123,7 +127,15 @@ model SalesOrder {
   // Counterparty — exactly one, enforced in SalesOrderService (Prisma has no XOR).
   buyerCompanyId Int? // -> Company (the group company that raised the ICPO)
   buyerBranchId  Int? // -> Branch of that company
-  // customerId  Int?  <- added with the Customer master, for the LSO
+  /// The EXTERNAL customer, for a local sales order (LSO) — a shop, a caterer,
+  /// an institution ordering from a branch. Exactly one counterparty is set:
+  /// this OR buyerCompanyId, enforced in SalesOrderService because Prisma has
+  /// no XOR.
+  ///
+  /// The Order Catalogue reads these as demand ON the branch: goods a customer
+  /// has already ordered are goods the branch must have, on top of what the
+  /// shelf needs, so they ADD to what it orders from the factory.
+  customerId     Int? // -> Accounts Customer (plain cross-domain id)
 
   // The ICPO this was converted from. Unique: an ICPO converts once.
   purchaseOrderId Int?      @unique

@@ -323,6 +323,14 @@ export class CreateProductDto {
   @Min(1)
   demandCycles?: number;
 
+  /** Days between ordering this product and having it on the shelf. Read by
+   *  the Order Catalogue for a made-to-order product, where there is no next
+   *  production run to bridge to and the branch carries its own wait. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  leadTimeDays?: number;
+
   @IsOptional()
   @IsNumber()
   @IsPositive()
@@ -602,6 +610,14 @@ export class UpdateProductDto {
   @IsInt()
   @Min(1)
   demandCycles?: number;
+
+  /** Days between ordering this product and having it on the shelf. Read by
+   *  the Order Catalogue for a made-to-order product, where there is no next
+   *  production run to bridge to and the branch carries its own wait. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  leadTimeDays?: number;
 
   @IsOptional()
   @IsNumber()
