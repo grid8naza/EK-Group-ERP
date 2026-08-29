@@ -253,3 +253,115 @@ model DispatchLine {
   @@index([dispatchId])
   @@map("dispatch_lines")
 }
+
+// ---------------------------------------------------------------------------
+// Contracts — the standing agreements behind institutional and contract
+// customers: a school, a hospital canteen, an airline caterer.
+//
+// The difference from a Sales Order is that a contract is not an ORDER. Nobody
+// rings up on Tuesday to ask for Wednesday's bread; the agreement already says
+// what goes out, on which days, at what price, until when. So the document that
+// matters is the AGREEMENT, and each day's supply is derived from it — which is
+// why the quantity lives per line with the days it is supplied on, rather than
+// as a dated schedule somebody has to keep filling in.
+//
+// What that buys the branch is foresight. The Order Catalogue can ask "what am
+// I contractually obliged to hand over on Wednesday" and add it to the day's
+// order, instead of the branch remembering.
+// ---------------------------------------------------------------------------
+
+/// Where a contract stands. Only ACTIVE contracts oblige a supply; the rest are
+/// kept for the record and are invisible to the day's order.
+enum ContractStatus {
+  DRAFT // being drawn up, agreed with nobody yet
+  ACTIVE // in force — supply is due on its days, within its period
+  SUSPENDED // paused by agreement; the period still runs but nothing is due
+  EXPIRED // ran to its end date
+  CANCELLED // ended early
+}
+
+/// A supply agreement with one customer, for a period.
+///
+/// Cross-domain rule as everywhere in this file: company, branch, customer,
+/// product and unit are plain Int ids with no @relation.
+model Contract {
+  id         Int    @id @default(autoincrement())
+  companyId  Int // the SELLER — owns the contract, its numbering and visibility
+  /// The branch that supplies it. NULL where the company keeps no branches, or
+  /// where the contract is served centrally. The Order Catalogue reads this: a
+  /// contract Kadathy supplies is Kadathy's demand, and nobody else's.
+  branchId   Int?
+  contractNo String // CON-##### per company
+  customerId Int // -> Accounts Customer (institutional / contract customer)
+
+  /// What the agreement is called in conversation — "Little Flower School,
+  /// 2026-27". Optional; the number and the customer already identify it.
+  title String?
+
+  /// The period it runs for, both INCLUSIVE. A supply is due only on a day
+  /// inside it, so an expired contract stops obliging anything without anybody
+  /// having to remember to close it.
+  startDate DateTime
+  endDate   DateTime
+
+  status ContractStatus @default(DRAFT)
+  notes  String?
+
+  isLocked        Boolean  @default(false) // when locked, must be unlocked before edit/delete
+  createdByUserId Int
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  lines ContractLine[]
+
+  @@unique([companyId, contractNo])
+  @@index([companyId, status])
+  @@index([customerId])
+  // What the day's order asks: which contracts are live for this branch today.
+  @@index([companyId, branchId, startDate, endDate])
+  @@map("contracts")
+}
+
+/// One product on a contract: how much goes out, on which days, at what price.
+///
+/// The DAYS are flat flags rather than a list, matching Product's production
+/// schedule and for the same reason — the days of the week are fixed by nature
+/// and never need configuring. A line with no day ticked is supplied on none,
+/// which is how a product is parked without deleting the price agreed for it.
+model ContractLine {
+  id         Int @id @default(autoincrement())
+  contractId Int
+  sequence   Int @default(0)
+  productId  Int // -> inventory Product (plain cross-domain id)
+
+  /// How much goes out ON EACH SUPPLY DAY — not per week and not for the term.
+  /// Per day is the only reading the daily order can use without dividing by a
+  /// number nobody agreed.
+  quantity Float
+  unitId   Int // -> Unit (plain cross-domain id)
+
+  /// The price agreed FOR THIS CONTRACT, per unit.
+  ///
+  /// Unlike a sales order line this does NOT follow the batch. That is the
+  /// whole point of a contract: the customer is promised one price for the
+  /// term, and stock that came in dearer does not change what they were
+  /// promised. What it costs US is the batch's business, and the margin between
+  /// them is the contract's performance.
+  rate Float @default(0)
+
+  // The days of the week this line is supplied on. Sunday first, matching JS
+  // and every weekday picker in the app.
+  supSun Boolean @default(false)
+  supMon Boolean @default(false)
+  supTue Boolean @default(false)
+  supWed Boolean @default(false)
+  supThu Boolean @default(false)
+  supFri Boolean @default(false)
+  supSat Boolean @default(false)
+
+  contract Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+  @@index([productId])
+  @@map("contract_lines")
+}

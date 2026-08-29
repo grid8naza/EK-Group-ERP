@@ -33,6 +33,10 @@ export const CRM_SUBS = [
   { name: 'ICSO', route: '/crm/icso', icon: 'clipboard-list', order: 2 },
   // Dispatch — ship an approved sales order; invoice + delivery note + e-way bill.
   { name: 'Dispatch', route: '/crm/dispatch', icon: 'truck', order: 3 },
+  // Contracts — the standing agreements behind institutional customers. Not an
+  // order: the agreement says what goes out on which days at what price, and
+  // each day's obligation is derived from it rather than raised.
+  { name: 'Contracts', route: '/crm/contracts', icon: 'file-signature', order: 4 },
 ];
 
 // A second main menu for what was actually SOLD, as opposed to what was ordered

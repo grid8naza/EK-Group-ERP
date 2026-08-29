@@ -291,17 +291,17 @@ model Employee {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  designation    HrDesignation           @relation(fields: [designationId], references: [id], onDelete: Restrict)
-  reportsTo      Employee?               @relation("EmployeeReportsTo", fields: [reportsToId], references: [id], onDelete: SetNull)
-  reports        Employee[]              @relation("EmployeeReportsTo")
-  salaryPackages EmployeeSalaryPackage[]
-  postings       EmployeePosting[]
-  attendance     AttendanceEntry[]
-  shifts         EmployeeShiftAssignment[]
+  designation     HrDesignation             @relation(fields: [designationId], references: [id], onDelete: Restrict)
+  reportsTo       Employee?                 @relation("EmployeeReportsTo", fields: [reportsToId], references: [id], onDelete: SetNull)
+  reports         Employee[]                @relation("EmployeeReportsTo")
+  salaryPackages  EmployeeSalaryPackage[]
+  postings        EmployeePosting[]
+  attendance      AttendanceEntry[]
+  shifts          EmployeeShiftAssignment[]
   /// A dated SERIES, like postings and roster lines: at most one team on any
   /// given day, but a person may leave one team and join another over time.
   teamMemberships HrTeamMember[]
-  teamsLed       HrTeam[]                  @relation("HrTeamLeader")
+  teamsLed        HrTeam[]                  @relation("HrTeamLeader")
 
   @@unique([companyId, code])
   @@index([companyId, branchId])
@@ -476,8 +476,8 @@ model AttendanceSetting {
   /// Minutes after local midnight (09:00 → 540), the same units and for the
   /// same reason as a checklist's start time: this is a time of DAY, and the
   /// server runs in UTC.
-  defaultTimeIn  Int @default(540)
-  defaultTimeOut Int @default(1080)
+  defaultTimeIn  Int  @default(540)
+  defaultTimeOut Int  @default(1080)
   /// What a fresh line says before anybody touches it — an ATTENDANCE_TYPE
   /// LookupValue, normally Present. A plain Int: LookupValue is Cpanel's.
   defaultTypeId  Int?
@@ -502,7 +502,7 @@ model AttendanceSetting {
 /// week, the other a list of dates that changes every year and is set months
 /// ahead. A sheet for a holiday comes up pre-filled as one.
 model AttendanceHoliday {
-  id        Int    @id @default(autoincrement())
+  id        Int      @id @default(autoincrement())
   companyId Int
   /// NULL = the whole company. A branch may keep a local holiday of its own.
   branchId  Int?
@@ -539,7 +539,7 @@ enum AttendanceSheetStatus {
 /// nobody's memory. The month is assembled by the register report, which reads
 /// the days back.
 model AttendanceSheet {
-  id        Int  @id @default(autoincrement())
+  id        Int      @id @default(autoincrement())
   companyId Int
   /// NULL where the company keeps no branches. A branch marks its own people.
   branchId  Int?
@@ -602,8 +602,8 @@ model AttendanceEntry {
 
   /// Minutes after local midnight, as in AttendanceSetting. Null on the days
   /// where the question does not arise — an absence has no time in.
-  timeIn  Int?
-  timeOut Int?
+  timeIn        Int?
+  timeOut       Int?
   /// What in and out come to, worked out on save so a report never has to
   /// re-derive it and two readers can never disagree. A time out BEFORE the
   /// time in is read as a shift that crossed midnight, which is an ordinary
@@ -664,8 +664,8 @@ model HrShift {
   /// Minutes after local midnight, as everywhere else a time of day is stored.
   /// A finish at or before the start is a shift that crosses midnight, which is
   /// what a night shift is.
-  timeIn  Int
-  timeOut Int
+  timeIn       Int
+  timeOut      Int
   /// Unpaid break inside the shift, in minutes. Taken off the hours a rostered
   /// day is worth.
   breakMinutes Int @default(0)
@@ -742,7 +742,6 @@ model EmployeeShiftAssignment {
   @@map("employee_shift_assignments")
 }
 
-
 // ---------------------------------------------------------------------------
 // Teams — who answers for whose attendance.
 // ---------------------------------------------------------------------------
@@ -764,7 +763,7 @@ model HrTeam {
   /// Where the team works. NULL only where the company keeps no branches.
   branchId  Int?
 
-  name    String
+  name             String
   /// Who answers for it. An employee rather than a user: teams are led by the
   /// person on the floor, and whether they hold a login is a separate fact
   /// (they need one to mark, and the service says so plainly if they have none).

@@ -104,6 +104,18 @@ const SOURCES: Record<string, NumberSource[]> = {
         })
         .then((r) => r.map((x) => x.orderNo)),
   ],
+  // A supply contract, numbered per company like any other document it owns.
+  CONTRACT: [
+    (p, companyId, contractNo) =>
+      p.contract
+        .findMany({
+          where: { companyId, contractNo },
+          select: { contractNo: true },
+          orderBy: { contractNo: 'desc' },
+          take: SCAN_LIMIT,
+        })
+        .then((r) => r.map((x) => x.contractNo)),
+  ],
   PURCHASE_ORDER_LOCAL: [
     (p, companyId, orderNo) =>
       p.localPurchaseOrder
