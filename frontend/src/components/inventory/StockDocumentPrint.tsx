@@ -37,6 +37,15 @@ const qtyText = (v: number) =>
  * 1 Bottle, the store holds 200 Gram, and a printout that showed only one of
  * them would be arguing with either the invoice or the stock ledger.
  */
+/** The other side of the document, printed as a block rather than a field. */
+export type PrintParty = {
+  label: string;
+  name: string;
+  gstin?: string | null;
+  address?: string | null;
+  state?: string | null;
+};
+
 export function StockDocumentPrint({
   title,
   doc,
@@ -46,6 +55,8 @@ export function StockDocumentPrint({
   showRate,
   inbound,
   notes,
+  companyGstin,
+  party,
 }: {
   title: string;
   doc: StockTransaction;
@@ -55,6 +66,17 @@ export function StockDocumentPrint({
   showRate: boolean;
   inbound: boolean;
   notes?: string;
+  /** Printed under the company name — a document that leaves the building
+   *  carries the GSTIN it was issued under. */
+  companyGstin?: string | null;
+  /**
+   * Who the goods went to or came from, with their GSTIN.
+   *
+   * A delivery note travels with the goods and is what a check post reads, so
+   * both parties have to be identifiable on it — a name in a field is not that.
+   * Absent on an internal document, which has no other side.
+   */
+  party?: PrintParty | null;
 }) {
   const anyPacked = lines.some((l) => l.inPacks);
   // Rate is per whatever Qty is counted in — per bottle on a packed line, per
@@ -70,6 +92,7 @@ export function StockDocumentPrint({
         <div>
           <p className="text-lg font-bold">{row?.companyName ?? ''}</p>
           {row?.branchName && <p className="text-sm">{row.branchName}</p>}
+          {companyGstin && <p className="text-sm">GSTIN: {companyGstin}</p>}
         </div>
         <div className="text-right">
           <p className="text-lg font-bold uppercase tracking-wide">{title}</p>
@@ -77,11 +100,28 @@ export function StockDocumentPrint({
         </div>
       </div>
 
+      {/* The other party, as a block. A document that leaves the building has to
+          identify both ends — a name in a field is not that, and a GSTIN is
+          what a check post actually reads. */}
+      {party && (
+        <div className="mb-4 rounded border border-slate-300 p-2 text-sm">
+          <p className="text-xs uppercase tracking-wide text-slate-500">
+            {party.label}
+          </p>
+          <p className="font-semibold">{party.name}</p>
+          {party.address && <p>{party.address}</p>}
+          {party.state && <p>{party.state}</p>}
+          <p>{party.gstin ? `GSTIN: ${party.gstin}` : 'Unregistered'}</p>
+        </div>
+      )}
+
       <div className="mb-4 grid grid-cols-3 gap-x-6 gap-y-2 text-sm">
         <Field label="Date" value={fmtDate(doc.docDate)} />
         <Field label="Store" value={row?.storeName ?? ''} />
         <Field label="Reference" value={doc.reference || '—'} />
-        {supplierName && <Field label="Supplier" value={supplierName} />}
+        {supplierName && !party && (
+          <Field label="Supplier" value={supplierName} />
+        )}
         {doc.purchaseOrderRef && (
           <Field label="Purchase order" value={doc.purchaseOrderRef} />
         )}
@@ -162,6 +202,15 @@ export function StockDocumentPrint({
           <p className="text-xs font-semibold uppercase tracking-wide">Notes</p>
           <p className="whitespace-pre-wrap">{notes}</p>
         </div>
+      )}
+
+      {/* Said plainly, because a note that shows values and carries GSTINs
+          otherwise looks exactly like a bill — and a customer who treats it as
+          one claims credit against a document that was never filed. */}
+      {!inbound && party && (
+        <p className="mt-4 text-xs">
+          This is a delivery note and not a tax invoice.
+        </p>
       )}
 
       <div className="mt-16 flex justify-between text-xs uppercase tracking-wide">

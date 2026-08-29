@@ -157,7 +157,10 @@ export function StockTransactionScreen({
     IncomingDispatch[]
   >(showIncomingDispatch ? '/stock-transactions/incoming-dispatches' : null);
   const { data: companies } = useFetch<Company[]>(
-    showIncomingDispatch ? '/companies' : null,
+    // Also read for the PRINTOUT, which names the issuing company's GSTIN — so
+    // it is fetched wherever a document leaves the building, not only for the
+    // incoming-dispatch picker.
+    showIncomingDispatch || showCustomer || showSupplier ? '/companies' : null,
   );
 
   const canAdd = can(route, 'add');
@@ -738,6 +741,33 @@ export function StockTransactionScreen({
   const supplierName = supplierId
     ? supplierOptions.find((o) => o.value === supplierId)?.label
     : undefined;
+
+  /**
+   * The other end of the document, for the printout.
+   *
+   * A goods-OUT note to a customer and a goods-IN receipt from a supplier both
+   * leave a paper trail somebody outside this company reads, so both name that
+   * party with its GSTIN. The internal vouchers have no other side and print
+   * without one.
+   */
+  const printParty = useMemo(() => {
+    const party = showCustomer
+      ? (customers ?? []).find((c) => c.id === Number(customerId))
+      : showSupplier
+        ? (suppliers ?? []).find((s) => s.id === Number(supplierId))
+        : null;
+    if (!party) return null;
+    return {
+      label: showCustomer ? 'Delivered to' : 'Received from',
+      name: party.name,
+      gstin: party.gstNumber ?? null,
+      address: party.address ?? null,
+      state: party.state ?? null,
+    };
+  }, [showCustomer, showSupplier, customers, suppliers, customerId, supplierId]);
+
+  const printCompanyGstin =
+    (companies ?? []).find((c) => c.id === editingDoc?.companyId)?.gstin ?? null;
 
   const columns: Column<StockDocumentRow>[] = [
     {
@@ -1461,6 +1491,8 @@ export function StockTransactionScreen({
           showRate={showRateCol}
           inbound={inbound}
           notes={notes}
+          companyGstin={printCompanyGstin}
+          party={printParty}
         />
       )}
     </div>
