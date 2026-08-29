@@ -7,6 +7,8 @@ import {
   HR_GROUPS,
   HR_DESIGNATIONS,
   HR_EMPLOYEES,
+  HR_TEAMS,
+  HR_USER_GROUPS,
 } from './hr.data';
 import { ASSET_CATEGORIES, ASSET_GROUPS, ASSETS } from './assets.data';
 import {
@@ -538,6 +540,219 @@ export class MasterDataSeedService implements OnApplicationBootstrap {
     }
 
     this.warnMissingCompanies('Employees', missing);
+    made += await this.seedTeams();
+    made += await this.seedUserGroups();
+    return made;
+  }
+
+  /**
+   * The teams those employees work in, and who leads each.
+   *
+   * Keyed on (companyId, name) — the model's own unique, and for its reason:
+   * two teams of one name in a company is a sheet nobody can identify. A team
+   * that already exists is left ENTIRELY alone, members included: membership is
+   * a dated series that somebody may since have transferred people through, and
+   * re-asserting a seed over it would rewrite history to match a file.
+   *
+   * A team whose leader cannot be resolved is skipped rather than half-created.
+   * leaderEmployeeId is required, and a team nobody answers for cannot mark.
+   */
+  private async seedTeams(): Promise<number> {
+    if (!HR_TEAMS.length) return 0;
+    let made = 0;
+
+    const existing = new Set(
+      (
+        await this.prisma.hrTeam.findMany({
+          select: { companyId: true, name: true },
+        })
+      ).map((t) => `${t.companyId}|${t.name}`),
+    );
+    const employeeId = new Map(
+      (
+        await this.prisma.employee.findMany({
+          select: { id: true, code: true, companyId: true },
+        })
+      ).map((e) => [`${e.companyId}|${e.code}`, e.id]),
+    );
+    const branchId = new Map(
+      (
+        await this.prisma.branch.findMany({
+          select: { id: true, code: true, companyId: true },
+        })
+      ).map((b) => [`${b.companyId}|${b.code}`, b.id]),
+    );
+    const centreId = new Map(
+      (
+        await this.prisma.costCenter.findMany({
+          select: { id: true, code: true, companyId: true },
+        })
+      ).map((c) => [`${c.companyId}|${c.code}`, c.id]),
+    );
+    const objectId = new Map(
+      (
+        await this.prisma.costObject.findMany({
+          select: { id: true, code: true, companyId: true },
+        })
+      ).map((o) => [`${o.companyId}|${o.code}`, o.id]),
+    );
+    const shiftId = new Map(
+      (
+        await this.prisma.hrShift.findMany({
+          select: { id: true, code: true, companyId: true },
+        })
+      ).map((s) => [`${s.companyId}|${s.code}`, s.id]),
+    );
+
+    for (const t of HR_TEAMS) {
+      if (existing.has(`${t.companyId}|${t.name}`)) continue;
+      const leader = employeeId.get(`${t.companyId}|${t.leaderCode}`);
+      if (leader == null) {
+        this.logger.warn(
+          `HR teams: skipped ${t.name} — no employee ${t.leaderCode} to lead it.`,
+        );
+        continue;
+      }
+      const members = t.members
+        .map((m) => ({
+          id: employeeId.get(`${t.companyId}|${m.employeeCode}`),
+          m,
+        }))
+        .filter((x) => x.id != null)
+        .map((x) => ({
+          employeeId: x.id!,
+          effectiveFrom: new Date(`${x.m.effectiveFrom}T00:00:00.000Z`),
+          costCenterId: x.m.costCenterCode
+            ? (centreId.get(`${t.companyId}|${x.m.costCenterCode}`) ?? null)
+            : null,
+          costObjectId: x.m.costObjectCode
+            ? (objectId.get(`${t.companyId}|${x.m.costObjectCode}`) ?? null)
+            : null,
+        }));
+
+      await this.prisma.hrTeam.create({
+        data: {
+          companyId: t.companyId,
+          name: t.name,
+          branchId: t.branchCode
+            ? (branchId.get(`${t.companyId}|${t.branchCode}`) ?? null)
+            : null,
+          leaderEmployeeId: leader,
+          shiftId: t.shiftCode
+            ? (shiftId.get(`${t.companyId}|${t.shiftCode}`) ?? null)
+            : null,
+          members: members.length ? { create: members } : undefined,
+        },
+      });
+      made++;
+    }
+    return made;
+  }
+
+  /**
+   * The roles a login is put in, and the screens each may open.
+   *
+   * Screens are named by ROUTE and resolved against the sub-menus the scaffold
+   * has created for that company — an id is per company and per database, a
+   * route is the same screen everywhere. Runs after the scaffold has synced, so
+   * the menus it grants against exist.
+   *
+   * A group that already exists is left alone, privileges included. Access is
+   * the thing an administrator is most likely to have deliberately narrowed or
+   * widened since, and a seed that re-asserted itself over that would hand back
+   * reach somebody had taken away.
+   */
+  private async seedUserGroups(): Promise<number> {
+    if (!HR_USER_GROUPS.length) return 0;
+    const companies = await this.companies();
+    const missing = new Set<number>();
+    let made = 0;
+
+    const existing = new Set(
+      (
+        await this.prisma.userGroup.findMany({
+          select: { companyId: true, name: true },
+        })
+      ).map((g) => `${g.companyId}|${g.name}`),
+    );
+    const modules = await this.prisma.module.findMany({
+      select: { id: true, code: true },
+    });
+    const moduleId = new Map(modules.map((m) => [m.code, m.id]));
+
+    for (const g of HR_USER_GROUPS) {
+      if (existing.has(`${g.companyId}|${g.name}`)) continue;
+      if (!companies.has(g.companyId)) {
+        missing.add(g.companyId);
+        continue;
+      }
+
+      // Workplace is what every login lands on, so it goes in whether the role
+      // names it or not — the same rule UserGroupService applies.
+      const codes = [...new Set([...g.moduleCodes, 'WORKFLOW'])];
+      const moduleIds = codes
+        .map((c) => moduleId.get(c))
+        .filter((id): id is number => id != null);
+      if (!moduleIds.length) continue;
+
+      const group = await this.prisma.userGroup.create({
+        data: {
+          name: g.name,
+          description: g.description,
+          companyId: g.companyId,
+          modules: { create: moduleIds.map((id) => ({ moduleId: id })) },
+        },
+        select: { id: true },
+      });
+      made++;
+
+      // Resolve the routes against THIS company's menus.
+      const subMenus = await this.prisma.subMenu.findMany({
+        where: {
+          route: { in: g.screens.map((s) => s.route) },
+          mainMenu: { companyId: g.companyId, moduleId: { in: moduleIds } },
+        },
+        select: { id: true, route: true, mainMenuId: true },
+      });
+      const wanted = new Map(g.screens.map((s) => [s.route, s.actions]));
+
+      const visibleMains = new Set<number>();
+      for (const sub of subMenus) {
+        const actions = wanted.get(sub.route!) ?? [];
+        visibleMains.add(sub.mainMenuId);
+        await this.prisma.groupSubMenuPrivilege.create({
+          data: {
+            userGroupId: group.id,
+            subMenuId: sub.id,
+            canMenu: true,
+            canView: actions.includes('view'),
+            canAdd: actions.includes('add'),
+            canEdit: actions.includes('edit'),
+            canDelete: false,
+            // A report's actions are print / PDF / Excel rather than add / edit.
+            canPrint: actions.includes('print'),
+            canDownloadPdf: actions.includes('print'),
+            canDownloadExcel: actions.includes('print'),
+          },
+        });
+      }
+      // A screen inside a hidden main menu is unreachable, so open the parents
+      // of everything granted — and only those.
+      for (const mainMenuId of visibleMains) {
+        await this.prisma.groupMainMenuAccess.create({
+          data: { userGroupId: group.id, mainMenuId, visible: true },
+        });
+      }
+
+      const granted = subMenus.length;
+      if (granted < g.screens.length) {
+        this.logger.warn(
+          `User groups: ${g.name} granted ${granted} of ${g.screens.length} screens — the rest have no menu in company ${g.companyId}.`,
+        );
+      }
+    }
+
+    this.warnMissingCompanies('User groups', missing);
     return made;
   }
 
