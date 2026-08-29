@@ -235,9 +235,28 @@ const SOURCES: Record<string, NumberSource[]> = {
         })
         .then((r) => r.map((x) => x.dispatchNo)),
   ],
+  // TWO readers, one series. A company issues one run of invoice numbers, and
+  // it is written in two places: on the intercompany dispatch that carries the
+  // goods, and on the GST sales invoice raised against a delivery note. Reading
+  // only one of them would hand out a number the other had already used, and a
+  // repeated invoice number is the kind of thing a GST return is rejected for.
+  //
+  // Read across every year rather than within one: GST asks that a series be
+  // unique inside a financial year, and one that keeps rising satisfies that AND
+  // stays unique between years. A per-year scan is needed only to RESTART at 1
+  // each April, which the numbering rule does on its own where a company wants it.
   SALES_INVOICE: [
     (p, companyId, invoiceNo) =>
       p.dispatch
+        .findMany({
+          where: { companyId, invoiceNo },
+          select: { invoiceNo: true },
+          orderBy: { invoiceNo: 'desc' },
+          take: SCAN_LIMIT,
+        })
+        .then((r) => r.map((x) => x.invoiceNo)),
+    (p, companyId, invoiceNo) =>
+      p.salesInvoice
         .findMany({
           where: { companyId, invoiceNo },
           select: { invoiceNo: true },

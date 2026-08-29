@@ -62,6 +62,17 @@ model Customer {
   email            String?
   gstNumber        String? // GSTIN
   address          String?
+  /// The PLACE OF SUPPLY for GST — where the goods go, which together with the
+  /// supplier's own state decides whether a bill carries CGST + SGST or IGST.
+  ///
+  /// Its own field rather than read off the GSTIN, even though a GSTIN's first
+  /// two digits ARE the state code: an unregistered customer has no GSTIN and
+  /// still has a place of supply, and a B2C bill has to name one. The service
+  /// fills these in from the GSTIN where only that is given, so a registered
+  /// customer is never asked twice.
+  state            String?
+  /// The 2-digit GST state code ("32" = Kerala). What the return quotes.
+  stateCode        String?
   /// Days from a bill's date until it falls due — what an ageing report counts
   /// against. Null = no agreed term, so a bill is due the day it is raised.
   creditDays       Int?

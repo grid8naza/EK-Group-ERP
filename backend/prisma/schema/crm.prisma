@@ -112,11 +112,11 @@ enum SalesOrderStatus {
 ///    nothing inverts here: `companyId` is the SELLER either way, so the unique
 ///    constraint, the numbering key and the company scoping all keep working.
 ///
-/// The LSO's own entry screen is NOT built yet, and neither is the XOR guard —
-/// there is no create path to guard, since the only writer today is the ICPO
-/// conversion and it always sets buyerCompanyId. Both arrive with that screen.
-/// The column is here now because the Order Catalogue already reads these
-/// orders as demand on the branch, and would otherwise have nothing to read.
+/// Each has its own service and screen: LocalSalesOrderService enforces the XOR
+/// on create (a local order names a customer and nulls the buyer company), and
+/// both list queries filter on customerId so neither screen shows the other's
+/// orders. The numbering sources filter the same way, or the two series would
+/// hand out each other's numbers.
 model SalesOrder {
   id        Int  @id @default(autoincrement())
   companyId Int // the SELLER — owns the order, its numbering and its visibility
@@ -376,4 +376,192 @@ model ContractLine {
   @@index([contractId])
   @@index([productId])
   @@map("contract_lines")
+}
+
+// ---------------------------------------------------------------------------
+// Sales Invoices — the statutory document, raised against a DELIVERY NOTE.
+//
+// One invoice per delivery, which is what a contract customer is billed on: the
+// agreement says what goes out each day, the delivery note says what actually
+// went, and the invoice charges for that. Billing the contract instead of the
+// delivery would invoice bread nobody carried on a day the van broke down.
+//
+// Built for Indian GST from the start rather than retro-fitted. Which heads a
+// line carries follows the PLACE OF SUPPLY against the supplier's own state —
+// CGST + SGST within a state, IGST across one — and that is decided once, on the
+// invoice, because it is a fact about the transaction rather than about each
+// line. The e-invoice and e-way bill fields are here and filled by hand today;
+// they are shaped to be what the IRP and the EWB portal hand back, so uploading
+// directly later is a transport change and not a schema change.
+// ---------------------------------------------------------------------------
+
+/// Where an invoice stands. Only an ISSUED one is a bill; a draft is working.
+enum SalesInvoiceStatus {
+  DRAFT // being prepared; no number has been reported anywhere
+  ISSUED // the bill stands, and is what the customer owes
+  CANCELLED // withdrawn. Kept, never deleted — a cancelled invoice number is
+  //            still a number that was issued, and the series must show it.
+}
+
+/// How far the e-invoice has got with the Invoice Registration Portal.
+///
+/// A field rather than an inference from `irn`: the difference between "not
+/// required" and "required and not yet sent" is exactly what somebody chasing a
+/// filing deadline needs, and both have no IRN.
+enum EInvoiceStatus {
+  NOT_REQUIRED // below the turnover threshold, or a B2C bill the IRP does not take
+  PENDING // required, not yet registered
+  REGISTERED // the IRP returned an IRN
+  CANCELLED // cancelled on the portal (within its 24-hour window)
+  FAILED // the IRP rejected it; see einvoiceError
+}
+
+/// Who the supply is to, in the GST sense. Decides whether an e-invoice is due
+/// and how the bill is reported.
+enum GstSupplyType {
+  B2B // a registered customer — carries their GSTIN
+  B2C // unregistered
+  SEZ // special economic zone
+  EXPORT
+}
+
+model SalesInvoice {
+  id        Int  @id @default(autoincrement())
+  companyId Int // the SELLER
+  branchId  Int? // the branch that supplied and bills
+
+  /// Per company AND financial year, per the GST rule that a series is unique
+  /// within a GSTIN for a year. `finYear` is stored rather than derived so the
+  /// uniqueness can be enforced here instead of trusted to the caller.
+  invoiceNo   String
+  /// "2026-27" — the Indian financial year the invoice falls in (April–March).
+  finYear     String
+  invoiceDate DateTime
+
+  customerId      Int // -> Accounts Customer (plain cross-domain id)
+  /// The customer as they stood WHEN BILLED. Snapshotted, not joined: a bill is
+  /// a statement about a moment, and a customer who later moves or re-registers
+  /// must not silently rewrite what was filed.
+  customerName    String
+  customerGstin   String?
+  customerAddress String?
+
+  /// The DELIVERY NOTE this bills — a stock transaction of type SALE. One
+  /// invoice per delivery, so it is unique. Null only on a bill raised without
+  /// one, which the service refuses today but the column allows for the credit
+  /// notes that will come.
+  deliveryNoteId Int?    @unique
+  deliveryNoteNo String?
+  /// The contract this delivery was made under, where it was made under one.
+  /// Information: the invoice charges the delivery, not the agreement.
+  contractId     Int?
+  contractNo     String?
+
+  supplyType        GstSupplyType @default(B2B)
+  /// The 2-digit GST state code the supply is made TO. With the supplier's own
+  /// state it decides the heads: equal ⇒ CGST + SGST, different ⇒ IGST.
+  placeOfSupplyCode String
+  placeOfSupply     String?
+  /// The split that decision produced, STORED rather than re-derived. A state
+  /// code corrected on a master a year later must not silently re-file a bill
+  /// as inter-state when it was raised, and reported, as intra.
+  isInterState      Boolean       @default(false)
+  /// Tax payable by the recipient instead of the supplier. Rare, and it changes
+  /// what the bill collects, so it is recorded on the document.
+  reverseCharge     Boolean       @default(false)
+
+  // Totals, all in the company's currency. Held rather than summed on read: a
+  // rate corrected on a master must not move a bill that has been filed.
+  taxableValue Float @default(0)
+  cgstAmount   Float @default(0)
+  sgstAmount   Float @default(0)
+  igstAmount   Float @default(0)
+  cessAmount   Float @default(0)
+  /// The rounding to the nearest rupee that the printed total shows, kept so
+  /// the bill foots exactly rather than to within a paisa.
+  roundOff     Float @default(0)
+  grandTotal   Float @default(0)
+
+  // ---- e-invoice (Invoice Registration Portal) ----
+  einvoiceStatus      EInvoiceStatus @default(NOT_REQUIRED)
+  /// The 64-character Invoice Reference Number the IRP returns. It, not our
+  /// number, is what makes the bill valid where e-invoicing applies.
+  irn                 String?        @unique
+  ackNo               String?
+  ackDate             DateTime?
+  /// The signed QR the IRP returns, printed on the bill. Long — a JWT — so it
+  /// is stored whole rather than parsed into pieces we would have to re-sign.
+  signedQrCode        String?
+  einvoiceError       String?
+  einvoiceCancelledAt DateTime?
+
+  // ---- e-way bill ----
+  ewbNo           String?
+  ewbDate         DateTime?
+  ewbValidUntil   DateTime?
+  /// Kilometres, which is what decides the bill's validity period.
+  distanceKm      Int?
+  transportMode   String? // Road / Rail / Air / Ship
+  transporterId   String? // the transporter's GSTIN or enrolment id
+  transporterName String?
+  vehicleNo       String?
+
+  notes           String?
+  status          SalesInvoiceStatus @default(DRAFT)
+  isLocked        Boolean            @default(false)
+  createdByUserId Int
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  lines SalesInvoiceLine[]
+
+  @@unique([companyId, finYear, invoiceNo])
+  @@index([companyId, status])
+  @@index([customerId])
+  @@index([companyId, invoiceDate])
+  @@map("sales_invoices")
+}
+
+/// One billed line. Every figure the return needs is on the row: a GST return is
+/// filed from the invoice, and re-deriving tax from a rate at read time would
+/// have a corrected master rewrite a filing.
+model SalesInvoiceLine {
+  id        Int @id @default(autoincrement())
+  invoiceId Int
+  sequence  Int @default(0)
+
+  productId   Int // -> inventory Product (plain cross-domain id)
+  /// Name and HSN as they stood when billed — the return quotes them.
+  description String
+  hsnCode     String?
+
+  quantity     Float
+  unitId       Int
+  /// The unit the return reports in (UQC — "PCS", "KGS"). Snapshotted.
+  unitSymbol   String?
+  rate         Float   @default(0)
+  /// Discount ON THIS LINE, in currency rather than a percentage: what was
+  /// actually taken off is what the taxable value is computed from.
+  discount     Float   @default(0)
+  /// quantity x rate - discount. What the tax is charged on.
+  taxableValue Float   @default(0)
+
+  // Rates as PERCENTAGES, and what they came to. Which pair is non-zero follows
+  // the invoice's own inter-state decision, never the line's.
+  cgstRate   Float @default(0)
+  cgstAmount Float @default(0)
+  sgstRate   Float @default(0)
+  sgstAmount Float @default(0)
+  igstRate   Float @default(0)
+  igstAmount Float @default(0)
+  cessRate   Float @default(0)
+  cessAmount Float @default(0)
+  /// taxableValue + every head above.
+  lineTotal  Float @default(0)
+
+  invoice SalesInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([productId])
+  @@map("sales_invoice_lines")
 }

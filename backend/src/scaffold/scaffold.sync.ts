@@ -1534,12 +1534,13 @@ async function orderPurchaseMenu(
  * afterwards keeps their arrangement.
  */
 async function orderCrmMenu(prisma: Prisma.TransactionClient): Promise<void> {
-  await runOnce(prisma, 'crm-lso-slotted-in', async () => {
+  await runOnce(prisma, 'crm-invoice-slotted-in', async () => {
     const ORDER = [
       '/crm/icpo-received',
       '/crm/icso',
       '/crm/lso',
       '/crm/dispatch',
+      '/crm/invoices',
       '/crm/contracts',
     ];
     for (const [i, route] of ORDER.entries()) {

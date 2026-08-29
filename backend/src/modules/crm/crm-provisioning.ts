@@ -38,10 +38,14 @@ export const CRM_SUBS = [
   { name: 'LSO', route: '/crm/lso', icon: 'shopping-bag', order: 3 },
   // Dispatch — ship an approved sales order; invoice + delivery note + e-way bill.
   { name: 'Dispatch', route: '/crm/dispatch', icon: 'truck', order: 4 },
+  // Sales Invoice — the GST bill, raised against a delivery note. One per
+  // delivery, which is how a contract customer is billed: the note says what
+  // actually went out, and the bill charges for that.
+  { name: 'Sales Invoice', route: '/crm/invoices', icon: 'receipt-indian-rupee', order: 5 },
   // Contracts — the standing agreements behind institutional customers. Not an
   // order: the agreement says what goes out on which days at what price, and
   // each day's obligation is derived from it rather than raised.
-  { name: 'Contracts', route: '/crm/contracts', icon: 'file-signature', order: 5 },
+  { name: 'Contracts', route: '/crm/contracts', icon: 'file-signature', order: 6 },
 ];
 
 // A second main menu for what was actually SOLD, as opposed to what was ordered
